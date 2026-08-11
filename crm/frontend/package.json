@@ -1,0 +1,25 @@
+{
+  "name": "studio-f-crm-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "node --test src/**/*.test.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "framer-motion": "^13.1.0",
+    "lucide-react": "^1.28.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^5.4.0"
+  }
+}

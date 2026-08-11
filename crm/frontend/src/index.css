@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f5f7;
+  --foreground: #18181b;
+
+  --paper: #ffffff;
+  --paper-soft: rgba(255, 255, 255, 0.7);
+
+  --ink: #18181b;
+  --greige: #71717a;
+  --greige-ink: #52525b;
+
+  --line: #e4e4e7;
+  --line-soft: rgba(228, 228, 231, 0.6);
+
+  /* Studio F indigo — not Persiinova's blue. This is the one thing we do not touch. */
+  --accent: #4338ca;
+  --accent-soft: rgba(67, 56, 202, 0.1);
+  --accent-hover: #3730a3;
+
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --purple: #7e22ce;
+
+  /* Back-compat aliases for the pre-Persiinova token names — only kept where
+     there's no meaning collision with the new system (see "accent" note below,
+     that one was NOT safe to alias and was fixed at the call sites instead). */
+  --muted: rgba(0, 0, 0, 0.04);
+  --muted-foreground: var(--greige);
+  --border: var(--line);
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-foreground: #ffffff;
+  --warning: var(--warn);
+  --warning-bg: rgba(180, 83, 9, 0.1);
+  --success: var(--ok);
+  --success-bg: rgba(21, 128, 61, 0.1);
+  --info: var(--accent);
+  --info-bg: var(--accent-soft);
+  --danger-bg: rgba(185, 28, 28, 0.1);
+  --purple-bg: rgba(126, 34, 206, 0.1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-paper: var(--paper);
+  --color-paper-soft: var(--paper-soft);
+
+  --color-ink: var(--ink);
+  --color-greige: var(--greige);
+  --color-greige-ink: var(--greige-ink);
+
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-hover: var(--accent-hover);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-purple: var(--purple);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-danger-bg: var(--danger-bg);
+  --color-purple-bg: var(--purple-bg);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Custom scrollbar everywhere — thin, rounded, indigo on hover. Firefox uses
+   the scrollbar-color shorthand; everything else uses the ::-webkit- pseudo. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--line);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-paper-soft backdrop-blur-xl border border-line-soft;
+  }
+  .glass-card {
+    @apply bg-paper/80 backdrop-blur-xl border border-line shadow-sm;
+  }
+}
