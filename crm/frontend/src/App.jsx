@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
 import { fetchMe, logout, fetchTickets } from './api.js';
 import Login from './Login.jsx';
@@ -58,6 +59,9 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Toast visuals live in components/Toast.jsx (showSuccess/showError) — this
+          just mounts the portal and positions it. */}
+      <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
@@ -177,7 +181,7 @@ export default function App() {
             transition={{ duration: 0.5, ease: 'easeOut' }}
             className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden rounded-3xl border border-line bg-paper shadow-sm"
           >
-            <Component />
+            <Component user={user} />
           </motion.div>
         </main>
       </div>

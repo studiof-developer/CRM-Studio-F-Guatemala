@@ -85,6 +85,10 @@ export function attachmentUrl(id) {
   return `${API_BASE}/api/attachments/${id}/file`;
 }
 
+export function attachmentDownloadUrl(id) {
+  return `${attachmentUrl(id)}?download=1`;
+}
+
 export async function fetchCustomerCounts() {
   const res = await apiFetch('/api/customers/counts');
   if (!res.ok) throw new Error('Error al cargar los conteos de clientes');

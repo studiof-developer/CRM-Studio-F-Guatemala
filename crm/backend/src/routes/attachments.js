@@ -18,7 +18,10 @@ router.get('/:id/file', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const { filename, mime_type, file_path } = rows[0];
     res.setHeader('Content-Type', mime_type);
-    if (filename) res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    // Preview (img/iframe/audio src) needs inline; the explicit download button
+    // asks for ?download=1 to force a save-as instead of rendering in place.
+    const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+    res.setHeader('Content-Disposition', filename ? `${disposition}; filename="${filename}"` : disposition);
     fs.createReadStream(file_path).pipe(res);
   } catch (err) { next(err); }
 });

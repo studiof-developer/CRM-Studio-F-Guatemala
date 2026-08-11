@@ -3,6 +3,8 @@ import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone } fr
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import Badge from './components/Badge.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
 
 export default function Customers() {
   const [counts, setCounts] = useState({});
@@ -12,6 +14,8 @@ export default function Customers() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   const loadCounts = useCallback(() => {
     fetchCustomerCounts().then(setCounts).catch((err) => setError(err.message));
@@ -48,19 +52,24 @@ export default function Customers() {
       await updateCustomerTags(selectedId, { manualStatus: value || null });
       reloadDetail();
       loadCounts();
+      showSuccess(value ? `Estado cambiado a ${TEMP_META[value].label}` : 'Estado devuelto a automático');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     }
   }
 
   async function handleMarkPaid() {
-    if (!window.confirm('Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. ¿Continuar?')) return;
+    setMarkingPaid(true);
     try {
       await updateCustomerTags(selectedId, { paidLocked: true });
       reloadDetail();
       loadCounts();
+      showSuccess('Cliente marcado como Pagado');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setMarkingPaid(false);
+      setConfirmPaidOpen(false);
     }
   }
 
@@ -186,7 +195,7 @@ export default function Customers() {
                 </select>
                 {!detail.paid_locked && (
                   <button
-                    onClick={handleMarkPaid}
+                    onClick={() => setConfirmPaidOpen(true)}
                     className="ml-auto rounded-lg border border-success-bg bg-success-bg/50 px-2.5 py-1 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
                   >
                     Marcar como Pagado
@@ -254,6 +263,16 @@ export default function Customers() {
           )}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmPaidOpen}
+        title="Marcar como Pagado"
+        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer."
+        confirmLabel="Marcar como Pagado"
+        busy={markingPaid}
+        onConfirm={handleMarkPaid}
+        onCancel={() => setConfirmPaidOpen(false)}
+      />
     </div>
   );
 }

@@ -5,11 +5,13 @@ import {
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
-  attachmentUrl, updateTicket, updateCustomerTags,
+  attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import Avatar from './components/Avatar.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
 
 function Tail({ side, color }) {
   // Small CSS-triangle "tail" on the bubble's outer top corner, the classic WhatsApp cue.
@@ -26,7 +28,7 @@ function Tail({ side, color }) {
   return <span style={style} />;
 }
 
-export default function Conversations() {
+export default function Conversations({ user }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
   const [temperature, setTemperature] = useState('');
@@ -39,6 +41,7 @@ export default function Conversations() {
   const [actionBusy, setActionBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -114,22 +117,22 @@ export default function Conversations() {
       setDraft('');
       loadThread();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setSending(false);
     }
   }
 
   async function handleTake() {
-    const advisor = window.prompt('Tu nombre para asignarte esta conversación:');
-    if (!advisor || !thread?.ticketId) return;
+    if (!thread?.ticketId) return;
     setActionBusy(true);
     try {
-      await updateTicket(thread.ticketId, { status: 'en_atencion', assigned_advisor: advisor });
+      await updateTicket(thread.ticketId, { status: 'en_atencion', assigned_advisor: user.fullName });
       await loadThread();
       load(false);
+      showSuccess('Conversación asignada a ti');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setActionBusy(false);
     }
@@ -142,8 +145,9 @@ export default function Conversations() {
       await updateTicket(thread.ticketId, { status: 'resuelto' });
       await loadThread();
       load(false);
+      showSuccess('Conversación resuelta');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setActionBusy(false);
     }
@@ -158,7 +162,7 @@ export default function Conversations() {
       await sendConversationAttachment(selectedId, file);
       loadThread();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setUploading(false);
     }
@@ -171,20 +175,25 @@ export default function Conversations() {
       await updateCustomerTags(thread.customerId, { manualStatus: value || null });
       await loadThread();
       load(false);
+      showSuccess(value ? `Estado cambiado a ${TEMP_META[value].label}` : 'Estado devuelto a automático');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     }
   }
 
   async function handleMarkPaid() {
     if (!thread?.customerId) return;
-    if (!window.confirm('Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. ¿Continuar?')) return;
+    setActionBusy(true);
     try {
       await updateCustomerTags(thread.customerId, { paidLocked: true });
       await loadThread();
       load(false);
+      showSuccess('Cliente marcado como Pagado');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setActionBusy(false);
+      setConfirmPaidOpen(false);
     }
   }
 
@@ -418,7 +427,7 @@ export default function Conversations() {
                       </select>
                       {!thread.paidLocked && (
                         <button
-                          onClick={handleMarkPaid}
+                          onClick={() => setConfirmPaidOpen(true)}
                           className="mt-1 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
                         >
                           Marcar como Pagado (permanente)
@@ -488,6 +497,16 @@ export default function Conversations() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmPaidOpen}
+        title="Marcar como Pagado"
+        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer."
+        confirmLabel="Marcar como Pagado"
+        busy={actionBusy}
+        onConfirm={handleMarkPaid}
+        onCancel={() => setConfirmPaidOpen(false)}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Clock, MapPin, ShoppingBag, User, CircleUser } from 'lucide-react';
 import { API_BASE, fetchTickets, fetchTicket, updateTicket } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
 
 const STATUS_META = {
   esperando_asesor: { label: 'Esperando asesor', variant: 'warning' },
@@ -13,7 +14,7 @@ const STATUS_META = {
 
 const FILTERS = Object.keys(STATUS_META);
 
-export default function HandoffQueue() {
+export default function HandoffQueue({ user }) {
   const [statusFilter, setStatusFilter] = useState('esperando_asesor');
   const [tickets, setTickets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -52,17 +53,25 @@ export default function HandoffQueue() {
   }, [selectedId]);
 
   async function handleTake(id) {
-    const advisor = window.prompt('Tu nombre para asignarte este ticket:');
-    if (!advisor) return;
-    await updateTicket(id, { status: 'en_atencion', assigned_advisor: advisor });
-    await loadTickets();
-    fetchTicket(id).then(setTicketDetail);
+    try {
+      await updateTicket(id, { status: 'en_atencion', assigned_advisor: user.fullName });
+      await loadTickets();
+      fetchTicket(id).then(setTicketDetail);
+      showSuccess('Ticket asignado a ti');
+    } catch (err) {
+      showError(err.message);
+    }
   }
 
   async function handleResolve(id) {
-    await updateTicket(id, { status: 'resuelto' });
-    await loadTickets();
-    setSelectedId(null);
+    try {
+      await updateTicket(id, { status: 'resuelto' });
+      await loadTickets();
+      setSelectedId(null);
+      showSuccess('Ticket marcado como resuelto');
+    } catch (err) {
+      showError(err.message);
+    }
   }
 
   return (

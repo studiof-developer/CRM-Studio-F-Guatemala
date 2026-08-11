@@ -3,6 +3,8 @@ import { UserPlus, Trash2 } from 'lucide-react';
 import { fetchUsers, createUser, updateUser, deleteUser } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
 
 const EMPTY_FORM = { full_name: '', email: '', password: '', role: 'asesor', zone: '' };
 
@@ -12,6 +14,8 @@ export default function Users() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(() => {
     fetchUsers().then(setUsers).catch((err) => setError(err.message));
@@ -45,6 +49,7 @@ export default function Users() {
       }
       load();
       selectNew();
+      showSuccess(selectedId === 'new' ? 'Usuario creado' : 'Cambios guardados');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -52,14 +57,18 @@ export default function Users() {
     }
   }
 
-  async function handleDelete(id) {
-    if (!window.confirm('¿Eliminar este usuario?')) return;
+  async function handleDelete() {
+    setDeleting(true);
     try {
-      await deleteUser(id);
+      await deleteUser(confirmDeleteId);
       load();
       selectNew();
+      showSuccess('Usuario eliminado');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -164,7 +173,7 @@ export default function Users() {
                 {selectedId === 'new' ? 'Crear' : 'Guardar cambios'}
               </Button>
               {selectedId !== 'new' && (
-                <Button type="button" variant="danger" onClick={() => handleDelete(selectedId)}>
+                <Button type="button" variant="danger" onClick={() => setConfirmDeleteId(selectedId)}>
                   <Trash2 size={14} /> Eliminar
                 </Button>
               )}
@@ -172,6 +181,17 @@ export default function Users() {
           </form>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Eliminar usuario"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        danger
+        busy={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }
