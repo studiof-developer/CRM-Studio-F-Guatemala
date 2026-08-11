@@ -41,6 +41,8 @@ export default function Conversations() {
   const [uploading, setUploading] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const lastMessageIdRef = useRef(null);
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -67,7 +69,11 @@ export default function Conversations() {
     fetchConversation(selectedId).then(setThread).catch((err) => setError(err.message));
   }, [selectedId]);
 
-  useEffect(() => { loadThread(); setInfoOpen(false); }, [loadThread]);
+  useEffect(() => {
+    loadThread();
+    setInfoOpen(false);
+    lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
+  }, [loadThread]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -75,8 +81,20 @@ export default function Conversations() {
     return () => clearInterval(id);
   }, [selectedId, loadThread]);
 
+  // Polling refreshes `thread` every few seconds even with no new messages — only
+  // autoscroll when the last message actually changed, and only if the advisor
+  // hadn't scrolled up to read history (don't yank them back down mid-read).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
+    if (!thread) return;
+    const lastId = thread.messages[thread.messages.length - 1]?.id ?? null;
+    if (lastId === lastMessageIdRef.current) return;
+    const isFirstLoadForThread = lastMessageIdRef.current === null;
+    const container = scrollContainerRef.current;
+    const nearBottom = !container || container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    lastMessageIdRef.current = lastId;
+    if (isFirstLoadForThread || nearBottom) {
+      bottomRef.current?.scrollIntoView({ block: 'end' });
+    }
   }, [thread]);
 
   async function handleSend(e) {
@@ -298,7 +316,7 @@ export default function Conversations() {
             </button>
 
             <div className="flex min-h-0 flex-1">
-              <div className="flex-1 space-y-1 overflow-y-auto px-6 py-4">
+              <div ref={scrollContainerRef} className="flex-1 space-y-1 overflow-y-auto px-6 py-4">
                 {dayGroups.map((group) => (
                   <div key={group.label}>
                     <div className="sticky top-0 z-10 my-3 flex justify-center">
