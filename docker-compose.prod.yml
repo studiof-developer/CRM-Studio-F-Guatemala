@@ -63,7 +63,7 @@ services:
     depends_on:
       - crm-backend
     ports:
-      - "80:80"
+      - "8080:80"
 
 volumes:
   postgres_data:
