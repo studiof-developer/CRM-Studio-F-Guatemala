@@ -93,7 +93,15 @@ export default function Conversations() {
     const nearBottom = !container || container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     lastMessageIdRef.current = lastId;
     if (isFirstLoadForThread || nearBottom) {
-      bottomRef.current?.scrollIntoView({ block: 'end' });
+      // Direct scrollTop instead of scrollIntoView, reapplied after paint and again
+      // shortly after — attachment images finish loading late and grow the container,
+      // which otherwise leaves the view sitting above the true bottom.
+      const scrollToBottom = () => {
+        if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      };
+      scrollToBottom();
+      requestAnimationFrame(scrollToBottom);
+      setTimeout(scrollToBottom, 300);
     }
   }, [thread]);
 
