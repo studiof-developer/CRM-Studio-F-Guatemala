@@ -50,8 +50,14 @@ services:
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      UPLOAD_DIR: /app/uploads
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
+      WHATSAPP_INBOUND_SECRET: ${WHATSAPP_INBOUND_SECRET}
     ports:
       - "4000:4000"
+    volumes:
+      - backend_uploads:/app/uploads
 
   crm-frontend:
     build:
@@ -67,3 +73,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_uploads:

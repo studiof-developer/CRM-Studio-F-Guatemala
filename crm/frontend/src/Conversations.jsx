@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X,
-  MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2,
+  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip,
+  MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
 } from 'lucide-react';
-import { fetchConversations, fetchConversation, sendConversationMessage, updateTicket, updateCustomerTags } from './api.js';
+import {
+  fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
+  attachmentUrl, updateTicket, updateCustomerTags,
+} from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import Avatar from './components/Avatar.jsx';
@@ -35,7 +38,9 @@ export default function Conversations() {
   const [sending, setSending] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -118,6 +123,21 @@ export default function Conversations() {
     }
   }
 
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      await sendConversationAttachment(selectedId, file);
+      loadThread();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleSetStatus(e) {
     const value = e.target.value;
     if (!thread?.customerId) return;
@@ -144,7 +164,7 @@ export default function Conversations() {
 
   const selected = conversations.find((c) => c.sessionId === selectedId);
   const visibleMessages = thread?.messages.filter(
-    (m) => (m.type === 'human' || m.type === 'ai') && typeof m.content === 'string' && m.content.trim()
+    (m) => (m.type === 'human' || m.type === 'ai') && ((typeof m.content === 'string' && m.content.trim()) || m.attachment)
   ) ?? [];
   const dayGroups = groupByDay(visibleMessages);
 
@@ -305,7 +325,8 @@ export default function Conversations() {
                                   {m.additional_kwargs.advisorName}
                                 </p>
                               )}
-                              <p className="whitespace-pre-wrap">{m.content}</p>
+                              {m.attachment && <AttachmentContent attachment={m.attachment} outgoing={outgoing} />}
+                              {m.content?.trim() && <p className="whitespace-pre-wrap">{m.content}</p>}
                               <span
                                 className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${
                                   outgoing ? 'text-white/70' : 'text-greige'
@@ -400,14 +421,31 @@ export default function Conversations() {
             {thread.enAtencion ? (
               <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
                 <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,audio/*,.pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] hover:text-ink disabled:opacity-50"
+                  aria-label="Adjuntar archivo"
+                >
+                  <Paperclip size={18} />
+                </button>
+                <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Escribe tu respuesta como asesor…"
-                  className="flex-1 rounded-full border border-line bg-black/[0.03] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+                  placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor…'}
+                  disabled={uploading}
+                  className="flex-1 rounded-full border border-line bg-black/[0.03] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={sending || !draft.trim()}
+                  disabled={sending || uploading || !draft.trim()}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
                   aria-label="Enviar"
                 >
@@ -425,6 +463,45 @@ export default function Conversations() {
         )}
       </div>
     </div>
+  );
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentContent({ attachment, outgoing }) {
+  const url = attachmentUrl(attachment.id);
+  if (attachment.kind === 'image') {
+    return (
+      <img
+        src={url}
+        alt={attachment.filename ?? 'Imagen adjunta'}
+        className="mb-1 max-h-64 w-full rounded-lg object-cover"
+      />
+    );
+  }
+  if (attachment.kind === 'audio') {
+    return <audio src={url} controls className="mb-1 w-64 max-w-full" />;
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 ${
+        outgoing ? 'bg-white/10' : 'bg-black/[0.04]'
+      }`}
+    >
+      <FileText size={22} className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium">{attachment.filename ?? 'Documento'}</p>
+        <p className={`text-[10px] ${outgoing ? 'text-white/70' : 'text-greige'}`}>{formatSize(attachment.sizeBytes)}</p>
+      </div>
+      <Download size={14} className="shrink-0" />
+    </a>
   );
 }
 

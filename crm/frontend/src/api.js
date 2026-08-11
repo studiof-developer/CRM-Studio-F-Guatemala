@@ -73,6 +73,18 @@ export async function sendConversationMessage(sessionId, content) {
   return res.json();
 }
 
+export async function sendConversationAttachment(sessionId, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiFetch(`/api/conversations/${sessionId}/attachments`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al enviar el archivo');
+  return res.json();
+}
+
+export function attachmentUrl(id) {
+  return `${API_BASE}/api/attachments/${id}/file`;
+}
+
 export async function fetchCustomerCounts() {
   const res = await apiFetch('/api/customers/counts');
   if (!res.ok) throw new Error('Error al cargar los conteos de clientes');

@@ -9,13 +9,14 @@ import productsRouter from './routes/products.js';
 import dashboardRouter from './routes/dashboard.js';
 import auditRouter from './routes/audit.js';
 import authRouter from './routes/auth.js';
+import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -27,6 +28,10 @@ app.use('/api/users', requireAuth, requireRole('supervisor'), usersRouter);
 app.use('/api/products', requireAuth, productsRouter);
 app.use('/api/dashboard', requireAuth, dashboardRouter);
 app.use('/api/audit', requireAuth, requireRole('supervisor'), auditRouter);
+app.use('/api/attachments', requireAuth, attachmentsRouter);
+// No requireAuth: n8n calls this directly (no advisor session), protected by its own
+// shared-secret header check inside the router instead.
+app.use('/api/whatsapp-inbound', inboundRouter);
 
 app.get('/api/events', requireAuth, (req, res) => {
   res.set({

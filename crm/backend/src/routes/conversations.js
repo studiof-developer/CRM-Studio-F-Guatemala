@@ -1,9 +1,19 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
+import * as whatsapp from '../whatsapp.js';
+import { saveAttachment } from '../attachmentStorage.js';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+const MIME_KIND = (mime) => {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
+};
 
 export function cleanSessionId(sessionId) {
   return sessionId.split('__')[0];
@@ -179,6 +189,16 @@ router.get('/:sessionId', async (req, res, next) => {
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
 
+    const messageIds = messages.map((r) => r.id);
+    const { rows: attachments } = messageIds.length
+      ? await pool.query(
+          `SELECT id, n8n_message_id, kind, filename, mime_type, size_bytes
+           FROM message_attachments WHERE n8n_message_id = ANY($1)`,
+          [messageIds]
+        )
+      : { rows: [] };
+    const attachmentByMessageId = new Map(attachments.map((a) => [a.n8n_message_id, a]));
+
     res.json({
       enAtencion: customer?.ticket_status === 'en_atencion',
       ticketId: customer?.ticket_id ?? null,
@@ -194,7 +214,17 @@ router.get('/:sessionId', async (req, res, next) => {
       manualStatus: customer?.manual_status ?? null,
       paidLocked: customer?.paid_locked ?? false,
       phone,
-      messages: messages.map((r) => ({ id: r.id, createdAt: r.created_at, ...r.message })),
+      messages: messages.map((r) => {
+        const a = attachmentByMessageId.get(r.id);
+        return {
+          id: r.id,
+          createdAt: r.created_at,
+          ...r.message,
+          attachment: a
+            ? { id: a.id, kind: a.kind, filename: a.filename, mimeType: a.mime_type, sizeBytes: a.size_bytes }
+            : null,
+        };
+      }),
     });
   } catch (err) { next(err); }
 });
@@ -204,7 +234,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     const { content } = req.body ?? {};
     if (!content?.trim()) return res.status(400).json({ error: 'content required' });
 
-    const { sessionIds } = await findConversationThread(req.params.sessionId);
+    const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
     if (!sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
 
     // Multiple session_ids can share one thread (see findConversationThread) — append
@@ -213,6 +243,8 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       `SELECT session_id FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT 1`,
       [sessionIds]
     );
+
+    if (phone) await whatsapp.sendText(phone, content.trim());
 
     const message = {
       type: 'ai',
@@ -226,6 +258,55 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [latest[0].session_id, JSON.stringify(message)]
     );
     res.status(201).json({ id: inserted[0].id, createdAt: inserted[0].created_at, ...message });
+  } catch (err) { next(err); }
+});
+
+router.post('/:sessionId/attachments', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'file required' });
+
+    const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
+    if (!sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
+
+    const { rows: latest } = await pool.query(
+      `SELECT session_id FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT 1`,
+      [sessionIds]
+    );
+
+    const kind = MIME_KIND(req.file.mimetype);
+
+    let mediaId = null;
+    if (phone) {
+      mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
+      await whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname);
+    }
+
+    const message = {
+      type: 'ai',
+      content: '',
+      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName },
+      response_metadata: {},
+      tool_calls: [],
+    };
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id, created_at`,
+      [latest[0].session_id, JSON.stringify(message)]
+    );
+
+    const attachmentId = await saveAttachment({
+      n8nMessageId: inserted[0].id,
+      kind,
+      filename: req.file.originalname,
+      mimeType: req.file.mimetype,
+      buffer: req.file.buffer,
+    });
+
+    res.status(201).json({
+      id: inserted[0].id,
+      createdAt: inserted[0].created_at,
+      ...message,
+      attachment: { id: attachmentId, kind, filename: req.file.originalname, mimeType: req.file.mimetype, sizeBytes: req.file.buffer.length },
+    });
   } catch (err) { next(err); }
 });
 
