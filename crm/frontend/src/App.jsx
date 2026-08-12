@@ -11,6 +11,8 @@ import Customers from './Customers.jsx';
 import Users from './Users.jsx';
 import Catalog from './Catalog.jsx';
 import Audit from './Audit.jsx';
+import { Logo } from './components/Logo.jsx';
+import { ThemeToggle } from './components/ThemeToggle.jsx';
 
 const BASE_TABS = {
   dashboard: { label: 'Dashboard', icon: LayoutDashboard, Component: Dashboard },
@@ -78,19 +80,11 @@ export default function App() {
         }`}
       >
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-line-soft px-6 py-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-white shadow-md shadow-accent/20">
-                SF
-              </div>
-              <div>
-                <p className="text-sm font-semibold leading-tight text-ink">Studio F</p>
-                <p className="text-xs leading-tight text-greige">Brands Clothing CRM</p>
-              </div>
-            </div>
+          <div className="relative flex items-center justify-center border-b border-line-soft px-4 py-8">
+            <Logo className="w-52 mx-auto" />
             <button
               onClick={() => setMobileNavOpen(false)}
-              className="rounded-lg p-1.5 text-greige hover:bg-black/5 hover:text-ink md:hidden"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink md:hidden"
             >
               <X size={18} />
             </button>
@@ -112,7 +106,7 @@ export default function App() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-300 ${
-                      active ? 'text-white' : 'text-greige hover:bg-black/5 hover:text-ink'
+                      active ? 'text-white' : 'text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink'
                     }`}
                   >
                     {active && (
@@ -139,8 +133,11 @@ export default function App() {
         </div>
 
         <div className="border-t border-line-soft p-4">
-          <div className="rounded-xl bg-black/5 p-4 backdrop-blur-sm">
-            <div className="mb-1 truncate text-sm font-semibold text-ink">{user.fullName}</div>
+          <div className="relative rounded-xl bg-black/5 dark:bg-white/5 p-4 backdrop-blur-sm">
+            <div className="absolute right-4 top-4 hidden md:block">
+              <ThemeToggle />
+            </div>
+            <div className="mb-1 truncate pr-8 text-sm font-semibold text-ink">{user.fullName}</div>
             <div className="mb-4 text-[11px] font-bold uppercase tracking-wider text-accent">
               {ROLE_LABELS[user.role]}{user.zone ? ` · ${user.zone}` : ''}
             </div>
@@ -159,18 +156,16 @@ export default function App() {
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-paper/80 px-4 py-3 backdrop-blur-xl md:hidden">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-xs font-semibold text-white shadow-sm shadow-accent/20">
-              SF
-            </div>
-            <span className="text-sm font-semibold text-ink">Studio F</span>
+          <Logo className="w-32 ml-1" />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              className="rounded-lg p-2 text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink"
+            >
+              <Menu size={20} />
+            </button>
           </div>
-          <button
-            onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg p-2 text-greige hover:bg-black/5 hover:text-ink"
-          >
-            <Menu size={20} />
-          </button>
         </div>
 
         <main className="h-full w-full min-w-0 flex-1 overflow-hidden px-4 pb-8 md:p-5 md:py-8 md:pl-2 md:pr-8">

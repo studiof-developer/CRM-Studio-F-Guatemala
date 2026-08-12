@@ -102,8 +102,8 @@ export default function Catalog() {
       </div>
 
       <div className="mb-4 rounded-xl border border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
-        Columnas esperadas: <code className="rounded bg-white px-1.5 py-0.5">sku, name, category, line, size, color, price, discount_pct, stock_quantity, active</code>.
-        Un <code className="rounded bg-white px-1.5 py-0.5">sku</code> que ya existe se actualiza; uno nuevo se crea.
+        Columnas esperadas: <code className="rounded bg-paper px-1.5 py-0.5">sku, name, category, line, size, color, price, discount_pct, stock_quantity, active</code>.
+        Un <code className="rounded bg-paper px-1.5 py-0.5">sku</code> que ya existe se actualiza; uno nuevo se crea.
       </div>
 
       {result && (
@@ -139,7 +139,7 @@ export default function Catalog() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-white">
+      <div className="overflow-hidden rounded-2xl border border-border bg-paper">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted text-xs text-muted-foreground">
             <tr>

@@ -87,7 +87,7 @@ export default function Customers() {
 
         {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
-        <ul className="flex flex-col gap-2 rounded-2xl border border-border bg-white p-2">
+        <ul className="flex flex-col gap-2 rounded-2xl border border-border bg-paper p-2">
           {BUCKET_ORDER.map((key) => {
             const { label, icon: Icon, iconBg, iconText } = TEMP_META[key];
             return (
@@ -153,7 +153,7 @@ export default function Customers() {
               className={`cursor-pointer rounded-xl border p-4 transition-all ${
                 c.id === selectedId
                   ? 'border-accent bg-accent-soft shadow-sm'
-                  : 'border-border bg-white hover:border-foreground/20 hover:shadow-sm'
+                  : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
               }`}
             >
               <p className="text-sm font-medium">{c.full_name || c.whatsapp_number}</p>
@@ -162,7 +162,7 @@ export default function Customers() {
           ))}
         </ul>
 
-        <section className="rounded-2xl border border-border bg-white p-8">
+        <section className="rounded-2xl border border-border bg-paper p-8">
           {!detail && (
             <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
               Selecciona un cliente para ver su perfil.
@@ -195,7 +195,7 @@ export default function Customers() {
                 <select
                   value={detail.manual_status ?? ''}
                   onChange={handleSetStatus}
-                  className="rounded-lg border border-border bg-white px-2.5 py-1 text-xs outline-none focus:border-accent"
+                  className="rounded-lg border border-border bg-paper px-2.5 py-1 text-xs outline-none focus:border-accent"
                 >
                   <option value="">Automático</option>
                   {BUCKET_ORDER.map((k) => (

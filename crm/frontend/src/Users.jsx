@@ -93,7 +93,7 @@ export default function Users() {
               className={`cursor-pointer rounded-xl border p-4 transition-all ${
                 u.id === selectedId
                   ? 'border-accent bg-accent-soft shadow-sm'
-                  : 'border-border bg-white hover:border-foreground/20 hover:shadow-sm'
+                  : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -108,7 +108,7 @@ export default function Users() {
           ))}
         </ul>
 
-        <section className="rounded-2xl border border-border bg-white p-8">
+        <section className="rounded-2xl border border-border bg-paper p-8">
           <form onSubmit={handleSubmit} className="max-w-md">
             <h2 className="text-lg font-semibold">
               {selectedId === 'new' ? 'Crear usuario' : 'Editar usuario'}

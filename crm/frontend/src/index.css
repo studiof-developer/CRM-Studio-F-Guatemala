@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  option {
+    background-color: var(--paper);
+    color: var(--ink);
+  }
+}
+
 :root {
+  color-scheme: light;
   --background: #f5f5f7;
   --foreground: #18181b;
 
@@ -24,9 +34,7 @@
   --danger: #b91c1c;
   --purple: #7e22ce;
 
-  /* Back-compat aliases for the pre-Persiinova token names — only kept where
-     there's no meaning collision with the new system (see "accent" note below,
-     that one was NOT safe to alias and was fixed at the call sites instead). */
+  /* Back-compat aliases for the pre-Persiinova token names */
   --muted: rgba(0, 0, 0, 0.04);
   --muted-foreground: var(--greige);
   --border: var(--line);
@@ -41,6 +49,40 @@
   --info-bg: var(--accent-soft);
   --danger-bg: rgba(185, 28, 28, 0.1);
   --purple-bg: rgba(126, 34, 206, 0.1);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #09090b; /* zinc-950 */
+  --foreground: #f4f4f5; /* zinc-100 */
+
+  --paper: #18181b; /* zinc-900 */
+  --paper-soft: rgba(24, 24, 27, 0.7);
+
+  --ink: #f4f4f5; /* zinc-100 */
+  --greige: #a1a1aa; /* zinc-400 */
+  --greige-ink: #d4d4d8; /* zinc-300 */
+
+  --line: #27272a; /* zinc-800 */
+  --line-soft: rgba(39, 39, 42, 0.6);
+
+  /* Mantenemos el accent casi igual, ligeramente más brillante para legibilidad */
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.2);
+  --accent-hover: #6366f1;
+
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --purple: #a855f7;
+
+  --muted: rgba(255, 255, 255, 0.05);
+  
+  --warning-bg: rgba(245, 158, 11, 0.15);
+  --success-bg: rgba(34, 197, 94, 0.15);
+  --info-bg: var(--accent-soft);
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  --purple-bg: rgba(168, 85, 247, 0.15);
 }
 
 @theme inline {

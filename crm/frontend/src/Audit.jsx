@@ -23,7 +23,7 @@ export default function Audit() {
         <p className="mt-1 text-sm text-greige-ink">Trazabilidad de accesos a datos y de las decisiones que toma la IA.</p>
       </div>
 
-      <div className="mb-6 inline-flex rounded-xl border border-line bg-black/[0.03] p-1">
+      <div className="mb-6 inline-flex rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
         {[
           { key: 'access', label: 'Accesos a datos', icon: Eye },
           { key: 'ai', label: 'Decisiones de la IA', icon: Bot },
@@ -79,7 +79,7 @@ function AccessTab() {
 
       <div className="overflow-hidden rounded-2xl border border-line bg-paper">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-black/[0.02] text-xs text-greige-ink">
+          <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
             <tr>
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 font-medium">Quién</th>
@@ -93,7 +93,7 @@ function AccessTab() {
               <tr><td colSpan={4} className="px-4 py-8 text-center text-greige-ink">Sin registros.</td></tr>
             )}
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015]">
+              <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
                 <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.accessed_at)}</td>
                 <td className="px-4 py-3">
                   <span className="font-medium text-ink">{r.actor_name ?? r.actor}</span>

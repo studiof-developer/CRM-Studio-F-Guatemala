@@ -218,7 +218,7 @@ export default function Conversations({ user }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nombre o número"
-              className="w-full rounded-full border border-line bg-black/[0.03] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+              className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
           </div>
           <select
@@ -246,7 +246,7 @@ export default function Conversations({ user }) {
                 key={c.sessionId}
                 onClick={() => setSelectedId(c.sessionId)}
                 className={`flex w-full items-center gap-3 border-b border-line-soft px-4 py-3 text-left transition-colors ${
-                  c.sessionId === selectedId ? 'bg-accent-soft' : 'hover:bg-black/[0.03]'
+                  c.sessionId === selectedId ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                 }`}
               >
                 <Avatar name={name} />
@@ -263,7 +263,7 @@ export default function Conversations({ user }) {
                     {c.temperature && (() => {
                       const { label, icon: Icon, iconText } = TEMP_META[c.temperature];
                       return (
-                        <span className={`flex items-center gap-1 rounded-full bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold ${iconText}`}>
+                        <span className={`flex items-center gap-1 rounded-full bg-black/[0.03] dark:bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold ${iconText}`}>
                           <Icon size={10} /> {label}
                         </span>
                       );
@@ -288,7 +288,7 @@ export default function Conversations({ user }) {
       </div>
 
       {/* Thread */}
-      <div className="flex min-w-0 flex-1 flex-col bg-black/[0.015]">
+      <div className="flex min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02]">
         {!thread && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
             <MessageCircle size={32} strokeWidth={1.5} className="text-greige" />
@@ -299,7 +299,7 @@ export default function Conversations({ user }) {
           <>
             <button
               onClick={() => setInfoOpen((v) => !v)}
-              className="flex items-center gap-3 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02]"
+              className="flex items-center gap-3 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
             >
               <Avatar name={thread.customerName || thread.phone} size={36} />
               <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ export default function Conversations({ user }) {
                     {group.items.map((m) => {
                       const fromAdvisor = m.additional_kwargs?.sentBy === 'advisor';
                       const outgoing = m.type === 'ai'; // Business side (bot or advisor) = outgoing = right, like WhatsApp Business.
-                      const bg = outgoing ? '#4338ca' : '#ffffff';
+                      const bg = outgoing ? 'var(--accent)' : 'var(--paper)';
                       return (
                         <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
                           <div className="relative max-w-[70%]">
@@ -426,7 +426,7 @@ export default function Conversations({ user }) {
                       <select
                         value={thread.manualStatus ?? ''}
                         onChange={handleSetStatus}
-                        className="w-full rounded-lg border border-line bg-black/[0.03] px-3 py-1.5 text-sm outline-none focus:border-accent focus:bg-paper"
+                        className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-1.5 text-sm outline-none focus:border-accent focus:bg-paper"
                       >
                         <option value="">Automático ({TEMP_META[thread.temperature]?.label ?? '—'})</option>
                         {BUCKET_ORDER.map((k) => (
@@ -474,7 +474,7 @@ export default function Conversations({ user }) {
                   type="button"
                   disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] hover:text-ink disabled:opacity-50"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
                   aria-label="Adjuntar archivo"
                 >
                   <Paperclip size={18} />
@@ -484,7 +484,7 @@ export default function Conversations({ user }) {
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor…'}
                   disabled={uploading}
-                  className="flex-1 rounded-full border border-line bg-black/[0.03] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
+                  className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
                 />
                 <button
                   type="submit"
@@ -519,7 +519,7 @@ export default function Conversations({ user }) {
         <select
           value={paidMethod}
           onChange={(e) => setPaidMethod(e.target.value)}
-          className="w-full rounded-lg border border-line bg-black/[0.03] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
+          className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
         >
           <option value="">Selecciona el medio de pago…</option>
           {PAID_METHOD_ORDER.map((k) => (
@@ -557,7 +557,7 @@ function AttachmentContent({ attachment, outgoing }) {
       target="_blank"
       rel="noreferrer"
       className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 ${
-        outgoing ? 'bg-white/10' : 'bg-black/[0.04]'
+        outgoing ? 'bg-white/10' : 'bg-black/[0.04] dark:bg-white/[0.06]'
       }`}
     >
       <FileText size={22} className="shrink-0" />

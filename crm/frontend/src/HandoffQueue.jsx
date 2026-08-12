@@ -88,7 +88,7 @@ export default function HandoffQueue({ user }) {
             onClick={() => setStatusFilter(key)}
             className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
               statusFilter === key
-                ? 'bg-white text-foreground shadow-sm'
+                ? 'bg-paper text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -118,7 +118,7 @@ export default function HandoffQueue({ user }) {
               className={`cursor-pointer rounded-xl border p-4 transition-all ${
                 t.id === selectedId
                   ? 'border-accent bg-accent-soft shadow-sm'
-                  : 'border-border bg-white hover:border-foreground/20 hover:shadow-sm'
+                  : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
               }`}
             >
               <p className="text-sm font-medium">{t.full_name || t.whatsapp_number}</p>
@@ -130,7 +130,7 @@ export default function HandoffQueue({ user }) {
           ))}
         </ul>
 
-        <section className="rounded-2xl border border-border bg-white p-8">
+        <section className="rounded-2xl border border-border bg-paper p-8">
           {!ticketDetail && (
             <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
               Selecciona un ticket para ver el detalle.

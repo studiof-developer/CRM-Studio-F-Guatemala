@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { login } from './api.js';
 import { Field, Button } from './components/ui.jsx';
+import { Logo } from './components/Logo.jsx';
 
 export default function Login({ onLoggedIn }) {
   const [email, setEmail] = useState('');
@@ -33,11 +34,7 @@ export default function Login({ onLoggedIn }) {
         className="glass-card w-full max-w-sm rounded-3xl p-8"
       >
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-white shadow-md shadow-accent/20">
-            SF
-          </div>
-          <h1 className="text-lg font-semibold text-ink">Studio F CRM</h1>
-          <p className="mt-1 text-sm text-greige-ink">Inicia sesión para continuar</p>
+          <Logo className="w-72 mx-auto drop-shadow-sm" />
         </div>
 
         <div className="flex flex-col gap-4">

@@ -194,7 +194,7 @@ export default function Dashboard() {
           </div>
         </ChartCard>
 
-        <div className="rounded-2xl border border-border bg-white p-6">
+        <div className="rounded-2xl border border-border bg-paper p-6">
           <h3 className="mb-4 text-sm font-medium text-muted-foreground">Pedidos recientes</h3>
           {data.recentOrders.length === 0 && (
             <p className="text-sm text-muted-foreground">Todavía no hay pedidos.</p>
@@ -234,7 +234,7 @@ function MetricCard({ icon: Icon, label, value, accent, featured }) {
     );
   }
   return (
-    <div className="rounded-2xl border border-border bg-white p-5">
+    <div className="rounded-2xl border border-border bg-paper p-5">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <Icon size={16} className={accent ? 'text-warning' : 'text-muted-foreground'} />
@@ -246,7 +246,7 @@ function MetricCard({ icon: Icon, label, value, accent, featured }) {
 
 function ChartCard({ title, children }) {
   return (
-    <div className="rounded-2xl border border-border bg-white p-6">
+    <div className="rounded-2xl border border-border bg-paper p-6">
       <h3 className="mb-4 text-sm font-medium text-muted-foreground">{title}</h3>
       {children}
     </div>

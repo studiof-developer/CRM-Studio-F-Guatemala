@@ -35,7 +35,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'Co
               <button
                 onClick={onCancel}
                 disabled={busy}
-                className="rounded-lg px-3.5 py-2 text-sm font-medium text-greige-ink transition-colors hover:bg-black/[0.04] hover:text-ink disabled:opacity-50"
+                className="rounded-lg px-3.5 py-2 text-sm font-medium text-greige-ink transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
               >
                 Cancelar
               </button>
