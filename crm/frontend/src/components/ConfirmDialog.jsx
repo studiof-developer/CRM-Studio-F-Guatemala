@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 
-export default function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar', danger = false, busy = false, onConfirm, onCancel }) {
+export default function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar', danger = false, busy = false, confirmDisabled = false, children, onConfirm, onCancel }) {
   return (
     <AnimatePresence>
       {open && (
@@ -30,6 +30,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'Co
                 <p className="mt-1 text-sm leading-relaxed text-greige-ink">{message}</p>
               </div>
             </div>
+            {children && <div className="mt-4">{children}</div>}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={onCancel}
@@ -40,7 +41,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'Co
               </button>
               <button
                 onClick={onConfirm}
-                disabled={busy}
+                disabled={busy || confirmDisabled}
                 className={`rounded-lg px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50 ${
                   danger ? 'bg-danger' : 'bg-accent'
                 }`}

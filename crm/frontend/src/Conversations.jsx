@@ -9,6 +9,7 @@ import {
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
+import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -42,6 +43,7 @@ export default function Conversations({ user }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
+  const [paidMethod, setPaidMethod] = useState('');
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -182,10 +184,10 @@ export default function Conversations({ user }) {
   }
 
   async function handleMarkPaid() {
-    if (!thread?.customerId) return;
+    if (!thread?.customerId || !paidMethod) return;
     setActionBusy(true);
     try {
-      await updateCustomerTags(thread.customerId, { paidLocked: true });
+      await updateCustomerTags(thread.customerId, { paidLocked: true, paidMethod });
       await loadThread();
       load(false);
       showSuccess('Cliente marcado como Pagado');
@@ -194,6 +196,7 @@ export default function Conversations({ user }) {
     } finally {
       setActionBusy(false);
       setConfirmPaidOpen(false);
+      setPaidMethod('');
     }
   }
 
@@ -410,6 +413,11 @@ export default function Conversations({ user }) {
                         );
                       })()}
                     </div>
+                    {thread.paidLocked && thread.paidMethod && (
+                      <p className="mt-1 text-[11px] text-greige-ink">
+                        Pagó por {PAID_METHOD_LABELS[thread.paidMethod]}
+                      </p>
+                    )}
                   </div>
 
                   {thread.customerId && (
@@ -501,12 +509,24 @@ export default function Conversations({ user }) {
       <ConfirmDialog
         open={confirmPaidOpen}
         title="Marcar como Pagado"
-        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer."
+        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. Indica el medio de pago:"
         confirmLabel="Marcar como Pagado"
         busy={actionBusy}
+        confirmDisabled={!paidMethod}
         onConfirm={handleMarkPaid}
-        onCancel={() => setConfirmPaidOpen(false)}
-      />
+        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
+      >
+        <select
+          value={paidMethod}
+          onChange={(e) => setPaidMethod(e.target.value)}
+          className="w-full rounded-lg border border-line bg-black/[0.03] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
+        >
+          <option value="">Selecciona el medio de pago…</option>
+          {PAID_METHOD_ORDER.map((k) => (
+            <option key={k} value={k}>{PAID_METHOD_LABELS[k]}</option>
+          ))}
+        </select>
+      </ConfirmDialog>
     </div>
   );
 }

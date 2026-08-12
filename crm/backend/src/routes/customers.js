@@ -25,6 +25,7 @@ export const TEMPERATURE_SQL = `
 `;
 
 export const VALID_TEMPERATURES = ['caliente', 'tibio', 'frio', 'pagado', 'pqrs'];
+export const VALID_PAID_METHODS = ['tarjeta', 'efectivo', 'transferencia', 'deposito'];
 
 // Advisor override wins whenever set — the bot/n8n never writes manual_status,
 // so once an advisor picks a status it's pinned until an advisor changes it again.
@@ -145,21 +146,25 @@ router.patch('/:id/tags', async (req, res, next) => {
       return res.status(403).json({ error: 'forbidden' });
     }
 
-    const { manualStatus, paidLocked } = req.body ?? {};
+    const { manualStatus, paidLocked, paidMethod } = req.body ?? {};
     if (manualStatus !== undefined && manualStatus !== null && !VALID_TEMPERATURES.includes(manualStatus)) {
       return res.status(400).json({ error: 'invalid manualStatus' });
     }
     if (paidLocked !== undefined && paidLocked !== true) {
       return res.status(400).json({ error: 'paidLocked cannot be reversed once set' });
     }
+    if (paidLocked === true && !VALID_PAID_METHODS.includes(paidMethod)) {
+      return res.status(400).json({ error: 'paidMethod is required when marking as paid' });
+    }
 
     const { rows } = await pool.query(
       `UPDATE customers AS c SET
          manual_status = CASE WHEN $1 THEN $2 ELSE manual_status END,
-         paid_locked = paid_locked OR COALESCE($3, false)
+         paid_locked = paid_locked OR COALESCE($3, false),
+         paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END
        WHERE c.id = $4
-       RETURNING id, manual_status, paid_locked, ${EFFECTIVE_STATUS_SQL} AS temperature`,
-      [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id]
+       RETURNING id, manual_status, paid_locked, paid_method, ${EFFECTIVE_STATUS_SQL} AS temperature`,
+      [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id, paidMethod ?? null]
     );
     res.json(rows[0]);
   } catch (err) { next(err); }

@@ -4,10 +4,14 @@ import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
-import { saveAttachment } from '../attachmentStorage.js';
+import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, isAllowedAttachmentMime(file.mimetype)),
+});
 
 const MIME_KIND = (mime) => {
   if (mime.startsWith('image/')) return 'image';
@@ -41,7 +45,7 @@ export async function findCustomerBySessionId(sessionIdPrefix) {
 async function findCustomerByPhone(phone) {
   const { rows } = await pool.query(
     `SELECT c.id, c.full_name, c.zone, c.department, c.preferred_line, c.purchase_frequency, c.address,
-            c.paid_locked, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
+            c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
             t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason
      FROM customers c
      LEFT JOIN LATERAL (
@@ -213,6 +217,7 @@ router.get('/:sessionId', async (req, res, next) => {
       temperature: customer?.temperature ?? null,
       manualStatus: customer?.manual_status ?? null,
       paidLocked: customer?.paid_locked ?? false,
+      paidMethod: customer?.paid_method ?? null,
       phone,
       messages: messages.map((r) => {
         const a = attachmentByMessageId.get(r.id);
@@ -263,7 +268,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
 
 router.post('/:sessionId/attachments', upload.single('file'), async (req, res, next) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'file required' });
+    if (!req.file) return res.status(400).json({ error: 'file required or file type not allowed' });
 
     const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
     if (!sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });

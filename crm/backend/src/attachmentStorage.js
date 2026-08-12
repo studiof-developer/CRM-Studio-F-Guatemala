@@ -5,6 +5,20 @@ import { pool } from './db.js';
 export const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// Whitelist, not blacklist — serving an uploaded file back with Content-Disposition:
+// inline means an unrestricted mimetype (e.g. text/html, image/svg+xml) would let
+// someone plant a stored-XSS payload via a "photo" attachment.
+const ALLOWED_MIME_PREFIXES = ['image/', 'audio/'];
+const ALLOWED_MIME_EXACT = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+export function isAllowedAttachmentMime(mimeType) {
+  return ALLOWED_MIME_EXACT.includes(mimeType) || ALLOWED_MIME_PREFIXES.some((p) => mimeType.startsWith(p));
+}
+
 export async function saveAttachment({ n8nMessageId, kind, filename, mimeType, buffer }) {
   const diskName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const filePath = path.join(UPLOAD_DIR, diskName);

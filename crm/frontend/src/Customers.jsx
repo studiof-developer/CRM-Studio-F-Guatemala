@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
+import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import Badge from './components/Badge.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -16,6 +17,7 @@ export default function Customers() {
   const [error, setError] = useState(null);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [paidMethod, setPaidMethod] = useState('');
 
   const loadCounts = useCallback(() => {
     fetchCustomerCounts().then(setCounts).catch((err) => setError(err.message));
@@ -59,9 +61,10 @@ export default function Customers() {
   }
 
   async function handleMarkPaid() {
+    if (!paidMethod) return;
     setMarkingPaid(true);
     try {
-      await updateCustomerTags(selectedId, { paidLocked: true });
+      await updateCustomerTags(selectedId, { paidLocked: true, paidMethod });
       reloadDetail();
       loadCounts();
       showSuccess('Cliente marcado como Pagado');
@@ -70,6 +73,7 @@ export default function Customers() {
     } finally {
       setMarkingPaid(false);
       setConfirmPaidOpen(false);
+      setPaidMethod('');
     }
   }
 
@@ -173,10 +177,15 @@ export default function Customers() {
                     <Phone size={13} /> {detail.whatsapp_number}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={TEMP_META[detail.temperature].variant}>{TEMP_META[detail.temperature].label}</Badge>
-                  {detail.paid_locked && detail.temperature !== 'pagado' && (
-                    <Badge variant={TEMP_META.pagado.variant}>{TEMP_META.pagado.label}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={TEMP_META[detail.temperature].variant}>{TEMP_META[detail.temperature].label}</Badge>
+                    {detail.paid_locked && detail.temperature !== 'pagado' && (
+                      <Badge variant={TEMP_META.pagado.variant}>{TEMP_META.pagado.label}</Badge>
+                    )}
+                  </div>
+                  {detail.paid_locked && detail.paid_method && (
+                    <p className="text-xs text-muted-foreground">Pagó por {PAID_METHOD_LABELS[detail.paid_method]}</p>
                   )}
                 </div>
               </div>
@@ -267,12 +276,24 @@ export default function Customers() {
       <ConfirmDialog
         open={confirmPaidOpen}
         title="Marcar como Pagado"
-        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer."
+        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. Indica el medio de pago:"
         confirmLabel="Marcar como Pagado"
         busy={markingPaid}
+        confirmDisabled={!paidMethod}
         onConfirm={handleMarkPaid}
-        onCancel={() => setConfirmPaidOpen(false)}
-      />
+        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
+      >
+        <select
+          value={paidMethod}
+          onChange={(e) => setPaidMethod(e.target.value)}
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-accent"
+        >
+          <option value="">Selecciona el medio de pago…</option>
+          {PAID_METHOD_ORDER.map((k) => (
+            <option key={k} value={k}>{PAID_METHOD_LABELS[k]}</option>
+          ))}
+        </select>
+      </ConfirmDialog>
     </div>
   );
 }

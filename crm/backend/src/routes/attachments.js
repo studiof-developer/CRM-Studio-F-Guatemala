@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs';
 import { pool } from '../db.js';
-import { saveAttachment } from '../attachmentStorage.js';
+import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 
 const router = Router();
@@ -38,6 +38,9 @@ inboundRouter.post('/', async (req, res, next) => {
     const { phone, kind, filename, mimeType, base64 } = req.body ?? {};
     if (!phone || !kind || !mimeType || !base64) {
       return res.status(400).json({ error: 'phone, kind, mimeType, base64 required' });
+    }
+    if (!isAllowedAttachmentMime(mimeType)) {
+      return res.status(400).json({ error: 'mimeType not allowed' });
     }
 
     const { sessionIds } = await findConversationThread(phone);

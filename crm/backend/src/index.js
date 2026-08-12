@@ -15,6 +15,10 @@ import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
 
 const app = express();
+// Behind Dokploy's Traefik in production — without this, req.ip is the proxy's
+// address for every request, which would make the login rate limiter apply
+// globally instead of per-client.
+app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(cookieParser());
