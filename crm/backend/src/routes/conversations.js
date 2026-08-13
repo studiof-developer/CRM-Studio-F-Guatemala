@@ -23,7 +23,8 @@ export function cleanSessionId(sessionId) {
   return sessionId.split('__')[0];
 }
 
-const PHONE_RE = /^\d{7,10}$/;
+// 7-15 digits covers bare local numbers up through full E.164 (country code + number).
+const PHONE_RE = /^\d{7,15}$/;
 
 // The customer's phone number is the first thing the script asks for, so it's
 // sitting in the transcript as plain text — no n8n changes needed to find it.
@@ -118,19 +119,20 @@ router.get('/', async (req, res, next) => {
         SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
         FROM readable
         WHERE message->>'type' = 'human'
-          AND trim(message->>'content') ~ '^\\d{7,10}$'
+          AND trim(message->>'content') ~ '^\\d{7,15}$'
         ORDER BY session_id, id ASC
       ),
       -- Once a phone is known, it — not the raw session_id — is the thread's identity,
       -- so every session_id that ever mentioned it collapses into one row. Production
-      -- session_ids are already the real wa_id (phone), so that always wins over the
-      -- old "first digit-looking message in the transcript" heuristic below, which
-      -- exists only for legacy test sessions with random session_ids and would
-      -- otherwise misfire on the DPI (also 7-10 digits) in the current intake flow.
+      -- session_ids are already the real wa_id (phone, up to full E.164 length with
+      -- country code), so that always wins over the old "first digit-looking message
+      -- in the transcript" heuristic below, which exists only for legacy test sessions
+      -- with random session_ids and would otherwise misfire on the DPI in the current
+      -- intake flow.
       threaded AS (
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN r.session_id ~ '^\d{7,10}$' THEN r.session_id ELSE p.phone END AS phone,
-               CASE WHEN r.session_id ~ '^\d{7,10}$' THEN r.session_id ELSE COALESCE(p.phone, r.session_id) END AS thread_key
+               CASE WHEN r.session_id ~ '^\d{7,15}$' THEN r.session_id ELSE p.phone END AS phone,
+               CASE WHEN r.session_id ~ '^\d{7,15}$' THEN r.session_id ELSE COALESCE(p.phone, r.session_id) END AS thread_key
         FROM readable r
         LEFT JOIN phone_by_session p USING (session_id)
       ),
