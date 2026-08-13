@@ -143,12 +143,13 @@ export default function Dashboard() {
   const { kpis } = data;
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div className="mb-6">
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">Panorama general de Studio F.</p>
       </div>
 
+      <div className="px-8 pb-8">
       <div className="mb-6 grid grid-cols-4 gap-4">
         <MetricCard icon={DollarSign} label="Ingresos totales" value={formatQ(kpis.ingresosTotales)} featured />
         <MetricCard icon={ShoppingCart} label="Pedidos este mes" value={kpis.pedidosMes} />
@@ -216,6 +217,7 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

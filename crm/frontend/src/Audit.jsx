@@ -25,30 +25,34 @@ export default function Audit() {
   const [tab, setTab] = useState('access');
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Auditoría</h1>
-        <p className="mt-1 text-sm text-greige-ink">Trazabilidad de accesos a datos y de las decisiones que toma la IA.</p>
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Auditoría</h1>
+          <p className="mt-1 text-sm text-greige-ink">Trazabilidad de accesos a datos y de las decisiones que toma la IA.</p>
+        </div>
+
+        <div className="inline-flex rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
+          {[
+            { key: 'access', label: 'Accesos a datos', icon: Eye },
+            { key: 'ai', label: 'Decisiones de la IA', icon: Bot },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
+                tab === key ? 'bg-paper text-ink shadow-sm' : 'text-greige-ink hover:text-ink'
+              }`}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="mb-6 inline-flex rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
-        {[
-          { key: 'access', label: 'Accesos a datos', icon: Eye },
-          { key: 'ai', label: 'Decisiones de la IA', icon: Bot },
-        ].map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
-              tab === key ? 'bg-paper text-ink shadow-sm' : 'text-greige-ink hover:text-ink'
-            }`}
-          >
-            <Icon size={14} /> {label}
-          </button>
-        ))}
+      <div className="px-8 pb-8">
+        {tab === 'access' ? <AccessTab /> : <AiTab />}
       </div>
-
-      {tab === 'access' ? <AccessTab /> : <AiTab />}
     </div>
   );
 }

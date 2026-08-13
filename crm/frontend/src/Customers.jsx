@@ -118,8 +118,8 @@ export default function Customers() {
   const { label, icon: Icon, iconText } = TEMP_META[bucket];
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div className="mb-6 flex items-center gap-3">
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 flex items-center gap-3 bg-paper px-8 pb-4 pt-8">
         <button
           onClick={() => { setBucket(null); setSelectedId(null); loadCounts(); }}
           className="rounded-lg px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -132,6 +132,7 @@ export default function Customers() {
         </span>
       </div>
 
+      <div className="px-8 pb-8">
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="grid grid-cols-[360px_1fr] gap-6">
@@ -278,6 +279,7 @@ export default function Customers() {
             </>
           )}
         </section>
+      </div>
       </div>
 
       <ConfirmDialog

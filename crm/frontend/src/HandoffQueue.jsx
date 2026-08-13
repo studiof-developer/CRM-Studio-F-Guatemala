@@ -75,28 +75,31 @@ export default function HandoffQueue({ user }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Cola de Handoff</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Conversaciones que necesitan un asesor humano.</p>
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Cola de Handoff</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Conversaciones que necesitan un asesor humano.</p>
+        </div>
+
+        <div className="inline-flex rounded-xl border border-border bg-muted p-1">
+          {FILTERS.map((key) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
+                statusFilter === key
+                  ? 'bg-paper text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {STATUS_META[key].label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="mb-6 inline-flex rounded-xl border border-border bg-muted p-1">
-        {FILTERS.map((key) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
-              statusFilter === key
-                ? 'bg-paper text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {STATUS_META[key].label}
-          </button>
-        ))}
-      </div>
-
+      <div className="px-8 pb-8">
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="grid grid-cols-[360px_1fr] gap-6">
@@ -199,6 +202,7 @@ export default function HandoffQueue({ user }) {
             </>
           )}
         </section>
+      </div>
       </div>
     </div>
   );

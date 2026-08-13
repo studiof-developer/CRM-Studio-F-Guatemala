@@ -106,8 +106,8 @@ export default function Users() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 mb-6 flex items-center justify-between bg-paper px-8 pb-4 pt-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="mt-1 text-sm text-muted-foreground">Administradores, supervisores y asesores con acceso al CRM.</p>
@@ -117,6 +117,7 @@ export default function Users() {
         </Button>
       </div>
 
+      <div className="px-8 pb-8">
       <div className="grid grid-cols-[360px_1fr] gap-6">
         <ul className="flex flex-col gap-2">
           {users.map((u) => (
@@ -220,6 +221,7 @@ export default function Users() {
             </div>
           </form>
         </section>
+      </div>
       </div>
 
       <ConfirmDialog
