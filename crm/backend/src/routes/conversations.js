@@ -73,9 +73,14 @@ async function findCustomerByPhone(phone) {
 export async function findConversationThread(threadKey) {
   let sessionIds;
   if (PHONE_RE.test(threadKey)) {
+    // Production session_ids are the phone itself, so match that directly — the
+    // content-equals-phone clause is only there for legacy sessions (random
+    // session_id) that merge into this thread because the customer once typed
+    // their own number as a message.
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
-       WHERE message->>'type' = 'human' AND trim(message->>'content') = $1`,
+       WHERE session_id = $1
+          OR (message->>'type' = 'human' AND trim(message->>'content') = $1)`,
       [threadKey]
     );
     sessionIds = rows.map((r) => r.session_id);
