@@ -449,6 +449,7 @@ export default function Conversations({ user }) {
                     <InfoRow icon={MapPin} label="Municipio" value={thread.municipio || '—'} />
                     <InfoRow icon={MapPin} label="Dirección" value={thread.address || '—'} />
                     <InfoRow icon={ShoppingBag} label="Línea preferida" value={thread.preferredLine || '—'} />
+                    <InfoRow icon={ShoppingBag} label="Talla" value={thread.preferredSize || '—'} />
                     <InfoRow icon={CircleDollarSign} label="Compras totales" value={thread.purchaseFrequency ?? '—'} />
                   </div>
 

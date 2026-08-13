@@ -216,6 +216,7 @@ export default function Customers() {
                 <InfoRow icon={MapPin} label="Departamento" value={detail.department || '—'} />
                 <InfoRow icon={MapPin} label="Municipio" value={detail.municipio || '—'} />
                 <InfoRow icon={ShoppingBag} label="Línea preferida" value={detail.preferred_line || '—'} />
+                <InfoRow icon={ShoppingBag} label="Talla" value={detail.preferred_size || '—'} />
                 <InfoRow icon={CircleDollarSign} label="Compras totales" value={detail.purchase_frequency} />
                 <InfoRow icon={MessageSquareWarning} label="Conversaciones" value={detail.conversationSessionIds.length} />
               </div>

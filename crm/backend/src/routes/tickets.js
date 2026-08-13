@@ -45,7 +45,7 @@ router.get('/:id', async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT t.id, t.status, t.handoff_reason, t.assigned_advisor, t.created_at, t.updated_at,
               c.id AS customer_id, c.full_name, c.whatsapp_number, c.department, c.municipio, c.preferred_line,
-              c.purchase_frequency, c.purchase_status, c.zone
+              c.preferred_size, c.purchase_frequency, c.purchase_status, c.zone
        FROM tickets t
        JOIN customers c ON c.id = t.customer_id
        WHERE t.id = $1`,
