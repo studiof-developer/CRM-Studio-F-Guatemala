@@ -35,7 +35,7 @@ export const EFFECTIVE_STATUS_SQL = `COALESCE(c.manual_status, ${TEMPERATURE_SQL
 export function zoneClause(user, params) {
   if (ELEVATED_ROLES.includes(user.role)) return '';
   params.push(user.zone);
-  return `AND c.zone = $${params.length}`;
+  return `AND (c.zone IS NULL OR c.zone = $${params.length})`;
 }
 
 router.get('/counts', async (req, res, next) => {
@@ -94,7 +94,7 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const customer = rows[0];
 
-    if (!ELEVATED_ROLES.includes(req.user.role) && customer.zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && customer.zone && customer.zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
@@ -143,7 +143,7 @@ router.patch('/:id/tags', async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query(`SELECT zone FROM customers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
-    if (!ELEVATED_ROLES.includes(req.user.role) && existing[0].zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && existing[0].zone && existing[0].zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

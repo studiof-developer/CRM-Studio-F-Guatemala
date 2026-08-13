@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone } from 'lucide-react';
+import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
@@ -213,10 +213,15 @@ export default function Customers() {
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-5 border-y border-border py-6">
+                <InfoRow icon={Mail} label="Correo" value={detail.email || '—'} />
+                <InfoRow icon={CreditCard} label="DPI" value={detail.dpi || '—'} />
                 <InfoRow icon={MapPin} label="Departamento" value={detail.department || '—'} />
                 <InfoRow icon={MapPin} label="Municipio" value={detail.municipio || '—'} />
+                <InfoRow icon={MapPin} label="Dirección" value={detail.address || '—'} />
                 <InfoRow icon={ShoppingBag} label="Línea preferida" value={detail.preferred_line || '—'} />
                 <InfoRow icon={ShoppingBag} label="Talla" value={detail.preferred_size || '—'} />
+                <InfoRow icon={Calendar} label="Fecha de nacimiento" value={detail.birth_date ? new Date(detail.birth_date).toLocaleDateString('es-GT') : '—'} />
+                <InfoRow icon={Package} label="Estado de compra" value={detail.purchase_status || '—'} />
                 <InfoRow icon={CircleDollarSign} label="Compras totales" value={detail.purchase_frequency} />
                 <InfoRow icon={MessageSquareWarning} label="Conversaciones" value={detail.conversationSessionIds.length} />
               </div>

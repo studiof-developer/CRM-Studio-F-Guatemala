@@ -8,12 +8,11 @@ ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin';
 ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
 
-UPDATE users SET username = 'asupervisora' WHERE full_name = 'Ana Supervisora' AND username IS NULL;
-
-INSERT INTO users (full_name, username, email, password_hash, role)
-VALUES ('Mauricio Rodriguez', 'mrodriguez', NULL, '$2b$10$E61ja3QRf8n.xOihF.2AeOm4xBIsMi.8rl2cneDF/iKWqNIecGWKm', 'admin')
-ON CONFLICT (username) DO NOTHING;
-
+-- Existing accounts and the first admin were backfilled by hand once, directly
+-- against the live DB — not scripted here, so no real credential ever lands in
+-- git history. On a fresh install: no users exist yet, so username being
+-- NOT NULL below is trivially satisfied; create the first admin by hand via
+-- psql (INSERT with a bcrypt hash), then manage everyone else from Usuarios.
 ALTER TABLE users ALTER COLUMN username SET NOT NULL;
 
 ALTER TABLE access_audit ALTER COLUMN customer_id DROP NOT NULL;

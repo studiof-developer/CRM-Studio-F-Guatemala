@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Eye, Bot, AlertTriangle } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions } from './api.js';
 import Badge from './components/Badge.jsx';
 
-const ACTION_LABELS = {
-  view_customer: 'Vio perfil de cliente',
-  view_ticket: 'Vio ticket',
-  view_conversation: 'Vio conversación',
+// Data-access actions are tied to a customer record; account actions are not
+// (their "Cliente" column shows an em dash) — grouped and color-coded so the
+// two kinds of activity are easy to tell apart at a glance in the table.
+const ACTION_META = {
+  view_customer: { label: 'Vio perfil de cliente', variant: 'info', icon: Eye },
+  view_ticket: { label: 'Vio ticket', variant: 'info', icon: Eye },
+  view_conversation: { label: 'Vio conversación', variant: 'info', icon: Eye },
+  login: { label: 'Inició sesión', variant: 'success', icon: LogIn },
+  user_created: { label: 'Creó un usuario', variant: 'purple', icon: UserPlus },
+  user_updated: { label: 'Editó un usuario', variant: 'warning', icon: UserCog },
+  user_deleted: { label: 'Eliminó un usuario', variant: 'danger', icon: UserMinus },
 };
+const ACTION_LABELS = Object.fromEntries(Object.entries(ACTION_META).map(([k, v]) => [k, v.label]));
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
@@ -68,9 +76,17 @@ function AccessTab() {
           className="rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-accent"
         >
           <option value="">Todas las acciones</option>
-          {Object.entries(ACTION_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
+          <optgroup label="Acceso a datos">
+            <option value="view_customer">{ACTION_LABELS.view_customer}</option>
+            <option value="view_ticket">{ACTION_LABELS.view_ticket}</option>
+            <option value="view_conversation">{ACTION_LABELS.view_conversation}</option>
+          </optgroup>
+          <optgroup label="Cuentas">
+            <option value="login">{ACTION_LABELS.login}</option>
+            <option value="user_created">{ACTION_LABELS.user_created}</option>
+            <option value="user_updated">{ACTION_LABELS.user_updated}</option>
+            <option value="user_deleted">{ACTION_LABELS.user_deleted}</option>
+          </optgroup>
         </select>
         <span className="text-xs text-greige-ink">{rows.length} registros</span>
       </div>
@@ -84,7 +100,7 @@ function AccessTab() {
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 font-medium">Quién</th>
               <th className="px-4 py-3 font-medium">Acción</th>
-              <th className="px-4 py-3 font-medium">Cliente consultado</th>
+              <th className="px-4 py-3 font-medium">Cliente</th>
             </tr>
           </thead>
           <tbody>
@@ -92,17 +108,24 @@ function AccessTab() {
             {!loading && rows.length === 0 && (
               <tr><td colSpan={4} className="px-4 py-8 text-center text-greige-ink">Sin registros.</td></tr>
             )}
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
-                <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.accessed_at)}</td>
-                <td className="px-4 py-3">
-                  <span className="font-medium text-ink">{r.actor_name ?? r.actor}</span>
-                  {r.actor_role && <span className="ml-1.5 text-xs text-greige">({r.actor_role})</span>}
-                </td>
-                <td className="px-4 py-3 text-ink">{ACTION_LABELS[r.action] ?? r.action}</td>
-                <td className="px-4 py-3 text-ink">{r.customer_name}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const meta = ACTION_META[r.action];
+              return (
+                <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
+                  <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.accessed_at)}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-medium text-ink">{r.actor_name ?? r.actor}</span>
+                    {r.actor_role && <span className="ml-1.5 text-xs text-greige">({r.actor_role})</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={meta?.variant ?? 'neutral'}>
+                      {meta?.icon && <meta.icon size={11} />} {meta?.label ?? r.action}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-ink">{r.customer_name ?? '—'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

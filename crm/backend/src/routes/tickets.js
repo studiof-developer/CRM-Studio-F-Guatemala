@@ -54,7 +54,7 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const ticket = rows[0];
 
-    if (!ELEVATED_ROLES.includes(req.user.role) && ticket.zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && ticket.zone && ticket.zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
@@ -77,7 +77,7 @@ router.patch('/:id', async (req, res, next) => {
       [req.params.id]
     );
     if (!existing.rows.length) return res.status(404).json({ error: 'not found' });
-    if (!ELEVATED_ROLES.includes(req.user.role) && existing.rows[0].zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && existing.rows[0].zone && existing.rows[0].zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

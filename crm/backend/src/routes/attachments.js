@@ -2,21 +2,32 @@ import { Router } from 'express';
 import fs from 'fs';
 import { pool } from '../db.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
-import { cleanSessionId, findConversationThread } from './conversations.js';
+import { cleanSessionId, findConversationThread, findCustomerBySessionId } from './conversations.js';
+import { ELEVATED_ROLES } from '../auth.js';
 
 const router = Router();
 
-// Serving is behind requireAuth (mounted under /api/attachments in index.js) but doesn't
-// re-check zone access — a modest simplification, tighten if attachments ever carry
-// anything more sensitive than product photos/catalogs/voice notes.
+// Same zone rule as everywhere else: null zone (not yet inferred) always passes —
+// once handed off, any advisor/supervisor can pick the conversation back up for
+// shift continuity — only an explicit zone mismatch blocks access.
 router.get('/:id/file', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT filename, mime_type, file_path FROM message_attachments WHERE id = $1`,
+      `SELECT a.filename, a.mime_type, a.file_path, h.session_id
+       FROM message_attachments a
+       JOIN n8n_chat_histories h ON h.id = a.n8n_message_id
+       WHERE a.id = $1`,
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'not found' });
-    const { filename, mime_type, file_path } = rows[0];
+    const { filename, mime_type, file_path, session_id } = rows[0];
+
+    if (!ELEVATED_ROLES.includes(req.user.role)) {
+      const { customer } = await findCustomerBySessionId(cleanSessionId(session_id));
+      if (customer?.zone && customer.zone !== req.user.zone) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+    }
     res.setHeader('Content-Type', mime_type);
     // Preview (img/iframe/audio src) needs inline; the explicit download button
     // asks for ?download=1 to force a save-as instead of rendering in place.
