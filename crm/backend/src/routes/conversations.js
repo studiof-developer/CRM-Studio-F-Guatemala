@@ -131,8 +131,8 @@ router.get('/', async (req, res, next) => {
       -- intake flow.
       threaded AS (
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN r.session_id ~ '^\d{7,15}$' THEN r.session_id ELSE p.phone END AS phone,
-               CASE WHEN r.session_id ~ '^\d{7,15}$' THEN r.session_id ELSE COALESCE(p.phone, r.session_id) END AS thread_key
+               CASE WHEN r.session_id ~ '^\\d{7,15}$' THEN r.session_id ELSE p.phone END AS phone,
+               CASE WHEN r.session_id ~ '^\\d{7,15}$' THEN r.session_id ELSE COALESCE(p.phone, r.session_id) END AS thread_key
         FROM readable r
         LEFT JOIN phone_by_session p USING (session_id)
       ),
