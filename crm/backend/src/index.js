@@ -28,10 +28,10 @@ app.use('/api/auth', authRouter);
 app.use('/api/tickets', requireAuth, ticketsRouter);
 app.use('/api/conversations', requireAuth, conversationsRouter);
 app.use('/api/customers', requireAuth, customersRouter);
-app.use('/api/users', requireAuth, requireRole('supervisor'), usersRouter);
+app.use('/api/users', requireAuth, requireRole('admin'), usersRouter);
 app.use('/api/products', requireAuth, productsRouter);
 app.use('/api/dashboard', requireAuth, dashboardRouter);
-app.use('/api/audit', requireAuth, requireRole('supervisor'), auditRouter);
+app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRouter);
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 // No requireAuth: n8n calls this directly (no advisor session), protected by its own
 // shared-secret header check inside the router instead.

@@ -23,12 +23,16 @@ export function requireAuth(req, res, next) {
   }
 }
 
-export function requireRole(role) {
+export function requireRole(...roles) {
   return (req, res, next) => {
-    if (req.user?.role !== role) return res.status(403).json({ error: 'forbidden' });
+    if (!roles.includes(req.user?.role)) return res.status(403).json({ error: 'forbidden' });
     next();
   };
 }
+
+// Admin and supervisor both get unrestricted (non-zone-scoped) access everywhere;
+// only 'asesor' is limited to their own zone.
+export const ELEVATED_ROLES = ['admin', 'supervisor'];
 
 export function setSessionCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {

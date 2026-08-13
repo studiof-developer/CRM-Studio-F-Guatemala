@@ -6,12 +6,28 @@ import { Button } from './components/ui.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
-const EMPTY_FORM = { full_name: '', email: '', password: '', role: 'asesor', zone: '' };
+const EMPTY_FORM = { full_name: '', username: '', email: '', password: '', role: 'asesor', zone: '' };
+
+const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor' };
+const ROLE_BADGE_VARIANT = { admin: 'danger', supervisor: 'purple', asesor: 'info' };
+
+const DIACRITICS_RE = new RegExp('[̀-ͯ]', 'g');
+
+function suggestUsername(fullName) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const raw = parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1]}` : parts[0];
+  return raw
+    .normalize('NFD').replace(DIACRITICS_RE, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '');
+}
 
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [selectedId, setSelectedId] = useState('new');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [usernameTouched, setUsernameTouched] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -25,14 +41,31 @@ export default function Users() {
 
   function selectUser(user) {
     setSelectedId(user.id);
-    setForm({ full_name: user.full_name, email: user.email, password: '', role: user.role, zone: user.zone ?? '' });
+    setForm({
+      full_name: user.full_name,
+      username: user.username,
+      email: user.email ?? '',
+      password: '',
+      role: user.role,
+      zone: user.zone ?? '',
+    });
+    setUsernameTouched(true);
     setError(null);
   }
 
   function selectNew() {
     setSelectedId('new');
     setForm(EMPTY_FORM);
+    setUsernameTouched(false);
     setError(null);
+  }
+
+  function handleFullNameChange(value) {
+    setForm((f) => ({
+      ...f,
+      full_name: value,
+      username: usernameTouched ? f.username : suggestUsername(value),
+    }));
   }
 
   async function handleSubmit(e) {
@@ -43,7 +76,7 @@ export default function Users() {
       if (selectedId === 'new') {
         await createUser(form);
       } else {
-        const patch = { full_name: form.full_name, role: form.role, zone: form.zone || null };
+        const patch = { full_name: form.full_name, username: form.username, email: form.email || null, role: form.role, zone: form.zone || null };
         if (form.password) patch.password = form.password;
         await updateUser(selectedId, patch);
       }
@@ -77,7 +110,7 @@ export default function Users() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Asesores y supervisores con acceso al CRM.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Administradores, supervisores y asesores con acceso al CRM.</p>
         </div>
         <Button onClick={selectNew}>
           <UserPlus size={16} /> Nuevo usuario
@@ -98,11 +131,9 @@ export default function Users() {
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">{u.full_name}</p>
-                <Badge variant={u.role === 'supervisor' ? 'purple' : 'info'}>
-                  {u.role === 'supervisor' ? 'Supervisor' : 'Asesor'}
-                </Badge>
+                <Badge variant={ROLE_BADGE_VARIANT[u.role]}>{ROLE_LABELS[u.role]}</Badge>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">{u.email}</p>
+              <p className="mt-1 text-sm text-muted-foreground">@{u.username}</p>
               {u.zone && <p className="mt-0.5 text-xs text-muted-foreground">Zona: {u.zone}</p>}
             </li>
           ))}
@@ -117,19 +148,27 @@ export default function Users() {
             <label className="mb-1.5 mt-5 block text-sm font-medium">Nombre completo</label>
             <input
               value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+              onChange={(e) => handleFullNameChange(e.target.value)}
               required
               className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-primary"
             />
 
-            <label className="mb-1.5 mt-4 block text-sm font-medium">Correo</label>
+            <label className="mb-1.5 mt-4 block text-sm font-medium">Usuario (para iniciar sesión)</label>
+            <input
+              value={form.username}
+              onChange={(e) => { setUsernameTouched(true); setForm({ ...form, username: e.target.value.toLowerCase() }); }}
+              required
+              placeholder="usuario"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+            />
+
+            <label className="mb-1.5 mt-4 block text-sm font-medium">Correo (opcional)</label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              disabled={selectedId !== 'new'}
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-primary disabled:bg-muted disabled:text-muted-foreground"
+              placeholder="tu@studiof.gt"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-primary"
             />
 
             <label className="mb-1.5 mt-4 block text-sm font-medium">
@@ -152,6 +191,7 @@ export default function Users() {
             >
               <option value="asesor">Asesor de zona</option>
               <option value="supervisor">Supervisor</option>
+              <option value="admin">Admin</option>
             </select>
 
             {form.role === 'asesor' && (

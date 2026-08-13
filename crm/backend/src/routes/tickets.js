@@ -2,13 +2,15 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess } from '../auditLog.js';
+import { ELEVATED_ROLES } from '../auth.js';
 
 const router = Router();
 
-// Supervisors see everything; asesores see tickets for customers in their zone plus
-// any not yet assigned a zone (the current intake flow no longer collects it upfront).
+// Admins and supervisors see everything; asesores see tickets for customers in
+// their zone plus any not yet assigned a zone (the current intake flow no
+// longer collects it upfront).
 function zoneClause(user, params) {
-  if (user.role === 'supervisor') return '';
+  if (ELEVATED_ROLES.includes(user.role)) return '';
   params.push(user.zone);
   return `AND (c.zone IS NULL OR c.zone = $${params.length})`;
 }
@@ -52,7 +54,7 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const ticket = rows[0];
 
-    if (req.user.role !== 'supervisor' && ticket.zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && ticket.zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
@@ -75,7 +77,7 @@ router.patch('/:id', async (req, res, next) => {
       [req.params.id]
     );
     if (!existing.rows.length) return res.status(404).json({ error: 'not found' });
-    if (req.user.role !== 'supervisor' && existing.rows[0].zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && existing.rows[0].zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

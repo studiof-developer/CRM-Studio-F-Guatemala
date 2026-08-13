@@ -9,15 +9,17 @@ const DEDUPE_WINDOW = '2 minutes';
 
 // Failures here are logged but never thrown — an audit trail glitch must
 // never be the reason a real feature (viewing a customer, a ticket...) breaks.
+// customerId is null for actions with no associated customer record (login,
+// user management) — pass it explicitly as null, not omitted, to log those.
 export async function logAccess(user, customerId, action) {
-  if (!customerId) return;
+  if (customerId === undefined) return;
   try {
     await pool.query(
       `INSERT INTO access_audit (actor, actor_user_id, customer_id, action)
        SELECT $1, $2, $3, $4
        WHERE NOT EXISTS (
          SELECT 1 FROM access_audit
-         WHERE actor_user_id = $2 AND customer_id = $3 AND action = $4
+         WHERE actor_user_id = $2 AND customer_id IS NOT DISTINCT FROM $3 AND action = $4
            AND accessed_at > now() - interval '${DEDUPE_WINDOW}'
        )`,
       [user.fullName, user.id, customerId, action]

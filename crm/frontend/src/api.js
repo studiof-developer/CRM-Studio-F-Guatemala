@@ -5,13 +5,13 @@ async function apiFetch(path, options = {}) {
   return res;
 }
 
-export async function login(email, password) {
+export async function login(username, password) {
   const res = await apiFetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error('Correo o contraseña incorrectos');
+  if (!res.ok) throw new Error('Usuario o contraseña incorrectos');
   return res.json();
 }
 

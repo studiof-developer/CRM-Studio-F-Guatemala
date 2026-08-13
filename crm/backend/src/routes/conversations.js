@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
+import { ELEVATED_ROLES } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
@@ -166,7 +167,7 @@ router.get('/', async (req, res, next) => {
     `);
     // Asesores only see conversations tied to their zone (or not yet linked to any customer);
     // supervisors see everything.
-    let visible = req.user.role === 'supervisor'
+    let visible = ELEVATED_ROLES.includes(req.user.role)
       ? rows
       : rows.filter((r) => !r.zone || r.zone === req.user.zone);
 
@@ -204,7 +205,7 @@ router.get('/:sessionId', async (req, res, next) => {
     const { messages, customer, phone } = await findConversationThread(req.params.sessionId);
     if (!messages.length) return res.status(404).json({ error: 'not found' });
 
-    if (customer && req.user.role !== 'supervisor' && customer.zone && customer.zone !== req.user.zone) {
+    if (customer && !ELEVATED_ROLES.includes(req.user.role) && customer.zone && customer.zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

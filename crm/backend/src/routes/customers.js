@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
+import { ELEVATED_ROLES } from '../auth.js';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ export const VALID_PAID_METHODS = ['tarjeta', 'efectivo', 'transferencia', 'depo
 export const EFFECTIVE_STATUS_SQL = `COALESCE(c.manual_status, ${TEMPERATURE_SQL})`;
 
 export function zoneClause(user, params) {
-  if (user.role === 'supervisor') return '';
+  if (ELEVATED_ROLES.includes(user.role)) return '';
   params.push(user.zone);
   return `AND c.zone = $${params.length}`;
 }
@@ -93,7 +94,7 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const customer = rows[0];
 
-    if (req.user.role !== 'supervisor' && customer.zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && customer.zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
@@ -142,7 +143,7 @@ router.patch('/:id/tags', async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query(`SELECT zone FROM customers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
-    if (req.user.role !== 'supervisor' && existing[0].zone !== req.user.zone) {
+    if (!ELEVATED_ROLES.includes(req.user.role) && existing[0].zone !== req.user.zone) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

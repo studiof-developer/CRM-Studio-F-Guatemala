@@ -5,7 +5,7 @@ import { Field, Button } from './components/ui.jsx';
 import { Logo } from './components/Logo.jsx';
 
 export default function Login({ onLoggedIn }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,7 @@ export default function Login({ onLoggedIn }) {
     setLoading(true);
     setError(null);
     try {
-      const user = await login(email, password);
+      const user = await login(username, password);
       onLoggedIn(user);
     } catch (err) {
       setError(err.message);
@@ -39,13 +39,13 @@ export default function Login({ onLoggedIn }) {
 
         <div className="flex flex-col gap-4">
           <Field
-            label="Correo"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            label="Usuario"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
             autoFocus
-            placeholder="tu@studiof.gt"
+            placeholder="usuario"
           />
 
           <Field

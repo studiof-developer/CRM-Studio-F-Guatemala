@@ -14,20 +14,26 @@ import Audit from './Audit.jsx';
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
+// Visible to everyone: admin, supervisor, and asesor.
 const BASE_TABS = {
   dashboard: { label: 'Dashboard', icon: LayoutDashboard, Component: Dashboard },
   customers: { label: 'Clientes', icon: UsersIcon, Component: Customers },
   handoff: { label: 'Cola de Handoff', icon: Inbox, Component: HandoffQueue },
   conversations: { label: 'Conversaciones', icon: MessagesSquare, Component: Conversations },
+  catalog: { label: 'Catálogo', icon: ShoppingBag, Component: Catalog },
 };
 
-const SUPERVISOR_TABS = {
-  catalog: { label: 'Catálogo', icon: ShoppingBag, Component: Catalog },
-  users: { label: 'Usuarios', icon: UserCog, Component: Users },
+// Admin and supervisor only.
+const AUDIT_TABS = {
   audit: { label: 'Auditoría', icon: ShieldCheck, Component: Audit },
 };
 
-const ROLE_LABELS = { supervisor: 'Supervisor', asesor: 'Asesor de zona' };
+// Admin only.
+const ADMIN_TABS = {
+  users: { label: 'Usuarios', icon: UserCog, Component: Users },
+};
+
+const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
@@ -51,7 +57,11 @@ export default function App() {
   if (user === undefined) return null;
   if (!user) return <Login onLoggedIn={setUser} />;
 
-  const tabs = user.role === 'supervisor' ? { ...BASE_TABS, ...SUPERVISOR_TABS } : BASE_TABS;
+  const tabs = {
+    ...BASE_TABS,
+    ...(user.role === 'admin' || user.role === 'supervisor' ? AUDIT_TABS : {}),
+    ...(user.role === 'admin' ? ADMIN_TABS : {}),
+  };
   const { Component } = tabs[tab] ?? tabs.dashboard;
 
   async function handleLogout() {

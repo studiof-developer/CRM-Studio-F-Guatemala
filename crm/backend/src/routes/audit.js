@@ -23,7 +23,7 @@ router.get('/access', async (req, res, next) => {
               c.id AS customer_id, c.full_name AS customer_name,
               u.id AS actor_user_id, u.full_name AS actor_name, u.role AS actor_role
        FROM access_audit a
-       JOIN customers c ON c.id = a.customer_id
+       LEFT JOIN customers c ON c.id = a.customer_id
        LEFT JOIN users u ON u.id = a.actor_user_id
        WHERE true ${where}
        ORDER BY a.accessed_at DESC

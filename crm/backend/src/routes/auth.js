@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { signSession, setSessionCookie, clearSessionCookie, requireAuth } from '../auth.js';
+import { logAccess } from '../auditLog.js';
 
 const router = Router();
 
@@ -30,10 +31,10 @@ router.post('/login', async (req, res, next) => {
       return res.status(429).json({ error: 'too many attempts, try again later' });
     }
 
-    const { email, password } = req.body ?? {};
-    if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+    const { username, password } = req.body ?? {};
+    if (!username || !password) return res.status(400).json({ error: 'username and password required' });
 
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     const user = rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       recordFailedAttempt(req.ip);
@@ -41,6 +42,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     setSessionCookie(res, signSession(user));
+    logAccess({ fullName: user.full_name, id: user.id }, null, 'login');
     res.json({ id: user.id, fullName: user.full_name, role: user.role, zone: user.zone });
   } catch (err) { next(err); }
 });
