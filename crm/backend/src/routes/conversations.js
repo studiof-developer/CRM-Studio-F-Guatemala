@@ -269,8 +269,6 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [sessionIds]
     );
 
-    if (phone) await whatsapp.sendText(phone, content.trim());
-
     const message = {
       type: 'ai',
       content: content.trim(),
@@ -283,6 +281,10 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [latest[0].session_id, JSON.stringify(message)]
     );
     res.status(201).json({ id: inserted[0].id, createdAt: inserted[0].created_at, ...message });
+
+    // The advisor's confirmation shouldn't wait on WhatsApp's network round-trip —
+    // it's already saved, so respond first and let delivery happen in the background.
+    if (phone) whatsapp.sendText(phone, content.trim()).catch((err) => console.error('sendText failed', err));
   } catch (err) { next(err); }
 });
 
