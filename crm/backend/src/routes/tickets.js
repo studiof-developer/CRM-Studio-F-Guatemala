@@ -5,11 +5,12 @@ import { logAccess } from '../auditLog.js';
 
 const router = Router();
 
-// Supervisors see everything; asesores only see tickets for customers in their zone.
+// Supervisors see everything; asesores see tickets for customers in their zone plus
+// any not yet assigned a zone (the current intake flow no longer collects it upfront).
 function zoneClause(user, params) {
   if (user.role === 'supervisor') return '';
   params.push(user.zone);
-  return `AND c.zone = $${params.length}`;
+  return `AND (c.zone IS NULL OR c.zone = $${params.length})`;
 }
 
 router.get('/', async (req, res, next) => {
