@@ -446,6 +446,7 @@ export default function Conversations({ user }) {
 
                   <div className="mt-6 flex flex-col gap-4 border-t border-line-soft pt-5">
                     <InfoRow icon={MapPin} label="Departamento" value={thread.department || '—'} />
+                    <InfoRow icon={MapPin} label="Municipio" value={thread.municipio || '—'} />
                     <InfoRow icon={MapPin} label="Dirección" value={thread.address || '—'} />
                     <InfoRow icon={ShoppingBag} label="Línea preferida" value={thread.preferredLine || '—'} />
                     <InfoRow icon={CircleDollarSign} label="Compras totales" value={thread.purchaseFrequency ?? '—'} />

@@ -150,6 +150,7 @@ export default function HandoffQueue({ user }) {
 
               <div className="mt-6 grid grid-cols-2 gap-5 border-y border-border py-6">
                 <InfoRow icon={MapPin} label="Departamento" value={ticketDetail.department || '—'} />
+                <InfoRow icon={MapPin} label="Municipio" value={ticketDetail.municipio || '—'} />
                 <InfoRow icon={ShoppingBag} label="Línea preferida" value={ticketDetail.preferred_line || '—'} />
                 <InfoRow icon={User} label="Compras previas" value={ticketDetail.purchase_frequency} />
                 <InfoRow icon={CircleUser} label="Asesor asignado" value={ticketDetail.assigned_advisor || '—'} />
