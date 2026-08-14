@@ -85,7 +85,15 @@ router.delete('/:id', async (req, res, next) => {
     if (!rowCount) return res.status(404).json({ error: 'not found' });
     logAccess(req.user, null, 'user_deleted');
     res.status(204).end();
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Deleting a user who has audit history would orphan those log rows —
+    // Postgres correctly refuses via the FK constraint; surface that clearly
+    // instead of a generic 500.
+    if (err.code === '23503') {
+      return res.status(409).json({ error: 'no se puede eliminar: este usuario tiene historial de auditoría asociado' });
+    }
+    next(err);
+  }
 });
 
 export default router;
