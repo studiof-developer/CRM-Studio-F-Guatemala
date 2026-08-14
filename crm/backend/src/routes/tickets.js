@@ -2,17 +2,13 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess } from '../auditLog.js';
-import { ELEVATED_ROLES } from '../auth.js';
 
 const router = Router();
 
-// Admins and supervisors see everything; asesores see tickets for customers in
-// their zone plus any not yet assigned a zone (the current intake flow no
-// longer collects it upfront).
-function zoneClause(user, params) {
-  if (ELEVATED_ROLES.includes(user.role)) return '';
-  params.push(user.zone);
-  return `AND (c.zone IS NULL OR c.zone = $${params.length})`;
+// The advisor team handles every zone for Studio F Guatemala (not zone-assigned
+// individually), so this is a no-op — kept as a hook in case that ever changes.
+function zoneClause() {
+  return '';
 }
 
 router.get('/', async (req, res, next) => {
@@ -54,10 +50,6 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const ticket = rows[0];
 
-    if (!ELEVATED_ROLES.includes(req.user.role) && ticket.zone && ticket.zone !== req.user.zone) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
-
     logAccess(req.user, ticket.customer_id, 'view_ticket');
 
     const orders = await pool.query(
@@ -72,14 +64,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const existing = await pool.query(
-      `SELECT c.zone FROM tickets t JOIN customers c ON c.id = t.customer_id WHERE t.id = $1`,
-      [req.params.id]
-    );
+    const existing = await pool.query(`SELECT id FROM tickets WHERE id = $1`, [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'not found' });
-    if (!ELEVATED_ROLES.includes(req.user.role) && existing.rows[0].zone && existing.rows[0].zone !== req.user.zone) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
 
     const { status, assigned_advisor } = req.body ?? {};
     if (status && !isValidStatus(status)) {

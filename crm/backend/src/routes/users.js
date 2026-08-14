@@ -33,7 +33,7 @@ router.post('/', async (req, res, next) => {
       `INSERT INTO users (full_name, username, email, password_hash, role, zone)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, full_name, username, email, role, zone, created_at`,
-      [full_name, username, email || null, hash, role, role === 'asesor' ? zone ?? null : null]
+      [full_name, username, email || null, hash, role, role === 'asesor' ? (zone || null) : null]
     );
     logAccess(req.user, null, 'user_created');
     res.status(201).json(rows[0]);
@@ -65,7 +65,7 @@ router.patch('/:id', async (req, res, next) => {
          password_hash = COALESCE($7, password_hash)
        WHERE id = $8
        RETURNING id, full_name, username, email, role, zone, created_at`,
-      [full_name ?? null, username ?? null, email !== undefined, email || null, role ?? null, zone ?? null, passwordHash, req.params.id]
+      [full_name ?? null, username ?? null, email !== undefined, email || null, role ?? null, zone || null, passwordHash, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     logAccess(req.user, null, 'user_updated');

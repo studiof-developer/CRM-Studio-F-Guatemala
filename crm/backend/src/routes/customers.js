@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
-import { ELEVATED_ROLES } from '../auth.js';
 
 const router = Router();
 
@@ -32,10 +31,10 @@ export const VALID_PAID_METHODS = ['tarjeta', 'efectivo', 'transferencia', 'depo
 // so once an advisor picks a status it's pinned until an advisor changes it again.
 export const EFFECTIVE_STATUS_SQL = `COALESCE(c.manual_status, ${TEMPERATURE_SQL})`;
 
-export function zoneClause(user, params) {
-  if (ELEVATED_ROLES.includes(user.role)) return '';
-  params.push(user.zone);
-  return `AND (c.zone IS NULL OR c.zone = $${params.length})`;
+// The advisor team handles every zone for Studio F Guatemala (not zone-assigned
+// individually), so this is a no-op — kept as a hook in case that ever changes.
+export function zoneClause() {
+  return '';
 }
 
 router.get('/counts', async (req, res, next) => {
@@ -94,10 +93,6 @@ router.get('/:id', async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const customer = rows[0];
 
-    if (!ELEVATED_ROLES.includes(req.user.role) && customer.zone && customer.zone !== req.user.zone) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
-
     logAccess(req.user, customer.id, 'view_customer');
 
     const [orders, tickets, consents, conversations] = await Promise.all([
@@ -141,11 +136,8 @@ router.get('/:id', async (req, res, next) => {
 // rejects any attempt to send it back to false, since a paid customer stays paid.
 router.patch('/:id/tags', async (req, res, next) => {
   try {
-    const { rows: existing } = await pool.query(`SELECT zone FROM customers WHERE id = $1`, [req.params.id]);
+    const { rows: existing } = await pool.query(`SELECT id FROM customers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
-    if (!ELEVATED_ROLES.includes(req.user.role) && existing[0].zone && existing[0].zone !== req.user.zone) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
 
     const { manualStatus, paidLocked, paidMethod } = req.body ?? {};
     if (manualStatus !== undefined && manualStatus !== null && !VALID_TEMPERATURES.includes(manualStatus)) {

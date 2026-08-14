@@ -2,7 +2,6 @@ import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
-import { ELEVATED_ROLES } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
@@ -165,11 +164,8 @@ router.get('/', async (req, res, next) => {
       ) t ON true
       ORDER BY l.id DESC
     `);
-    // Asesores only see conversations tied to their zone (or not yet linked to any customer);
-    // supervisors see everything.
-    let visible = ELEVATED_ROLES.includes(req.user.role)
-      ? rows
-      : rows.filter((r) => !r.zone || r.zone === req.user.zone);
+    // The advisor team handles every zone, so no zone filtering here.
+    let visible = rows;
 
     const q = req.query.q?.trim().toLowerCase();
     if (q) {
@@ -204,10 +200,6 @@ router.get('/:sessionId', async (req, res, next) => {
   try {
     const { messages, customer, phone } = await findConversationThread(req.params.sessionId);
     if (!messages.length) return res.status(404).json({ error: 'not found' });
-
-    if (customer && !ELEVATED_ROLES.includes(req.user.role) && customer.zone && customer.zone !== req.user.zone) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
 

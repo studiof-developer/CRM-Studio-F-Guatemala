@@ -30,10 +30,6 @@ export function requireRole(...roles) {
   };
 }
 
-// Admin and supervisor both get unrestricted (non-zone-scoped) access everywhere;
-// only 'asesor' is limited to their own zone.
-export const ELEVATED_ROLES = ['admin', 'supervisor'];
-
 export function setSessionCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
