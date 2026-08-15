@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
-import { fetchMe, logout, fetchTickets } from './api.js';
+import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import Login from './Login.jsx';
 import Dashboard from './Dashboard.jsx';
 import HandoffQueue from './HandoffQueue.jsx';
@@ -39,6 +39,7 @@ export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
   const [tab, setTab] = useState('dashboard');
   const [pendingCount, setPendingCount] = useState(0);
+  const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => { fetchMe().then(setUser); }, []);
@@ -47,12 +48,22 @@ export default function App() {
     fetchTickets('esperando_asesor').then((rows) => setPendingCount(rows.length)).catch(() => {});
   }, []);
 
+  // No stored "last seen" state needed — a thread whose last message is still from
+  // the customer means nobody (bot or advisor) has answered it yet, full stop. That's
+  // computable fresh on every poll instead of tracking per-user read state.
+  const loadUnanswered = useCallback(() => {
+    fetchConversations().then((rows) => {
+      setUnansweredCount(rows.filter((r) => r.lastMessage?.type === 'human').length);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     loadPending();
-    const id = setInterval(loadPending, 30000);
+    loadUnanswered();
+    const id = setInterval(() => { loadPending(); loadUnanswered(); }, 15000);
     return () => clearInterval(id);
-  }, [user, loadPending]);
+  }, [user, loadPending, loadUnanswered]);
 
   if (user === undefined) return null;
   if (!user) return <Login onLoggedIn={setUser} />;
@@ -132,6 +143,11 @@ export default function App() {
                       {key === 'handoff' && pendingCount > 0 && (
                         <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-medium text-white">
                           {pendingCount}
+                        </span>
+                      )}
+                      {key === 'conversations' && unansweredCount > 0 && (
+                        <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-medium text-white">
+                          {unansweredCount}
                         </span>
                       )}
                     </span>

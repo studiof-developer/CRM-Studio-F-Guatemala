@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Clock, MapPin, ShoppingBag, User, CircleUser } from 'lucide-react';
+import { Clock, MapPin, ShoppingBag, User, CircleUser, AlertTriangle } from 'lucide-react';
 import { API_BASE, fetchTickets, fetchTicket, updateTicket } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
+import { isOverdue, formatWait, SLA_MINUTES } from './lib/sla.js';
 
 const STATUS_META = {
   esperando_asesor: { label: 'Esperando asesor', variant: 'warning' },
@@ -114,23 +115,38 @@ export default function HandoffQueue({ user }) {
               No hay tickets en este estado.
             </li>
           )}
-          {tickets.map((t) => (
-            <li
-              key={t.id}
-              onClick={() => setSelectedId(t.id)}
-              className={`cursor-pointer rounded-xl border p-4 transition-all ${
-                t.id === selectedId
-                  ? 'border-accent bg-accent-soft shadow-sm'
-                  : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
-              }`}
-            >
-              <p className="text-sm font-medium">{t.full_name || t.whatsapp_number}</p>
-              <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{t.handoff_reason}</p>
-              <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock size={12} /> {new Date(t.created_at).toLocaleString('es-GT')}
-              </p>
-            </li>
-          ))}
+          {tickets.map((t) => {
+            const overdue = t.status === 'esperando_asesor' && isOverdue(t.created_at);
+            return (
+              <li
+                key={t.id}
+                onClick={() => setSelectedId(t.id)}
+                className={`cursor-pointer rounded-xl border p-4 transition-all ${
+                  t.id === selectedId
+                    ? 'border-accent bg-accent-soft shadow-sm'
+                    : overdue
+                      ? 'border-danger/40 bg-danger/5 hover:shadow-sm'
+                      : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium">{t.full_name || t.whatsapp_number}</p>
+                  {overdue && (
+                    <span className="flex shrink-0 animate-pulse items-center gap-1 rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold text-white">
+                      <AlertTriangle size={10} /> atrasado
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{t.handoff_reason}</p>
+                <p className={`mt-2 flex items-center gap-1 text-xs ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>
+                  {overdue ? <AlertTriangle size={12} /> : <Clock size={12} />}
+                  {overdue
+                    ? `Esperando hace ${formatWait(t.created_at)} (más de ${SLA_MINUTES} min)`
+                    : new Date(t.created_at).toLocaleString('es-GT')}
+                </p>
+              </li>
+            );
+          })}
         </ul>
 
         <section className="rounded-2xl border border-border bg-paper p-8">
