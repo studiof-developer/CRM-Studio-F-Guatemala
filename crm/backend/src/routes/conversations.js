@@ -344,6 +344,12 @@ router.post('/:sessionId/messages', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// WhatsApp's own per-type caps (not ours) — our multer limit above is just the outer
+// bound; sending something under that but over Meta's limit fails at their end with
+// a generic "file too large" error that doesn't say which limit, so we catch it first.
+const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
+const WHATSAPP_KIND_LABEL = { image: 'imágenes', audio: 'audios', document: 'documentos' };
+
 router.post('/:sessionId/attachments', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required or file type not allowed' });
@@ -357,6 +363,13 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
     );
 
     const kind = MIME_KIND(req.file.mimetype);
+
+    const maxBytes = WHATSAPP_MAX_BYTES[kind] ?? WHATSAPP_MAX_BYTES.document;
+    if (req.file.size > maxBytes) {
+      return res.status(400).json({
+        error: `El archivo pesa demasiado para WhatsApp (máx. ${Math.floor(maxBytes / (1024 * 1024))}MB para ${WHATSAPP_KIND_LABEL[kind] ?? 'documentos'}).`,
+      });
+    }
 
     let mediaId = null;
     if (phone) {

@@ -452,10 +452,17 @@ export default function Conversations({ user }) {
                         {group.label}
                       </span>
                     </div>
-                    {group.items.map((m) => {
+                    {group.items.map((m, i) => {
                       const fromAdvisor = m.additional_kwargs?.sentBy === 'advisor';
                       const outgoing = m.type === 'ai'; // Business side (bot or advisor) = outgoing = right, like WhatsApp Business.
                       const bg = outgoing ? 'var(--accent)' : 'var(--paper)';
+                      // Same sender back-to-back (e.g. an advisor sending several photos)
+                      // only gets the name label once, on the first bubble of the run —
+                      // repeating it on every bubble reads as noisy/broken, not chat-like.
+                      const prev = group.items[i - 1];
+                      const prevSenderKey = prev && (prev.type === 'ai' ? (prev.additional_kwargs?.sentBy === 'advisor' ? prev.additional_kwargs.advisorName : '__bot__') : '__customer__');
+                      const senderKey = outgoing ? (fromAdvisor ? m.additional_kwargs.advisorName : '__bot__') : '__customer__';
+                      const isRunStart = !prev || prevSenderKey !== senderKey;
                       const replyLabel = outgoing
                         ? (fromAdvisor ? m.additional_kwargs.advisorName : 'Studio F (bot)')
                         : (thread.customerName || thread.phone);
@@ -481,17 +488,19 @@ export default function Conversations({ user }) {
                         </button>
                       ) : null;
                       return (
-                        <div key={m.id} className={`group mb-1.5 flex items-center gap-1 ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                        <div key={m.id} className={`group flex items-center gap-1 ${isRunStart ? 'mb-1.5' : 'mb-0.5'} ${outgoing ? 'justify-end' : 'justify-start'}`}>
                           {outgoing && replyButton}
                           <div className="relative max-w-[70%]">
-                            <Tail side={outgoing ? 'right' : 'left'} color={bg} />
+                            {isRunStart && <Tail side={outgoing ? 'right' : 'left'} color={bg} />}
                             <div
                               className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
-                                outgoing ? 'rounded-tr-none text-white' : 'rounded-tl-none border border-line-soft text-ink'
+                                outgoing
+                                  ? `text-white ${isRunStart ? 'rounded-tr-none' : ''}`
+                                  : `border border-line-soft text-ink ${isRunStart ? 'rounded-tl-none' : ''}`
                               }`}
                               style={{ backgroundColor: bg }}
                             >
-                              {fromAdvisor && (
+                              {fromAdvisor && isRunStart && (
                                 <p className="mb-0.5 text-[11px] font-semibold text-white/80">
                                   {m.additional_kwargs.advisorName}
                                 </p>
