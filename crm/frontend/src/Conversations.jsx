@@ -488,7 +488,13 @@ export default function Conversations({ user }) {
                         </button>
                       ) : null;
                       return (
-                        <div key={m.id} className={`group flex items-center gap-1 ${isRunStart ? 'mb-1.5' : 'mb-0.5'} ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                        <motion.div
+                          key={m.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeOut' }}
+                          className={`group flex items-center gap-1 ${isRunStart ? 'mb-1.5' : 'mb-0.5'} ${outgoing ? 'justify-end' : 'justify-start'}`}
+                        >
                           {outgoing && replyButton}
                           <div className="relative max-w-[70%]">
                             {isRunStart && <Tail side={outgoing ? 'right' : 'left'} color={bg} />}
@@ -500,7 +506,7 @@ export default function Conversations({ user }) {
                               }`}
                               style={{ backgroundColor: bg }}
                             >
-                              {fromAdvisor && isRunStart && (
+                              {fromAdvisor && (
                                 <p className="mb-0.5 text-[11px] font-semibold text-white/80">
                                   {m.additional_kwargs.advisorName}
                                 </p>
@@ -532,7 +538,7 @@ export default function Conversations({ user }) {
                             </div>
                           </div>
                           {!outgoing && replyButton}
-                        </div>
+                        </motion.div>
                       );
                     })}
                   </div>
@@ -811,14 +817,23 @@ function formatSize(bytes) {
 
 function AttachmentContent({ attachment, outgoing, onImageClick }) {
   const url = attachmentUrl(attachment.id);
+  const [loaded, setLoaded] = useState(false);
   if (attachment.kind === 'image') {
     return (
-      <img
-        src={url}
-        alt={attachment.filename ?? 'Imagen adjunta'}
-        onClick={() => onImageClick?.(url)}
-        className="mb-1 max-h-64 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
-      />
+      <div className="relative mb-1 w-full max-h-64 min-h-[140px] overflow-hidden rounded-lg">
+        {!loaded && <div className="absolute inset-0 animate-pulse bg-black/10 dark:bg-white/10" />}
+        <img
+          src={url}
+          alt={attachment.filename ?? 'Imagen adjunta'}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onClick={() => onImageClick?.(url)}
+          className={`max-h-64 w-full cursor-pointer rounded-lg object-cover transition-opacity duration-300 hover:opacity-90 ${
+            loaded ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      </div>
     );
   }
   if (attachment.kind === 'audio') {
