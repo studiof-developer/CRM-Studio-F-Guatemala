@@ -338,7 +338,9 @@ router.post('/:sessionId/messages', async (req, res, next) => {
 
     // The advisor's confirmation shouldn't wait on WhatsApp's network round-trip —
     // it's already saved, so respond first and let delivery happen in the background.
-    if (phone) whatsapp.sendText(phone, content.trim()).catch((err) => console.error('sendText failed', err));
+    // replyTo.wamid (only present for customer messages n8n tagged with their WhatsApp
+    // message id) makes this show as a native quoted reply on the customer's phone too.
+    if (phone) whatsapp.sendText(phone, content.trim(), replyTo?.wamid).catch((err) => console.error('sendText failed', err));
   } catch (err) { next(err); }
 });
 

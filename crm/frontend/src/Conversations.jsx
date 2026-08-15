@@ -398,7 +398,15 @@ export default function Conversations({ user }) {
                       const replyButton = thread.enAtencion ? (
                         <button
                           type="button"
-                          onClick={() => setReplyingTo({ id: m.id, content: m.content?.trim() || (m.attachment ? '📎 Adjunto' : ''), from: replyLabel })}
+                          onClick={() => setReplyingTo({
+                            id: m.id,
+                            content: m.content?.trim() || (m.attachment ? '📎 Adjunto' : ''),
+                            from: replyLabel,
+                            // Only customer messages n8n tagged with their WhatsApp id can become
+                            // a native quoted reply — replying to the bot/advisor's own text falls
+                            // back to the CRM-only quote, since we never captured a wamid for those.
+                            wamid: !outgoing ? m.additional_kwargs?.wamid : undefined,
+                          })}
                           className="flex h-7 w-7 shrink-0 scale-90 items-center justify-center rounded-full border border-line bg-paper text-greige opacity-0 shadow-sm transition-all hover:border-accent hover:text-accent group-hover:scale-100 group-hover:opacity-100"
                           aria-label="Responder"
                           title="Responder"

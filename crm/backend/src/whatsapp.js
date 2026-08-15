@@ -22,7 +22,9 @@ async function graphFetch(path, options) {
   return res.json();
 }
 
-export async function sendText(toPhone, body) {
+// contextMessageId, when given the wamid of an earlier message, makes WhatsApp show
+// this as a native quoted reply on the customer's side — not just inside the CRM.
+export async function sendText(toPhone, body, contextMessageId) {
   if (!configured) {
     console.warn('WhatsApp not configured (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID) — skipping real send');
     return null;
@@ -30,7 +32,13 @@ export async function sendText(toPhone, body) {
   return graphFetch(`${PHONE_NUMBER_ID}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: toPhone, type: 'text', text: { body } }),
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: toPhone,
+      type: 'text',
+      text: { body },
+      ...(contextMessageId ? { context: { message_id: contextMessageId } } : {}),
+    }),
   });
 }
 
