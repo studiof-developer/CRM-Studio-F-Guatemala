@@ -11,6 +11,7 @@ import {
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
+import { useLiveEvent } from './lib/liveEvents.js';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
@@ -97,9 +98,14 @@ export default function Conversations({ user }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // n8n owns this table directly, so we poll instead of wiring a trigger onto it.
+  const loadQuiet = useCallback(() => load(false), [load]);
+  useLiveEvent('message_changes', loadQuiet);
+  useLiveEvent('ticket_changes', loadQuiet);
+
+  // SSE (above) is the fast path — this is just a safety net in case that connection
+  // silently drops, so it doesn't need to be nearly as tight as before.
   useEffect(() => {
-    const id = setInterval(() => load(false), 5000);
+    const id = setInterval(() => load(false), 30000);
     return () => clearInterval(id);
   }, [load]);
 
@@ -115,9 +121,11 @@ export default function Conversations({ user }) {
     lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
   }, [loadThread]);
 
+  useLiveEvent('message_changes', loadThread);
+
   useEffect(() => {
     if (!selectedId) return;
-    const id = setInterval(loadThread, 4000);
+    const id = setInterval(loadThread, 15000);
     return () => clearInterval(id);
   }, [selectedId, loadThread]);
 

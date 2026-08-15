@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
+import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
 import Dashboard from './Dashboard.jsx';
 import HandoffQueue from './HandoffQueue.jsx';
@@ -90,11 +91,16 @@ export default function App() {
     if (!user) return;
     loadPending();
     loadUnanswered();
-    const id = setInterval(() => { loadPending(); loadUnanswered(); }, 15000);
+    // SSE (below) carries the instant path — this is just a safety net.
+    const id = setInterval(() => { loadPending(); loadUnanswered(); }, 60000);
     return () => clearInterval(id);
   }, [user, loadPending, loadUnanswered]);
 
-  // Switching into Conversaciones shouldn't wait up to 15s to clear the badge.
+  useLiveEvent('ticket_changes', loadPending);
+  useLiveEvent('ticket_changes', loadUnanswered);
+  useLiveEvent('message_changes', loadUnanswered);
+
+  // Switching into Conversaciones shouldn't wait for the next tick to clear the badge.
   useEffect(() => {
     if (user && tab === 'conversations') loadUnanswered();
   }, [user, tab, loadUnanswered]);

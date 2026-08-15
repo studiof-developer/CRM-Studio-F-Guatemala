@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Clock, MapPin, ShoppingBag, User, CircleUser, AlertTriangle } from 'lucide-react';
-import { API_BASE, fetchTickets, fetchTicket, updateTicket } from './api.js';
+import { fetchTickets, fetchTicket, updateTicket } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { isOverdue, formatWait, SLA_MINUTES } from './lib/sla.js';
+import { useLiveEvent } from './lib/liveEvents.js';
 
 const STATUS_META = {
   esperando_asesor: { label: 'Esperando asesor', variant: 'warning' },
@@ -37,14 +38,12 @@ export default function HandoffQueue({ user }) {
 
   useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  useEffect(() => {
-    const es = new EventSource(`${API_BASE}/api/events`, { withCredentials: true });
-    es.onmessage = () => loadTickets(false);
-    return () => es.close();
-  }, [loadTickets]);
+  useLiveEvent('ticket_changes', useCallback(() => loadTickets(false), [loadTickets]));
 
+  // Fallback in case the SSE connection silently drops — SSE is the fast path now,
+  // this is just a safety net, so it doesn't need to be as tight as before.
   useEffect(() => {
-    const id = setInterval(() => loadTickets(false), 30000);
+    const id = setInterval(() => loadTickets(false), 60000);
     return () => clearInterval(id);
   }, [loadTickets]);
 

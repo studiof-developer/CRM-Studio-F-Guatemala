@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Chart from 'chart.js/auto';
 import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Headset, AlertTriangle } from 'lucide-react';
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';
 import { PAID_METHOD_LABELS } from './lib/paymentMethods.js';
+import { useLiveEvent } from './lib/liveEvents.js';
 
 const PAID_METHOD_COLORS = { tarjeta: '#4338ca', efectivo: '#15803d', transferencia: '#b45309', deposito: '#0891b2' };
 
@@ -49,9 +50,16 @@ export default function Dashboard() {
   const advisorRef = useRef(null);
   const paidMethodRef = useRef(null);
 
-  useEffect(() => {
+  const loadDashboard = useCallback(() => {
     fetchDashboard().then(setData).catch((err) => setError(err.message));
   }, []);
+
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  // The aggregates here shift with both ticket and message activity — push-refresh
+  // instead of the once-on-mount load this page had before.
+  useLiveEvent('ticket_changes', loadDashboard);
+  useLiveEvent('message_changes', loadDashboard);
 
   useChart(pipelineRef, () => {
     const entries = Object.entries(data.pipeline);
