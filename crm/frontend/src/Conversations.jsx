@@ -187,10 +187,7 @@ export default function Conversations({ user }) {
     }
   }
 
-  async function handleFileSelected(e) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  async function uploadFile(file) {
     setUploading(true);
     try {
       await sendConversationAttachment(selectedId, file);
@@ -199,6 +196,31 @@ export default function Conversations({ user }) {
       showError(err.message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await uploadFile(file);
+  }
+
+  // Lets an advisor Ctrl+V a copied screenshot/image straight into the chat,
+  // same as WhatsApp Web — no need to save it to disk first just to attach it.
+  function handlePaste(e) {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadFile(file);
+        }
+        return;
+      }
     }
   }
 
@@ -642,6 +664,7 @@ export default function Conversations({ user }) {
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
+                  onPaste={handlePaste}
                   placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor…'}
                   disabled={uploading}
                   className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
