@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil,
+  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
 } from 'lucide-react';
 import {
@@ -51,6 +52,8 @@ export default function Conversations({ user }) {
   const [newChatName, setNewChatName] = useState('');
   const [newChatAddress, setNewChatAddress] = useState('');
   const [editOpen, setEditOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -84,6 +87,7 @@ export default function Conversations({ user }) {
   useEffect(() => {
     loadThread();
     setInfoOpen(false);
+    setReplyingTo(null);
     lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
   }, [loadThread]);
 
@@ -122,8 +126,9 @@ export default function Conversations({ user }) {
     if (!draft.trim() || sending) return;
     setSending(true);
     try {
-      await sendConversationMessage(selectedId, draft.trim());
+      await sendConversationMessage(selectedId, draft.trim(), replyingTo ?? undefined);
       setDraft('');
+      setReplyingTo(null);
       loadThread();
     } catch (err) {
       showError(err.message);
@@ -385,8 +390,25 @@ export default function Conversations({ user }) {
                       const fromAdvisor = m.additional_kwargs?.sentBy === 'advisor';
                       const outgoing = m.type === 'ai'; // Business side (bot or advisor) = outgoing = right, like WhatsApp Business.
                       const bg = outgoing ? 'var(--accent)' : 'var(--paper)';
+                      const replyLabel = outgoing
+                        ? (fromAdvisor ? m.additional_kwargs.advisorName : 'Studio F (bot)')
+                        : (thread.customerName || thread.phone);
+                      // Only while the advisor actually has the chat — the reply
+                      // compose bar itself is bot-handled/waiting chats can't use it anyway.
+                      const replyButton = thread.enAtencion ? (
+                        <button
+                          type="button"
+                          onClick={() => setReplyingTo({ id: m.id, content: m.content?.trim() || (m.attachment ? '📎 Adjunto' : ''), from: replyLabel })}
+                          className="flex h-7 w-7 shrink-0 scale-90 items-center justify-center rounded-full border border-line bg-paper text-greige opacity-0 shadow-sm transition-all hover:border-accent hover:text-accent group-hover:scale-100 group-hover:opacity-100"
+                          aria-label="Responder"
+                          title="Responder"
+                        >
+                          <Reply size={13} />
+                        </button>
+                      ) : null;
                       return (
-                        <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                        <div key={m.id} className={`group mb-1.5 flex items-center gap-1 ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                          {outgoing && replyButton}
                           <div className="relative max-w-[70%]">
                             <Tail side={outgoing ? 'right' : 'left'} color={bg} />
                             <div
@@ -400,7 +422,21 @@ export default function Conversations({ user }) {
                                   {m.additional_kwargs.advisorName}
                                 </p>
                               )}
-                              {m.attachment && <AttachmentContent attachment={m.attachment} outgoing={outgoing} />}
+                              {m.additional_kwargs?.replyTo && (
+                                <div className={`mb-1.5 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
+                                  outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'
+                                }`}>
+                                  <p className={`font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
+                                    {m.additional_kwargs.replyTo.from || '—'}
+                                  </p>
+                                  <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
+                                    {m.additional_kwargs.replyTo.content || '📎 Adjunto'}
+                                  </p>
+                                </div>
+                              )}
+                              {m.attachment && (
+                                <AttachmentContent attachment={m.attachment} outgoing={outgoing} onImageClick={setLightboxUrl} />
+                              )}
                               {m.content?.trim() && <p className="whitespace-pre-wrap">{m.content}</p>}
                               <span
                                 className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${
@@ -412,6 +448,7 @@ export default function Conversations({ user }) {
                               </span>
                             </div>
                           </div>
+                          {!outgoing && replyButton}
                         </div>
                       );
                     })}
@@ -513,6 +550,26 @@ export default function Conversations({ user }) {
             </div>
 
             {thread.enAtencion ? (
+              <>
+              {replyingTo && (
+                <div className="flex items-center gap-3 border-t border-line bg-accent-soft px-4 py-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-accent shadow-sm">
+                    <Reply size={14} />
+                  </span>
+                  <div className="min-w-0 flex-1 border-l-2 border-accent/40 pl-2.5">
+                    <p className="truncate text-xs font-semibold text-accent">{replyingTo.from}</p>
+                    <p className="truncate text-xs text-greige-ink">{replyingTo.content || '📎 Adjunto'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-ink"
+                    aria-label="Cancelar respuesta"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
               <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
                 <input
                   ref={fileInputRef}
@@ -546,6 +603,7 @@ export default function Conversations({ user }) {
                   <Send size={16} />
                 </button>
               </form>
+              </>
             ) : (
               <div className="border-t border-line bg-paper px-5 py-3 text-center text-xs text-greige-ink">
                 {thread.ticketStatus === 'esperando_asesor'
@@ -628,6 +686,35 @@ export default function Conversations({ user }) {
         onCancel={() => setEditOpen(false)}
         onSaved={() => { setEditOpen(false); loadThread(); load(false); }}
       />
+
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-6"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="Cerrar"
+            >
+              <X size={20} />
+            </button>
+            <motion.img
+              initial={{ scale: 0.96 }}
+              animate={{ scale: 1 }}
+              src={lightboxUrl}
+              alt="Imagen ampliada"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -638,14 +725,15 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentContent({ attachment, outgoing }) {
+function AttachmentContent({ attachment, outgoing, onImageClick }) {
   const url = attachmentUrl(attachment.id);
   if (attachment.kind === 'image') {
     return (
       <img
         src={url}
         alt={attachment.filename ?? 'Imagen adjunta'}
-        className="mb-1 max-h-64 w-full rounded-lg object-cover"
+        onClick={() => onImageClick?.(url)}
+        className="mb-1 max-h-64 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
       />
     );
   }

@@ -73,11 +73,11 @@ export async function startConversation({ phone, fullName, address }) {
   return res.json();
 }
 
-export async function sendConversationMessage(sessionId, content) {
+export async function sendConversationMessage(sessionId, content, replyTo) {
   const res = await apiFetch(`/api/conversations/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, replyTo }),
   });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al enviar el mensaje');
   return res.json();

@@ -304,7 +304,7 @@ router.get('/:sessionId', async (req, res, next) => {
 
 router.post('/:sessionId/messages', async (req, res, next) => {
   try {
-    const { content } = req.body ?? {};
+    const { content, replyTo } = req.body ?? {};
     if (!content?.trim()) return res.status(400).json({ error: 'content required' });
 
     const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
@@ -320,7 +320,13 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     const message = {
       type: 'ai',
       content: content.trim(),
-      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName },
+      additional_kwargs: {
+        sentBy: 'advisor',
+        advisorName: req.user.fullName,
+        // Snapshot, not a live reference — the quoted message stays exactly as it
+        // looked when the advisor hit reply, even if the thread scrolls past it.
+        ...(replyTo?.id ? { replyTo: { id: replyTo.id, content: String(replyTo.content ?? '').slice(0, 300), from: replyTo.from ?? null } } : {}),
+      },
       response_metadata: {},
       tool_calls: [],
     };
