@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Chart from 'chart.js/auto';
-import { DollarSign, ShoppingCart, Users, LifeBuoy, Timer, CheckCircle2 } from 'lucide-react';
+import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Headset, AlertTriangle } from 'lucide-react';
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';
 
@@ -13,18 +13,11 @@ const TEMP_COLORS = {
 };
 const TEMP_LABELS = { caliente: 'Caliente', tibio: 'Tibio', frio: 'Frío', pagado: 'Pagado', pqrs: 'PQRS' };
 
-const ORDER_STATUS_META = {
-  carrito: { label: 'Carrito', variant: 'neutral' },
-  pendiente_pago: { label: 'Pendiente de pago', variant: 'warning' },
-  pagado: { label: 'Pagado', variant: 'success' },
-  enviado: { label: 'Enviado', variant: 'info' },
-  entregado: { label: 'Entregado', variant: 'info' },
-  cancelado: { label: 'Cancelado', variant: 'danger' },
+const TICKET_STATUS_META = {
+  esperando_asesor: { label: 'Pendiente', color: '#b45309', variant: 'warning', icon: AlertTriangle },
+  en_atencion: { label: 'Asesor', color: '#4338ca', variant: 'info', icon: Headset },
+  resuelto: { label: 'Resuelto', color: '#15803d', variant: 'success', icon: CheckCircle2 },
 };
-
-function formatQ(n) {
-  return 'Q' + Number(n).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function formatMinutes(m) {
   if (m === null) return 'Sin datos';
@@ -48,8 +41,9 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const pipelineRef = useRef(null);
-  const revenueRef = useRef(null);
-  const productsRef = useRef(null);
+  const ticketStatusRef = useRef(null);
+  const conversationsRef = useRef(null);
+  const advisorRef = useRef(null);
 
   useEffect(() => {
     fetchDashboard().then(setData).catch((err) => setError(err.message));
@@ -81,13 +75,33 @@ export default function Dashboard() {
     };
   }, [data]);
 
-  useChart(revenueRef, () => {
+  useChart(ticketStatusRef, () => {
+    const entries = Object.entries(data.ticketStatus);
+    return {
+      type: 'doughnut',
+      data: {
+        labels: entries.map(([k]) => TICKET_STATUS_META[k].label),
+        datasets: [{
+          data: entries.map(([, v]) => v),
+          backgroundColor: entries.map(([k]) => TICKET_STATUS_META[k].color),
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } } },
+      },
+    };
+  }, [data]);
+
+  useChart(conversationsRef, () => {
     return {
       type: 'line',
       data: {
-        labels: data.revenueByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })),
+        labels: data.conversationsByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })),
         datasets: [{
-          data: data.revenueByDay.map((r) => r.total),
+          data: data.conversationsByDay.map((r) => r.count),
           borderColor: '#4338ca',
           backgroundColor: 'rgba(67,56,202,0.08)',
           fill: true,
@@ -100,25 +114,22 @@ export default function Dashboard() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => formatQ(ctx.parsed.y) } },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
-          y: { beginAtZero: true, grid: { color: '#e4e4e7' }, ticks: { callback: (v) => 'Q' + v } },
+          y: { beginAtZero: true, grid: { color: '#e4e4e7' }, ticks: { precision: 0 } },
         },
       },
     };
   }, [data]);
 
-  useChart(productsRef, () => {
+  useChart(advisorRef, () => {
     return {
       type: 'bar',
       data: {
-        labels: data.topProducts.map((p) => p.name),
+        labels: data.advisorActivity.map((a) => a.advisor),
         datasets: [{
-          data: data.topProducts.map((p) => p.units),
+          data: data.advisorActivity.map((a) => a.count),
           backgroundColor: '#4338ca',
           borderRadius: 4,
           barThickness: 18,
@@ -151,9 +162,9 @@ export default function Dashboard() {
 
       <div className="px-8 pb-8">
       <div className="mb-6 grid grid-cols-4 gap-4">
-        <MetricCard icon={DollarSign} label="Ingresos totales" value={formatQ(kpis.ingresosTotales)} featured />
-        <MetricCard icon={ShoppingCart} label="Pedidos este mes" value={kpis.pedidosMes} />
-        <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} />
+        <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} featured />
+        <MetricCard icon={UserPlus} label="Registros esta semana" value={kpis.registrosSemana} />
+        <MetricCard icon={CircleDollarSign} label="Clientes marcados como Pagado" value={kpis.clientesPagados} />
         <MetricCard icon={LifeBuoy} label="Tickets pendientes" value={kpis.ticketsPendientes} accent={kpis.ticketsPendientes > 0} />
       </div>
 
@@ -173,49 +184,68 @@ export default function Dashboard() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Ingresos, últimos 14 días">
+        <ChartCard title="Tickets por estado">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
-              ref={revenueRef}
+              ref={ticketStatusRef}
               role="img"
-              aria-label="Gráfico de línea de ingresos diarios en los últimos 14 días"
+              aria-label={`Tickets por estado: ${Object.entries(data.ticketStatus).map(([k, v]) => `${TICKET_STATUS_META[k].label} ${v}`).join(', ')}`}
             />
           </div>
         </ChartCard>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-6">
-        <ChartCard title="Productos más vendidos">
-          <div style={{ position: 'relative', height: Math.max(160, data.topProducts.length * 40) }}>
+        <ChartCard title="Conversaciones nuevas, últimos 14 días">
+          <div style={{ position: 'relative', height: 200 }}>
             <canvas
-              ref={productsRef}
+              ref={conversationsRef}
               role="img"
-              aria-label={`Productos más vendidos: ${data.topProducts.map((p) => `${p.name} ${p.units} unidades`).join(', ')}`}
+              aria-label="Gráfico de línea de conversaciones nuevas por día en los últimos 14 días"
             />
           </div>
         </ChartCard>
 
-        <div className="rounded-2xl border border-border bg-paper p-6">
-          <h3 className="mb-4 text-sm font-medium text-muted-foreground">Pedidos recientes</h3>
-          {data.recentOrders.length === 0 && (
-            <p className="text-sm text-muted-foreground">Todavía no hay pedidos.</p>
+        <ChartCard title="Tickets resueltos por asesor (30d)">
+          {data.advisorActivity.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay tickets resueltos en este período.</p>
+          ) : (
+            <div style={{ position: 'relative', height: Math.max(160, data.advisorActivity.length * 40) }}>
+              <canvas
+                ref={advisorRef}
+                role="img"
+                aria-label={`Tickets resueltos por asesor: ${data.advisorActivity.map((a) => `${a.advisor} ${a.count}`).join(', ')}`}
+              />
+            </div>
           )}
-          <div className="flex flex-col divide-y divide-border">
-            {data.recentOrders.map((o) => (
-              <div key={o.ticketCode} className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0">
+        </ChartCard>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-paper p-6">
+        <h3 className="mb-4 text-sm font-medium text-muted-foreground">Tickets recientes</h3>
+        {data.recentTickets.length === 0 && (
+          <p className="text-sm text-muted-foreground">Todavía no hay tickets.</p>
+        )}
+        <div className="flex flex-col divide-y divide-border">
+          {data.recentTickets.map((t) => {
+            const meta = TICKET_STATUS_META[t.status];
+            const Icon = meta?.icon;
+            return (
+              <div key={t.id} className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{o.customerName}</p>
-                  <p className="text-xs text-muted-foreground">{o.ticketCode}</p>
+                  <p className="truncate font-medium">{t.customerName}</p>
+                  <p className="truncate text-xs text-muted-foreground">{t.handoffReason || '—'}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="font-medium">{o.total !== null ? formatQ(o.total) : '—'}</span>
-                  <Badge variant={ORDER_STATUS_META[o.status]?.variant ?? 'neutral'}>
-                    {ORDER_STATUS_META[o.status]?.label ?? o.status}
+                  {t.assignedAdvisor && <span className="text-xs text-muted-foreground">{t.assignedAdvisor}</span>}
+                  <Badge variant={meta?.variant ?? 'neutral'}>
+                    {Icon && <Icon size={11} className="mr-1 inline" />}
+                    {meta?.label ?? t.status}
                   </Badge>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
       </div>
