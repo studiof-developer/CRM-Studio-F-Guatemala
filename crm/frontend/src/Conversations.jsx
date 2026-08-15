@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply,
+  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
 } from 'lucide-react';
 import {
@@ -354,6 +354,11 @@ export default function Conversations({ user }) {
                         <AlertTriangle size={10} /> pendiente
                       </span>
                     )}
+                    {!c.ticketStatus && (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-greige-ink">
+                        <Bot size={10} /> bot
+                      </span>
+                    )}
                     </div>
                   </div>
                 </div>
@@ -407,6 +412,11 @@ export default function Conversations({ user }) {
                     <CheckCircle2 size={12} /> {actionBusy ? '...' : 'Resolver'}
                   </span>
                 </div>
+              )}
+              {!thread.ticketStatus && (
+                <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
+                  <Bot size={12} /> Bot activo
+                </span>
               )}
               <Info size={16} className="shrink-0 text-greige" />
             </button>
