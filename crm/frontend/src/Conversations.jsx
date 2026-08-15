@@ -54,22 +54,42 @@ export default function Conversations({ user }) {
   const [editOpen, setEditOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [unreadCounts, setUnreadCounts] = useState({});
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
+  const seenIdRef = useRef({}); // sessionId -> last lastId we've already accounted for
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      setConversations(await fetchConversations(search, temperature));
+      const data = await fetchConversations(search, temperature);
+      setConversations(data);
+      // Diff against what we last saw per thread — a new customer message on a thread
+      // that isn't currently open bumps its badge. First sighting of a thread just
+      // seeds the baseline, it doesn't retroactively flag old history as unread.
+      setUnreadCounts((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const c of data) {
+          const seen = seenIdRef.current[c.sessionId];
+          seenIdRef.current[c.sessionId] = c.lastId;
+          if (seen === undefined || c.lastId <= seen) continue;
+          if (c.sessionId === selectedId) continue;
+          if (c.lastMessage?.type !== 'human') continue;
+          next[c.sessionId] = (next[c.sessionId] ?? 0) + 1;
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
     } catch (err) {
       setError(err.message);
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature]);
+  }, [search, temperature, selectedId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -283,10 +303,19 @@ export default function Conversations({ user }) {
           )}
           {conversations.map((c) => {
             const name = c.customerName || c.phone || c.sessionId.slice(0, 12);
+            const unread = unreadCounts[c.sessionId] ?? 0;
             return (
               <button
                 key={c.sessionId}
-                onClick={() => setSelectedId(c.sessionId)}
+                onClick={() => {
+                  setSelectedId(c.sessionId);
+                  setUnreadCounts((prev) => {
+                    if (!prev[c.sessionId]) return prev;
+                    const next = { ...prev };
+                    delete next[c.sessionId];
+                    return next;
+                  });
+                }}
                 className={`flex w-full items-center gap-3 border-b border-line-soft px-4 py-3 text-left transition-colors ${
                   c.sessionId === selectedId ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                 }`}
@@ -298,10 +327,15 @@ export default function Conversations({ user }) {
                     <span className="shrink-0 text-[11px] text-greige">{formatListTime(c.lastMessageAt)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs text-greige-ink">
+                    <p className={`truncate text-xs ${unread ? 'font-semibold text-ink' : 'text-greige-ink'}`}>
                       {typeof c.lastMessage?.content === 'string' ? c.lastMessage.content : ''}
                     </p>
                     <div className="flex shrink-0 items-center gap-1">
+                    {unread > 0 && (
+                      <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
                     {c.temperature && (() => {
                       const { label, icon: Icon, iconText } = TEMP_META[c.temperature];
                       return (

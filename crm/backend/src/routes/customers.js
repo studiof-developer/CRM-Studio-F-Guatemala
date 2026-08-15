@@ -4,14 +4,13 @@ import { logAccess } from '../auditLog.js';
 
 const router = Router();
 
-// PQRS beats everything (needs attention now). Pagado is sticky once true.
-// Caliente/Tibio/Frío only apply to customers who have never bought.
+// Every registered customer gets a handoff ticket now (not just complaints), so ticket
+// existence alone no longer implies PQRS — that badge would've swallowed almost every
+// customer. The ticket's own status ("pendiente"/"en atención") already flags that a
+// human needs to look; PQRS stays available as a manual override for actual P/Q/R/S.
+// Pagado is sticky once true. Caliente/Tibio/Frío only apply to customers who never bought.
 export const TEMPERATURE_SQL = `
   CASE
-    WHEN EXISTS (
-      SELECT 1 FROM tickets t
-      WHERE t.customer_id = c.id AND t.status IN ('esperando_asesor','en_atencion')
-    ) THEN 'pqrs'
     WHEN c.purchase_frequency > 0 THEN 'pagado'
     WHEN EXISTS (
       SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.status = 'pendiente_pago'

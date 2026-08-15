@@ -27,7 +27,11 @@ export default function EditCustomerModal({ open, customer, onCancel, onSaved })
       f.key,
       f.key === 'birth_date' ? (customer.birth_date ? String(customer.birth_date).slice(0, 10) : '') : (customer[f.key] ?? ''),
     ])));
-  }, [open, customer]);
+    // Keyed on id, not the whole object — the parent (Conversations) polls every few
+    // seconds and passes a brand-new `customer` object each time even when nothing
+    // changed, which was resetting the form (wiping what the advisor had just typed).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id]);
 
   async function handleSave() {
     setBusy(true);
