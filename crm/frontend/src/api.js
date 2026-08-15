@@ -83,9 +83,10 @@ export async function sendConversationMessage(sessionId, content, replyTo) {
   return res.json();
 }
 
-export async function sendConversationAttachment(sessionId, file) {
+export async function sendConversationAttachment(sessionId, file, caption) {
   const formData = new FormData();
   formData.append('file', file);
+  if (caption) formData.append('caption', caption);
   const res = await apiFetch(`/api/conversations/${sessionId}/attachments`, { method: 'POST', body: formData });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al enviar el archivo');
   return res.json();

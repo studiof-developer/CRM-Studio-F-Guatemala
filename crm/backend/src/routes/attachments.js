@@ -33,7 +33,7 @@ inboundRouter.post('/', async (req, res, next) => {
     if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
       return res.status(401).json({ error: 'unauthorized' });
     }
-    const { phone, kind, filename, mimeType, base64, wamid } = req.body ?? {};
+    const { phone, kind, filename, mimeType, base64, wamid, caption } = req.body ?? {};
     if (!phone || !kind || !mimeType || !base64) {
       return res.status(400).json({ error: 'phone, kind, mimeType, base64 required' });
     }
@@ -46,7 +46,7 @@ inboundRouter.post('/', async (req, res, next) => {
 
     const message = {
       type: 'human',
-      content: '',
+      content: caption ?? '',
       additional_kwargs: wamid ? { wamid } : {},
       response_metadata: {},
     };

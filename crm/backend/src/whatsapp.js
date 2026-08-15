@@ -77,13 +77,15 @@ export async function uploadMedia(buffer, mimeType) {
   return id;
 }
 
-export async function sendMedia(toPhone, kind, mediaId, filename) {
+export async function sendMedia(toPhone, kind, mediaId, filename, caption) {
   if (!configured) {
     console.warn('WhatsApp not configured (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID) — skipping real send');
     return null;
   }
   const payload = { messaging_product: 'whatsapp', to: toPhone, type: kind, [kind]: { id: mediaId } };
   if (kind === 'document' && filename) payload.document.filename = filename;
+  // WhatsApp doesn't support captions on audio — silently ignored there is fine.
+  if (caption && kind !== 'audio') payload[kind].caption = caption;
   return graphFetch(`${PHONE_NUMBER_ID}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

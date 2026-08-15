@@ -194,7 +194,11 @@ export default function Conversations({ user }) {
   async function uploadFile(file) {
     setUploading(true);
     try {
-      await sendConversationAttachment(selectedId, file);
+      // Whatever's typed in the compose box rides along as the WhatsApp caption —
+      // same gesture as WhatsApp itself (write, then attach, sends as one message).
+      const caption = draft.trim();
+      await sendConversationAttachment(selectedId, file, caption || undefined);
+      if (caption) setDraft('');
       loadThread();
     } catch (err) {
       showError(err.message);

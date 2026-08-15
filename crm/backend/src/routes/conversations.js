@@ -371,15 +371,17 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       });
     }
 
+    const caption = (req.body?.caption ?? '').trim();
+
     let mediaId = null;
     if (phone) {
       mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
-      await whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname);
+      await whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined);
     }
 
     const message = {
       type: 'ai',
-      content: '',
+      content: caption,
       additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName },
       response_metadata: {},
       tool_calls: [],
