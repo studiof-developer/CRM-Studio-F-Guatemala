@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
@@ -35,6 +35,16 @@ const ADMIN_TABS = {
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
 
+// Persisted so it survives switching tabs (or reloading the page) without losing
+// track of what's already been seen — a plain in-memory ref would reset both ways.
+const NAV_SEEN_KEY = 'studio_f_nav_seen_ids';
+function loadSeenIds() {
+  try { return JSON.parse(localStorage.getItem(NAV_SEEN_KEY) || '{}'); } catch { return {}; }
+}
+function saveSeenIds(seen) {
+  try { localStorage.setItem(NAV_SEEN_KEY, JSON.stringify(seen)); } catch { /* storage full/blocked — badge just won't persist */ }
+}
+
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
   const [tab, setTab] = useState('dashboard');
@@ -48,13 +58,32 @@ export default function App() {
     fetchTickets('esperando_asesor').then((rows) => setPendingCount(rows.length)).catch(() => {});
   }, []);
 
-  // No stored "last seen" state needed — a thread whose last message is still from
-  // the customer means nobody (bot or advisor) has answered it yet, full stop. That's
-  // computable fresh on every poll instead of tracking per-user read state.
-  const loadUnanswered = useCallback(() => {
-    fetchConversations().then((rows) => {
-      setUnansweredCount(rows.filter((r) => r.lastMessage?.type === 'human').length);
-    }).catch(() => {});
+  const tabRef = useRef(tab);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+
+  // Counts threads that are BOTH still unanswered (last message is from the customer)
+  // AND new since the advisor last had the Conversaciones tab open — being on that tab
+  // marks everything currently listed as seen, so revisiting later starts the count
+  // fresh instead of re-flagging things already looked at.
+  const loadUnanswered = useCallback(async () => {
+    try {
+      const rows = await fetchConversations();
+      const seen = loadSeenIds();
+      if (tabRef.current === 'conversations') {
+        for (const r of rows) seen[r.sessionId] = r.lastId;
+        saveSeenIds(seen);
+        setUnansweredCount(0);
+        return;
+      }
+      let count = 0;
+      for (const r of rows) {
+        const prev = seen[r.sessionId];
+        seen[r.sessionId] = r.lastId;
+        if (prev !== undefined && r.lastId > prev && r.lastMessage?.type === 'human') count += 1;
+      }
+      saveSeenIds(seen);
+      setUnansweredCount(count);
+    } catch { /* leave the last known count showing rather than flash to 0 */ }
   }, []);
 
   useEffect(() => {
@@ -64,6 +93,11 @@ export default function App() {
     const id = setInterval(() => { loadPending(); loadUnanswered(); }, 15000);
     return () => clearInterval(id);
   }, [user, loadPending, loadUnanswered]);
+
+  // Switching into Conversaciones shouldn't wait up to 15s to clear the badge.
+  useEffect(() => {
+    if (user && tab === 'conversations') loadUnanswered();
+  }, [user, tab, loadUnanswered]);
 
   if (user === undefined) return null;
   if (!user) return <Login onLoggedIn={setUser} />;
