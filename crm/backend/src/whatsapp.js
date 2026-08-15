@@ -34,6 +34,28 @@ export async function sendText(toPhone, body) {
   });
 }
 
+// First-contact messages (customer never wrote in, or >24h since their last message)
+// must use a pre-approved Meta template — free text gets rejected outright.
+export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = []) {
+  if (!configured) {
+    console.warn('WhatsApp not configured (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID) — skipping real send');
+    return null;
+  }
+  const components = bodyParams.length
+    ? [{ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) }]
+    : undefined;
+  return graphFetch(`${PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: toPhone,
+      type: 'template',
+      template: { name: templateName, language: { code: languageCode }, components },
+    }),
+  });
+}
+
 export async function uploadMedia(buffer, mimeType) {
   if (!configured) {
     console.warn('WhatsApp not configured (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID) — skipping real upload');

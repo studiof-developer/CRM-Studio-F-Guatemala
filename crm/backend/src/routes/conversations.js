@@ -109,6 +109,58 @@ export async function findConversationThread(threadKey) {
   return { messages, customer, phone, sessionIds };
 }
 
+// The template must already be approved in Meta's WhatsApp Manager under this exact
+// name/language — see the CRM ops notes for the approved wording ("seguimiento_asesor").
+const OUTREACH_TEMPLATE_NAME = process.env.WHATSAPP_TEMPLATE_NAME || 'seguimiento_asesor';
+const OUTREACH_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
+
+// Advisor-initiated first contact (customer has no prior thread, or one that's gone
+// cold) — WhatsApp requires a pre-approved template for this, not free text.
+router.post('/', async (req, res, next) => {
+  try {
+    const { phone: rawPhone, fullName, address } = req.body ?? {};
+    const phone = String(rawPhone ?? '').replace(/\D/g, '');
+    if (!PHONE_RE.test(phone)) return res.status(400).json({ error: 'invalid phone' });
+    if (!fullName?.trim()) return res.status(400).json({ error: 'fullName required' });
+    if (!address?.trim()) return res.status(400).json({ error: 'address required' });
+
+    try {
+      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [fullName.trim()]);
+    } catch (err) {
+      return res.status(502).json({ error: `no se pudo enviar la plantilla de WhatsApp: ${err.message}` });
+    }
+
+    const { rows: customerRows } = await pool.query(
+      `INSERT INTO customers (whatsapp_number, full_name, address)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (whatsapp_number) DO UPDATE SET full_name = $2, address = $3, updated_at = now()
+       RETURNING id`,
+      [phone, fullName.trim(), address.trim()]
+    );
+    const customerId = customerRows[0].id;
+
+    await pool.query(
+      `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
+       VALUES ($1, 'en_atencion', 'contacto_proactivo', $2, now())`,
+      [customerId, req.user.fullName]
+    );
+
+    const message = {
+      type: 'ai',
+      content: `Hola ${fullName.trim()}, te escribimos de Studio F Guatemala 😊 Un asesor quiere darte seguimiento personalizado. ¿Nos confirmas que podemos continuar la conversación por aquí?`,
+      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName, template: OUTREACH_TEMPLATE_NAME },
+      response_metadata: {},
+      tool_calls: [],
+    };
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id, created_at`,
+      [phone, JSON.stringify(message)]
+    );
+
+    res.status(201).json({ sessionId: phone, id: inserted[0].id, createdAt: inserted[0].created_at });
+  } catch (err) { next(err); }
+});
+
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`

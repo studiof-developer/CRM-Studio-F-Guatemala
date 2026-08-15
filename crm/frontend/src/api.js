@@ -63,6 +63,16 @@ export async function fetchConversation(sessionId) {
   return res.json();
 }
 
+export async function startConversation({ phone, fullName, address }) {
+  const res = await apiFetch('/api/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, fullName, address }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al iniciar la conversación');
+  return res.json();
+}
+
 export async function sendConversationMessage(sessionId, content) {
   const res = await apiFetch(`/api/conversations/${sessionId}/messages`, {
     method: 'POST',

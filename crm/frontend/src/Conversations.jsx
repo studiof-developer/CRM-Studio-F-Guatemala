@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip,
+  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
-  attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags,
+  attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -44,6 +44,11 @@ export default function Conversations({ user }) {
   const [uploading, setUploading] = useState(false);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatBusy, setNewChatBusy] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatName, setNewChatName] = useState('');
+  const [newChatAddress, setNewChatAddress] = useState('');
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -200,6 +205,26 @@ export default function Conversations({ user }) {
     }
   }
 
+  async function handleStartConversation() {
+    setNewChatBusy(true);
+    try {
+      const { sessionId } = await startConversation({
+        phone: newChatPhone.trim(), fullName: newChatName.trim(), address: newChatAddress.trim(),
+      });
+      setNewChatOpen(false);
+      setNewChatPhone('');
+      setNewChatName('');
+      setNewChatAddress('');
+      await load(false);
+      setSelectedId(sessionId);
+      showSuccess('Plantilla enviada, chat abierto');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setNewChatBusy(false);
+    }
+  }
+
   const selected = conversations.find((c) => c.sessionId === selectedId);
   const visibleMessages = thread?.messages.filter(
     (m) => (m.type === 'human' || m.type === 'ai') && ((typeof m.content === 'string' && m.content.trim()) || m.attachment)
@@ -211,7 +236,17 @@ export default function Conversations({ user }) {
       {/* Conversation list — mirrors WhatsApp's left rail */}
       <div className="flex w-[380px] max-w-[45vw] shrink-0 flex-col border-r border-line">
         <div className="border-b border-line p-4">
-          <h1 className="mb-3 px-1 text-lg font-semibold text-ink">Conversaciones</h1>
+          <div className="mb-3 flex items-center justify-between px-1">
+            <h1 className="text-lg font-semibold text-ink">Conversaciones</h1>
+            <button
+              onClick={() => setNewChatOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+              aria-label="Nuevo chat"
+              title="Nuevo chat"
+            >
+              <SquarePen size={17} />
+            </button>
+          </div>
           <div className="relative mb-2">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-greige" />
             <input
@@ -528,6 +563,38 @@ export default function Conversations({ user }) {
             <option key={k} value={k}>{PAID_METHOD_LABELS[k]}</option>
           ))}
         </select>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={newChatOpen}
+        title="Nuevo chat"
+        message="Le llega un mensaje de plantilla pre-aprobada por WhatsApp para abrir la conversación. En cuanto responda, puedes escribirle libremente."
+        confirmLabel="Enviar y abrir chat"
+        busy={newChatBusy}
+        confirmDisabled={!newChatPhone.trim() || !newChatName.trim() || !newChatAddress.trim()}
+        onConfirm={handleStartConversation}
+        onCancel={() => setNewChatOpen(false)}
+      >
+        <div className="flex flex-col gap-2.5">
+          <input
+            value={newChatPhone}
+            onChange={(e) => setNewChatPhone(e.target.value)}
+            placeholder="Número (ej. 50255551234)"
+            className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
+          />
+          <input
+            value={newChatName}
+            onChange={(e) => setNewChatName(e.target.value)}
+            placeholder="Nombre completo"
+            className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
+          />
+          <input
+            value={newChatAddress}
+            onChange={(e) => setNewChatAddress(e.target.value)}
+            placeholder="Dirección"
+            className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
+          />
+        </div>
       </ConfirmDialog>
     </div>
   );
