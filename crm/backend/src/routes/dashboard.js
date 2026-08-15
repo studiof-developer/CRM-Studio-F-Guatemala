@@ -16,7 +16,7 @@ router.get('/', async (req, res, next) => {
     const pipelineParams = [];
     const pipelineZone = zoneClause(req.user, pipelineParams);
 
-    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets] = await Promise.all([
+    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets, paidMethods, handoffReasons] = await Promise.all([
       pool.query(
         `SELECT
            (SELECT count(*) FROM customers c WHERE true ${kpiZone}) AS clientes_totales,
@@ -61,6 +61,18 @@ router.get('/', async (req, res, next) => {
          FROM tickets t JOIN customers c ON c.id = t.customer_id
          ORDER BY t.created_at DESC LIMIT 6`
       ),
+      pool.query(
+        `SELECT paid_method, count(*) AS count
+         FROM customers
+         WHERE paid_locked AND paid_method IS NOT NULL
+         GROUP BY paid_method ORDER BY count DESC`
+      ),
+      pool.query(
+        `SELECT handoff_reason, count(*) AS count
+         FROM tickets
+         WHERE handoff_reason IS NOT NULL AND created_at >= now() - interval '30 days'
+         GROUP BY handoff_reason ORDER BY count DESC LIMIT 8`
+      ),
     ]);
 
     const pipelineCounts = Object.fromEntries(VALID_TEMPERATURES.map((t) => [t, 0]));
@@ -90,6 +102,8 @@ router.get('/', async (req, res, next) => {
         customerName: r.full_name || r.whatsapp_number,
         createdAt: r.created_at,
       })),
+      paidMethods: paidMethods.rows.map((r) => ({ method: r.paid_method, count: Number(r.count) })),
+      handoffReasons: handoffReasons.rows.map((r) => ({ reason: r.handoff_reason, count: Number(r.count) })),
     });
   } catch (err) { next(err); }
 });

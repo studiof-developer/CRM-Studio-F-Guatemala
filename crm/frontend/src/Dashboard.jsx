@@ -3,6 +3,9 @@ import Chart from 'chart.js/auto';
 import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Headset, AlertTriangle } from 'lucide-react';
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';
+import { PAID_METHOD_LABELS } from './lib/paymentMethods.js';
+
+const PAID_METHOD_COLORS = { tarjeta: '#4338ca', efectivo: '#15803d', transferencia: '#b45309', deposito: '#0891b2' };
 
 const TEMP_COLORS = {
   caliente: '#b91c1c',
@@ -44,6 +47,7 @@ export default function Dashboard() {
   const ticketStatusRef = useRef(null);
   const conversationsRef = useRef(null);
   const advisorRef = useRef(null);
+  const paidMethodRef = useRef(null);
 
   useEffect(() => {
     fetchDashboard().then(setData).catch((err) => setError(err.message));
@@ -148,6 +152,26 @@ export default function Dashboard() {
     };
   }, [data]);
 
+  useChart(paidMethodRef, () => {
+    const entries = data.paidMethods;
+    return {
+      type: 'doughnut',
+      data: {
+        labels: entries.map((p) => PAID_METHOD_LABELS[p.method] ?? p.method),
+        datasets: [{
+          data: entries.map((p) => p.count),
+          backgroundColor: entries.map((p) => PAID_METHOD_COLORS[p.method] ?? '#6b7280'),
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } } },
+      },
+    };
+  }, [data]);
+
   if (error) return <div className="mx-auto max-w-6xl px-8 py-8 text-sm text-danger">{error}</div>;
   if (!data) return <div className="mx-auto max-w-6xl px-8 py-8 text-sm text-muted-foreground">Cargando…</div>;
 
@@ -219,6 +243,37 @@ export default function Dashboard() {
             </div>
           )}
         </ChartCard>
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-6">
+        <ChartCard title="Medio de pago (clientes marcados como Pagado)">
+          {data.paidMethods.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay clientes marcados como Pagado con medio registrado.</p>
+          ) : (
+            <div style={{ position: 'relative', height: 200 }}>
+              <canvas
+                ref={paidMethodRef}
+                role="img"
+                aria-label={`Medio de pago: ${data.paidMethods.map((p) => `${PAID_METHOD_LABELS[p.method] ?? p.method} ${p.count}`).join(', ')}`}
+              />
+            </div>
+          )}
+        </ChartCard>
+
+        <div className="rounded-2xl border border-border bg-paper p-6">
+          <h3 className="mb-4 text-sm font-medium text-muted-foreground">Motivos de handoff más comunes (30d)</h3>
+          {data.handoffReasons.length === 0 && (
+            <p className="text-sm text-muted-foreground">Todavía no hay tickets en este período.</p>
+          )}
+          <div className="flex flex-col divide-y divide-border">
+            {data.handoffReasons.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 py-2.5 text-sm first:pt-0 last:pb-0">
+                <p className="line-clamp-2 text-foreground">{r.reason}</p>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{r.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-paper p-6">
