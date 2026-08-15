@@ -51,6 +51,7 @@ export async function findCustomerBySessionId(sessionIdPrefix) {
 async function findCustomerByPhone(phone) {
   const { rows } = await pool.query(
     `SELECT c.id, c.full_name, c.zone, c.department, c.municipio, c.preferred_line, c.preferred_size, c.purchase_frequency, c.address,
+            c.dpi, c.email, c.birth_date,
             c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
             t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason
      FROM customers c
@@ -278,6 +279,9 @@ router.get('/:sessionId', async (req, res, next) => {
       preferredLine: customer?.preferred_line ?? null,
       purchaseFrequency: customer?.purchase_frequency ?? null,
       address: customer?.address ?? null,
+      dpi: customer?.dpi ?? null,
+      email: customer?.email ?? null,
+      birthDate: customer?.birth_date ?? null,
       temperature: customer?.temperature ?? null,
       manualStatus: customer?.manual_status ?? null,
       paidLocked: customer?.paid_locked ?? false,

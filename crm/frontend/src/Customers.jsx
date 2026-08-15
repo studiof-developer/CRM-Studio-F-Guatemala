@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package } from 'lucide-react';
+import { CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import Badge from './components/Badge.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
+import EditCustomerModal from './components/EditCustomerModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
 export default function Customers() {
@@ -18,6 +19,7 @@ export default function Customers() {
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
 
   const loadCounts = useCallback(() => {
     fetchCustomerCounts().then(setCounts).catch((err) => setError(err.message));
@@ -173,7 +175,17 @@ export default function Customers() {
             <>
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">{detail.full_name || detail.whatsapp_number}</h2>
+                  <h2 className="flex items-center gap-2 text-xl font-semibold">
+                    {detail.full_name || detail.whatsapp_number}
+                    <button
+                      onClick={() => setEditOpen(true)}
+                      className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Editar cliente"
+                      title="Editar cliente"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </h2>
                   <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Phone size={13} /> {detail.whatsapp_number}
                   </p>
@@ -303,6 +315,13 @@ export default function Customers() {
           ))}
         </select>
       </ConfirmDialog>
+
+      <EditCustomerModal
+        open={editOpen}
+        customer={detail}
+        onCancel={() => setEditOpen(false)}
+        onSaved={() => { setEditOpen(false); reloadDetail(); }}
+      />
     </div>
   );
 }

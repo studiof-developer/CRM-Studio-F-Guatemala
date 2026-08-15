@@ -131,6 +131,33 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Plain profile fields — open to every role (asesor, supervisor, admin), since with the
+// bot's intake trimmed down to just name + consent, whoever picks up the ticket is the
+// one filling in the rest (DPI, dirección, talla, etc.) as the customer gives it to them.
+const PROFILE_FIELDS = ['full_name', 'dpi', 'birth_date', 'department', 'municipio', 'address', 'preferred_line', 'preferred_size', 'email'];
+
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const { rows: existing } = await pool.query(`SELECT id FROM customers WHERE id = $1`, [req.params.id]);
+    if (!existing.length) return res.status(404).json({ error: 'not found' });
+
+    const fields = PROFILE_FIELDS.filter((f) => f in (req.body ?? {}));
+    if (!fields.length) return res.status(400).json({ error: 'no fields to update' });
+
+    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
+    const values = fields.map((f) => {
+      const v = req.body[f];
+      return typeof v === 'string' ? (v.trim() || null) : v;
+    });
+    const { rows } = await pool.query(
+      `UPDATE customers SET ${setClause}, updated_at = now() WHERE id = $${values.length + 1}
+       RETURNING id, full_name, dpi, birth_date, department, municipio, address, preferred_line, preferred_size, email`,
+      [...values, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) { next(err); }
+});
+
 // Advisor override: manual_status is fully settable (including back to null, to
 // release the override and return to automatic). paid_locked is one-way — the API
 // rejects any attempt to send it back to false, since a paid customer stays paid.

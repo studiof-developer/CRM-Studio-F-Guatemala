@@ -118,6 +118,16 @@ export async function fetchCustomer(id) {
   return res.json();
 }
 
+export async function updateCustomerProfile(id, fields) {
+  const res = await apiFetch(`/api/customers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar el cliente');
+  return res.json();
+}
+
 export async function updateCustomerTags(id, patch) {
   const res = await apiFetch(`/api/customers/${id}/tags`, {
     method: 'PATCH',

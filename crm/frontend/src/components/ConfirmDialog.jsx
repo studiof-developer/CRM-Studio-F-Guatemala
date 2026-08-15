@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 
-export default function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar', danger = false, busy = false, confirmDisabled = false, children, onConfirm, onCancel }) {
+export default function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar', danger = false, busy = false, confirmDisabled = false, wide = false, children, onConfirm, onCancel }) {
   return (
     <AnimatePresence>
       {open && (
@@ -18,7 +18,9 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'Co
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ type: 'spring', bounce: 0.25, duration: 0.45 }}
-            className="glass-card w-full max-w-sm rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className={`glass-card w-full rounded-2xl border border-line bg-paper p-6 shadow-xl ${
+              wide ? 'max-w-lg max-h-[85vh] overflow-y-auto' : 'max-w-sm'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">

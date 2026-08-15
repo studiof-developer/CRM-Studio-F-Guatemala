@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen,
+  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
 } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
+import EditCustomerModal from './components/EditCustomerModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
 function Tail({ side, color }) {
@@ -49,6 +50,7 @@ export default function Conversations({ user }) {
   const [newChatPhone, setNewChatPhone] = useState('');
   const [newChatName, setNewChatName] = useState('');
   const [newChatAddress, setNewChatAddress] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -422,9 +424,21 @@ export default function Conversations({ user }) {
                 <div className="w-72 shrink-0 overflow-y-auto border-l border-line bg-paper p-5">
                   <div className="mb-5 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
-                    <button onClick={() => setInfoOpen(false)} className="text-greige hover:text-ink">
-                      <X size={16} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {thread.customerId && (
+                        <button
+                          onClick={() => setEditOpen(true)}
+                          className="rounded-lg p-1 text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+                          aria-label="Editar cliente"
+                          title="Editar cliente"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      )}
+                      <button onClick={() => setInfoOpen(false)} className="text-greige hover:text-ink">
+                        <X size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex flex-col items-center text-center">
                     <Avatar name={thread.customerName || thread.phone} size={64} />
@@ -596,6 +610,24 @@ export default function Conversations({ user }) {
           />
         </div>
       </ConfirmDialog>
+
+      <EditCustomerModal
+        open={editOpen}
+        customer={thread?.customerId ? {
+          id: thread.customerId,
+          full_name: thread.customerName,
+          dpi: thread.dpi,
+          email: thread.email,
+          department: thread.department,
+          municipio: thread.municipio,
+          address: thread.address,
+          preferred_line: thread.preferredLine,
+          preferred_size: thread.preferredSize,
+          birth_date: thread.birthDate,
+        } : null}
+        onCancel={() => setEditOpen(false)}
+        onSaved={() => { setEditOpen(false); loadThread(); load(false); }}
+      />
     </div>
   );
 }
