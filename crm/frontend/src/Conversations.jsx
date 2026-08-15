@@ -60,6 +60,10 @@ export default function Conversations({ user }) {
   const scrollContainerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
   const seenIdRef = useRef({}); // sessionId -> last lastId we've already accounted for
+  const selectedIdRef = useRef(null); // read (not subscribed) inside load, so selecting a
+  // conversation doesn't change load's identity and re-trigger the mount/interval effects
+  // below with showLoading=true — that was what made the list flash "Cargando..." and jump.
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -77,7 +81,7 @@ export default function Conversations({ user }) {
           const seen = seenIdRef.current[c.sessionId];
           seenIdRef.current[c.sessionId] = c.lastId;
           if (seen === undefined || c.lastId <= seen) continue;
-          if (c.sessionId === selectedId) continue;
+          if (c.sessionId === selectedIdRef.current) continue;
           if (c.lastMessage?.type !== 'human') continue;
           next[c.sessionId] = (next[c.sessionId] ?? 0) + 1;
           changed = true;
@@ -89,7 +93,7 @@ export default function Conversations({ user }) {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature, selectedId]);
+  }, [search, temperature]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -317,9 +321,22 @@ export default function Conversations({ user }) {
           </select>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="relative flex-1 overflow-y-auto">
+          {/* Overlaid, not in-flow — a loading blip here must never push the list around. */}
+          <AnimatePresence>
+            {loading && (
+              <motion.span
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+                className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full border border-line bg-paper px-3 py-1 text-[11px] font-medium text-greige-ink shadow-sm"
+              >
+                Cargando…
+              </motion.span>
+            )}
+          </AnimatePresence>
           {error && <p className="p-4 text-sm text-danger">{error}</p>}
-          {loading && <p className="p-4 text-sm text-greige-ink">Cargando…</p>}
           {!loading && conversations.length === 0 && (
             <p className="p-4 text-sm text-greige-ink">Sin conversaciones.</p>
           )}
