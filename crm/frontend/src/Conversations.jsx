@@ -36,6 +36,7 @@ export default function Conversations({ user }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
   const [temperature, setTemperature] = useState('');
+  const [ticketStatusFilter, setTicketStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ export default function Conversations({ user }) {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const data = await fetchConversations(search, temperature);
+      const data = await fetchConversations(search, temperature, ticketStatusFilter);
       setConversations(data);
       // Diff against what we last saw per thread — a new customer message on a thread
       // that isn't currently open bumps its badge. First sighting of a thread just
@@ -94,7 +95,7 @@ export default function Conversations({ user }) {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature]);
+  }, [search, temperature, ticketStatusFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -330,6 +331,16 @@ export default function Conversations({ user }) {
             {BUCKET_ORDER.map((k) => (
               <option key={k} value={k}>{TEMP_META[k].label}</option>
             ))}
+          </select>
+          <select
+            value={ticketStatusFilter}
+            onChange={(e) => setTicketStatusFilter(e.target.value)}
+            className="mt-2 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink outline-none focus:border-accent"
+          >
+            <option value="">Todos los estados</option>
+            <option value="bot">Bot</option>
+            <option value="esperando_asesor">Pendiente</option>
+            <option value="en_atencion">Asesor</option>
           </select>
         </div>
 

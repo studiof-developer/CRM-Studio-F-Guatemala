@@ -233,6 +233,14 @@ router.get('/', async (req, res, next) => {
       visible = visible.filter((r) => r.temperature === temperature);
     }
 
+    // "bot" isn't a real ticket status — it means no active ticket exists at all.
+    const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'en_atencion'];
+    const { ticketStatus } = req.query;
+    if (ticketStatus) {
+      if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
+      visible = visible.filter((r) => (ticketStatus === 'bot' ? !r.ticket_status : r.ticket_status === ticketStatus));
+    }
+
     res.json(visible.map((r) => ({
       sessionId: cleanSessionId(r.thread_key),
       lastId: r.last_id,
