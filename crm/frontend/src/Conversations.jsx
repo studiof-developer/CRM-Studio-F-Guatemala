@@ -57,6 +57,7 @@ export default function Conversations({ user }) {
   const [replyingTo, setReplyingTo] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -192,7 +193,8 @@ export default function Conversations({ user }) {
       await updateTicket(thread.ticketId, { status: 'resuelto' });
       await loadThread();
       load(false);
-      showSuccess('Conversación resuelta');
+      setConfirmResolveOpen(false);
+      showSuccess('Conversación resuelta — el chat sigue disponible para responder');
     } catch (err) {
       showError(err.message);
     } finally {
@@ -341,6 +343,7 @@ export default function Conversations({ user }) {
             <option value="bot">Bot</option>
             <option value="esperando_asesor">Pendiente</option>
             <option value="en_atencion">Asesor</option>
+            <option value="resuelto">Resuelto</option>
           </select>
         </div>
 
@@ -416,6 +419,11 @@ export default function Conversations({ user }) {
                         <AlertTriangle size={10} /> pendiente
                       </span>
                     )}
+                    {c.ticketStatus === 'resuelto' && (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-ok/10 px-2 py-0.5 text-[10px] font-semibold text-ok">
+                        <CheckCircle2 size={10} /> resuelto
+                      </span>
+                    )}
                     {!c.ticketStatus && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-greige-ink">
                         <Bot size={10} /> bot
@@ -468,12 +476,17 @@ export default function Conversations({ user }) {
                   </span>
                   <span
                     role="button"
-                    onClick={(e) => { e.stopPropagation(); handleResolve(); }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmResolveOpen(true); }}
                     className="flex items-center gap-1.5 rounded-full bg-ok/10 px-3 py-1.5 text-xs font-semibold text-ok transition-colors hover:bg-ok hover:text-white"
                   >
-                    <CheckCircle2 size={12} /> {actionBusy ? '...' : 'Resolver'}
+                    <CheckCircle2 size={12} /> Resolver
                   </span>
                 </div>
+              )}
+              {thread.ticketStatus === 'resuelto' && (
+                <span className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
+                  <CheckCircle2 size={12} /> Resuelto — puedes seguir escribiendo
+                </span>
               )}
               {!thread.ticketStatus && (
                 <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
@@ -766,6 +779,16 @@ export default function Conversations({ user }) {
           ))}
         </select>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmResolveOpen}
+        title="Resolver conversación"
+        message="¿Está seguro de resolver la conversación? Esto solo la marca como resuelta — el chat sigue disponible, el cliente puede seguir escribiendo y tú puedes seguir respondiendo con normalidad."
+        confirmLabel="Resolver"
+        busy={actionBusy}
+        onConfirm={handleResolve}
+        onCancel={() => setConfirmResolveOpen(false)}
+      />
 
       <ConfirmDialog
         open={newChatOpen}

@@ -49,6 +49,9 @@ export async function findCustomerBySessionId(sessionIdPrefix) {
 }
 
 async function findCustomerByPhone(phone) {
+  // The most recent ticket regardless of status — not just active ones. A resolved
+  // ticket still means a human has this relationship; the compose box shouldn't lock
+  // back up and pretend it's "bot" again just because the last issue was closed out.
   const { rows } = await pool.query(
     `SELECT c.id, c.full_name, c.zone, c.department, c.municipio, c.preferred_line, c.preferred_size, c.purchase_frequency, c.address,
             c.dpi, c.email, c.birth_date,
@@ -57,7 +60,7 @@ async function findCustomerByPhone(phone) {
      FROM customers c
      LEFT JOIN LATERAL (
        SELECT id, status, handoff_reason FROM tickets
-       WHERE customer_id = c.id AND status IN ('esperando_asesor', 'en_atencion')
+       WHERE customer_id = c.id
        ORDER BY created_at DESC LIMIT 1
      ) t ON true
      WHERE c.whatsapp_number = $1`,
@@ -212,7 +215,7 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN customers c ON c.whatsapp_number = l.phone
       LEFT JOIN LATERAL (
         SELECT status FROM tickets
-        WHERE customer_id = c.id AND status IN ('esperando_asesor', 'en_atencion')
+        WHERE customer_id = c.id
         ORDER BY created_at DESC LIMIT 1
       ) t ON true
       ORDER BY l.id DESC
@@ -234,7 +237,7 @@ router.get('/', async (req, res, next) => {
     }
 
     // "bot" isn't a real ticket status — it means no active ticket exists at all.
-    const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'en_atencion'];
+    const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'en_atencion', 'resuelto'];
     const { ticketStatus } = req.query;
     if (ticketStatus) {
       if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
@@ -250,7 +253,9 @@ router.get('/', async (req, res, next) => {
       customerName: r.full_name,
       phone: r.phone,
       ticketStatus: r.ticket_status,
-      enAtencion: r.ticket_status === 'en_atencion',
+      // Resuelto still lets the advisor keep typing — only "no ticket at all yet" and
+      // "esperando_asesor" (needs to be taken first) lock the compose box.
+      enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
       temperature: r.temperature,
       paidLocked: r.paid_locked ?? false,
     })));
@@ -275,7 +280,7 @@ router.get('/:sessionId', async (req, res, next) => {
     const attachmentByMessageId = new Map(attachments.map((a) => [a.n8n_message_id, a]));
 
     res.json({
-      enAtencion: customer?.ticket_status === 'en_atencion',
+      enAtencion: customer?.ticket_status === 'en_atencion' || customer?.ticket_status === 'resuelto',
       ticketId: customer?.ticket_id ?? null,
       ticketStatus: customer?.ticket_status ?? null,
       handoffReason: customer?.handoff_reason ?? null,
