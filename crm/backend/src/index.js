@@ -42,10 +42,25 @@ app.get('/api/events', requireAuth, (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
+    // Nginx-style reverse proxies (Traefik/Dokploy included, depending on config) can
+    // buffer responses by default, which would hold every event until the buffer fills
+    // instead of streaming it — this asks them not to. Harmless if the proxy ignores it.
+    'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
   addClient(res);
-  req.on('close', () => removeClient(res));
+
+  // A silent connection looks identical to a dead one to both sides — proxies and load
+  // balancers commonly time out and drop idle connections after 30-60s with no bytes
+  // sent, without either end finding out until the next real event tries to use it.
+  // A comment line every 20s keeps bytes flowing (a browser EventSource ignores lines
+  // starting with ":") so the connection either stays alive or fails fast and reconnects.
+  const heartbeat = setInterval(() => res.write(':heartbeat\n\n'), 20000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeClient(res);
+  });
 });
 
 startListener();

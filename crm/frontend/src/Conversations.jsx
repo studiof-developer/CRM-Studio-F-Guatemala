@@ -147,6 +147,10 @@ export default function Conversations({ user }) {
   }, [loadThread]);
 
   useLiveEvent('message_changes', loadThread);
+  // Without this, another advisor taking/resolving the ticket you have open right now
+  // (or a customer's reply changing SLA state) wouldn't show up until you reselected
+  // the thread or reloaded — the list picked it up, but the open detail pane didn't.
+  useLiveEvent('ticket_changes', loadThread);
 
   useEffect(() => {
     if (!selectedId) return;
