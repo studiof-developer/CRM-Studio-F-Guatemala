@@ -386,12 +386,6 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
 
     const caption = (req.body?.caption ?? '').trim();
 
-    let mediaId = null;
-    if (phone) {
-      mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
-      await whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined);
-    }
-
     const message = {
       type: 'ai',
       content: caption,
@@ -412,12 +406,21 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       buffer: req.file.buffer,
     });
 
+    // Saved and shown already — the two sequential Meta round-trips (upload the media,
+    // then send it) happen in the background instead of making the advisor wait on them,
+    // same as text messages.
     res.status(201).json({
       id: inserted[0].id,
       createdAt: inserted[0].created_at,
       ...message,
       attachment: { id: attachmentId, kind, filename: req.file.originalname, mimeType: req.file.mimetype, sizeBytes: req.file.buffer.length },
     });
+
+    if (phone) {
+      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
+        .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
+        .catch((err) => console.error('sendMedia failed', err));
+    }
   } catch (err) { next(err); }
 });
 
