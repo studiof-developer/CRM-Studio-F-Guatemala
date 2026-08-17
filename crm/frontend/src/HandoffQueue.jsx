@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Clock, MapPin, ShoppingBag, User, CircleUser, AlertTriangle } from 'lucide-react';
+import { Clock, MapPin, ShoppingBag, User, CircleUser, AlertTriangle, Search } from 'lucide-react';
 import { fetchTickets, fetchTicket, updateTicket } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
@@ -18,6 +18,7 @@ const FILTERS = Object.keys(STATUS_META);
 
 export default function HandoffQueue({ user }) {
   const [statusFilter, setStatusFilter] = useState('esperando_asesor');
+  const [search, setSearch] = useState('');
   const [tickets, setTickets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [ticketDetail, setTicketDetail] = useState(null);
@@ -74,47 +75,60 @@ export default function HandoffQueue({ user }) {
     }
   }
 
+  const visibleTickets = tickets.filter((t) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (t.full_name || '').toLowerCase().includes(q) || (t.whatsapp_number || '').includes(q);
+  });
+
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Cola de Handoff</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Conversaciones que necesitan un asesor humano.</p>
+    <div className="flex h-full min-w-0 overflow-hidden rounded-3xl">
+      {/* List column scrolls on its own — the header/filters/search stay put. */}
+      <div className="flex w-[360px] max-w-[45vw] shrink-0 flex-col border-r border-border">
+        <div className="border-b border-border p-4">
+          <h1 className="text-lg font-semibold tracking-tight">Cola de Handoff</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Conversaciones que necesitan un asesor humano.</p>
+
+          <div className="relative mt-3">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o número"
+              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+            />
+          </div>
+
+          <div className="mt-3 inline-flex flex-wrap gap-1 rounded-xl border border-border bg-muted p-1">
+            {FILTERS.map((key) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                  statusFilter === key
+                    ? 'bg-paper text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {STATUS_META[key].label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="inline-flex rounded-xl border border-border bg-muted p-1">
-          {FILTERS.map((key) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
-                statusFilter === key
-                  ? 'bg-paper text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {STATUS_META[key].label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-8 pb-8">
-      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-
-      <div className="grid grid-cols-[360px_1fr] gap-6">
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
+          {error && <li className="text-sm text-danger">{error}</li>}
           {loading && (
             <li className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
               Cargando…
             </li>
           )}
-          {!loading && tickets.length === 0 && (
+          {!loading && visibleTickets.length === 0 && (
             <li className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No hay tickets en este estado.
+              {tickets.length === 0 ? 'No hay tickets en este estado.' : 'Ningún resultado para esa búsqueda.'}
             </li>
           )}
-          {tickets.map((t) => {
+          {visibleTickets.map((t) => {
             const overdue = t.status === 'esperando_asesor' && isOverdue(t.created_at);
             return (
               <li
@@ -147,8 +161,11 @@ export default function HandoffQueue({ user }) {
             );
           })}
         </ul>
+      </div>
 
-        <section className="rounded-2xl border border-border bg-paper p-8">
+      {/* Detail column scrolls independently — selecting a ticket further down the
+          list no longer drags the whole page with it. */}
+      <section className="flex-1 overflow-y-auto p-8">
           {!ticketDetail && (
             <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
               Selecciona un ticket para ver el detalle.
@@ -216,9 +233,7 @@ export default function HandoffQueue({ user }) {
               </div>
             </>
           )}
-        </section>
-      </div>
-      </div>
+      </section>
     </div>
   );
 }
