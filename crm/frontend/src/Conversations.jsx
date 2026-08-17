@@ -17,6 +17,18 @@ import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
+// Turns a message into what its quote preview should show — a document shows its
+// filename (not a generic "Adjunto"), an image shows nothing here since the preview
+// renders an actual thumbnail instead, audio gets a plain label.
+function describeQuoted(msg, from) {
+  const att = msg.attachment;
+  let content = msg.content?.trim() || '';
+  if (!content && att) {
+    content = att.kind === 'document' ? (att.filename || 'Documento') : att.kind === 'audio' ? '🎵 Audio' : '';
+  }
+  return { from, content, attachmentKind: att?.kind ?? null, attachmentId: att?.id ?? null };
+}
+
 function Tail({ side, color }) {
   // Small CSS-triangle "tail" on the bubble's outer top corner, the classic WhatsApp cue.
   const style = {
@@ -58,6 +70,17 @@ export default function Conversations({ user }) {
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  // Tapping a quote preview jumps to (and briefly flashes) the original message,
+  // same as WhatsApp itself — only works if that message is still loaded in this thread.
+  function scrollToMessage(id) {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedId(id);
+    setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1500);
+  }
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -531,10 +554,8 @@ export default function Conversations({ user }) {
                         if (!orig) return null;
                         const origOutgoing = orig.type === 'ai';
                         const origFromAdvisor = orig.additional_kwargs?.sentBy === 'advisor';
-                        return {
-                          from: origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (bot)') : (thread.customerName || thread.phone),
-                          content: orig.content?.trim() || (orig.attachment ? '📎 Adjunto' : ''),
-                        };
+                        const origFrom = origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (bot)') : (thread.customerName || thread.phone);
+                        return { ...describeQuoted(orig, origFrom), id: orig.id };
                       })();
                       // Only while the advisor actually has the chat — the reply
                       // compose bar itself is bot-handled/waiting chats can't use it anyway.
@@ -543,8 +564,7 @@ export default function Conversations({ user }) {
                           type="button"
                           onClick={() => setReplyingTo({
                             id: m.id,
-                            content: m.content?.trim() || (m.attachment ? '📎 Adjunto' : ''),
-                            from: replyLabel,
+                            ...describeQuoted(m, replyLabel),
                             // Present on customer messages (n8n tags them) and on our own
                             // outgoing ones (stamped back after Meta confirms the send) —
                             // missing only for messages sent before this existed.
@@ -560,6 +580,7 @@ export default function Conversations({ user }) {
                       return (
                         <motion.div
                           key={m.id}
+                          id={`msg-${m.id}`}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.2, ease: 'easeOut' }}
@@ -569,11 +590,11 @@ export default function Conversations({ user }) {
                           <div className="relative max-w-[70%]">
                             {isRunStart && <Tail side={outgoing ? 'right' : 'left'} color={bg} />}
                             <div
-                              className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
+                              className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm transition-shadow duration-300 ${
                                 outgoing
                                   ? `text-white ${isRunStart ? 'rounded-tr-none' : ''}`
                                   : `border border-line-soft text-ink ${isRunStart ? 'rounded-tl-none' : ''}`
-                              }`}
+                              } ${highlightedId === m.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-paper' : ''}`}
                               style={{ backgroundColor: bg }}
                             >
                               {fromAdvisor && (
@@ -582,15 +603,29 @@ export default function Conversations({ user }) {
                                 </p>
                               )}
                               {quotePreview && (
-                                <div className={`mb-1.5 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
-                                  outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'
-                                }`}>
-                                  <p className={`font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
-                                    {quotePreview.from || '—'}
-                                  </p>
-                                  <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
-                                    {quotePreview.content || '📎 Adjunto'}
-                                  </p>
+                                <div
+                                  onClick={() => quotePreview.id != null && scrollToMessage(quotePreview.id)}
+                                  className={`mb-1.5 flex items-center gap-2 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
+                                    quotePreview.id != null ? 'cursor-pointer' : ''
+                                  } ${outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'}`}
+                                >
+                                  {quotePreview.attachmentKind === 'image' && quotePreview.attachmentId && (
+                                    <img
+                                      src={attachmentUrl(quotePreview.attachmentId)}
+                                      alt=""
+                                      className="h-9 w-9 shrink-0 rounded object-cover"
+                                    />
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className={`font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
+                                      {quotePreview.from || '—'}
+                                    </p>
+                                    <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
+                                      {quotePreview.attachmentKind === 'image'
+                                        ? (quotePreview.content || '📷 Foto')
+                                        : (quotePreview.content || '📎 Adjunto')}
+                                    </p>
+                                  </div>
                                 </div>
                               )}
                               {m.attachment && (

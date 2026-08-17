@@ -338,7 +338,13 @@ router.post('/:sessionId/messages', async (req, res, next) => {
         advisorName: req.user.fullName,
         // Snapshot, not a live reference — the quoted message stays exactly as it
         // looked when the advisor hit reply, even if the thread scrolls past it.
-        ...(replyTo?.id ? { replyTo: { id: replyTo.id, content: String(replyTo.content ?? '').slice(0, 300), from: replyTo.from ?? null } } : {}),
+        ...(replyTo?.id ? { replyTo: {
+          id: replyTo.id,
+          content: String(replyTo.content ?? '').slice(0, 300),
+          from: replyTo.from ?? null,
+          attachmentKind: replyTo.attachmentKind ?? null,
+          attachmentId: replyTo.attachmentId ?? null,
+        } } : {}),
       },
       response_metadata: {},
       tool_calls: [],
