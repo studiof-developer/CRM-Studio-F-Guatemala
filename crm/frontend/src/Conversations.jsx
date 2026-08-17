@@ -519,6 +519,23 @@ export default function Conversations({ user }) {
                       const replyLabel = outgoing
                         ? (fromAdvisor ? m.additional_kwargs.advisorName : 'Studio F (bot)')
                         : (thread.customerName || thread.phone);
+                      // Two ways a message can be "a reply": the advisor composed it with
+                      // our reply button (snapshot already stored in additional_kwargs.replyTo),
+                      // or the customer used WhatsApp's own quote feature — in that case we only
+                      // got the wamid of the original, so look it up in this same thread by the
+                      // wamid we stamped on our own outgoing messages (or captured on theirs).
+                      const quotePreview = m.additional_kwargs?.replyTo || (() => {
+                        const targetWamid = m.additional_kwargs?.replyToWamid;
+                        if (!targetWamid) return null;
+                        const orig = thread.messages.find((x) => x.additional_kwargs?.wamid === targetWamid);
+                        if (!orig) return null;
+                        const origOutgoing = orig.type === 'ai';
+                        const origFromAdvisor = orig.additional_kwargs?.sentBy === 'advisor';
+                        return {
+                          from: origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (bot)') : (thread.customerName || thread.phone),
+                          content: orig.content?.trim() || (orig.attachment ? '📎 Adjunto' : ''),
+                        };
+                      })();
                       // Only while the advisor actually has the chat — the reply
                       // compose bar itself is bot-handled/waiting chats can't use it anyway.
                       const replyButton = thread.enAtencion ? (
@@ -528,10 +545,10 @@ export default function Conversations({ user }) {
                             id: m.id,
                             content: m.content?.trim() || (m.attachment ? '📎 Adjunto' : ''),
                             from: replyLabel,
-                            // Only customer messages n8n tagged with their WhatsApp id can become
-                            // a native quoted reply — replying to the bot/advisor's own text falls
-                            // back to the CRM-only quote, since we never captured a wamid for those.
-                            wamid: !outgoing ? m.additional_kwargs?.wamid : undefined,
+                            // Present on customer messages (n8n tags them) and on our own
+                            // outgoing ones (stamped back after Meta confirms the send) —
+                            // missing only for messages sent before this existed.
+                            wamid: m.additional_kwargs?.wamid,
                           })}
                           className="flex h-7 w-7 shrink-0 scale-90 items-center justify-center rounded-full border border-line bg-paper text-greige opacity-0 shadow-sm transition-all hover:border-accent hover:text-accent group-hover:scale-100 group-hover:opacity-100"
                           aria-label="Responder"
@@ -564,15 +581,15 @@ export default function Conversations({ user }) {
                                   {m.additional_kwargs.advisorName}
                                 </p>
                               )}
-                              {m.additional_kwargs?.replyTo && (
+                              {quotePreview && (
                                 <div className={`mb-1.5 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
                                   outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'
                                 }`}>
                                   <p className={`font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
-                                    {m.additional_kwargs.replyTo.from || '—'}
+                                    {quotePreview.from || '—'}
                                   </p>
                                   <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
-                                    {m.additional_kwargs.replyTo.content || '📎 Adjunto'}
+                                    {quotePreview.content || '📎 Adjunto'}
                                   </p>
                                 </div>
                               )}
