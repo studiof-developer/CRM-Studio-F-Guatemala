@@ -7,6 +7,7 @@ import {
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
+  fetchQuickReplies,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -71,6 +72,38 @@ export default function Conversations({ user }) {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   const [highlightedId, setHighlightedId] = useState(null);
+  const [quickReplies, setQuickReplies] = useState([]);
+  const [slashIndex, setSlashIndex] = useState(0);
+
+  useEffect(() => { fetchQuickReplies().then(setQuickReplies).catch(() => {}); }, []);
+
+  // Only while the draft is *just* "/something" — a slash typed mid-sentence isn't a
+  // command. Matches on shortcut prefix, personal and team templates mixed together.
+  const slashMatch = /^\/(\S*)$/.exec(draft);
+  const slashResults = slashMatch
+    ? quickReplies.filter((q) => q.shortcut.startsWith(slashMatch[1].toLowerCase())).slice(0, 8)
+    : [];
+
+  function applyQuickReply(item) {
+    setDraft(item.content);
+    setSlashIndex(0);
+  }
+
+  function handleDraftKeyDown(e) {
+    if (!slashResults.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSlashIndex((i) => (i + 1) % slashResults.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      applyQuickReply(slashResults[slashIndex] ?? slashResults[0]);
+    } else if (e.key === 'Escape') {
+      setDraft('');
+    }
+  }
 
   // Tapping a quote preview jumps to (and briefly flashes) the original message,
   // same as WhatsApp itself — only works if that message is still loaded in this thread.
@@ -785,14 +818,35 @@ export default function Conversations({ user }) {
                 >
                   <Paperclip size={18} />
                 </button>
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onPaste={handlePaste}
-                  placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor…'}
-                  disabled={uploading}
-                  className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
-                />
+                <div className="relative flex-1">
+                  {slashResults.length > 0 && (
+                    <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-paper shadow-lg">
+                      {slashResults.map((item, i) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onMouseDown={(e) => { e.preventDefault(); applyQuickReply(item); }}
+                          onMouseEnter={() => setSlashIndex(i)}
+                          className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors ${
+                            i === slashIndex ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <span className="font-semibold text-accent">/{item.shortcut}</span>
+                          <span className="truncate text-greige-ink">{item.content}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onPaste={handlePaste}
+                    onKeyDown={handleDraftKeyDown}
+                    placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor… ( / para plantillas )'}
+                    disabled={uploading}
+                    className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={sending || uploading || !draft.trim()}

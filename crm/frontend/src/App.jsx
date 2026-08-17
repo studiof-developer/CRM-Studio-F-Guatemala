@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
@@ -12,6 +12,7 @@ import Customers from './Customers.jsx';
 import Users from './Users.jsx';
 import Catalog from './Catalog.jsx';
 import Audit from './Audit.jsx';
+import QuickReplies from './QuickReplies.jsx';
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
@@ -22,6 +23,7 @@ const BASE_TABS = {
   handoff: { label: 'Cola de Handoff', icon: Inbox, Component: HandoffQueue },
   conversations: { label: 'Conversaciones', icon: MessagesSquare, Component: Conversations },
   catalog: { label: 'Catálogo', icon: ShoppingBag, Component: Catalog },
+  quickReplies: { label: 'Respuestas rápidas', icon: Zap, Component: QuickReplies },
 };
 
 // Admin and supervisor only.

@@ -177,6 +177,37 @@ export async function fetchProducts() {
   return res.json();
 }
 
+export async function fetchQuickReplies() {
+  const res = await apiFetch('/api/quick-replies');
+  if (!res.ok) throw new Error('Error al cargar las plantillas');
+  return res.json();
+}
+
+export async function createQuickReply(data) {
+  const res = await apiFetch('/api/quick-replies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la plantilla');
+  return res.json();
+}
+
+export async function updateQuickReply(id, data) {
+  const res = await apiFetch(`/api/quick-replies/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la plantilla');
+  return res.json();
+}
+
+export async function deleteQuickReply(id) {
+  const res = await apiFetch(`/api/quick-replies/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
+}
+
 export async function fetchDashboard() {
   const res = await apiFetch('/api/dashboard');
   if (!res.ok) throw new Error('Error al cargar el dashboard');

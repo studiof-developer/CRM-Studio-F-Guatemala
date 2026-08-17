@@ -1,3 +1,4 @@
 .env
 /backups/
 node_modules/
+crm/frontend/dist/
