@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
+  Megaphone,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
@@ -638,6 +639,42 @@ export default function Conversations({ user }) {
                                 <p className="mb-0.5 text-[11px] font-semibold text-white/80">
                                   {m.additional_kwargs.advisorName}
                                 </p>
+                              )}
+                              {m.additional_kwargs?.referral && (
+                                <a
+                                  href={m.additional_kwargs.referral.source_url || undefined}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={`mb-1.5 flex items-center gap-2 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
+                                    outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'
+                                  }`}
+                                >
+                                  {m.additional_kwargs.referral.thumbnail_url ? (
+                                    <img
+                                      src={m.additional_kwargs.referral.thumbnail_url}
+                                      alt=""
+                                      className="h-9 w-9 shrink-0 rounded object-cover"
+                                    />
+                                  ) : (
+                                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
+                                      <Megaphone size={14} />
+                                    </span>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className={`flex items-center gap-1 font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
+                                      <Megaphone size={11} />
+                                      Anuncio de {/instagram\.com/i.test(m.additional_kwargs.referral.source_url || '') ? 'Instagram' : 'Facebook'}
+                                    </p>
+                                    <p className={`truncate font-medium ${outgoing ? 'text-white/90' : 'text-ink'}`}>
+                                      {m.additional_kwargs.referral.headline || 'Publicidad de Meta'}
+                                    </p>
+                                    {m.additional_kwargs.referral.body && (
+                                      <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
+                                        {m.additional_kwargs.referral.body}
+                                      </p>
+                                    )}
+                                  </div>
+                                </a>
                               )}
                               {quotePreview && (
                                 <div
