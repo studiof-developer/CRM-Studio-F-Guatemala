@@ -645,31 +645,31 @@ export default function Conversations({ user }) {
                                   href={m.additional_kwargs.referral.source_url || undefined}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className={`mb-1.5 flex items-center gap-2 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
-                                    outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'
+                                  className={`mb-2 block w-64 max-w-full overflow-hidden rounded-xl border ${
+                                    outgoing ? 'border-white/25 bg-black/10' : 'border-line-soft bg-black/[0.03] dark:bg-white/[0.05]'
                                   }`}
                                 >
                                   {m.additional_kwargs.referral.thumbnail_url ? (
                                     <img
                                       src={m.additional_kwargs.referral.thumbnail_url}
                                       alt=""
-                                      className="h-9 w-9 shrink-0 rounded object-cover"
+                                      className="h-32 w-full object-cover"
                                     />
                                   ) : (
-                                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
-                                      <Megaphone size={14} />
+                                    <span className={`flex h-20 w-full items-center justify-center ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
+                                      <Megaphone size={22} />
                                     </span>
                                   )}
-                                  <div className="min-w-0">
-                                    <p className={`flex items-center gap-1 font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
-                                      <Megaphone size={11} />
+                                  <div className="px-3 py-2.5">
+                                    <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white/70' : 'text-accent'}`}>
+                                      <Megaphone size={12} />
                                       Anuncio de {/instagram\.com/i.test(m.additional_kwargs.referral.source_url || '') ? 'Instagram' : 'Facebook'}
                                     </p>
-                                    <p className={`truncate font-medium ${outgoing ? 'text-white/90' : 'text-ink'}`}>
+                                    <p className={`text-sm font-semibold leading-snug ${outgoing ? 'text-white' : 'text-ink'}`}>
                                       {m.additional_kwargs.referral.headline || 'Publicidad de Meta'}
                                     </p>
                                     {m.additional_kwargs.referral.body && (
-                                      <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
+                                      <p className={`mt-0.5 line-clamp-2 text-xs leading-snug ${outgoing ? 'text-white/75' : 'text-greige-ink'}`}>
                                         {m.additional_kwargs.referral.body}
                                       </p>
                                     )}
