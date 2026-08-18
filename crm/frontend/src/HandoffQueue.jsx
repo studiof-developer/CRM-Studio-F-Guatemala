@@ -16,7 +16,7 @@ const STATUS_META = {
 
 const FILTERS = Object.keys(STATUS_META);
 
-export default function HandoffQueue({ user }) {
+export default function HandoffQueue({ user, onOpenConversation }) {
   const [statusFilter, setStatusFilter] = useState('esperando_asesor');
   const [search, setSearch] = useState('');
   const [tickets, setTickets] = useState([]);
@@ -53,12 +53,15 @@ export default function HandoffQueue({ user }) {
     fetchTicket(selectedId).then(setTicketDetail).catch((err) => setError(err.message));
   }, [selectedId]);
 
-  async function handleTake(id) {
+  async function handleTake(id, phone) {
     try {
       await updateTicket(id, { status: 'en_atencion', assigned_advisor: user.fullName });
       await loadTickets();
       fetchTicket(id).then(setTicketDetail);
       showSuccess('Ticket asignado a ti');
+      // Taking it here is only step one — the advisor still needs to actually talk to
+      // the customer, which happens in Conversaciones, not this queue.
+      if (phone) onOpenConversation?.(phone);
     } catch (err) {
       showError(err.message);
     }
@@ -218,7 +221,7 @@ export default function HandoffQueue({ user }) {
 
               <div className="mt-8 flex gap-3">
                 {ticketDetail.status === 'esperando_asesor' && (
-                  <Button onClick={() => handleTake(ticketDetail.id)}>
+                  <Button onClick={() => handleTake(ticketDetail.id, ticketDetail.whatsapp_number)}>
                     Tomar ticket
                   </Button>
                 )}

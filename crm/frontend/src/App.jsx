@@ -54,6 +54,12 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [openConversationId, setOpenConversationId] = useState(null);
+  const handleOpenConversation = useCallback((phone) => {
+    setOpenConversationId(phone);
+    setTab('conversations');
+  }, []);
+  const handleOpenedConversation = useCallback(() => setOpenConversationId(null), []);
 
   useEffect(() => { fetchMe().then(setUser); }, []);
 
@@ -244,7 +250,12 @@ export default function App() {
             transition={{ duration: 0.5, ease: 'easeOut' }}
             className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden rounded-3xl border border-line bg-paper shadow-sm"
           >
-            <Component user={user} />
+            <Component
+              user={user}
+              onOpenConversation={handleOpenConversation}
+              openSessionId={openConversationId}
+              onOpenedConversation={handleOpenedConversation}
+            />
           </motion.div>
         </main>
       </div>

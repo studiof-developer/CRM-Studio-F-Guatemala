@@ -46,7 +46,7 @@ function Tail({ side, color }) {
   return <span style={style} />;
 }
 
-export default function Conversations({ user }) {
+export default function Conversations({ user, openSessionId, onOpenedConversation }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
   const [temperature, setTemperature] = useState('');
@@ -167,6 +167,14 @@ export default function Conversations({ user }) {
     const id = setInterval(() => load(false), 30000);
     return () => clearInterval(id);
   }, [load]);
+
+  // Coming from "Tomar ticket" in Cola de Handoff — jump straight to that chat
+  // instead of leaving the advisor to hunt for it in the list.
+  useEffect(() => {
+    if (!openSessionId) return;
+    setSelectedId(openSessionId);
+    onOpenedConversation?.();
+  }, [openSessionId, onOpenedConversation]);
 
   const loadThread = useCallback(() => {
     if (!selectedId) { setThread(null); return; }
