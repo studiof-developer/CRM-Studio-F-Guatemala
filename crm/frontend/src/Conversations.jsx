@@ -649,14 +649,14 @@ export default function Conversations({ user }) {
                                     outgoing ? 'border-white/25 bg-black/10' : 'border-line-soft bg-black/[0.03] dark:bg-white/[0.05]'
                                   }`}
                                 >
-                                  {m.additional_kwargs.referral.thumbnail_url ? (
+                                  {(m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url) ? (
                                     <img
-                                      src={m.additional_kwargs.referral.thumbnail_url}
+                                      src={m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url}
                                       alt=""
-                                      className="h-32 w-full object-cover"
+                                      className="aspect-square w-full object-cover"
                                     />
                                   ) : (
-                                    <span className={`flex h-20 w-full items-center justify-center ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
+                                    <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
                                       <Megaphone size={22} />
                                     </span>
                                   )}
