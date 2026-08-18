@@ -70,7 +70,6 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [editOpen, setEditOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
-  const [unreadCounts, setUnreadCounts] = useState({});
   const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   const [highlightedId, setHighlightedId] = useState(null);
   const [quickReplies, setQuickReplies] = useState([]);
@@ -119,7 +118,6 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
-  const seenIdRef = useRef({}); // sessionId -> last lastId we've already accounted for
   const selectedIdRef = useRef(null); // read (not subscribed) inside load, so selecting a
   // conversation doesn't change load's identity and re-trigger the mount/interval effects
   // below with showLoading=true — that was what made the list flash "Cargando..." and jump.
@@ -131,23 +129,6 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     try {
       const data = await fetchConversations(search, temperature, ticketStatusFilter);
       setConversations(data);
-      // Diff against what we last saw per thread — a new customer message on a thread
-      // that isn't currently open bumps its badge. First sighting of a thread just
-      // seeds the baseline, it doesn't retroactively flag old history as unread.
-      setUnreadCounts((prev) => {
-        let changed = false;
-        const next = { ...prev };
-        for (const c of data) {
-          const seen = seenIdRef.current[c.sessionId];
-          seenIdRef.current[c.sessionId] = c.lastId;
-          if (seen === undefined || c.lastId <= seen) continue;
-          if (c.sessionId === selectedIdRef.current) continue;
-          if (c.lastMessage?.type !== 'human') continue;
-          next[c.sessionId] = (next[c.sessionId] ?? 0) + 1;
-          changed = true;
-        }
-        return changed ? next : prev;
-      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -160,6 +141,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const loadQuiet = useCallback(() => load(false), [load]);
   useLiveEvent('message_changes', loadQuiet);
   useLiveEvent('ticket_changes', loadQuiet);
+  // Another advisor opening this same thread marks it read for the whole team —
+  // this is what keeps everyone's unread badges in sync in real time.
+  useLiveEvent('read_changes', loadQuiet);
 
   // SSE (above) is the fast path — this is just a safety net in case that connection
   // silently drops, so it doesn't need to be nearly as tight as before.
@@ -437,18 +421,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           )}
           {conversations.map((c) => {
             const name = c.customerName || c.phone || c.sessionId.slice(0, 12);
-            const unread = unreadCounts[c.sessionId] ?? 0;
+            const unread = c.unreadCount ?? 0;
             return (
               <button
                 key={c.sessionId}
                 onClick={() => {
                   setSelectedId(c.sessionId);
-                  setUnreadCounts((prev) => {
-                    if (!prev[c.sessionId]) return prev;
-                    const next = { ...prev };
-                    delete next[c.sessionId];
-                    return next;
-                  });
+                  // Optimistic — the server marks it read as soon as the thread loads,
+                  // this just avoids a visible lag before that round-trip lands.
+                  if (unread > 0) {
+                    setConversations((prev) => prev.map((x) => (x.sessionId === c.sessionId ? { ...x, unreadCount: 0 } : x)));
+                  }
                 }}
                 className={`flex w-full items-center gap-3 border-b border-line-soft px-4 py-3 text-left transition-colors ${
                   c.sessionId === selectedId ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'

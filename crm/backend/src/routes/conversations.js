@@ -206,12 +206,24 @@ router.get('/', async (req, res, next) => {
         SELECT thread_key, count(*) AS message_count
         FROM threaded
         GROUP BY thread_key
+      ),
+      -- Read state is shared across the whole team (one watermark per phone, not per
+      -- advisor) — whoever opens the thread first marks it read for everyone, same as
+      -- a shared support inbox. Counts only customer messages newer than that watermark.
+      unread_counts AS (
+        SELECT th.thread_key, count(*) AS unread_count
+        FROM threaded th
+        LEFT JOIN conversation_reads cr ON cr.phone = th.phone
+        WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
+        GROUP BY th.thread_key
       )
       SELECT l.thread_key, l.id AS last_id, l.message, l.created_at, cnt.message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, t.status AS ticket_status,
-             CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature
+             CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
+             COALESCE(uc.unread_count, 0) AS unread_count
       FROM last_msg l
       JOIN counts cnt USING (thread_key)
+      LEFT JOIN unread_counts uc USING (thread_key)
       LEFT JOIN customers c ON c.whatsapp_number = l.phone
       LEFT JOIN LATERAL (
         SELECT status FROM tickets
@@ -258,6 +270,7 @@ router.get('/', async (req, res, next) => {
       enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
       temperature: r.temperature,
       paidLocked: r.paid_locked ?? false,
+      unreadCount: Number(r.unread_count),
     })));
   } catch (err) { next(err); }
 });
@@ -268,6 +281,20 @@ router.get('/:sessionId', async (req, res, next) => {
     if (!messages.length) return res.status(404).json({ error: 'not found' });
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
+
+    // Read state is shared across the team — whichever advisor opens the thread first
+    // marks it read for everyone, same as a shared support inbox. Doesn't block the
+    // response; the list picks up the change on its next refresh (SSE-driven).
+    if (phone) {
+      const maxId = messages[messages.length - 1].id;
+      pool.query(
+        `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+         ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+        [phone, maxId]
+      )
+        .then(() => pool.query(`SELECT pg_notify('read_changes', $1)`, [phone]))
+        .catch((err) => console.error('mark conversation read failed', err));
+    }
 
     const messageIds = messages.map((r) => r.id);
     const { rows: attachments } = messageIds.length
