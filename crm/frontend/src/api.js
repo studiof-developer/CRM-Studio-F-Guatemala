@@ -64,6 +64,12 @@ export async function fetchConversation(sessionId) {
   return res.json();
 }
 
+export async function markConversationUnread(sessionId) {
+  const res = await apiFetch(`/api/conversations/${sessionId}/mark-unread`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al marcar como no leído');
+  return res.json();
+}
+
 export async function startConversation({ phone, fullName, address }) {
   const res = await apiFetch('/api/conversations', {
     method: 'POST',

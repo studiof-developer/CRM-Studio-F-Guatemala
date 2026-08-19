@@ -342,6 +342,33 @@ router.get('/:sessionId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Advisor peeked at a thread and has to step away — rolls the read watermark back
+// to the last advisor/bot reply so the badge shows exactly the customer's messages
+// still waiting on a response, instead of forcing them to remember unassisted.
+router.post('/:sessionId/mark-unread', async (req, res, next) => {
+  try {
+    const { messages, phone } = await findConversationThread(req.params.sessionId);
+    if (!messages.length || !phone) return res.status(404).json({ error: 'not found' });
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.message?.type !== 'human') {
+      return res.status(400).json({ error: 'nothing pending to mark unread' });
+    }
+
+    const lastReply = [...messages].reverse().find((r) => r.message?.type === 'ai');
+    const watermark = lastReply ? lastReply.id : 0;
+
+    await pool.query(
+      `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (phone) DO UPDATE SET last_read_message_id = $2, updated_at = now()`,
+      [phone, watermark]
+    );
+    await pool.query(`SELECT pg_notify('read_changes', $1)`, [phone]);
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.post('/:sessionId/messages', async (req, res, next) => {
   try {
     const { content, replyTo } = req.body ?? {};

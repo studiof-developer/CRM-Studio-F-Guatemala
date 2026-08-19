@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
-  Megaphone,
+  Megaphone, Mail,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
-  fetchQuickReplies,
+  fetchQuickReplies, markConversationUnread,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -253,6 +253,23 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       await loadThread();
       load(false);
       showSuccess('Conversación asignada a ti');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleMarkUnread() {
+    if (!selectedId) return;
+    setActionBusy(true);
+    try {
+      await markConversationUnread(selectedId);
+      // Close the thread — staying on it would poll GET /:sessionId again within
+      // seconds and immediately re-mark it read, undoing this.
+      setSelectedId(null);
+      load(false);
+      showSuccess('Marcado como no leído');
     } catch (err) {
       showError(err.message);
     } finally {
@@ -549,6 +566,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               {!thread.ticketStatus && (
                 <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
                   <Bot size={12} /> Bot activo
+                </span>
+              )}
+              {thread.messages[thread.messages.length - 1]?.type === 'human' && (
+                <span
+                  role="button"
+                  title="Marcar como no leído"
+                  onClick={(e) => { e.stopPropagation(); handleMarkUnread(); }}
+                  className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white"
+                >
+                  <Mail size={12} />
                 </span>
               )}
               <Info size={16} className="shrink-0 text-greige" />
