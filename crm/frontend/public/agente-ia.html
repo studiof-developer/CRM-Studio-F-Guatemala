@@ -83,11 +83,7 @@
   .chip.tibio { background: var(--warn-soft); color: var(--warn); }
   .chip.caliente { background: var(--danger-soft); color: var(--danger); }
   .chip.pqrs { background: var(--purple-soft); color: var(--purple); }
-  .swatch { width: 14px; height: 14px; flex-shrink: 0; }
-  .swatch.box { background: var(--paper); border: 1.5px solid var(--line); border-radius: 3px; }
-  .swatch.wait { background: var(--paper-soft); border: 1.5px dashed var(--line); border-radius: 3px; }
-  .swatch.diamond { background: var(--accent-soft); border: 1.5px solid var(--accent-line); transform: rotate(45deg); width: 11px; height: 11px; }
-  .swatch.loop { width: 18px; height: 0; border-top: 2px dashed var(--accent); }
+  .legend-item svg { flex-shrink: 0; display: block; }
   .chip.neutral { background: var(--line-soft); color: var(--greige-ink); }
 
   h2.section-title {
@@ -506,10 +502,10 @@
   <p class="lede">Pensado para leerse sin conocimiento técnico — cada flecha está dibujada explícitamente, sin atajos. Los números pequeños en la esquina de cada caja remiten al paso equivalente en la pestaña de especificación.</p>
 
   <div class="legend" style="max-width:900px;">
-    <span class="legend-item"><span class="swatch diamond"></span>Pregunta / decisión</span>
-    <span class="legend-item"><span class="swatch box"></span>Mensaje o paso del bot</span>
-    <span class="legend-item"><span class="swatch wait"></span>Resultado pasivo (no hay apuro)</span>
-    <span class="legend-item"><span class="swatch loop"></span>🔁 Vuelve a un paso anterior</span>
+    <span class="legend-item"><svg width="14" height="14" viewBox="0 0 14 14"><polygon points="7,1 13,7 7,13 1,7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/></svg>Pregunta / decisión</span>
+    <span class="legend-item"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.5"/></svg>Mensaje o paso del bot</span>
+    <span class="legend-item"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2" fill="var(--paper-soft)" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="2.5 2"/></svg>Resultado pasivo (no hay apuro)</span>
+    <span class="legend-item"><svg width="20" height="14" viewBox="0 0 20 14"><line x1="1" y1="7" x2="15" y2="7" stroke="var(--accent)" stroke-width="2" stroke-dasharray="3.5 2.5"/><path d="M15,3 L19,7 L15,11 Z" fill="var(--accent)"/></svg>🔁 Vuelve a un paso anterior</span>
     <span class="legend-item">⏱ Minutos que espera antes de continuar</span>
     <span class="legend-item">Al terminar el camino, el cliente queda:</span>
     <span class="chip frio">Frío</span>
