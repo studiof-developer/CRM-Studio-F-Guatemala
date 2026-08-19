@@ -515,7 +515,7 @@
 
   <div class="fc-scroll">
   <figure class="fc-figure">
-  <svg width="1300" height="3200" viewBox="0 0 1300 3200" role="img" aria-label="Diagrama de flujo del agente Mar-IA: desde que el cliente escribe hasta que un asesor humano toma la conversación, pasando por identificación, saludo, talla, disponibilidad de color y precio.">
+  <svg width="1300" height="3350" viewBox="0 0 1300 3350" role="img" aria-label="Diagrama de flujo del agente Mar-IA: desde que el cliente escribe hasta que un asesor humano toma la conversación, pasando por identificación, saludo, talla, disponibilidad de color y precio.">
     <defs>
       <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="var(--greige-ink)"/>
@@ -538,262 +538,263 @@
     <line x1="650" y1="240" x2="650" y2="400" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
     <rect x="305" y="270" width="690" height="24" fill="var(--paper)"/>
     <text x="650" y="286" text-anchor="middle" font-size="11" fill="var(--greige-ink)">Aplica para cualquier motivo del mensaje, no solo si viene de un anuncio</text>
-    <rect x="250" y="330" width="800" height="24" fill="var(--paper)"/>
-    <text x="650" y="346" text-anchor="middle" font-size="11" fill="var(--greige-ink)">El anuncio de Meta llega adjunto al mensaje (imagen + texto) — así se sabe de dónde viene, sin adivinar</text>
+    <rect x="440" y="322" width="420" height="44" fill="var(--paper)"/>
+    <text x="650" y="337" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🕐 Antes de saludar revisa quién está en turno:</text>
+    <text x="650" y="353" text-anchor="middle" font-size="11" fill="var(--greige-ink)">usa su nombre real, o se presenta como "Mar-IA" si no hay nadie</text>
 
-    <polygon points="650,400 765,470 650,540 535,470" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Clasifica la intención antes de automatizar nada: solo el camino que viene de un anuncio trae suficiente contexto (línea, color, precio) para que el bot avance solo.</title></polygon>
-    <text x="650" y="474" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Por qué escribe?</text>
+    <!-- ¿Cliente nuevo o antiguo? — universal, antes de saber por qué escribe -->
+    <polygon points="650,400 730,450 650,500 570,450" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Cliente antiguo ya trae nombre y talla guardados de compras anteriores: no hace falta volver a preguntarlos.</title></polygon>
+    <text x="650" y="454" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">¿Nuevo o</text>
+    <text x="650" y="467" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">antiguo?</text>
 
-    <line x1="650" y1="540" x2="650" y2="580" stroke="var(--greige-ink)" stroke-width="2"/>
-    <line x1="220" y1="580" x2="1075" y2="580" stroke="var(--greige-ink)" stroke-width="2"/>
+    <line x1="650" y1="500" x2="650" y2="540" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="600" y="508" width="66" height="20" fill="var(--paper)"/>
+    <text x="633" y="523" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Nuevo</text>
 
-    <!-- Branch 1: anuncio -->
-    <line x1="220" y1="580" x2="220" y2="685" stroke="var(--greige-ink)" stroke-width="2"/>
-    <rect x="150" y="617" width="140" height="24" fill="var(--paper)"/>
-    <text x="220" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Vio un anuncio</text>
-    <polyline points="220,685 220,813 650,813 650,825" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-
-    <!-- Branch 2: fuera de campaña -->
-    <line x1="505" y1="580" x2="505" y2="715" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="395" y="617" width="220" height="24" fill="var(--paper)"/>
-    <text x="505" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Pregunta fuera de campaña</text>
-    <rect x="365" y="715" width="280" height="64" rx="32" fill="var(--accent)"><title>Sin un anuncio de referencia no hay talla, color ni precio que interpretar: pasa directo a un asesor en vez de arriesgar una respuesta genérica.</title></rect>
-    <text x="505" y="752" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
-
-    <!-- Branch 3: PQRS -->
-    <line x1="790" y1="580" x2="790" y2="715" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="690" y="617" width="200" height="24" fill="var(--paper)"/>
-    <text x="790" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Queja o reclamo (PQRS)</text>
-    <rect x="650" y="715" width="270" height="64" rx="32" fill="var(--purple)"><title>Una queja necesita empatía y criterio, nunca una respuesta automática: siempre pasa a un humano de inmediato.</title></rect>
-    <text x="790" y="752" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
-
-    <!-- Branch 4: catálogo -->
-    <line x1="1075" y1="580" x2="1075" y2="685" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="985" y="617" width="180" height="24" fill="var(--paper)"/>
-    <text x="1075" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Quiere ver catálogo</text>
-    <rect x="925" y="685" width="300" height="80" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Explorar catálogo sin un anuncio puntual es de bajo riesgo: el bot puede compartirlo sin necesitar el contexto de una campaña. Este mismo paso es la puerta de entrada de los anuncios de Catálogo de Rebajas (E3) y Catálogo Nueva Colección (E4): esos también identifican al cliente y saludan primero, y llegan aquí con el mismo "qué referencia deseas". Aplica delay de 20 min esperando respuesta.</title></rect>
-    <text x="1235" y="702" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">E3 / E4</text>
-    <text x="1075" y="720" text-anchor="middle" font-size="13" fill="var(--ink)">Envía el catálogo y</text>
-    <text x="1075" y="738" text-anchor="middle" font-size="13" fill="var(--ink)">pregunta qué le interesa</text>
-    <text x="1210" y="757" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 20 min</text>
-    <line x1="1075" y1="765" x2="1075" y2="805" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-
-    <polygon points="1075,805 1170,860 1075,915 980,860" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Una foto del producto es un dato concreto que el bot puede cruzar contra el catálogo; sin ella, mejor que lo atienda una persona.</title></polygon>
-    <text x="1075" y="864" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Manda foto?</text>
-
-    <line x1="1075" y1="915" x2="1075" y2="935" stroke="var(--greige-ink)" stroke-width="2"/>
-    <polyline points="1075,935 980,935 980,955" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="963" y="917" width="34" height="20" fill="var(--paper)"/>
-    <text x="980" y="932" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
-    <rect x="890" y="955" width="180" height="56" rx="28" fill="var(--accent)"><title>Con la foto en mano ya hay suficiente información para que un asesor cierre la venta directamente.</title></rect>
-    <text x="980" y="989" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">🤝 Asesor</text>
-
-    <polyline points="1075,935 1200,935 1200,955" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="1183" y="917" width="34" height="20" fill="var(--paper)"/>
-    <text x="1200" y="932" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
-    <rect x="1110" y="955" width="180" height="60" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Sin foto ni anuncio claro se evita insistir: se le recuerda que hay atención disponible y se deja la puerta abierta. Mismo destino si pasan los 20 min sin ninguna respuesta.</title></rect>
-    <text x="1200" y="977" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">Le recuerda que</text>
-    <text x="1200" y="993" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">sigue disponible</text>
-    <rect x="1155" y="1021" width="90" height="24" rx="12" fill="var(--accent-soft)"/>
-    <text x="1200" y="1037" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Queda Frío</text>
-
-    <!-- ============ MAIN TRUNK ============ -->
-    <text x="650" y="795" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--greige-ink)">Cuando el cliente viene de un anuncio, sigue este camino:</text>
-
-    <rect x="480" y="825" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>El cliente ya se identificó arriba (paso 1.2) — aquí solo se lee el anuncio en sí. Interpreta la imagen y el copy del anuncio de Meta para deducir línea, sublínea y color: ese dato se reutiliza más abajo al validar existencia.</title></rect>
-    <text x="810" y="842" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">1</text>
-    <text x="650" y="863" text-anchor="middle" font-size="13.5" fill="var(--ink)">Lee la imagen y el copy</text>
-    <text x="650" y="883" text-anchor="middle" font-size="13.5" fill="var(--ink)">del anuncio: línea, color</text>
-
-    <line x1="650" y1="915" x2="650" y2="985" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="440" y="927" width="420" height="44" fill="var(--paper)"/>
-    <text x="650" y="942" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🕐 Antes de saludar revisa quién está en turno:</text>
-    <text x="650" y="958" text-anchor="middle" font-size="11" fill="var(--greige-ink)">usa su nombre real, o se presenta como "Mar-IA" si no hay nadie</text>
-
-    <!-- ¿Cliente nuevo o antiguo? -->
-    <polygon points="650,985 730,1035 650,1085 570,1035" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Cliente antiguo ya trae nombre y talla guardados de compras anteriores: no hace falta volver a preguntarlos.</title></polygon>
-    <text x="650" y="1039" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">¿Nuevo o</text>
-    <text x="650" y="1052" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">antiguo?</text>
-
-    <line x1="650" y1="1085" x2="650" y2="1125" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="600" y="1093" width="66" height="20" fill="var(--paper)"/>
-    <text x="633" y="1108" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Nuevo</text>
-
-    <polyline points="730,1035 1150,1035 1150,1870 820,1870" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="745" y="1023" width="72" height="20" fill="var(--paper)"/>
-    <text x="781" y="1038" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">Antiguo</text>
-    <rect x="1065" y="1445" width="80" height="34" fill="var(--paper)"/>
-    <text x="1145" y="1458" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">usa nombre y</text>
-    <text x="1145" y="1472" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">talla guardados</text>
+    <polyline points="730,450 1150,450 1150,1240 650,1240" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="745" y="438" width="72" height="20" fill="var(--paper)"/>
+    <text x="781" y="453" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">Antiguo</text>
+    <rect x="1065" y="838" width="80" height="34" fill="var(--paper)"/>
+    <text x="1145" y="851" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">usa nombre y</text>
+    <text x="1145" y="865" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">talla guardados</text>
 
     <!-- Pregunta el nombre (2.1 / 2.2) — solo cliente nuevo -->
-    <rect x="470" y="1125" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Solo para cliente nuevo: el antiguo ya se saltó este paso.</title></rect>
-    <text x="820" y="1142" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">2.1 · 2.2</text>
-    <text x="650" y="1163" text-anchor="middle" font-size="13.5" fill="var(--ink)">Saluda y pregunta su nombre</text>
-    <text x="650" y="1188" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"Hola, soy (nombre del asesor), bienvenida a</text>
-    <text x="650" y="1204" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Studio F. ¿Cuál es tu nombre?"</text>
-    <text x="815" y="1249" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 1 min</text>
+    <rect x="470" y="540" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Solo para cliente nuevo: el antiguo ya se saltó este paso.</title></rect>
+    <text x="820" y="557" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">2.1 · 2.2</text>
+    <text x="650" y="578" text-anchor="middle" font-size="13.5" fill="var(--ink)">Saluda y pregunta su nombre</text>
+    <text x="650" y="603" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"Hola, soy (nombre del asesor), bienvenida a</text>
+    <text x="650" y="619" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Studio F. ¿Cuál es tu nombre?"</text>
+    <text x="815" y="664" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 1 min</text>
 
-    <line x1="650" y1="1265" x2="650" y2="1305" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="650" y1="680" x2="650" y2="720" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <polygon points="650,1305 730,1355 650,1405 570,1355" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Da el nombre o no, la conversación sigue: el nombre solo sirve para personalizar los siguientes mensajes.</title></polygon>
-    <text x="650" y="1359" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">¿Dio el nombre?</text>
+    <polygon points="650,720 730,770 650,820 570,770" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Da el nombre o no, la conversación sigue: el nombre solo sirve para personalizar los siguientes mensajes.</title></polygon>
+    <text x="650" y="774" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">¿Dio el nombre?</text>
 
-    <line x1="650" y1="1405" x2="650" y2="1445" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="662" y="1413" width="30" height="20" fill="var(--paper)"/>
-    <text x="677" y="1428" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
-    <text x="700" y="1428" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">guarda el nombre</text>
+    <line x1="650" y1="820" x2="650" y2="860" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="662" y="828" width="30" height="20" fill="var(--paper)"/>
+    <text x="677" y="843" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <text x="700" y="843" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">guarda el nombre</text>
 
-    <polyline points="730,1355 830,1355 830,1445 650,1445" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
-    <rect x="813" y="1343" width="34" height="20" fill="var(--paper)"/>
-    <text x="830" y="1358" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
-    <text x="845" y="1403" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">⏱ 1 min y</text>
-    <text x="845" y="1417" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">continúa</text>
+    <polyline points="730,770 830,770 830,860 650,860" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+    <rect x="813" y="758" width="34" height="20" fill="var(--paper)"/>
+    <text x="830" y="773" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <text x="845" y="818" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">⏱ 1 min y</text>
+    <text x="845" y="832" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">continúa</text>
 
     <!-- Talla (3) -->
-    <rect x="470" y="1445" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>La talla es el primer filtro: en moda es la razón más común de que una venta no avance, así que se valida antes que nada más.</title></rect>
-    <text x="820" y="1462" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3</text>
-    <text x="650" y="1483" text-anchor="middle" font-size="13.5" fill="var(--ink)">Pregunta la talla</text>
-    <text x="650" y="1508" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Con nombre: "Perfecto, (nombre), ¿cuál es tu talla?"</text>
-    <text x="650" y="1524" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Sin nombre: "¿Cuál es tu talla?"</text>
-    <text x="815" y="1569" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 10 min</text>
+    <rect x="470" y="860" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>La talla es el primer filtro: en moda es la razón más común de que una venta no avance, así que se valida antes que nada más.</title></rect>
+    <text x="820" y="877" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3</text>
+    <text x="650" y="898" text-anchor="middle" font-size="13.5" fill="var(--ink)">Pregunta la talla</text>
+    <text x="650" y="923" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Con nombre: "Perfecto, (nombre), ¿cuál es tu talla?"</text>
+    <text x="650" y="939" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Sin nombre: "¿Cuál es tu talla?"</text>
+    <text x="815" y="984" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 10 min</text>
 
-    <line x1="650" y1="1585" x2="650" y2="1625" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="650" y1="1000" x2="650" y2="1040" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <polygon points="650,1625 760,1690 650,1755 540,1690" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Si no confirma la talla dentro de los 10 minutos, la conversación no tiene todavía con qué avanzar.</title></polygon>
-    <text x="650" y="1694" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Dio la talla?</text>
+    <polygon points="650,1040 760,1105 650,1170 540,1105" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Si no confirma la talla dentro de los 10 minutos, la conversación no tiene todavía con qué avanzar.</title></polygon>
+    <text x="650" y="1109" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Dio la talla?</text>
 
-    <line x1="650" y1="1755" x2="650" y2="1785" stroke="var(--greige-ink)" stroke-width="2"/>
-    <line x1="650" y1="1785" x2="650" y2="1825" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="662" y="1793" width="30" height="20" fill="var(--paper)"/>
-    <text x="677" y="1808" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
-    <text x="700" y="1808" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">3.2 · guarda y continúa</text>
+    <line x1="650" y1="1170" x2="650" y2="1200" stroke="var(--greige-ink)" stroke-width="2"/>
+    <line x1="650" y1="1200" x2="650" y2="1240" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="662" y="1208" width="30" height="20" fill="var(--paper)"/>
+    <text x="677" y="1223" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <text x="700" y="1223" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">3.2 · guarda y continúa</text>
 
-    <polyline points="650,1785 390,1785 390,1825" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="470" y="1771" width="34" height="20" fill="var(--paper)"/>
-    <text x="487" y="1786" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <polyline points="650,1200 390,1200 390,1240" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="470" y="1186" width="34" height="20" fill="var(--paper)"/>
+    <text x="487" y="1201" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
 
-    <rect x="315" y="1825" width="150" height="70" rx="12" fill="var(--paper)" stroke="var(--accent)" stroke-width="1.5"><title>Sin talla confirmada se marca como Frío: no se pierde el contacto, pero tampoco se le presiona sin datos concretos que ofrecer.</title></rect>
-    <text x="455" y="1841" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.1</text>
-    <text x="390" y="1857" text-anchor="middle" font-size="12.5" fill="var(--ink)">Le recuerda que</text>
-    <text x="390" y="1875" text-anchor="middle" font-size="12.5" fill="var(--ink)">sigue disponible</text>
-    <rect x="345" y="1903" width="90" height="24" rx="12" fill="var(--accent-soft)"/>
-    <text x="390" y="1919" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Queda Frío</text>
+    <rect x="315" y="1240" width="150" height="70" rx="12" fill="var(--paper)" stroke="var(--accent)" stroke-width="1.5"><title>Sin talla confirmada se marca como Frío: no se pierde el contacto, pero tampoco se le presiona sin datos concretos que ofrecer.</title></rect>
+    <text x="455" y="1256" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.1</text>
+    <text x="390" y="1272" text-anchor="middle" font-size="12.5" fill="var(--ink)">Le recuerda que</text>
+    <text x="390" y="1290" text-anchor="middle" font-size="12.5" fill="var(--ink)">sigue disponible</text>
+    <rect x="345" y="1318" width="90" height="24" rx="12" fill="var(--accent-soft)"/>
+    <text x="390" y="1334" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Queda Frío</text>
+
+    <!-- Con nombre y talla ya en mano (nuevo que respondió, o antiguo que se saltó todo), recién ahí se decide el escenario -->
+    <line x1="650" y1="1240" x2="650" y2="1440" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="250" y="1355" width="800" height="24" fill="var(--paper)"/>
+    <text x="650" y="1371" text-anchor="middle" font-size="11" fill="var(--greige-ink)">El anuncio de Meta llega adjunto al mensaje (imagen + texto) — así se sabe de dónde viene, sin adivinar</text>
+
+    <polygon points="650,1440 765,1510 650,1580 535,1510" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Clasifica la intención antes de automatizar nada: solo el camino que viene de un anuncio trae suficiente contexto (línea, color, precio) para que el bot avance solo.</title></polygon>
+    <text x="650" y="1514" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Por qué escribe?</text>
+
+    <line x1="650" y1="1580" x2="650" y2="1620" stroke="var(--greige-ink)" stroke-width="2"/>
+    <line x1="220" y1="1620" x2="1075" y2="1620" stroke="var(--greige-ink)" stroke-width="2"/>
+
+    <!-- Branch 1: anuncio -->
+    <line x1="220" y1="1620" x2="220" y2="1725" stroke="var(--greige-ink)" stroke-width="2"/>
+    <rect x="150" y="1657" width="140" height="24" fill="var(--paper)"/>
+    <text x="220" y="1674" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Vio un anuncio</text>
+    <polyline points="220,1725 220,1853 650,1853 650,1865" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- Branch 2: fuera de campaña -->
+    <line x1="505" y1="1620" x2="505" y2="1755" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="395" y="1657" width="220" height="24" fill="var(--paper)"/>
+    <text x="505" y="1674" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Pregunta fuera de campaña</text>
+    <rect x="365" y="1755" width="280" height="64" rx="32" fill="var(--accent)"><title>Sin un anuncio de referencia no hay talla, color ni precio que interpretar: pasa directo a un asesor en vez de arriesgar una respuesta genérica.</title></rect>
+    <text x="505" y="1792" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
+
+    <!-- Branch 3: PQRS -->
+    <line x1="790" y1="1620" x2="790" y2="1755" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="690" y="1657" width="200" height="24" fill="var(--paper)"/>
+    <text x="790" y="1674" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Queja o reclamo (PQRS)</text>
+    <rect x="650" y="1755" width="270" height="64" rx="32" fill="var(--purple)"><title>Una queja necesita empatía y criterio, nunca una respuesta automática: siempre pasa a un humano de inmediato.</title></rect>
+    <text x="790" y="1792" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
+
+    <!-- Branch 4: catálogo -->
+    <line x1="1075" y1="1620" x2="1075" y2="1725" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="985" y="1657" width="180" height="24" fill="var(--paper)"/>
+    <text x="1075" y="1674" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Quiere ver catálogo</text>
+    <rect x="925" y="1725" width="300" height="80" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Explorar catálogo sin un anuncio puntual es de bajo riesgo: el bot puede compartirlo sin necesitar el contexto de una campaña. Este mismo paso es la puerta de entrada de los anuncios de Catálogo de Rebajas (E3) y Catálogo Nueva Colección (E4): esos también identifican al cliente y saludan primero, y llegan aquí con el mismo "qué referencia deseas". Aplica delay de 20 min esperando respuesta.</title></rect>
+    <text x="1235" y="1742" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">E3 / E4</text>
+    <text x="1075" y="1760" text-anchor="middle" font-size="13" fill="var(--ink)">Envía el catálogo y</text>
+    <text x="1075" y="1778" text-anchor="middle" font-size="13" fill="var(--ink)">pregunta qué le interesa</text>
+    <text x="1210" y="1797" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 20 min</text>
+    <line x1="1075" y1="1805" x2="1075" y2="1845" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <polygon points="1075,1845 1170,1900 1075,1955 980,1900" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Una foto del producto es un dato concreto que el bot puede cruzar contra el catálogo; sin ella, mejor que lo atienda una persona.</title></polygon>
+    <text x="1075" y="1904" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Manda foto?</text>
+
+    <line x1="1075" y1="1955" x2="1075" y2="1975" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="1075,1975 980,1975 980,1995" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="963" y="1957" width="34" height="20" fill="var(--paper)"/>
+    <text x="980" y="1972" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <rect x="890" y="1995" width="180" height="56" rx="28" fill="var(--accent)"><title>Con la foto en mano ya hay suficiente información para que un asesor cierre la venta directamente.</title></rect>
+    <text x="980" y="2029" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">🤝 Asesor</text>
+
+    <polyline points="1075,1975 1200,1975 1200,1995" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="1183" y="1957" width="34" height="20" fill="var(--paper)"/>
+    <text x="1200" y="1972" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <rect x="1110" y="1995" width="180" height="60" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Sin foto ni anuncio claro se evita insistir: se le recuerda que hay atención disponible y se deja la puerta abierta. Mismo destino si pasan los 20 min sin ninguna respuesta.</title></rect>
+    <text x="1200" y="2017" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">Le recuerda que</text>
+    <text x="1200" y="2033" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">sigue disponible</text>
+    <rect x="1155" y="2061" width="90" height="24" rx="12" fill="var(--accent-soft)"/>
+    <text x="1200" y="2077" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Queda Frío</text>
+
+    <!-- ============ MAIN TRUNK ============ -->
+    <text x="650" y="1835" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--greige-ink)">Cuando el cliente viene de un anuncio, sigue este camino — ya con nombre y talla en mano:</text>
+
+    <rect x="480" y="1865" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>El cliente y su talla ya se identificaron arriba (pasos 1.2 y 3) — aquí solo se lee el anuncio en sí. Interpreta la imagen y el copy del anuncio de Meta para deducir línea, sublínea y color.</title></rect>
+    <text x="810" y="1882" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">1</text>
+    <text x="650" y="1903" text-anchor="middle" font-size="13.5" fill="var(--ink)">Lee la imagen y el copy</text>
+    <text x="650" y="1923" text-anchor="middle" font-size="13.5" fill="var(--ink)">del anuncio: línea, color</text>
+
+    <line x1="650" y1="1955" x2="650" y2="1995" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
     <!-- NUEVO: acción explícita de búsqueda en base de datos (3.3) -->
-    <rect x="480" y="1825" width="340" height="90" rx="14" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5"><title>Paso interno, no le habla al cliente todavía: cruza línea/sublínea/color (leídos del anuncio) y talla (dada por el cliente) contra el inventario real del catálogo.</title></rect>
-    <text x="810" y="1842" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3</text>
-    <text x="650" y="1866" text-anchor="middle" font-size="13" fill="var(--ink)">🔎 Busca en la base de datos</text>
-    <text x="650" y="1886" text-anchor="middle" font-size="11" fill="var(--greige-ink)">si hay talla y color de la referencia de la pauta</text>
+    <rect x="480" y="1995" width="340" height="90" rx="14" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5"><title>Paso interno, no le habla al cliente todavía: cruza línea/sublínea/color (leídos del anuncio) y talla (dada por el cliente arriba) contra el inventario real del catálogo.</title></rect>
+    <text x="810" y="2012" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3</text>
+    <text x="650" y="2036" text-anchor="middle" font-size="13" fill="var(--ink)">🔎 Busca en la base de datos</text>
+    <text x="650" y="2056" text-anchor="middle" font-size="11" fill="var(--greige-ink)">si hay talla y color de la referencia de la pauta</text>
 
-    <line x1="650" y1="1915" x2="650" y2="1955" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polygon points="650,2125 760,2190 650,2255 540,2190" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Resultado de la búsqueda de arriba: ¿el inventario real confirma esa talla en ese color?</title></polygon>
+    <text x="650" y="2186" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Hay talla</text>
+    <text x="650" y="2201" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">y color?</text>
 
-    <polygon points="650,1955 760,2020 650,2085 540,2020" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Resultado de la búsqueda de arriba: ¿el inventario real confirma esa talla en ese color?</title></polygon>
-    <text x="650" y="2016" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Hay talla</text>
-    <text x="650" y="2031" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">y color?</text>
+    <line x1="650" y1="2255" x2="650" y2="2275" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="650,2275 460,2275 460,2290" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="525" y="2263" width="30" height="20" fill="var(--paper)"/>
+    <text x="540" y="2278" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
 
-    <line x1="650" y1="2085" x2="650" y2="2105" stroke="var(--greige-ink)" stroke-width="2"/>
-    <polyline points="650,2105 460,2105 460,2120" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="525" y="2093" width="30" height="20" fill="var(--paper)"/>
-    <text x="540" y="2108" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <polyline points="650,2275 900,2275 900,2650" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="765" y="2263" width="34" height="20" fill="var(--paper)"/>
+    <text x="782" y="2278" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
 
-    <polyline points="650,2105 900,2105 900,2480" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="765" y="2093" width="34" height="20" fill="var(--paper)"/>
-    <text x="782" y="2108" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
-
-    <rect x="320" y="2120" width="280" height="140" rx="12" fill="var(--paper)" stroke="var(--warn)" stroke-width="1.5"><title>Talla y color confirmados en la base de datos: se le informa la disponibilidad y se espera su reacción.</title></rect>
-    <text x="590" y="2137" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3</text>
-    <text x="460" y="2157" text-anchor="middle" font-size="12.5" fill="var(--ink)">Confirma disponibilidad</text>
-    <text x="460" y="2179" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">1 color: "(nombre), lo tenemos en este color" + foto</text>
-    <text x="460" y="2195" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">2+ colores: "Lo tenemos en estos colores" + foto de c/u</text>
-    <text x="585" y="2219" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
-    <rect x="335" y="2270" width="110" height="24" rx="12" fill="var(--warn-soft)"/>
-    <text x="390" y="2286" text-anchor="middle" font-size="11" font-weight="700" fill="var(--warn)">Queda Tibio</text>
+    <rect x="320" y="2290" width="280" height="140" rx="12" fill="var(--paper)" stroke="var(--warn)" stroke-width="1.5"><title>Talla y color confirmados en la base de datos: se le informa la disponibilidad y se espera su reacción.</title></rect>
+    <text x="590" y="2307" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3</text>
+    <text x="460" y="2327" text-anchor="middle" font-size="12.5" fill="var(--ink)">Confirma disponibilidad</text>
+    <text x="460" y="2349" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">1 color: "(nombre), lo tenemos en este color" + foto</text>
+    <text x="460" y="2365" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">2+ colores: "Lo tenemos en estos colores" + foto de c/u</text>
+    <text x="585" y="2389" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
+    <rect x="335" y="2440" width="110" height="24" rx="12" fill="var(--warn-soft)"/>
+    <text x="390" y="2456" text-anchor="middle" font-size="11" font-weight="700" fill="var(--warn)">Queda Tibio</text>
 
     <!-- Timeout on the color confirmation re-enters the same Frío/seguimiento outcome as 3.1 -->
-    <line x1="600" y1="2186" x2="615" y2="2186" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
-    <rect x="615" y="2161" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
-    <text x="705" y="2182" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
-    <text x="705" y="2198" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
+    <line x1="600" y1="2356" x2="615" y2="2356" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+    <rect x="615" y="2331" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
+    <text x="705" y="2352" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
+    <text x="705" y="2368" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
 
     <!-- Reacción al color (3.3.2) -->
-    <line x1="460" y1="2260" x2="460" y2="2340" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <polygon points="460,2340 540,2390 460,2440 380,2390" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>3.3.2 — lee la reacción del cliente a lo que se le mostró.</title></polygon>
-    <text x="460" y="2385" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent)">¿Le gustó</text>
-    <text x="460" y="2398" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent)">el color?</text>
+    <line x1="460" y1="2430" x2="460" y2="2510" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polygon points="460,2510 540,2560 460,2610 380,2560" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>3.3.2 — lee la reacción del cliente a lo que se le mostró.</title></polygon>
+    <text x="460" y="2555" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent)">¿Le gustó</text>
+    <text x="460" y="2568" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent)">el color?</text>
 
-    <line x1="460" y1="2440" x2="460" y2="2480" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="472" y="2448" width="30" height="20" fill="var(--paper)"/>
-    <text x="487" y="2463" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <line x1="460" y1="2610" x2="460" y2="2650" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="472" y="2618" width="30" height="20" fill="var(--paper)"/>
+    <text x="487" y="2633" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
 
-    <polyline points="540,2390 900,2390 900,2480" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="700" y="2378" width="34" height="20" fill="var(--paper)"/>
-    <text x="717" y="2393" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <polyline points="540,2560 900,2560 900,2650" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="700" y="2548" width="34" height="20" fill="var(--paper)"/>
+    <text x="717" y="2563" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
 
     <!-- Sin talla/color, o sin que le gustara: vuelve a buscar, ahora por línea+sublínea+talla más recientes -->
-    <rect x="750" y="2480" width="300" height="140" rx="12" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Sin esa talla/color — o sin que le gustara — en vez de perder la venta se buscan alternativas recientes de la misma línea.</title></rect>
-    <text x="1035" y="2497" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.2.1</text>
-    <text x="900" y="2517" text-anchor="middle" font-size="12.5" fill="var(--ink)">Busca las 3 referencias</text>
-    <text x="900" y="2535" text-anchor="middle" font-size="12.5" fill="var(--ink)">más recientes</text>
-    <text x="900" y="2555" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">Misma línea, sublínea y talla — el color ya no es</text>
-    <text x="900" y="2570" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">determinante: manda todos los colores que tenga c/u</text>
-    <text x="1035" y="2599" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
+    <rect x="750" y="2650" width="300" height="140" rx="12" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Sin esa talla/color — o sin que le gustara — en vez de perder la venta se buscan alternativas recientes de la misma línea.</title></rect>
+    <text x="1035" y="2667" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.2.1</text>
+    <text x="900" y="2687" text-anchor="middle" font-size="12.5" fill="var(--ink)">Busca las 3 referencias</text>
+    <text x="900" y="2705" text-anchor="middle" font-size="12.5" fill="var(--ink)">más recientes</text>
+    <text x="900" y="2725" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">Misma línea, sublínea y talla — el color ya no es</text>
+    <text x="900" y="2740" text-anchor="middle" font-size="10" font-style="italic" fill="var(--greige-ink)">determinante: manda todos los colores que tenga c/u</text>
+    <text x="1035" y="2769" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
 
     <!-- Timeout on the alternatives offer re-enters the same Frío/seguimiento outcome as 3.1 -->
-    <polyline points="760,2620 760,2660 690,2660 690,2680" fill="none" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
-    <rect x="600" y="2680" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
-    <text x="690" y="2701" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
-    <text x="690" y="2717" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
+    <polyline points="760,2790 760,2830 690,2830 690,2850" fill="none" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+    <rect x="600" y="2850" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
+    <text x="690" y="2871" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
+    <text x="690" y="2887" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
 
-    <line x1="900" y1="2620" x2="900" y2="2660" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <polygon points="900,2660 995,2715 900,2770 805,2715" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Decide si alguna alternativa convierte la venta o si hay que ampliar la búsqueda con el catálogo de lo más reciente. Si solo se había ofrecido 1 referencia y no le interesó, no tiene sentido reofrecer catálogo: pasa directo al mismo seguimiento Frío que un "no responde".</title></polygon>
-    <text x="900" y="2711" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">¿Le gustó</text>
-    <text x="900" y="2726" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">alguna?</text>
+    <line x1="900" y1="2790" x2="900" y2="2830" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polygon points="900,2830 995,2885 900,2940 805,2885" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Decide si alguna alternativa convierte la venta o si hay que ampliar la búsqueda con el catálogo de lo más reciente. Si solo se había ofrecido 1 referencia y no le interesó, no tiene sentido reofrecer catálogo: pasa directo al mismo seguimiento Frío que un "no responde".</title></polygon>
+    <text x="900" y="2881" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">¿Le gustó</text>
+    <text x="900" y="2896" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">alguna?</text>
 
-    <line x1="900" y1="2770" x2="900" y2="2800" stroke="var(--greige-ink)" stroke-width="2"/>
-    <polyline points="900,2800 780,2800 780,2850" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
-    <rect x="815" y="2788" width="30" height="20" fill="var(--paper)"/>
-    <text x="830" y="2803" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
-    <text x="770" y="2845" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">Continúa igual que "sí hay color" →</text>
+    <line x1="900" y1="2940" x2="900" y2="2970" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="900,2970 780,2970 780,3020" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+    <rect x="815" y="2958" width="30" height="20" fill="var(--paper)"/>
+    <text x="830" y="2973" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <text x="770" y="3015" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">Continúa igual que "sí hay color" →</text>
 
-    <polyline points="900,2800 1020,2800 1020,2810" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="935" y="2788" width="34" height="20" fill="var(--paper)"/>
-    <text x="952" y="2803" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <polyline points="900,2970 1020,2970 1020,2980" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="935" y="2958" width="34" height="20" fill="var(--paper)"/>
+    <text x="952" y="2973" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
 
-    <rect x="870" y="2810" width="300" height="130" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Catálogo de lo más reciente (New Arrival), no el catálogo completo. En cuanto elige una referencia puntual, se vuelve a validar talla y color de esa referencia (flecha punteada), no se asume nada.</title></rect>
-    <text x="1020" y="2831" text-anchor="middle" font-size="12" fill="var(--ink)">Comparte el catálogo de lo</text>
-    <text x="1020" y="2849" text-anchor="middle" font-size="12" fill="var(--ink)">más reciente (New Arrival)</text>
-    <text x="1020" y="2869" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🔁 La referencia que elija vuelve a validarse</text>
-    <text x="1020" y="2885" text-anchor="middle" font-size="11" fill="var(--greige-ink)">(talla + color) igual que arriba, hasta que confirme una</text>
-    <text x="1155" y="2913" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
+    <rect x="870" y="2980" width="300" height="130" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Catálogo de lo más reciente (New Arrival), no el catálogo completo. En cuanto elige una referencia puntual, se vuelve a validar talla y color de esa referencia (flecha punteada), no se asume nada.</title></rect>
+    <text x="1020" y="3001" text-anchor="middle" font-size="12" fill="var(--ink)">Comparte el catálogo de lo</text>
+    <text x="1020" y="3019" text-anchor="middle" font-size="12" fill="var(--ink)">más reciente (New Arrival)</text>
+    <text x="1020" y="3039" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🔁 La referencia que elija vuelve a validarse</text>
+    <text x="1020" y="3055" text-anchor="middle" font-size="11" fill="var(--greige-ink)">(talla + color) igual que arriba, hasta que confirme una</text>
+    <text x="1155" y="3083" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">⏱ 10 min</text>
 
     <!-- Timeout on the full-catalog share re-enters the same Frío/seguimiento outcome as 3.1 -->
-    <line x1="1020" y1="2920" x2="1020" y2="2945" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
-    <rect x="930" y="2945" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
-    <text x="1020" y="2966" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
-    <text x="1020" y="2982" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
+    <line x1="1020" y1="3090" x2="1020" y2="3115" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+    <rect x="930" y="3115" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
+    <text x="1020" y="3136" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
+    <text x="1020" y="3152" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
 
     <!-- Explicit loop-back: la referencia elegida vuelve al paso de búsqueda en base de datos, no directo al diamante -->
-    <polyline points="1170,2810 1250,2810 1250,1870 820,1870" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-    <text x="1242" y="2340" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--accent)">🔁 vuelve a buscar</text>
-    <text x="1242" y="2356" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--accent)">en base de datos</text>
+    <polyline points="1170,2980 1250,2980 1250,2040 820,2040" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+    <text x="1242" y="2510" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--accent)">🔁 vuelve a buscar</text>
+    <text x="1242" y="2526" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--accent)">en base de datos</text>
 
     <!-- Merges into price box -->
-    <polyline points="460,2480 460,2850 650,2850 650,2890" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <polyline points="780,2850 650,2850" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="460,2650 460,3020 650,3020 650,3060" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polyline points="780,3020 650,3020" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
 
-    <rect x="465" y="2890" width="370" height="110" rx="14" fill="var(--paper)" stroke="var(--danger)" stroke-width="1.5"><title>Caliente = listo para comprar: el bot se detiene a propósito aquí, porque el pago y los datos de envío los cierra siempre una persona.</title></rect>
-    <text x="825" y="2907" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.1</text>
-    <text x="650" y="2928" text-anchor="middle" font-size="13.5" fill="var(--ink)">Da el precio y el valor del producto</text>
-    <text x="650" y="2951" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"(nombre), tiene un precio de Q(precio) + argumento</text>
-    <text x="650" y="2967" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">de valor. ¿Cuál es tu medio de pago?"</text>
-    <rect x="585" y="3005" width="130" height="26" rx="13" fill="var(--danger-soft)"/>
-    <text x="650" y="3022" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--danger)">Queda Caliente</text>
+    <rect x="465" y="3060" width="370" height="110" rx="14" fill="var(--paper)" stroke="var(--danger)" stroke-width="1.5"><title>Caliente = listo para comprar: el bot se detiene a propósito aquí, porque el pago y los datos de envío los cierra siempre una persona.</title></rect>
+    <text x="825" y="3077" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.1</text>
+    <text x="650" y="3098" text-anchor="middle" font-size="13.5" fill="var(--ink)">Da el precio y el valor del producto</text>
+    <text x="650" y="3121" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"(nombre), tiene un precio de Q(precio) + argumento</text>
+    <text x="650" y="3137" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">de valor. ¿Cuál es tu medio de pago?"</text>
+    <rect x="585" y="3175" width="130" height="26" rx="13" fill="var(--danger-soft)"/>
+    <text x="650" y="3192" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--danger)">Queda Caliente</text>
 
-    <line x1="650" y1="3031" x2="650" y2="3070" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="650" y1="3201" x2="650" y2="3240" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <rect x="440" y="3070" width="420" height="70" rx="35" fill="var(--accent)"><title>El bot nunca cobra ni agenda el envío: entrega la conversación ya calentada y con contexto completo para que el cierre sea humano.</title></rect>
-    <text x="650" y="3112" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">🤝 Un asesor humano toma la conversación</text>
+    <rect x="440" y="3240" width="420" height="70" rx="35" fill="var(--accent)"><title>El bot nunca cobra ni agenda el envío: entrega la conversación ya calentada y con contexto completo para que el cierre sea humano.</title></rect>
+    <text x="650" y="3282" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">🤝 Un asesor humano toma la conversación</text>
   </svg>
   <figcaption class="fc-caption">
     De arriba a abajo: el cliente escribe, el agente decide si es por un anuncio, una pregunta fuera de
