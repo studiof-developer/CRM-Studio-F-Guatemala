@@ -201,62 +201,14 @@
   .panel.active { display: block; }
 
   /* ---- Flowchart (diagram tab) ---- */
-  .diagram-page { max-width: 1220px; margin: 0 auto; padding: 32px 32px 96px; }
-  .diagram-page .lede { text-align: center; margin: 0 auto 40px; }
-  .fc-col { display: flex; flex-direction: column; align-items: center; }
-  .fc-arrow { display: flex; justify-content: center; padding: 4px 0; color: var(--line); }
-  .fc-arrow svg { display: block; }
-
-  .fc-oval {
-    display: inline-flex; align-items: center; gap: 8px; justify-content: center;
-    min-width: 200px; max-width: 280px; padding: 13px 22px; border-radius: 999px; text-align: center;
-    font-size: 13px; font-weight: 700; border: 1.5px solid var(--line); background: var(--paper); box-shadow: var(--shadow-card);
-  }
-  .fc-oval.start { border-color: var(--accent-line); color: var(--ink); }
-  .fc-oval.end-human { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--shadow-lifted); font-size: 13.5px; padding: 14px 24px; }
-  .fc-oval.end-human.purple { background: var(--purple); border-color: var(--purple); }
-  .fc-oval.end-soft { background: var(--paper-soft); color: var(--greige-ink); border-style: dashed; font-weight: 600; font-size: 12px; }
-
-  .fc-box {
-    width: 300px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 20px; box-shadow: var(--shadow-card); text-align: center; font-size: 13px; line-height: 1.5; color: var(--ink);
-    position: relative;
-  }
-  .fc-box .ref { position: absolute; top: 8px; right: 12px; font-size: 9px; color: var(--greige); font-weight: 700; font-variant-numeric: tabular-nums; }
-  .fc-box.t-frio { border-left: 4px solid var(--accent); }
-  .fc-box.t-tibio { border-left: 4px solid var(--warn); }
-  .fc-box.t-caliente { border-left: 4px solid var(--danger); font-weight: 600; }
-  .fc-box.narrow { width: 260px; }
-
-  .fc-diamond-wrap { display: flex; flex-direction: column; align-items: center; margin: 2px 0; }
-  .fc-diamond {
-    width: 116px; height: 116px; background: var(--accent-soft); border: 1.5px solid var(--accent-line);
-    transform: rotate(45deg); border-radius: 14px; display: flex; align-items: center; justify-content: center;
-    box-shadow: var(--shadow-card); flex-shrink: 0;
-  }
-  .fc-diamond span {
-    transform: rotate(-45deg); width: 78px; text-align: center; font-size: 11.5px; font-weight: 700; color: var(--accent); line-height: 1.25;
-  }
-
-  .fc-branches { display: flex; justify-content: center; gap: 24px; margin-top: 2px; flex-wrap: wrap; }
-  .fc-branch { display: flex; flex-direction: column; align-items: center; }
-  .fc-branch-label {
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--greige-ink);
-    background: var(--line-soft); padding: 4px 11px; border-radius: 999px; margin-bottom: 9px; text-align: center;
-  }
-  .fc-branch-label.yes { background: var(--accent-soft); color: var(--accent); }
-
-  .fc-entry-row { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
-  .fc-entry { display: flex; flex-direction: column; align-items: center; width: 220px; }
-
-  .fc-loop-note {
-    font-size: 11px; color: var(--greige-ink); background: var(--paper-soft); border: 1px dashed var(--line);
-    border-radius: 10px; padding: 8px 12px; max-width: 280px; text-align: center; margin-top: 8px; line-height: 1.45;
-  }
-
-  @media (max-width: 820px) {
-    .fc-entry-row { flex-direction: column; align-items: center; }
-    .fc-entry { width: 100%; max-width: 300px; }
+  .diagram-page { max-width: 1300px; margin: 0 auto; padding: 32px 32px 96px; }
+  .diagram-page .lede { text-align: center; margin: 0 auto 32px; }
+  .fc-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .fc-figure { margin: 0; width: fit-content; min-width: 100%; }
+  .fc-figure svg { display: block; margin: 0 auto; }
+  .fc-caption {
+    max-width: 640px; margin: 20px auto 0; text-align: center; font-size: 12.5px;
+    color: var(--greige-ink); line-height: 1.6;
   }
 </style>
 </head>
@@ -545,108 +497,186 @@
 <div class="diagram-page">
   <p class="eyebrow" style="text-align:center;">Diagrama de flujo</p>
   <h1 style="text-align:center;">Cómo atiende Mar-IA una conversación</h1>
-  <p class="lede">Pensado para leerse sin conocimiento técnico. Los números pequeños en la esquina de cada caja remiten al paso equivalente en la pestaña de especificación.</p>
+  <p class="lede">Pensado para leerse sin conocimiento técnico — cada flecha está dibujada explícitamente, sin atajos. Los números pequeños en la esquina de cada caja remiten al paso equivalente en la pestaña de especificación.</p>
 
-  <div class="fc-col">
-    <div class="fc-oval start">💬 Un cliente escribe por WhatsApp</div>
-    <div class="fc-arrow"><svg width="18" height="26" viewBox="0 0 18 26"><line x1="9" y1="0" x2="9" y2="18" stroke="currentColor" stroke-width="2"/><polygon points="9,26 3,16 15,16" fill="currentColor"/></svg></div>
-    <div class="fc-diamond-wrap"><div class="fc-diamond"><span>¿Por qué escribe?</span></div></div>
-  </div>
 
-  <div class="fc-entry-row">
-    <div class="fc-entry">
-      <span class="fc-branch-label yes">Vio un anuncio</span>
-      <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-      <div class="fc-oval end-soft" style="border-style:solid;background:var(--accent-soft);color:var(--accent);">Continúa abajo ↓</div>
-    </div>
-    <div class="fc-entry">
-      <span class="fc-branch-label">Pregunta fuera de campaña</span>
-      <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-      <div class="fc-oval end-human">🤝 Asesor humano</div>
-    </div>
-    <div class="fc-entry">
-      <span class="fc-branch-label">Queja o reclamo</span>
-      <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-      <div class="fc-oval end-human purple">🤝 Asesor humano</div>
-    </div>
-    <div class="fc-entry">
-      <span class="fc-branch-label">Quiere ver catálogo</span>
-      <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-      <div class="fc-box narrow" style="font-size:12px;padding:12px 14px;">Envía el catálogo y pregunta qué le interesa<span class="ref">E3/E4</span></div>
-      <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-      <div class="fc-diamond-wrap"><div class="fc-diamond" style="width:96px;height:96px;"><span style="width:64px;font-size:10.5px;">¿Manda foto?</span></div></div>
-      <div class="fc-branches" style="margin-top:10px;">
-        <div class="fc-branch">
-          <span class="fc-branch-label yes">Sí</span>
-          <div class="fc-oval end-human" style="font-size:12px;padding:10px 16px;min-width:0;">🤝 Asesor</div>
-        </div>
-        <div class="fc-branch">
-          <span class="fc-branch-label">No</span>
-          <div class="fc-oval end-soft">Recuerda que sigue disponible</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="fc-scroll">
+  <figure class="fc-figure">
+  <svg width="1300" height="1780" viewBox="0 0 1300 1780" role="img" aria-label="Diagrama de flujo del agente Mar-IA: desde que el cliente escribe hasta que un asesor humano toma la conversación, pasando por identificación, saludo, talla, disponibilidad de color y precio.">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--greige-ink)"/>
+      </marker>
+    </defs>
 
-  <p class="section-sub" style="text-align:center;margin:36px 0 10px;">Cuando el cliente viene de un anuncio, sigue este camino:</p>
+    <!-- ============ ENTRY SECTION ============ -->
+    <rect x="510" y="40" width="280" height="64" rx="32" fill="var(--paper)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="650" y="77" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">💬 Un cliente escribe por WhatsApp</text>
 
-  <div class="fc-col">
-    <div class="fc-arrow"><svg width="18" height="22" viewBox="0 0 18 22"><line x1="9" y1="0" x2="9" y2="14" stroke="currentColor" stroke-width="2"/><polygon points="9,22 3,12 15,12" fill="currentColor"/></svg></div>
+    <line x1="650" y1="104" x2="650" y2="145" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <div class="fc-box">Identifica el anuncio y revisa si ya es cliente<span class="ref">1 · 1.2</span></div>
-    <div class="fc-arrow"><svg width="18" height="26" viewBox="0 0 18 26"><line x1="9" y1="0" x2="9" y2="18" stroke="currentColor" stroke-width="2"/><polygon points="9,26 3,16 15,16" fill="currentColor"/></svg></div>
+    <polygon points="650,145 765,215 650,285 535,215" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="650" y="219" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Por qué escribe?</text>
 
-    <div class="fc-diamond-wrap"><div class="fc-diamond"><span>¿Asesor de turno?</span></div></div>
-    <div class="fc-branches">
-      <div class="fc-branch"><span class="fc-branch-label yes">Sí</span><p style="font-size:11.5px;color:var(--greige-ink);max-width:120px;text-align:center;margin:0;">Saluda con su nombre real</p></div>
-      <div class="fc-branch"><span class="fc-branch-label">No</span><p style="font-size:11.5px;color:var(--greige-ink);max-width:120px;text-align:center;margin:0;">Se presenta como "Mar-IA"</p></div>
-    </div>
-    <div class="fc-arrow"><svg width="18" height="22" viewBox="0 0 18 22"><line x1="9" y1="0" x2="9" y2="14" stroke="currentColor" stroke-width="2"/><polygon points="9,22 3,12 15,12" fill="currentColor"/></svg></div>
+    <line x1="650" y1="285" x2="650" y2="325" stroke="var(--greige-ink)" stroke-width="2"/>
+    <line x1="220" y1="325" x2="1075" y2="325" stroke="var(--greige-ink)" stroke-width="2"/>
 
-    <div class="fc-box">Saluda al cliente y pregunta la talla<span class="ref">2.1 · 2.2 · 3</span></div>
-    <div class="fc-arrow"><svg width="18" height="26" viewBox="0 0 18 26"><line x1="9" y1="0" x2="9" y2="18" stroke="currentColor" stroke-width="2"/><polygon points="9,26 3,16 15,16" fill="currentColor"/></svg></div>
+    <!-- Branch 1: anuncio -->
+    <line x1="220" y1="325" x2="220" y2="430" stroke="var(--greige-ink)" stroke-width="2"/>
+    <rect x="150" y="362" width="140" height="24" fill="var(--paper)"/>
+    <text x="220" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Vio un anuncio</text>
+    <polyline points="220,430 650,430 650,496" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <div class="fc-diamond-wrap"><div class="fc-diamond"><span>¿Dio la talla?</span></div></div>
-    <div class="fc-branches">
-      <div class="fc-branch">
-        <span class="fc-branch-label">No</span>
-        <div class="fc-box t-frio narrow" style="font-size:12px;">Le recuerda que sigue disponible<span class="ref">3.1</span></div>
-        <span class="chip frio" style="margin-top:6px;">Queda Frío</span>
-      </div>
-      <div class="fc-branch">
-        <span class="fc-branch-label yes">Sí</span>
-        <div class="fc-arrow"><svg width="16" height="60" viewBox="0 0 16 60"><line x1="8" y1="0" x2="8" y2="50" stroke="currentColor" stroke-width="2"/><polygon points="8,60 2,48 14,48" fill="currentColor"/></svg></div>
-      </div>
-    </div>
+    <!-- Branch 2: fuera de campaña -->
+    <line x1="505" y1="325" x2="505" y2="460" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="395" y="362" width="220" height="24" fill="var(--paper)"/>
+    <text x="505" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Pregunta fuera de campaña</text>
+    <rect x="365" y="460" width="280" height="64" rx="32" fill="var(--accent)"/>
+    <text x="505" y="497" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
 
-    <div class="fc-diamond-wrap"><div class="fc-diamond"><span>¿Hay ese color?</span></div></div>
-    <div class="fc-branches">
-      <div class="fc-branch">
-        <span class="fc-branch-label yes">Sí</span>
-        <div class="fc-box t-tibio narrow" style="font-size:12px;">Confirma disponibilidad<span class="ref">3.3</span></div>
-        <span class="chip tibio" style="margin-top:6px;">Queda Tibio</span>
-      </div>
-      <div class="fc-branch">
-        <span class="fc-branch-label">No</span>
-        <div class="fc-box narrow" style="font-size:12px;">Ofrece hasta 3 referencias parecidas<span class="ref">3.3.2.1</span></div>
-        <div class="fc-arrow"><svg width="16" height="20" viewBox="0 0 16 20"><line x1="8" y1="0" x2="8" y2="12" stroke="currentColor" stroke-width="2"/><polygon points="8,20 2,10 14,10" fill="currentColor"/></svg></div>
-        <div class="fc-diamond-wrap"><div class="fc-diamond" style="width:100px;height:100px;"><span style="width:66px;font-size:11px;">¿Le gustó alguna?</span></div></div>
-        <div class="fc-branches" style="margin-top:8px;gap:16px;">
-          <div class="fc-branch"><span class="fc-branch-label yes">Sí</span><p style="font-size:11px;color:var(--greige-ink);text-align:center;margin:0;max-width:90px;">Continúa igual<br/>que "Sí hay color" →</p></div>
-          <div class="fc-branch">
-            <span class="fc-branch-label">No</span>
-            <div class="fc-loop-note">Comparte el catálogo completo y, en cuanto elige otra opción, vuelve a preguntar "¿hay ese color?" para esa nueva referencia.</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Branch 3: PQRS -->
+    <line x1="790" y1="325" x2="790" y2="460" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="690" y="362" width="200" height="24" fill="var(--paper)"/>
+    <text x="790" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Queja o reclamo (PQRS)</text>
+    <rect x="650" y="460" width="280" height="64" rx="32" fill="var(--purple)"/>
+    <text x="790" y="497" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">🤝 Asesor humano</text>
 
-    <div class="fc-arrow"><svg width="18" height="26" viewBox="0 0 18 26"><line x1="9" y1="0" x2="9" y2="18" stroke="currentColor" stroke-width="2"/><polygon points="9,26 3,16 15,16" fill="currentColor"/></svg></div>
-    <div class="fc-box t-caliente">Da el precio, el valor del producto y pregunta el medio de pago<span class="ref">3.3.1</span></div>
-    <span class="chip caliente" style="margin-top:8px;">Queda Caliente</span>
-    <div class="fc-arrow"><svg width="18" height="26" viewBox="0 0 18 26"><line x1="9" y1="0" x2="9" y2="18" stroke="currentColor" stroke-width="2"/><polygon points="9,26 3,16 15,16" fill="currentColor"/></svg></div>
+    <!-- Branch 4: catálogo -->
+    <line x1="1075" y1="325" x2="1075" y2="430" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="985" y="362" width="180" height="24" fill="var(--paper)"/>
+    <text x="1075" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Quiere ver catálogo</text>
+    <rect x="925" y="430" width="300" height="80" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"/>
+    <text x="1235" y="447" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">E3 / E4</text>
+    <text x="1075" y="465" text-anchor="middle" font-size="13" fill="var(--ink)">Envía el catálogo y</text>
+    <text x="1075" y="483" text-anchor="middle" font-size="13" fill="var(--ink)">pregunta qué le interesa</text>
+    <line x1="1075" y1="510" x2="1075" y2="550" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
-    <div class="fc-oval end-human" style="font-size:16px;padding:18px 32px;">🤝 Un asesor humano toma la conversación</div>
+    <polygon points="1075,550 1170,605 1075,660 980,605" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="1075" y="609" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Manda foto?</text>
+
+    <line x1="1075" y1="660" x2="1075" y2="680" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="1075,680 985,680 985,700" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="920" y="662" width="34" height="20" fill="var(--paper)"/>
+    <text x="937" y="677" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <rect x="885" y="700" width="200" height="56" rx="28" fill="var(--accent)"/>
+    <text x="985" y="734" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">🤝 Asesor</text>
+
+    <polyline points="1075,680 1150,680 1150,700" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="1095" y="662" width="34" height="20" fill="var(--paper)"/>
+    <text x="1112" y="677" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+    <rect x="1030" y="700" width="240" height="60" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="1150" y="722" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">Le recuerda que</text>
+    <text x="1150" y="738" text-anchor="middle" font-size="11.5" fill="var(--greige-ink)">sigue disponible</text>
+
+    <!-- ============ MAIN TRUNK ============ -->
+    <text x="650" y="410" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--greige-ink)">Cuando el cliente viene de un anuncio, sigue este camino:</text>
+
+    <rect x="480" y="500" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"/>
+    <text x="810" y="517" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">1 · 1.2</text>
+    <text x="650" y="538" text-anchor="middle" font-size="13.5" fill="var(--ink)">Identifica el anuncio y</text>
+    <text x="650" y="558" text-anchor="middle" font-size="13.5" fill="var(--ink)">revisa si ya es cliente</text>
+
+    <line x1="650" y1="590" x2="650" y2="660" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="440" y="602" width="420" height="44" fill="var(--paper)"/>
+    <text x="650" y="617" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🕐 Antes de saludar revisa quién está en turno:</text>
+    <text x="650" y="633" text-anchor="middle" font-size="11" fill="var(--greige-ink)">usa su nombre real, o se presenta como "Mar-IA" si no hay nadie</text>
+
+    <rect x="480" y="660" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"/>
+    <text x="810" y="677" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">2.1 · 2.2 · 3</text>
+    <text x="650" y="698" text-anchor="middle" font-size="13.5" fill="var(--ink)">Saluda al cliente y</text>
+    <text x="650" y="718" text-anchor="middle" font-size="13.5" fill="var(--ink)">pregunta la talla</text>
+
+    <line x1="650" y1="750" x2="650" y2="790" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <polygon points="650,790 760,855 650,920 540,855" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="650" y="859" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Dio la talla?</text>
+
+    <line x1="650" y1="920" x2="650" y2="950" stroke="var(--greige-ink)" stroke-width="2"/>
+    <line x1="650" y1="950" x2="650" y2="990" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="662" y="958" width="30" height="20" fill="var(--paper)"/>
+    <text x="677" y="973" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+
+    <polyline points="650,950 460,950 460,990" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="525" y="936" width="34" height="20" fill="var(--paper)"/>
+    <text x="542" y="951" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+
+    <rect x="330" y="990" width="260" height="70" rx="12" fill="var(--paper)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="580" y="1006" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.1</text>
+    <text x="460" y="1022" text-anchor="middle" font-size="12.5" fill="var(--ink)">Le recuerda que</text>
+    <text x="460" y="1040" text-anchor="middle" font-size="12.5" fill="var(--ink)">sigue disponible</text>
+    <rect x="415" y="1068" width="90" height="24" rx="12" fill="var(--accent-soft)"/>
+    <text x="460" y="1084" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Queda Frío</text>
+
+    <polygon points="650,990 760,1055 650,1120 540,1055" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="650" y="1051" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">¿Hay ese</text>
+    <text x="650" y="1066" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">color?</text>
+
+    <line x1="650" y1="1120" x2="650" y2="1140" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="650,1140 460,1140 460,1155" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="525" y="1128" width="30" height="20" fill="var(--paper)"/>
+    <text x="540" y="1143" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+
+    <polyline points="650,1140 900,1140 900,1155" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="765" y="1128" width="34" height="20" fill="var(--paper)"/>
+    <text x="782" y="1143" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+
+    <!-- Sí color -->
+    <rect x="320" y="1155" width="280" height="80" rx="12" fill="var(--paper)" stroke="var(--warn)" stroke-width="1.5"/>
+    <text x="590" y="1172" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3</text>
+    <text x="460" y="1192" text-anchor="middle" font-size="12.5" fill="var(--ink)">Confirma que sí hay</text>
+    <text x="460" y="1210" text-anchor="middle" font-size="12.5" fill="var(--ink)">disponibilidad en ese color</text>
+    <rect x="405" y="1246" width="110" height="24" rx="12" fill="var(--warn-soft)"/>
+    <text x="460" y="1262" text-anchor="middle" font-size="11" font-weight="700" fill="var(--warn)">Queda Tibio</text>
+
+    <!-- No color -->
+    <rect x="750" y="1155" width="300" height="80" rx="12" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"/>
+    <text x="1035" y="1172" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.2.1</text>
+    <text x="900" y="1192" text-anchor="middle" font-size="12.5" fill="var(--ink)">Ofrece hasta 3</text>
+    <text x="900" y="1210" text-anchor="middle" font-size="12.5" fill="var(--ink)">referencias parecidas</text>
+
+    <line x1="900" y1="1235" x2="900" y2="1270" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polygon points="900,1270 995,1325 900,1380 805,1325" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"/>
+    <text x="900" y="1321" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">¿Le gustó</text>
+    <text x="900" y="1336" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">alguna?</text>
+
+    <line x1="900" y1="1380" x2="900" y2="1410" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="900,1410 780,1410 780,1450" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+    <rect x="815" y="1398" width="30" height="20" fill="var(--paper)"/>
+    <text x="830" y="1413" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
+    <text x="700" y="1445" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">Continúa igual que "sí hay color" →</text>
+
+    <polyline points="900,1410 1020,1410 1020,1420" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="935" y="1398" width="34" height="20" fill="var(--paper)"/>
+    <text x="952" y="1413" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
+
+    <rect x="870" y="1420" width="300" height="110" rx="12" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="1020" y="1446" text-anchor="middle" font-size="12" fill="var(--ink)">Comparte el catálogo completo</text>
+    <text x="1020" y="1470" text-anchor="middle" font-size="12" fill="var(--greige-ink)">🔁 Repite este paso con la</text>
+    <text x="1020" y="1488" text-anchor="middle" font-size="12" fill="var(--greige-ink)">nueva referencia que elija,</text>
+    <text x="1020" y="1506" text-anchor="middle" font-size="12" fill="var(--greige-ink)">hasta que confirme una</text>
+
+    <!-- Merges into price box -->
+    <polyline points="460,1235 460,1450 650,1450 650,1490" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polyline points="780,1450 650,1450" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+
+    <rect x="470" y="1490" width="360" height="90" rx="14" fill="var(--paper)" stroke="var(--danger)" stroke-width="1.5"/>
+    <text x="820" y="1507" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3.3.1</text>
+    <text x="650" y="1528" text-anchor="middle" font-size="13.5" fill="var(--ink)">Da el precio, el valor del producto</text>
+    <text x="650" y="1548" text-anchor="middle" font-size="13.5" fill="var(--ink)">y pregunta el medio de pago</text>
+    <rect x="585" y="1585" width="130" height="26" rx="13" fill="var(--danger-soft)"/>
+    <text x="650" y="1602" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--danger)">Queda Caliente</text>
+
+    <line x1="650" y1="1611" x2="650" y2="1650" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="440" y="1650" width="420" height="70" rx="35" fill="var(--accent)"/>
+    <text x="650" y="1692" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">🤝 Un asesor humano toma la conversación</text>
+  </svg>
+  <figcaption class="fc-caption">
+    De arriba a abajo: el cliente escribe, el agente decide si es por un anuncio, una pregunta fuera de
+    campaña, una queja o un catálogo — solo el camino del anuncio sigue en automático hasta el precio;
+    los demás pasan a un asesor humano de inmediato o casi de inmediato.
+  </figcaption>
+  </figure>
   </div>
 </div>
 </div>
