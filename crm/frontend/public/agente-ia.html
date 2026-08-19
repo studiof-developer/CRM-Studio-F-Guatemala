@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg">
+<title>Agente Mar-IA — Studio F CRM</title>
+<style>
+  :root {
+    --background: #f5f5f7;
+    --paper: #ffffff;
+    --paper-soft: #fafafa;
+    --ink: #18181b;
+    --greige: #71717a;
+    --greige-ink: #52525b;
+    --line: #e4e4e7;
+    --line-soft: #eeeef0;
+    --accent: #4338ca;
+    --accent-soft: #eeecfb;
+    --accent-line: #d8d4f7;
+    --ok: #15803d;
+    --warn: #b45309;
+    --warn-soft: #fdf1e2;
+    --danger: #b91c1c;
+    --danger-soft: #fbe9e9;
+    --purple: #7e22ce;
+    --purple-soft: #f4e9fc;
+    --shadow-card: 0 1px 2px rgba(24,24,27,0.04), 0 10px 24px rgba(24,24,27,0.05);
+    --shadow-lifted: 0 2px 6px rgba(24,24,27,0.06), 0 24px 48px rgba(24,24,27,0.09);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  .page { max-width: 800px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  h1 { font-size: clamp(30px, 4.6vw, 42px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.06; margin: 0 0 12px; text-wrap: balance; }
+  .lede { max-width: 64ch; font-size: 15.5px; line-height: 1.6; color: var(--greige-ink); margin: 0; }
+  .lede strong { color: var(--ink); }
+
+  .legend {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 9px 18px;
+    margin: 28px 0; padding: 13px 18px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow-card); font-size: 12px; color: var(--greige-ink);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); flex-shrink: 0; }
+  .dot.new { background: transparent; border: 1.5px dashed var(--accent); }
+  .chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .chip.frio { background: var(--accent-soft); color: var(--accent); }
+  .chip.tibio { background: var(--warn-soft); color: var(--warn); }
+  .chip.caliente { background: var(--danger-soft); color: var(--danger); }
+  .chip.pqrs { background: var(--purple-soft); color: var(--purple); }
+  .chip.neutral { background: var(--line-soft); color: var(--greige-ink); }
+
+  /* ---- Table of contents ---- */
+  .toc { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow-card); margin-bottom: 40px; }
+  .toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--greige); margin: 0 0 12px; }
+  .toc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; }
+  .toc-grid a { font-size: 12.5px; color: var(--ink); text-decoration: none; display: flex; gap: 6px; padding: 3px 0; }
+  .toc-grid a b { color: var(--accent); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .toc-grid a:hover { color: var(--accent); }
+
+  h2.section-title {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
+    margin: 48px 0 4px; padding-top: 24px; border-top: 1px solid var(--line);
+  }
+  p.section-sub { font-size: 13px; color: var(--greige-ink); margin: 0 0 20px; }
+
+  /* ---- Escenario cards (entry points) ---- */
+  .escenario {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px 20px; box-shadow: var(--shadow-card); margin-bottom: 10px; scroll-margin-top: 20px;
+  }
+  .escenario-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .escenario-head h3 { font-size: 15px; font-weight: 700; margin: 0; }
+  .escenario-num { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; }
+  .escenario p { font-size: 13px; color: var(--greige-ink); line-height: 1.55; margin: 8px 0 0; }
+  .escenario .ref { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+  /* ---- Numbered steps (outline) ---- */
+  .step { position: relative; scroll-margin-top: 20px; }
+  .step + .step { margin-top: 14px; }
+  .step.l1 { margin-left: 0; }
+  .step.l2 { margin-left: 24px; }
+  .step.l3 { margin-left: 48px; }
+  .step.l2::before, .step.l3::before {
+    content: ''; position: absolute; left: -16px; top: 0; bottom: 0; width: 1px; background: var(--line);
+  }
+
+  .step-card { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow-card); }
+  .l1 > .step-card { border-color: var(--accent-line); }
+  .step-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    flex-shrink: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+  }
+  .l1 .badge { width: 26px; height: 26px; background: var(--accent); color: #fff; }
+  .l2 .badge { width: 22px; height: 22px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; }
+  .l3 .badge { width: 20px; height: 20px; background: var(--line-soft); color: var(--greige-ink); font-size: 9.5px; }
+  .step-title { font-size: 14.5px; font-weight: 700; margin: 0; }
+  .l3 .step-title { font-size: 13.5px; }
+  .tag-new {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--accent);
+    border: 1.5px dashed var(--accent); padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  }
+
+  .step-body { margin-top: 10px; padding-left: 36px; }
+  .l2 .step-body, .l3 .step-body { padding-left: 30px; }
+  .step-body p { font-size: 13px; line-height: 1.6; color: var(--greige-ink); margin: 0 0 8px; }
+  .step-body p:last-child { margin-bottom: 0; }
+  .step-body strong { color: var(--ink); }
+  .field-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--greige); margin: 10px 0 4px; }
+  .field-label:first-child { margin-top: 0; }
+
+  .msg {
+    background: var(--paper-soft); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
+    padding: 10px 14px; font-size: 13px; font-style: italic; color: var(--ink); line-height: 1.55; margin: 6px 0;
+  }
+
+  .outcomes { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .outcome {
+    display: flex; align-items: flex-start; gap: 10px; background: var(--paper-soft);
+    border: 1px solid var(--line-soft); border-radius: 10px; padding: 9px 12px;
+  }
+  .outcome .cond { font-size: 11.5px; font-weight: 700; color: var(--ink); flex-shrink: 0; min-width: 108px; }
+  .outcome .then { font-size: 12.5px; color: var(--greige-ink); line-height: 1.5; }
+  .outcome .then a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .outcome .then a:hover { text-decoration: underline; }
+
+  .note {
+    font-size: 11.5px; color: var(--greige); background: var(--line-soft); border-radius: 8px;
+    padding: 6px 10px; margin-top: 8px; display: inline-block;
+  }
+
+  /* ---- Exit card ---- */
+  .exit-card {
+    margin-top: 40px; background: var(--accent-soft); border: 1.5px solid var(--accent);
+    border-radius: 20px; padding: 26px; box-shadow: var(--shadow-lifted); text-align: center; scroll-margin-top: 20px;
+  }
+  .exit-card h3 { font-size: 19px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; color: var(--accent); }
+  .exit-card p { font-size: 13.5px; color: var(--greige-ink); max-width: 48ch; margin: 0 auto 14px; line-height: 1.55; }
+  .exit-triggers { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+  .foot { margin-top: 48px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 12px; color: var(--greige-ink); line-height: 1.65; }
+
+  @media (max-width: 640px) {
+    .toc-grid { grid-template-columns: 1fr 1fr; }
+    .step.l2 { margin-left: 14px; }
+    .step.l3 { margin-left: 26px; }
+    .outcome { flex-direction: column; gap: 3px; }
+    .outcome .cond { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Propuesta técnica — para revisión del gerente</p>
+  <h1>Agente Mar-IA</h1>
+  <p class="lede">
+    Especificación completa del flujo de atención automatizada por WhatsApp, tal como se definió en la
+    sesión de planeación del equipo — <strong>numerada igual que las notas originales</strong> (1, 1.2, 2, 2.1…)
+    para que cada paso se pueda ubicar y discutir sin ambigüedad. Se construye dentro de n8n.
+  </p>
+
+  <div class="legend">
+    <span class="legend-item"><span class="dot"></span>Ya existe en el CRM</span>
+    <span class="legend-item"><span class="dot new"></span>Nuevo, por construir</span>
+    <span class="legend-item">Clasificación del cliente:</span>
+    <span class="chip frio">Frío</span>
+    <span class="chip tibio">Tibio</span>
+    <span class="chip caliente">Caliente</span>
+    <span class="chip pqrs">PQRS</span>
+  </div>
+
+  <div class="toc">
+    <h2>Índice</h2>
+    <div class="toc-grid">
+      <a href="#esc-1"><b>E1</b> Pauta + referencia</a>
+      <a href="#esc-2"><b>E2</b> Fuera de pauta</a>
+      <a href="#esc-3"><b>E3</b> Catálogo rebajas</a>
+      <a href="#esc-4"><b>E4</b> Catálogo nueva colección</a>
+      <a href="#esc-5"><b>E5</b> PQRS</a>
+      <a href="#p-1"><b>1</b> Identificación del anuncio</a>
+      <a href="#p-1-2"><b>1.2</b> Identificación del cliente</a>
+      <a href="#p-2"><b>2</b> Mensaje de bienvenida</a>
+      <a href="#p-2-1"><b>2.1</b> Validación de turno</a>
+      <a href="#p-2-2"><b>2.2</b> Saludo</a>
+      <a href="#p-3"><b>3</b> Pregunta de talla</a>
+      <a href="#p-3-1"><b>3.1</b> Sin nombre ni talla</a>
+      <a href="#p-3-2"><b>3.2</b> Sin nombre, con talla</a>
+      <a href="#p-3-3"><b>3.3</b> Validación de existencias</a>
+      <a href="#p-3-3-1"><b>3.3.1</b> Precio y valor</a>
+      <a href="#p-3-3-2"><b>3.3.2</b> Respuesta sobre el color</a>
+      <a href="#p-3-3-2-1"><b>3.3.2.1</b> Referencias alternativas</a>
+      <a href="#p-4"><b>4</b> Handoff a asesor</a>
+    </div>
+  </div>
+
+  <h2 class="section-title">Escenarios de entrada</h2>
+  <p class="section-sub">Cómo puede empezar la conversación — cada uno decide si entra al flujo principal o corta directo a un asesor.</p>
+
+  <div class="escenario" id="esc-1">
+    <div class="escenario-head"><span class="escenario-num">ESCENARIO 1</span><h3>Pauta + referencia</h3></div>
+    <p>El cliente escribe desde un anuncio de Meta (Facebook/Instagram). Es el flujo completo, detallado paso a paso más abajo, del <a class="ref" href="#p-1">1</a> al <a class="ref" href="#p-4">4</a>.</p>
+  </div>
+
+  <div class="escenario" id="esc-2">
+    <div class="escenario-head"><span class="escenario-num">ESCENARIO 2</span><h3>Conversación fuera de pauta</h3></div>
+    <p>El mensaje no corresponde a ninguna campaña activa. Rompe la conversación automatizada de inmediato y la asigna a un asesor humano — no pasa por ningún otro paso.</p>
+  </div>
+
+  <div class="escenario" id="esc-3">
+    <div class="escenario-head"><span class="escenario-num">ESCENARIO 3</span><h3>Catálogo de Rebajas</h3></div>
+    <p>Entra por <a class="ref" href="#p-1">1</a> hasta <a class="ref" href="#p-2-2">2.2</a> (identificación + bienvenida), igual que el Escenario 1. Luego: <strong>"Te enviamos los catálogos de descuentos, ¿qué referencia deseas?"</strong> (aplica delay). Si el cliente responde con una foto → rompe el ciclo y asigna asesor. Si no responde → aplica el mensaje de seguimiento de <a class="ref" href="#p-3-1">3.1</a>.</p>
+  </div>
+
+  <div class="escenario" id="esc-4">
+    <div class="escenario-head"><span class="escenario-num">ESCENARIO 4</span><h3>Catálogo Nueva Colección</h3></div>
+    <p>Misma lógica que el Escenario 3: entra por <a class="ref" href="#p-1">1</a> hasta <a class="ref" href="#p-2-2">2.2</a>, envía el catálogo y pregunta qué referencia desea. Si responde → rompe chat y asigna asesor. Si no responde → mensaje de seguimiento de <a class="ref" href="#p-3-1">3.1</a>.</p>
+  </div>
+
+  <div class="escenario" id="esc-5">
+    <div class="escenario-head"><span class="escenario-num">ESCENARIO 5</span><h3>PQRS</h3></div>
+    <p>Cualquier queja, duda, petición o reclamo. Rompe la conversación y la asigna directo a un asesor humano, sin pasar por el flujo de ventas.</p>
+  </div>
+
+  <h2 class="section-title">Flujo principal — Escenario 1</h2>
+  <p class="section-sub">Numeración idéntica a las notas del equipo. Los pasos con sangría son sub-pasos del paso de arriba.</p>
+
+  <div class="step l1" id="p-1">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">1</span><p class="step-title">Identificación del anuncio</p><span class="tag-new">NUEVO — interpretación</span></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Lee la <strong>imagen</strong> y el <strong>copy</strong> del anuncio de Meta que originó el contacto. La captura de esos datos ya existe hoy en el CRM (tarjeta de anuncio); lo nuevo es que el agente los <strong>interpreta</strong> para deducir línea, sublínea y color.</p>
+        <p class="field-label">Guarda</p>
+        <p>Línea / sublínea / color deducidos — se usan más adelante en <a class="ref" href="#p-3-3">3.3</a>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-1-2">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">1.2</span><p class="step-title">Identificación del cliente</p></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Busca el número de teléfono en la base de clientes.</p>
+        <div class="outcomes">
+          <div class="outcome"><span class="cond">Cliente antiguo</span><span class="then">Ya trae nombre, histórico de compras, tallas y dirección. Salta directo a <a href="#p-2-2">2.2 (antiguo)</a>.</span></div>
+          <div class="outcome"><span class="cond">Cliente nuevo</span><span class="then">No hay datos previos. Continúa el flujo normal desde <a href="#p-2">2</a>.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l1" id="p-2">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">2</span><p class="step-title">Mensaje de bienvenida</p></div>
+      <div class="step-body">
+        <p>Encabezado de los pasos <a class="ref" href="#p-2-1">2.1</a> y <a class="ref" href="#p-2-2">2.2</a> — no tiene una acción propia.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-2-1">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">2.1</span><p class="step-title">Validación de turno del asesor</p><span class="tag-new">NUEVO — horarios</span></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Consulta una pantalla nueva (dentro de Usuarios) donde se asignan horarios por asesor, para saber quién está en turno en este momento.</p>
+        <div class="outcomes">
+          <div class="outcome"><span class="cond">Sí hay turno</span><span class="then">El saludo usa el nombre real del asesor asignado.</span></div>
+          <div class="outcome"><span class="cond">No hay turno</span><span class="then">El saludo usa "Mar-IA" como nombre.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-2-2">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">2.2</span><p class="step-title">Saludo</p></div>
+      <div class="step-body">
+        <p class="field-label">Mensaje — cliente antiguo</p>
+        <div class="msg">"Hola (nombre del cliente), mi nombre es (nombre del asesor), bienvenida a Studio F, seré tu asesora hoy."</div>
+        <p class="field-label">Mensaje — cliente nuevo</p>
+        <div class="msg">"Hola, mi nombre es (nombre del asesor), bienvenida a Studio F y seré tu asesora, ¿cuál es tu nombre?"</div>
+        <div class="outcomes">
+          <div class="outcome"><span class="cond">Si responde</span><span class="then">Lee y guarda el nombre. Aplica delay de 1 min.</span></div>
+          <div class="outcome"><span class="cond">Si no responde</span><span class="then">Aplica delay de 1 min igual y continúa.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l1" id="p-3">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3</span><p class="step-title">Pregunta de talla</p></div>
+      <div class="step-body">
+        <p class="field-label">Mensaje — con nombre</p>
+        <div class="msg">"(nombre del cliente), ¿en qué talla la deseas?"</div>
+        <p class="field-label">Mensaje — sin nombre</p>
+        <div class="msg">"¿En qué talla la deseas?"</div>
+        <p>Aplica delay de <strong>10 min</strong> esperando respuesta. Lee y guarda la talla si el cliente responde.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-3-1">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.1</span><p class="step-title">Sin nombre ni talla</p><span class="tag-new">NUEVO — seguimiento programado</span><span class="chip frio">Frío</span></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Si pasado el delay el cliente no dio ni nombre ni talla, manda un mensaje de seguimiento y clasifica al cliente como <strong>Frío</strong>.</p>
+        <p class="field-label">Mensaje</p>
+        <div class="msg">"Recuerda que soy (nombre del asesor), estaremos aquí pendientes para cuando usted esté disponible."</div>
+        <span class="note">Este paso también se dispara desde 3.3.2.1 y desde los Escenarios 3 y 4 cuando el cliente no responde.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-3-2">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.2</span><p class="step-title">Sin nombre, con talla</p></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Guarda la talla y continúa el proceso de venta con normalidad — no se detiene por no tener el nombre.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l2" id="p-3-3">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.3</span><p class="step-title">Validación de existencias</p></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Con la línea/sublínea/color del paso <a class="ref" href="#p-1">1</a> y la talla del paso <a class="ref" href="#p-3">3</a>, valida contra el catálogo de productos del CRM — <strong>línea, color, talla, precio y existencias ya están ahí</strong>, no hace falta crear nada nuevo para esta consulta.</p>
+        <div class="outcomes">
+          <div class="outcome">
+            <span class="cond">Hay la talla en el color pedido</span>
+            <span class="then">
+              "¿(nombre del cliente)? Lo tenemos disponible en ese color." — o si no, muestra en qué otros colores sí hay: "¿(nombre del cliente)? Lo tenemos en los siguientes colores…"
+              Aplica delay de 10 min. Continúa en <a href="#p-3-3-2">3.3.2</a>. <span class="chip tibio">Tibio</span>
+            </span>
+          </div>
+          <div class="outcome"><span class="cond">No hay esa talla</span><span class="then">Continúa en <a href="#p-3-3-2-1">3.3.2.1</a> (referencias alternativas).</span></div>
+          <div class="outcome"><span class="cond">Regresa desde 3.3.2.1</span><span class="then">Cuando el cliente envía una foto de una referencia que le gustó, se vuelve a pasar por aquí para confirmar esa existencia puntual.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l3" id="p-3-3-1">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.3.1</span><p class="step-title">Precio y argumento de valor</p><span class="chip caliente">Caliente</span></div>
+      <div class="step-body">
+        <p class="field-label">Mensaje</p>
+        <div class="msg">"(nombre del cliente) tiene un precio de Q[XXX] [+ argumento de valor], ¿cuál es tu medio de pago?"</div>
+        <p>Este es el punto donde el flujo de ventas <strong>termina</strong> y entra el paso <a class="ref" href="#p-4">4</a> — apenas se pregunta el medio de pago, el cliente queda listo para un asesor.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l3" id="p-3-3-2">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.3.2</span><p class="step-title">Lee la respuesta sobre el color</p></div>
+      <div class="step-body">
+        <div class="outcomes">
+          <div class="outcome"><span class="cond">Le gustó el color</span><span class="then">Va directo a <a href="#p-3-3-1">3.3.1</a> (precio).</span></div>
+          <div class="outcome"><span class="cond">No le gustó</span><span class="then">Busca disponibilidad por línea, sublínea, color (opcional) y talla; ofrece las referencias de menor a mayor <span class="note">valor — confirmar con el equipo qué mide exactamente "T.V" en la nota original</span>.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l3" id="p-3-3-2-1">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">3.3.2.1</span><p class="step-title">Ofrece referencias alternativas</p></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>Envía hasta <strong>3 imágenes</strong> + código de referencia.</p>
+        <p class="field-label">Mensaje</p>
+        <div class="msg">"(nombre del cliente), en vista de que no tenemos ese color te podemos ofrecer las siguientes referencias en tu talla." — con 1 opción: "¿Deseas este estilo?" — con 2 o más: "¿Qué referencia te gustó?"</div>
+        <p>Aplica delay de 10 min.</p>
+        <div class="outcomes">
+          <div class="outcome"><span class="cond">No responde</span><span class="then">Aplica el mensaje de seguimiento de <a href="#p-3-1">3.1</a>.</span></div>
+          <div class="outcome"><span class="cond">Le gustó una referencia</span><span class="then">Va a <a href="#p-3-3-1">3.3.1</a> (precio).</span></div>
+          <div class="outcome"><span class="cond">Ninguna le gustó</span><span class="then">"Te entiendo, le voy a compartir el catálogo NEWA para que selecciones los diseños que más te gusten." Aplica delay de 10 min. Si envía una foto de algo que le gustó, regresa a <a href="#p-3-3">3.3</a> para validar esa referencia — se repite hasta que confirma una que le gustó, y de ahí pasa a <a href="#p-3-3-1">3.3.1</a>.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step l1" id="p-4">
+    <div class="step-card">
+      <div class="step-head"><span class="badge">4</span><p class="step-title">Handoff a asesor humano</p></div>
+      <div class="step-body">
+        <p class="field-label">Qué hace</p>
+        <p>En cuanto el cliente queda clasificado como <strong>Caliente</strong> (paso <a class="ref" href="#p-3-3-1">3.3.1</a>), el agente rompe la conversación automatizada y la entrega a un asesor — mismo mecanismo de Cola de Handoff que ya existe hoy en el CRM.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="exit-card" id="handoff">
+    <h3>Los 4 disparadores de handoff</h3>
+    <p>Sin importar en qué paso esté, cualquiera de estos rompe el flujo automatizado de inmediato y asigna un asesor humano.</p>
+    <div class="exit-triggers">
+      <span class="chip caliente">Cliente queda Caliente (3.3.1)</span>
+      <span class="chip pqrs">Es un caso de PQRS (Escenario 5)</span>
+      <span class="chip neutral">Mensaje fuera de pauta (Escenario 2)</span>
+      <span class="chip neutral">El cliente envía una foto en Escenario 3 / 4</span>
+    </div>
+  </div>
+
+  <p class="foot">
+    <strong>Lo marcado "Nuevo"</strong> es lo único que no existe todavía en el CRM: la pantalla de horarios de turno,
+    el mecanismo de seguimiento programado, y la capacidad del agente de interpretar el anuncio para deducir
+    línea/color. Todo lo demás — clasificación por temperatura, catálogo con línea/color/talla/precio/existencias,
+    y la Cola de Handoff — ya está construido y en uso diario por el equipo.
+  </p>
+</div>
+</body>
+</html>
