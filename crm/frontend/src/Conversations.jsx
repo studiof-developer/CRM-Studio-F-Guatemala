@@ -12,12 +12,33 @@ import {
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
-import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
+import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Avatar from './components/Avatar.jsx';
+import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
+
+// Same icon/color pairing as the ticket-status pills in the list and header below —
+// kept here once so the filter dropdown matches them instead of drifting apart.
+const TICKET_STATUS_META = {
+  bot: { label: 'Bot', icon: Bot, iconClassName: 'text-greige-ink' },
+  esperando_asesor: { label: 'Pendiente', icon: AlertTriangle, iconClassName: 'text-warn' },
+  en_atencion: { label: 'Asesor', icon: Headset, iconClassName: 'text-accent' },
+  resuelto: { label: 'Resuelto', icon: CheckCircle2, iconClassName: 'text-ok' },
+};
+const TICKET_STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'Todos los estados' },
+  ...Object.entries(TICKET_STATUS_META).map(([value, meta]) => ({ value, ...meta })),
+];
+const TEMP_FILTER_OPTIONS = [
+  { value: '', label: 'Todas las temperaturas' },
+  ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
+];
+const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
+  value: k, label: PAID_METHOD_LABELS[k], icon: PAID_METHOD_ICONS[k], iconClassName: 'text-greige-ink',
+}));
 
 // Turns a message into what its quote preview should show — a document shows its
 // filename (not a generic "Adjunto"), an image shows nothing here since the preview
@@ -296,8 +317,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
 
-  async function handleSetStatus(e) {
-    const value = e.target.value;
+  async function handleSetStatus(value) {
     if (!thread?.customerId) return;
     try {
       await updateCustomerTags(thread.customerId, { manualStatus: value || null });
@@ -377,27 +397,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
           </div>
-          <select
-            value={temperature}
-            onChange={(e) => setTemperature(e.target.value)}
-            className="w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink outline-none focus:border-accent"
-          >
-            <option value="">Todas las temperaturas</option>
-            {BUCKET_ORDER.map((k) => (
-              <option key={k} value={k}>{TEMP_META[k].label}</option>
-            ))}
-          </select>
-          <select
+          <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} />
+          <Select
             value={ticketStatusFilter}
-            onChange={(e) => setTicketStatusFilter(e.target.value)}
-            className="mt-2 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink outline-none focus:border-accent"
-          >
-            <option value="">Todos los estados</option>
-            <option value="bot">Bot</option>
-            <option value="esperando_asesor">Pendiente</option>
-            <option value="en_atencion">Asesor</option>
-            <option value="resuelto">Resuelto</option>
-          </select>
+            onChange={setTicketStatusFilter}
+            options={TICKET_STATUS_FILTER_OPTIONS}
+            className="mt-2"
+          />
         </div>
 
         <div className="relative flex-1 overflow-y-auto">
@@ -768,16 +774,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   {thread.customerId && (
                     <div className="mt-5 flex flex-col gap-2 border-t border-line-soft pt-5">
                       <label className="text-xs font-medium text-greige-ink">Estado (control del asesor)</label>
-                      <select
+                      <Select
                         value={thread.manualStatus ?? ''}
                         onChange={handleSetStatus}
-                        className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-1.5 text-sm outline-none focus:border-accent focus:bg-paper"
-                      >
-                        <option value="">Automático ({TEMP_META[thread.temperature]?.label ?? '—'})</option>
-                        {BUCKET_ORDER.map((k) => (
-                          <option key={k} value={k}>{TEMP_META[k].label}</option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: `Automático (${TEMP_META[thread.temperature]?.label ?? '—'})` },
+                          ...BUCKET_ORDER.map((k) => ({
+                            value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText,
+                          })),
+                        ]}
+                      />
                       {!thread.paidLocked && (
                         <button
                           onClick={() => setConfirmPaidOpen(true)}
@@ -906,16 +912,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         onConfirm={handleMarkPaid}
         onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
       >
-        <select
-          value={paidMethod}
-          onChange={(e) => setPaidMethod(e.target.value)}
-          className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-accent focus:bg-paper"
-        >
-          <option value="">Selecciona el medio de pago…</option>
-          {PAID_METHOD_ORDER.map((k) => (
-            <option key={k} value={k}>{PAID_METHOD_LABELS[k]}</option>
-          ))}
-        </select>
+        <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
       </ConfirmDialog>
 
       <ConfirmDialog

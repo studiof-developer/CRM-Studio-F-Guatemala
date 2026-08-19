@@ -3,6 +3,7 @@ import { Upload, PackageX, Search } from 'lucide-react';
 import { fetchProducts, importProducts } from './api.js';
 import Badge from './components/Badge.jsx';
 import Pagination from './components/Pagination.jsx';
+import Select from './components/Select.jsx';
 import { Button } from './components/ui.jsx';
 
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 50];
@@ -112,16 +113,12 @@ export default function Catalog() {
               className="w-full rounded-lg border border-border py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary"
             />
           </div>
-          <select
+          <Select
             value={category}
-            onChange={(e) => updateCategory(e.target.value)}
-            className="rounded-lg border border-border px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
-          >
-            <option value="all">Todas las categorías</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            onChange={updateCategory}
+            className="w-56"
+            options={[{ value: 'all', label: 'Todas las categorías' }, ...categories.map((c) => ({ value: c, label: c }))]}
+          />
           {(search || category !== 'all') && (
             <span className="text-xs text-muted-foreground">{filtered.length} resultados</span>
           )}

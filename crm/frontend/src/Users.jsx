@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { UserPlus, Trash2 } from 'lucide-react';
+import { UserPlus, Trash2, ShieldCheck, UserCog, User } from 'lucide-react';
 import { fetchUsers, createUser, updateUser, deleteUser } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
+import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
@@ -10,6 +11,11 @@ const EMPTY_FORM = { full_name: '', username: '', email: '', password: '', role:
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor' };
 const ROLE_BADGE_VARIANT = { admin: 'danger', supervisor: 'purple', asesor: 'info' };
+const ROLE_OPTIONS = [
+  { value: 'asesor', label: 'Asesor de zona', icon: User, iconClassName: 'text-accent' },
+  { value: 'supervisor', label: 'Supervisor', icon: UserCog, iconClassName: 'text-purple' },
+  { value: 'admin', label: 'Admin', icon: ShieldCheck, iconClassName: 'text-danger' },
+];
 
 const DIACRITICS_RE = new RegExp('[̀-ͯ]', 'g');
 
@@ -185,15 +191,7 @@ export default function Users() {
             />
 
             <label className="mb-1.5 mt-4 block text-sm font-medium">Rol</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-primary"
-            >
-              <option value="asesor">Asesor de zona</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="admin">Admin</option>
-            </select>
+            <Select value={form.role} onChange={(role) => setForm({ ...form, role })} options={ROLE_OPTIONS} />
 
             {form.role === 'asesor' && (
               <>

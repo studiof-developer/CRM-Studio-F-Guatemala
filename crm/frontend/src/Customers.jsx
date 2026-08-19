@@ -3,13 +3,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
-import { PAID_METHOD_LABELS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
+import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Avatar from './components/Avatar.jsx';
 import Badge from './components/Badge.jsx';
+import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
+
+const MANUAL_STATUS_OPTIONS = [
+  { value: '', label: 'Automático' },
+  ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
+];
+
+const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
+  value: k, label: PAID_METHOD_LABELS[k], icon: PAID_METHOD_ICONS[k], iconClassName: 'text-greige-ink',
+}));
 
 export default function Customers() {
   const [counts, setCounts] = useState({});
@@ -62,8 +72,7 @@ export default function Customers() {
   useEffect(() => { reloadDetail(); }, [reloadDetail]);
   useLiveEvent('ticket_changes', reloadDetail);
 
-  async function handleSetStatus(e) {
-    const value = e.target.value;
+  async function handleSetStatus(value) {
     try {
       await updateCustomerTags(selectedId, { manualStatus: value || null });
       reloadDetail();
@@ -110,16 +119,16 @@ export default function Customers() {
               className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
           </div>
-          <select
+          <Select
             value={temperature}
-            onChange={(e) => setTemperature(e.target.value)}
-            className="w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink outline-none focus:border-accent"
-          >
-            <option value="">Todos los estados</option>
-            {BUCKET_ORDER.map((k) => (
-              <option key={k} value={k}>{TEMP_META[k].label} ({counts[k] ?? 0})</option>
-            ))}
-          </select>
+            onChange={setTemperature}
+            options={[
+              { value: '', label: 'Todos los estados' },
+              ...BUCKET_ORDER.map((k) => ({
+                value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText, meta: counts[k] ?? 0,
+              })),
+            ]}
+          />
         </div>
 
         <div className="relative flex-1 overflow-y-auto">
@@ -214,17 +223,8 @@ export default function Customers() {
             </div>
 
             <div className="mt-4 flex items-center gap-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-3">
-              <label className="text-xs font-medium text-greige-ink">Estado (control del asesor):</label>
-              <select
-                value={detail.manual_status ?? ''}
-                onChange={handleSetStatus}
-                className="rounded-lg border border-line bg-paper px-2.5 py-1 text-xs outline-none focus:border-accent"
-              >
-                <option value="">Automático</option>
-                {BUCKET_ORDER.map((k) => (
-                  <option key={k} value={k}>{TEMP_META[k].label}</option>
-                ))}
-              </select>
+              <label className="shrink-0 text-xs font-medium text-greige-ink">Estado (control del asesor):</label>
+              <Select value={detail.manual_status ?? ''} onChange={handleSetStatus} options={MANUAL_STATUS_OPTIONS} className="w-48" />
               {!detail.paid_locked && (
                 <button
                   onClick={() => setConfirmPaidOpen(true)}
@@ -312,16 +312,12 @@ export default function Customers() {
         onConfirm={handleMarkPaid}
         onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
       >
-        <select
+        <Select
           value={paidMethod}
-          onChange={(e) => setPaidMethod(e.target.value)}
-          className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-accent"
-        >
-          <option value="">Selecciona el medio de pago…</option>
-          {PAID_METHOD_ORDER.map((k) => (
-            <option key={k} value={k}>{PAID_METHOD_LABELS[k]}</option>
-          ))}
-        </select>
+          onChange={setPaidMethod}
+          placeholder="Selecciona el medio de pago…"
+          options={PAID_METHOD_OPTIONS}
+        />
       </ConfirmDialog>
 
       <EditCustomerModal

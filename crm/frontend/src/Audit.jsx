@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2 } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions } from './api.js';
 import Badge from './components/Badge.jsx';
+import Select from './components/Select.jsx';
 
 // Data-access actions are tied to a customer record; account actions are not
 // (their "Cliente" column shows an em dash) — grouped and color-coded so the
@@ -15,7 +16,17 @@ const ACTION_META = {
   user_updated: { label: 'Editó un usuario', variant: 'warning', icon: UserCog },
   user_deleted: { label: 'Eliminó un usuario', variant: 'danger', icon: UserMinus },
 };
-const ACTION_LABELS = Object.fromEntries(Object.entries(ACTION_META).map(([k, v]) => [k, v.label]));
+const VARIANT_ICON_CLASS = { info: 'text-accent', success: 'text-ok', purple: 'text-purple', warning: 'text-warn', danger: 'text-danger' };
+
+const ACTION_FILTER_OPTIONS = [
+  { value: '', label: 'Todas las acciones' },
+  ...['view_customer', 'view_ticket', 'view_conversation'].map((k) => ({
+    value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Acceso a datos',
+  })),
+  ...['login', 'user_created', 'user_updated', 'user_deleted'].map((k) => ({
+    value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Cuentas',
+  })),
+];
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
@@ -74,24 +85,7 @@ function AccessTab() {
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
-        <select
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-          className="rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-accent"
-        >
-          <option value="">Todas las acciones</option>
-          <optgroup label="Acceso a datos">
-            <option value="view_customer">{ACTION_LABELS.view_customer}</option>
-            <option value="view_ticket">{ACTION_LABELS.view_ticket}</option>
-            <option value="view_conversation">{ACTION_LABELS.view_conversation}</option>
-          </optgroup>
-          <optgroup label="Cuentas">
-            <option value="login">{ACTION_LABELS.login}</option>
-            <option value="user_created">{ACTION_LABELS.user_created}</option>
-            <option value="user_updated">{ACTION_LABELS.user_updated}</option>
-            <option value="user_deleted">{ACTION_LABELS.user_deleted}</option>
-          </optgroup>
-        </select>
+        <Select value={action} onChange={setAction} className="w-56" options={ACTION_FILTER_OPTIONS} />
         <span className="text-xs text-greige-ink">{rows.length} registros</span>
       </div>
 
@@ -154,15 +148,16 @@ function AiTab() {
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
-        <select
+        <Select
           value={handedOff}
-          onChange={(e) => setHandedOff(e.target.value)}
-          className="rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-accent"
-        >
-          <option value="">Todas</option>
-          <option value="true">Solo escaladas</option>
-          <option value="false">Solo resueltas por el bot</option>
-        </select>
+          onChange={setHandedOff}
+          className="w-56"
+          options={[
+            { value: '', label: 'Todas' },
+            { value: 'true', label: 'Solo escaladas', icon: AlertTriangle, iconClassName: 'text-warn' },
+            { value: 'false', label: 'Solo resueltas por el bot', icon: CheckCircle2, iconClassName: 'text-ok' },
+          ]}
+        />
         <span className="text-xs text-greige-ink">{rows.length} registros</span>
       </div>
 
