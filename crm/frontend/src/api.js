@@ -211,6 +211,47 @@ export async function deleteQuickReply(id) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
 }
 
+export async function fetchWhatsappNumbers() {
+  const res = await apiFetch('/api/whatsapp-numbers');
+  if (!res.ok) throw new Error('Error al cargar los números de WhatsApp');
+  return res.json();
+}
+
+export async function testWhatsappNumber(data) {
+  const res = await apiFetch('/api/whatsapp-numbers/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo validar el número');
+  return res.json();
+}
+
+export async function createWhatsappNumber(data) {
+  const res = await apiFetch('/api/whatsapp-numbers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al guardar el número');
+  return res.json();
+}
+
+export async function updateWhatsappNumber(id, data) {
+  const res = await apiFetch(`/api/whatsapp-numbers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar el número');
+  return res.json();
+}
+
+export async function deleteWhatsappNumber(id) {
+  const res = await apiFetch(`/api/whatsapp-numbers/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar el número');
+}
+
 export async function fetchDashboard() {
   const res = await apiFetch('/api/dashboard');
   if (!res.ok) throw new Error('Error al cargar el dashboard');

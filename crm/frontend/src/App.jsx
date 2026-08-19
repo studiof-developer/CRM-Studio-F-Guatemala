@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
@@ -13,6 +13,7 @@ import Users from './Users.jsx';
 import Catalog from './Catalog.jsx';
 import Audit from './Audit.jsx';
 import QuickReplies from './QuickReplies.jsx';
+import WhatsappNumbers from './WhatsappNumbers.jsx';
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
@@ -34,6 +35,7 @@ const AUDIT_TABS = {
 // Admin only.
 const ADMIN_TABS = {
   users: { label: 'Usuarios', icon: UserCog, Component: Users },
+  whatsappNumbers: { label: 'Configuración', icon: Smartphone, Component: WhatsappNumbers },
 };
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
