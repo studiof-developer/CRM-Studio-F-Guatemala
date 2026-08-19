@@ -554,9 +554,9 @@
     <polyline points="730,450 1150,450 1150,1240 650,1240" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
     <rect x="745" y="438" width="72" height="20" fill="var(--paper)"/>
     <text x="781" y="453" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">Antiguo</text>
-    <rect x="1065" y="838" width="80" height="34" fill="var(--paper)"/>
-    <text x="1145" y="851" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">usa nombre y</text>
-    <text x="1145" y="865" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">talla guardados</text>
+    <rect x="1065" y="970" width="80" height="34" fill="var(--paper)"/>
+    <text x="1145" y="983" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">usa nombre y</text>
+    <text x="1145" y="997" text-anchor="end" font-size="10.5" fill="var(--greige-ink)">talla guardados</text>
 
     <!-- Pregunta el nombre (2.1 / 2.2) — solo cliente nuevo -->
     <rect x="470" y="540" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Solo para cliente nuevo: el antiguo ya se saltó este paso.</title></rect>
@@ -576,21 +576,28 @@
     <text x="677" y="843" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Sí</text>
     <text x="700" y="843" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">guarda el nombre</text>
 
-    <polyline points="730,770 830,770 830,860 650,860" fill="none" stroke="var(--greige-ink)" stroke-width="2"/>
+    <polyline points="730,770 900,770 900,860" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
     <rect x="813" y="758" width="34" height="20" fill="var(--paper)"/>
     <text x="830" y="773" text-anchor="middle" font-size="11" font-weight="700" fill="var(--greige-ink)">No</text>
-    <text x="845" y="818" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">⏱ 1 min y</text>
-    <text x="845" y="832" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">continúa</text>
+    <text x="915" y="818" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">⏱ 1 min y</text>
+    <text x="915" y="832" text-anchor="start" font-size="9.5" fill="var(--greige-ink)">continúa</text>
 
-    <!-- Talla (3) -->
-    <rect x="470" y="860" width="360" height="140" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>La talla es el primer filtro: en moda es la razón más común de que una venta no avance, así que se valida antes que nada más.</title></rect>
-    <text x="820" y="877" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3</text>
+    <!-- Talla (3) — con nombre -->
+    <rect x="470" y="860" width="360" height="100" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Dio el nombre: la pregunta de la talla llega personalizada.</title></rect>
+    <text x="810" y="877" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3</text>
     <text x="650" y="898" text-anchor="middle" font-size="13.5" fill="var(--ink)">Pregunta la talla</text>
-    <text x="650" y="923" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Con nombre: "Perfecto, (nombre), ¿cuál es tu talla?"</text>
-    <text x="650" y="939" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">Sin nombre: "¿Cuál es tu talla?"</text>
-    <text x="815" y="984" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 10 min</text>
+    <text x="650" y="923" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"Perfecto, (nombre), ¿cuál es tu talla?"</text>
+    <text x="815" y="944" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 10 min</text>
 
-    <line x1="650" y1="1000" x2="650" y2="1040" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <!-- Talla (3) — sin nombre -->
+    <rect x="900" y="860" width="220" height="100" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>No dio el nombre: la pregunta de la talla va genérica, sin dejar de avanzar.</title></rect>
+    <text x="1105" y="877" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">3</text>
+    <text x="1010" y="898" text-anchor="middle" font-size="13.5" fill="var(--ink)">Pregunta la talla</text>
+    <text x="1010" y="923" text-anchor="middle" font-size="10.5" font-style="italic" fill="var(--greige-ink)">"¿Cuál es tu talla?"</text>
+    <text x="1105" y="944" text-anchor="end" font-size="9.5" font-weight="700" fill="var(--greige)">⏱ espera 10 min</text>
+
+    <line x1="650" y1="960" x2="650" y2="1040" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
+    <polyline points="1010,960 1010,1020 650,1020 650,1040" fill="none" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
 
     <polygon points="650,1040 760,1105 650,1170 540,1105" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Si no confirma la talla dentro de los 10 minutos, la conversación no tiene todavía con qué avanzar.</title></polygon>
     <text x="650" y="1109" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">¿Dio la talla?</text>
