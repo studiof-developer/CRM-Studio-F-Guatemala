@@ -660,7 +660,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                               style={{ backgroundColor: bg }}
                             >
                               {fromAdvisor && (
-                                <p className="mb-0.5 text-[11px] font-semibold text-white/80">
+                                <p className="mb-0.5 text-[11px] font-semibold text-white">
                                   {m.additional_kwargs.advisorName}
                                 </p>
                               )}
@@ -670,7 +670,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                   target="_blank"
                                   rel="noreferrer"
                                   className={`mb-2 block w-64 max-w-full overflow-hidden rounded-xl border ${
-                                    outgoing ? 'border-white/25 bg-black/10' : 'border-line-soft bg-black/[0.03] dark:bg-white/[0.05]'
+                                    outgoing ? 'border-white/30 bg-white/10' : 'border-line-soft bg-black/[0.03] dark:bg-white/[0.05]'
                                   }`}
                                 >
                                   {(m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url) ? (
@@ -680,12 +680,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                       className="aspect-square w-full object-cover"
                                     />
                                   ) : (
-                                    <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
+                                    <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/15' : 'bg-black/5 dark:bg-white/10'}`}>
                                       <Megaphone size={22} />
                                     </span>
                                   )}
                                   <div className="px-3 py-2.5">
-                                    <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white/70' : 'text-accent'}`}>
+                                    <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white' : 'text-accent'}`}>
                                       <Megaphone size={12} />
                                       Anuncio de {/instagram\.com/i.test(m.additional_kwargs.referral.source_url || '') ? 'Instagram' : 'Facebook'}
                                     </p>
@@ -693,7 +693,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                       {m.additional_kwargs.referral.headline || 'Publicidad de Meta'}
                                     </p>
                                     {m.additional_kwargs.referral.body && (
-                                      <p className={`mt-0.5 line-clamp-2 text-xs leading-snug ${outgoing ? 'text-white/75' : 'text-greige-ink'}`}>
+                                      <p className={`mt-0.5 line-clamp-2 text-xs leading-snug ${outgoing ? 'text-white/90' : 'text-greige-ink'}`}>
                                         {m.additional_kwargs.referral.body}
                                       </p>
                                     )}
@@ -705,7 +705,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                   onClick={() => quotePreview.id != null && scrollToMessage(quotePreview.id)}
                                   className={`mb-1.5 flex items-center gap-2 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
                                     quotePreview.id != null ? 'cursor-pointer' : ''
-                                  } ${outgoing ? 'border-white/60 bg-black/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'}`}
+                                  } ${outgoing ? 'border-white/70 bg-white/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'}`}
                                 >
                                   {quotePreview.attachmentKind === 'image' && quotePreview.attachmentId && (
                                     <img
@@ -715,10 +715,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                     />
                                   )}
                                   <div className="min-w-0">
-                                    <p className={`font-semibold ${outgoing ? 'text-white/90' : 'text-accent'}`}>
+                                    <p className={`font-semibold ${outgoing ? 'text-white' : 'text-accent'}`}>
                                       {quotePreview.from || '—'}
                                     </p>
-                                    <p className={`truncate ${outgoing ? 'text-white/70' : 'text-greige-ink'}`}>
+                                    <p className={`truncate ${outgoing ? 'text-white/90' : 'text-greige-ink'}`}>
                                       {quotePreview.attachmentKind === 'image'
                                         ? (quotePreview.content || '📷 Foto')
                                         : (quotePreview.content || '📎 Adjunto')}
@@ -732,7 +732,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                               {m.content?.trim() && <p className="whitespace-pre-wrap">{m.content}</p>}
                               <span
                                 className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${
-                                  outgoing ? 'text-white/70' : 'text-greige'
+                                  outgoing ? 'text-white/85' : 'text-greige'
                                 }`}
                               >
                                 {formatBubbleTime(m.createdAt)}
@@ -1076,7 +1076,7 @@ function AttachmentContent({ attachment, outgoing, onImageClick }) {
       <FileText size={22} className="shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium">{attachment.filename ?? 'Documento'}</p>
-        <p className={`text-[10px] ${outgoing ? 'text-white/70' : 'text-greige'}`}>{formatSize(attachment.sizeBytes)}</p>
+        <p className={`text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>{formatSize(attachment.sizeBytes)}</p>
       </div>
       <Download size={14} className="shrink-0" />
     </a>
