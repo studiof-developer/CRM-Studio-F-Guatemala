@@ -454,9 +454,10 @@
         <div class="msg">"(nombre del cliente), en vista de que no tenemos ese color te podemos ofrecer las siguientes referencias en tu talla." — con 1 opción: "¿Deseas este estilo?" — con 2 o más: "¿Qué referencia te gustó?"</div>
         <p>Aplica delay de 10 min.</p>
         <div class="outcomes">
-          <div class="outcome"><span class="cond">No responde</span><span class="then">Aplica el mensaje de seguimiento de <a href="#p-3-1">3.1</a>.</span></div>
+          <div class="outcome"><span class="cond">No responde</span><span class="then">Aplica el mensaje de seguimiento de <a href="#p-3-1">3.1</a> (mismo destino que si no hubiera dado talla).</span></div>
           <div class="outcome"><span class="cond">Le gustó una referencia</span><span class="then">Va a <a href="#p-3-3-1">3.3.1</a> (precio).</span></div>
-          <div class="outcome"><span class="cond">Ninguna le gustó</span><span class="then">"Te entiendo, le voy a compartir el catálogo NEWA para que selecciones los diseños que más te gusten." Aplica delay de 10 min. Si envía una foto de algo que le gustó, regresa a <a href="#p-3-3">3.3</a> para validar esa referencia — se repite hasta que confirma una que le gustó, y de ahí pasa a <a href="#p-3-3-1">3.3.1</a>.</span></div>
+          <div class="outcome"><span class="cond">Ninguna le gustó — solo se ofreció 1</span><span class="then">No hay nada más específico que ofrecer en esa talla: aplica el mismo mensaje de seguimiento de <a href="#p-3-1">3.1</a>, sin pasar por el catálogo completo.</span></div>
+          <div class="outcome"><span class="cond">Ninguna le gustó — se ofrecieron 2 o 3</span><span class="then">"Te entiendo, le voy a compartir el catálogo NEWA para que selecciones los diseños que más te gusten." Aplica delay de 10 min. Si envía una foto de algo que le gustó, regresa a <a href="#p-3-3">3.3</a> para validar esa referencia — se repite hasta que confirma una que le gustó, y de ahí pasa a <a href="#p-3-3-1">3.3.1</a>.</span></div>
         </div>
       </div>
     </div>
@@ -545,7 +546,7 @@
     <line x1="1075" y1="325" x2="1075" y2="430" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
     <rect x="985" y="362" width="180" height="24" fill="var(--paper)"/>
     <text x="1075" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">Quiere ver catálogo</text>
-    <rect x="925" y="430" width="300" height="80" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Explorar catálogo sin un anuncio puntual es de bajo riesgo: el bot puede compartirlo sin necesitar el contexto de una campaña.</title></rect>
+    <rect x="925" y="430" width="300" height="80" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Explorar catálogo sin un anuncio puntual es de bajo riesgo: el bot puede compartirlo sin necesitar el contexto de una campaña. Este mismo paso es la puerta de entrada de los anuncios de Catálogo de Rebajas (E3) y Catálogo Nueva Colección (E4): esos también identifican al cliente y saludan primero, y llegan aquí con el mismo "qué referencia deseas". Aplica delay de 10 min esperando respuesta.</title></rect>
     <text x="1235" y="447" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">E3 / E4</text>
     <text x="1075" y="465" text-anchor="middle" font-size="13" fill="var(--ink)">Envía el catálogo y</text>
     <text x="1075" y="483" text-anchor="middle" font-size="13" fill="var(--ink)">pregunta qué le interesa</text>
@@ -571,7 +572,7 @@
     <!-- ============ MAIN TRUNK ============ -->
     <text x="650" y="540" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--greige-ink)">Cuando el cliente viene de un anuncio, sigue este camino:</text>
 
-    <rect x="480" y="570" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Saber qué anuncio vio y si ya es cliente evita preguntas redundantes y permite personalizar el saludo desde el primer mensaje.</title></rect>
+    <rect x="480" y="570" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>Saber qué anuncio vio y si ya es cliente evita preguntas redundantes y permite personalizar el saludo desde el primer mensaje. Cliente antiguo: salta directo al saludo con su nombre y datos ya guardados. Cliente nuevo: primero se le pide el nombre (delay de 1 min, continúa igual si no responde) antes de seguir.</title></rect>
     <text x="810" y="587" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">1 · 1.2</text>
     <text x="650" y="608" text-anchor="middle" font-size="13.5" fill="var(--ink)">Identifica el anuncio y</text>
     <text x="650" y="628" text-anchor="middle" font-size="13.5" fill="var(--ink)">revisa si ya es cliente</text>
@@ -581,7 +582,7 @@
     <text x="650" y="687" text-anchor="middle" font-size="11" fill="var(--greige-ink)">🕐 Antes de saludar revisa quién está en turno:</text>
     <text x="650" y="703" text-anchor="middle" font-size="11" fill="var(--greige-ink)">usa su nombre real, o se presenta como "Mar-IA" si no hay nadie</text>
 
-    <rect x="480" y="730" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>La talla es el primer filtro: en moda es la razón más común de que una venta no avance, así que se valida antes que nada más.</title></rect>
+    <rect x="480" y="730" width="340" height="90" rx="14" fill="var(--paper)" stroke="var(--line)" stroke-width="1.5"><title>La talla es el primer filtro: en moda es la razón más común de que una venta no avance, así que se valida antes que nada más. Espera 10 min la respuesta antes de decidir el siguiente paso.</title></rect>
     <text x="810" y="747" text-anchor="end" font-size="9" font-weight="700" fill="var(--greige)">2.1 · 2.2 · 3</text>
     <text x="650" y="768" text-anchor="middle" font-size="13.5" fill="var(--ink)">Saluda al cliente y</text>
     <text x="650" y="788" text-anchor="middle" font-size="13.5" fill="var(--ink)">pregunta la talla</text>
@@ -634,8 +635,14 @@
     <text x="900" y="1262" text-anchor="middle" font-size="12.5" fill="var(--ink)">Ofrece hasta 3</text>
     <text x="900" y="1280" text-anchor="middle" font-size="12.5" fill="var(--ink)">referencias parecidas</text>
 
+    <!-- Timeout on the alternatives offer re-enters the same Frío/seguimiento outcome as 3.1 -->
+    <polyline points="760,1305 760,1360 690,1360 690,1380" fill="none" stroke="var(--greige-ink)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+    <rect x="600" y="1380" width="180" height="50" rx="10" fill="var(--paper-soft)" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"><title>Igual que al no dar la talla: si pasan los 10 minutos sin respuesta, se manda el mismo mensaje de seguimiento y queda clasificado como Frío.</title></rect>
+    <text x="690" y="1401" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">⏱ Sin respuesta →</text>
+    <text x="690" y="1417" text-anchor="middle" font-size="10.5" fill="var(--greige-ink)">mismo seguimiento Frío</text>
+
     <line x1="900" y1="1305" x2="900" y2="1340" stroke="var(--greige-ink)" stroke-width="2" marker-end="url(#arrow)"/>
-    <polygon points="900,1340 995,1395 900,1450 805,1395" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Decide si alguna alternativa convierte la venta o si hay que ampliar la búsqueda con el catálogo completo.</title></polygon>
+    <polygon points="900,1340 995,1395 900,1450 805,1395" fill="var(--accent-soft)" stroke="var(--accent-line)" stroke-width="1.5"><title>Decide si alguna alternativa convierte la venta o si hay que ampliar la búsqueda con el catálogo completo. Si solo se había ofrecido 1 referencia (no 2 o 3) y no le interesó, no tiene sentido reofrecer el catálogo: pasa directo al mismo seguimiento Frío que un "no responde".</title></polygon>
     <text x="900" y="1391" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">¿Le gustó</text>
     <text x="900" y="1406" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">alguna?</text>
 
