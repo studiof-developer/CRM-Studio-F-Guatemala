@@ -35,10 +35,47 @@ const AUDIT_TABS = {
 // Admin only.
 const ADMIN_TABS = {
   users: { label: 'Usuarios', icon: UserCog, Component: Users },
+};
+
+// Admin only — kept out of ADMIN_TABS and rendered in its own section at the
+// bottom of the sidebar, below a divider, since it's system configuration
+// rather than a day-to-day page like the rest of the nav.
+const SETTINGS_TABS = {
   whatsappNumbers: { label: 'Configuración', icon: Smartphone, Component: WhatsappNumbers },
 };
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
+
+function NavButton({ tabKey, label, Icon, active, badge, onClick }) {
+  return (
+    <button onClick={onClick} className="relative w-full text-left">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-300 ${
+          active ? 'text-white' : 'text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink'
+        }`}
+      >
+        {active && (
+          <motion.div
+            layoutId="activeTab"
+            className="absolute inset-0 rounded-xl bg-accent shadow-md shadow-accent/20"
+            transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+          />
+        )}
+        <span className="relative z-10 flex w-full items-center gap-3">
+          <Icon size={18} strokeWidth={2} />
+          {label}
+          {badge > 0 && (
+            <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-medium text-white">
+              {badge}
+            </span>
+          )}
+        </span>
+      </motion.div>
+    </button>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
@@ -90,6 +127,7 @@ export default function App() {
     ...BASE_TABS,
     ...(user.role === 'admin' || user.role === 'supervisor' ? AUDIT_TABS : {}),
     ...(user.role === 'admin' ? ADMIN_TABS : {}),
+    ...(user.role === 'admin' ? SETTINGS_TABS : {}),
   };
   const { Component } = tabs[tab] ?? tabs.dashboard;
 
@@ -130,70 +168,56 @@ export default function App() {
           </div>
 
           <nav className="flex flex-col gap-2 p-4">
-            {Object.entries(tabs).map(([key, { label, icon: Icon }]) => {
-              const active = key === tab;
-              return (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setTab(key);
-                    setMobileNavOpen(false);
-                  }}
-                  className="relative text-left"
-                >
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-300 ${
-                      active ? 'text-white' : 'text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink'
-                    }`}
-                  >
-                    {active && (
-                      <motion.div
-                        layoutId="activeTab"
-                        className="absolute inset-0 rounded-xl bg-accent shadow-md shadow-accent/20"
-                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                      />
-                    )}
-                    <span className="relative z-10 flex w-full items-center gap-3">
-                      <Icon size={18} strokeWidth={2} />
-                      {label}
-                      {key === 'handoff' && pendingCount > 0 && (
-                        <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-medium text-white">
-                          {pendingCount}
-                        </span>
-                      )}
-                      {key === 'conversations' && unansweredCount > 0 && (
-                        <span className="relative z-10 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-medium text-white">
-                          {unansweredCount}
-                        </span>
-                      )}
-                    </span>
-                  </motion.div>
-                </button>
-              );
-            })}
+            {Object.entries(tabs).filter(([key]) => !(key in SETTINGS_TABS)).map(([key, { label, icon: Icon }]) => (
+              <NavButton
+                key={key}
+                tabKey={key}
+                label={label}
+                Icon={Icon}
+                active={key === tab}
+                badge={key === 'handoff' ? pendingCount : key === 'conversations' ? unansweredCount : 0}
+                onClick={() => { setTab(key); setMobileNavOpen(false); }}
+              />
+            ))}
           </nav>
         </div>
 
-        <div className="border-t border-line-soft p-4">
-          <div className="relative rounded-xl bg-black/5 dark:bg-white/5 p-4 backdrop-blur-sm">
-            <div className="absolute right-4 top-4 hidden md:block">
-              <ThemeToggle />
+        <div>
+          {user.role === 'admin' && (
+            <div className="border-t border-line-soft p-4 pb-2">
+              {Object.entries(SETTINGS_TABS).map(([key, { label, icon: Icon }]) => (
+                <NavButton
+                  key={key}
+                  tabKey={key}
+                  label={label}
+                  Icon={Icon}
+                  active={key === tab}
+                  badge={0}
+                  onClick={() => { setTab(key); setMobileNavOpen(false); }}
+                />
+              ))}
             </div>
-            <div className="mb-1 truncate pr-8 text-sm font-semibold text-ink">{user.fullName}</div>
-            <div className="mb-4 text-[11px] font-bold uppercase tracking-wider text-accent">
-              {ROLE_LABELS[user.role]}{user.zone ? ` · ${user.zone}` : ''}
+          )}
+
+          <div className={`p-4 ${user.role === 'admin' ? 'pt-2' : 'border-t border-line-soft'}`}>
+            <div className="relative rounded-xl bg-black/5 dark:bg-white/5 p-4 backdrop-blur-sm">
+              <div className="absolute right-4 top-4 hidden md:block">
+                <ThemeToggle />
+              </div>
+              <div className="mb-1 truncate pr-8 text-sm font-semibold text-ink">{user.fullName}</div>
+              <div className="mb-4 text-[11px] font-bold uppercase tracking-wider text-accent">
+                {ROLE_LABELS[user.role]}{user.zone ? ` · ${user.zone}` : ''}
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleLogout}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-paper-soft py-2 text-xs font-semibold text-danger shadow-sm transition-colors hover:bg-danger hover:text-white"
+              >
+                <LogOut size={14} />
+                Cerrar sesión
+              </motion.button>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-paper-soft py-2 text-xs font-semibold text-danger shadow-sm transition-colors hover:bg-danger hover:text-white"
-            >
-              <LogOut size={14} />
-              Cerrar sesión
-            </motion.button>
           </div>
         </div>
       </motion.aside>
