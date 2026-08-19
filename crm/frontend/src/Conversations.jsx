@@ -573,9 +573,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   role="button"
                   title="Marcar como no leído"
                   onClick={(e) => { e.stopPropagation(); handleMarkUnread(); }}
-                  className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white"
+                  className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white"
                 >
-                  <Mail size={12} />
+                  <Mail size={12} /> Marcar como no leído
                 </span>
               )}
               <Info size={16} className="shrink-0 text-greige" />
