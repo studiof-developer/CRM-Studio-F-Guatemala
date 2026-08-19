@@ -42,11 +42,31 @@
     * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
   }
 
-  .page { max-width: 800px; margin: 0 auto; padding: 56px 24px 96px; }
+  .layout { max-width: 1220px; margin: 0 auto; padding: 48px 32px 96px; display: flex; gap: 52px; align-items: flex-start; }
+  .page { flex: 1; min-width: 0; max-width: 760px; }
+
+  /* ---- Sidebar ---- */
+  .sidebar { width: 232px; flex-shrink: 0; position: sticky; top: 32px; }
+  .side-brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 20px; }
+  .side-brand .dot { background: var(--accent); }
+  .side-nav { display: flex; flex-direction: column; }
+  .side-group {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--greige);
+    margin: 18px 0 6px;
+  }
+  .side-group:first-child { margin-top: 0; }
+  .side-nav a {
+    display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--greige-ink); text-decoration: none;
+    padding: 5px 8px; border-radius: 7px; line-height: 1.35;
+  }
+  .side-nav a:hover { background: var(--accent-soft); color: var(--accent); }
+  .side-nav a b { color: var(--accent); font-variant-numeric: tabular-nums; flex-shrink: 0; font-size: 11px; }
+  .side-nav a.depth-2 { padding-left: 20px; }
+  .side-nav a.depth-3 { padding-left: 32px; }
 
   .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
   h1 { font-size: clamp(30px, 4.6vw, 42px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.06; margin: 0 0 12px; text-wrap: balance; }
-  .lede { max-width: 64ch; font-size: 15.5px; line-height: 1.6; color: var(--greige-ink); margin: 0; }
+  .lede { font-size: 15.5px; line-height: 1.6; color: var(--greige-ink); margin: 0; }
   .lede strong { color: var(--ink); }
 
   .legend {
@@ -64,14 +84,6 @@
   .chip.caliente { background: var(--danger-soft); color: var(--danger); }
   .chip.pqrs { background: var(--purple-soft); color: var(--purple); }
   .chip.neutral { background: var(--line-soft); color: var(--greige-ink); }
-
-  /* ---- Table of contents ---- */
-  .toc { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow-card); margin-bottom: 40px; }
-  .toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--greige); margin: 0 0 12px; }
-  .toc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; }
-  .toc-grid a { font-size: 12.5px; color: var(--ink); text-decoration: none; display: flex; gap: 6px; padding: 3px 0; }
-  .toc-grid a b { color: var(--accent); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-  .toc-grid a:hover { color: var(--accent); }
 
   h2.section-title {
     font-size: 13px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
@@ -157,8 +169,14 @@
 
   .foot { margin-top: 48px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 12px; color: var(--greige-ink); line-height: 1.65; }
 
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; padding: 32px 20px 72px; gap: 28px; }
+    .sidebar { width: 100%; position: static; }
+    .side-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+    .side-nav a.depth-2, .side-nav a.depth-3 { padding-left: 8px; }
+    .page { max-width: none; }
+  }
   @media (max-width: 640px) {
-    .toc-grid { grid-template-columns: 1fr 1fr; }
     .step.l2 { margin-left: 14px; }
     .step.l3 { margin-left: 26px; }
     .outcome { flex-direction: column; gap: 3px; }
@@ -167,7 +185,33 @@
 </style>
 </head>
 <body>
-<div class="page">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="side-brand"><span class="dot"></span>Agente Mar-IA</div>
+    <nav class="side-nav">
+      <p class="side-group">Escenarios</p>
+      <a href="#esc-1"><b>E1</b>Pauta + referencia</a>
+      <a href="#esc-2"><b>E2</b>Fuera de pauta</a>
+      <a href="#esc-3"><b>E3</b>Catálogo rebajas</a>
+      <a href="#esc-4"><b>E4</b>Catálogo nueva colección</a>
+      <a href="#esc-5"><b>E5</b>PQRS</a>
+      <p class="side-group">Flujo principal</p>
+      <a class="depth-1" href="#p-1"><b>1</b>Identificación del anuncio</a>
+      <a class="depth-2" href="#p-1-2"><b>1.2</b>Identificación del cliente</a>
+      <a class="depth-1" href="#p-2"><b>2</b>Mensaje de bienvenida</a>
+      <a class="depth-2" href="#p-2-1"><b>2.1</b>Validación de turno</a>
+      <a class="depth-2" href="#p-2-2"><b>2.2</b>Saludo</a>
+      <a class="depth-1" href="#p-3"><b>3</b>Pregunta de talla</a>
+      <a class="depth-2" href="#p-3-1"><b>3.1</b>Sin nombre ni talla</a>
+      <a class="depth-2" href="#p-3-2"><b>3.2</b>Sin nombre, con talla</a>
+      <a class="depth-2" href="#p-3-3"><b>3.3</b>Validación de existencias</a>
+      <a class="depth-3" href="#p-3-3-1"><b>3.3.1</b>Precio y valor</a>
+      <a class="depth-3" href="#p-3-3-2"><b>3.3.2</b>Respuesta sobre color</a>
+      <a class="depth-3" href="#p-3-3-2-1"><b>3.3.2.1</b>Referencias alt.</a>
+      <a class="depth-1" href="#p-4"><b>4</b>Handoff a asesor</a>
+    </nav>
+  </aside>
+  <div class="page">
   <p class="eyebrow">Propuesta técnica — para revisión del gerente</p>
   <h1>Agente Mar-IA</h1>
   <p class="lede">
@@ -184,30 +228,6 @@
     <span class="chip tibio">Tibio</span>
     <span class="chip caliente">Caliente</span>
     <span class="chip pqrs">PQRS</span>
-  </div>
-
-  <div class="toc">
-    <h2>Índice</h2>
-    <div class="toc-grid">
-      <a href="#esc-1"><b>E1</b> Pauta + referencia</a>
-      <a href="#esc-2"><b>E2</b> Fuera de pauta</a>
-      <a href="#esc-3"><b>E3</b> Catálogo rebajas</a>
-      <a href="#esc-4"><b>E4</b> Catálogo nueva colección</a>
-      <a href="#esc-5"><b>E5</b> PQRS</a>
-      <a href="#p-1"><b>1</b> Identificación del anuncio</a>
-      <a href="#p-1-2"><b>1.2</b> Identificación del cliente</a>
-      <a href="#p-2"><b>2</b> Mensaje de bienvenida</a>
-      <a href="#p-2-1"><b>2.1</b> Validación de turno</a>
-      <a href="#p-2-2"><b>2.2</b> Saludo</a>
-      <a href="#p-3"><b>3</b> Pregunta de talla</a>
-      <a href="#p-3-1"><b>3.1</b> Sin nombre ni talla</a>
-      <a href="#p-3-2"><b>3.2</b> Sin nombre, con talla</a>
-      <a href="#p-3-3"><b>3.3</b> Validación de existencias</a>
-      <a href="#p-3-3-1"><b>3.3.1</b> Precio y valor</a>
-      <a href="#p-3-3-2"><b>3.3.2</b> Respuesta sobre el color</a>
-      <a href="#p-3-3-2-1"><b>3.3.2.1</b> Referencias alternativas</a>
-      <a href="#p-4"><b>4</b> Handoff a asesor</a>
-    </div>
   </div>
 
   <h2 class="section-title">Escenarios de entrada</h2>
@@ -431,6 +451,7 @@
     línea/color. Todo lo demás — clasificación por temperatura, catálogo con línea/color/talla/precio/existencias,
     y la Cola de Handoff — ya está construido y en uso diario por el equipo.
   </p>
+  </div>
 </div>
 </body>
 </html>
