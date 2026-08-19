@@ -23,7 +23,7 @@ import { showSuccess, showError } from './components/Toast.jsx';
 // Same icon/color pairing as the ticket-status pills in the list and header below —
 // kept here once so the filter dropdown matches them instead of drifting apart.
 const TICKET_STATUS_META = {
-  bot: { label: 'Bot', icon: Bot, iconClassName: 'text-greige-ink' },
+  bot: { label: 'Agente', icon: Bot, iconClassName: 'text-greige-ink' },
   esperando_asesor: { label: 'Pendiente', icon: AlertTriangle, iconClassName: 'text-warn' },
   en_atencion: { label: 'Asesor', icon: Headset, iconClassName: 'text-accent' },
   resuelto: { label: 'Resuelto', icon: CheckCircle2, iconClassName: 'text-ok' },
@@ -512,7 +512,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     )}
                     {!c.ticketStatus && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-greige-ink">
-                        <Bot size={10} /> bot
+                        <Bot size={10} /> agente
                       </span>
                     )}
                     </div>
@@ -577,7 +577,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               {!thread.ticketStatus && (
                 <div className="flex items-center gap-2">
                   <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
-                    <Bot size={12} /> Bot activo
+                    <Bot size={12} /> Agente activo
                   </span>
                   <span
                     role="button"
@@ -622,7 +622,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       const senderKey = outgoing ? (fromAdvisor ? m.additional_kwargs.advisorName : '__bot__') : '__customer__';
                       const isRunStart = !prev || prevSenderKey !== senderKey;
                       const replyLabel = outgoing
-                        ? (fromAdvisor ? m.additional_kwargs.advisorName : 'Studio F (bot)')
+                        ? (fromAdvisor ? m.additional_kwargs.advisorName : 'Studio F (Agente)')
                         : (thread.customerName || thread.phone);
                       // Two ways a message can be "a reply": the advisor composed it with
                       // our reply button (snapshot already stored in additional_kwargs.replyTo),
@@ -636,7 +636,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         if (!orig) return null;
                         const origOutgoing = orig.type === 'ai';
                         const origFromAdvisor = orig.additional_kwargs?.sentBy === 'advisor';
-                        const origFrom = origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (bot)') : (thread.customerName || thread.phone);
+                        const origFrom = origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (Agente)') : (thread.customerName || thread.phone);
                         return { ...describeQuoted(orig, origFrom), id: orig.id };
                       })();
                       // Only while the advisor actually has the chat — the reply
@@ -948,7 +948,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               <div className="border-t border-line bg-paper px-5 py-3 text-center text-xs text-greige-ink">
                 {thread.ticketStatus === 'esperando_asesor'
                   ? 'Este cliente está esperando un asesor — tómalo desde el botón de arriba para poder responder.'
-                  : 'El bot está atendiendo esta conversación con normalidad.'}
+                  : 'El agente está atendiendo esta conversación con normalidad.'}
               </div>
             )}
           </>

@@ -161,7 +161,7 @@ function AiTab() {
           options={[
             { value: '', label: 'Todas' },
             { value: 'true', label: 'Solo escaladas', icon: AlertTriangle, iconClassName: 'text-warn' },
-            { value: 'false', label: 'Solo resueltas por el bot', icon: CheckCircle2, iconClassName: 'text-ok' },
+            { value: 'false', label: 'Solo resueltas por el agente', icon: CheckCircle2, iconClassName: 'text-ok' },
           ]}
         />
         <span className="text-xs text-greige-ink">{rows.length} registros</span>
@@ -188,7 +188,7 @@ function AiTab() {
               </div>
             </div>
             <p className="mb-2 text-sm"><span className="font-medium text-greige-ink">Cliente: </span>{r.message_in}</p>
-            <p className="text-sm"><span className="font-medium text-greige-ink">Bot: </span>{r.response_out}</p>
+            <p className="text-sm"><span className="font-medium text-greige-ink">Agente: </span>{r.response_out}</p>
             {r.rag_context && (
               <p className="mt-2 text-xs text-greige">Contexto usado: {r.rag_context}</p>
             )}

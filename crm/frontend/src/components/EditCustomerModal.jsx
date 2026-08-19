@@ -51,7 +51,7 @@ export default function EditCustomerModal({ open, customer, onCancel, onSaved })
       open={open}
       wide
       title="Editar cliente"
-      message="Actualiza lo que el bot ya no pregunta — se guarda directo en el perfil."
+      message="Actualiza lo que el agente ya no pregunta — se guarda directo en el perfil."
       confirmLabel="Guardar"
       busy={busy}
       onConfirm={handleSave}

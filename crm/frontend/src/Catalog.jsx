@@ -92,7 +92,7 @@ export default function Catalog() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Catálogo</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {products.length} productos · lo que el bot ofrece viene de aquí.
+              {products.length} productos · lo que el agente ofrece viene de aquí.
             </p>
           </div>
           <div>

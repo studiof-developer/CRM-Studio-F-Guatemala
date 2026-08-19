@@ -11,7 +11,7 @@ const STATUS_META = {
   esperando_asesor: { label: 'Esperando asesor', variant: 'warning' },
   en_atencion: { label: 'En atención', variant: 'info' },
   resuelto: { label: 'Resuelto', variant: 'success' },
-  bot: { label: 'Con el bot', variant: 'neutral' },
+  bot: { label: 'Con el agente', variant: 'neutral' },
 };
 
 const FILTERS = Object.keys(STATUS_META);
