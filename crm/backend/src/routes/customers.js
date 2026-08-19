@@ -55,31 +55,31 @@ router.get('/counts', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status } = req.query;
+    const { status, q } = req.query;
     if (status && !VALID_TEMPERATURES.includes(status)) {
       return res.status(400).json({ error: 'invalid status' });
     }
     const params = [];
     const zClause = zoneClause(req.user, params);
-    let statusFilter = '';
-    if (status) {
-      params.push(status);
-      statusFilter = `WHERE temperature = $${params.length}`;
-    }
-
     const { rows } = await pool.query(
-      `SELECT * FROM (
-         SELECT c.id, c.full_name, c.whatsapp_number, c.department, c.zone,
-                c.preferred_line, c.purchase_frequency, c.paid_locked,
-                ${EFFECTIVE_STATUS_SQL} AS temperature
-         FROM customers c
-         WHERE true ${zClause}
-       ) t
-       ${statusFilter}
+      `SELECT c.id, c.full_name, c.whatsapp_number, c.department, c.zone,
+              c.preferred_line, c.purchase_frequency, c.paid_locked,
+              ${EFFECTIVE_STATUS_SQL} AS temperature
+       FROM customers c
+       WHERE true ${zClause}
        ORDER BY id DESC`,
       params
     );
-    res.json(rows);
+
+    let visible = rows;
+    if (status) visible = visible.filter((r) => r.temperature === status);
+    const needle = q?.trim().toLowerCase();
+    if (needle) {
+      visible = visible.filter((r) =>
+        (r.full_name ?? '').toLowerCase().includes(needle) || (r.whatsapp_number ?? '').includes(needle)
+      );
+    }
+    res.json(visible);
   } catch (err) { next(err); }
 });
 

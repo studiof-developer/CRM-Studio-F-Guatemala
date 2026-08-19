@@ -107,9 +107,12 @@ export async function fetchCustomerCounts() {
   return res.json();
 }
 
-export async function fetchCustomers(status) {
-  const qs = status ? `?status=${status}` : '';
-  const res = await apiFetch(`/api/customers${qs}`);
+export async function fetchCustomers(q, status) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  const res = await apiFetch(`/api/customers${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar clientes');
   return res.json();
 }
