@@ -28,8 +28,12 @@ const TICKET_STATUS_META = {
   en_atencion: { label: 'Asesor', icon: Headset, iconClassName: 'text-accent' },
   resuelto: { label: 'Resuelto', icon: CheckCircle2, iconClassName: 'text-ok' },
 };
+// Not a real ticket status — unreadCount is a client-side flag already on every row,
+// so this option never reaches the backend as a ticketStatus (see load() below).
+const UNREAD_FILTER = 'no_leido';
 const TICKET_STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos los estados' },
+  { value: UNREAD_FILTER, label: 'No leído', icon: Mail, iconClassName: 'text-accent' },
   ...Object.entries(TICKET_STATUS_META).map(([value, meta]) => ({ value, ...meta })),
 ];
 const TEMP_FILTER_OPTIONS = [
@@ -148,8 +152,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const data = await fetchConversations(search, temperature, ticketStatusFilter);
-      setConversations(data);
+      const isUnreadFilter = ticketStatusFilter === UNREAD_FILTER;
+      const data = await fetchConversations(search, temperature, isUnreadFilter ? '' : ticketStatusFilter);
+      setConversations(isUnreadFilter ? data.filter((r) => r.unreadCount > 0) : data);
     } catch (err) {
       setError(err.message);
     } finally {
