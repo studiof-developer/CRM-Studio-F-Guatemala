@@ -376,6 +376,35 @@ router.post('/:sessionId/mark-unread', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// "Bot" state means no ticket row exists yet for this customer at all — normally
+// that's fine, but the n8n handoff can fail to fire (or a customer never triggers
+// it) leaving them stuck with no ticket for an advisor to take. This lets an advisor
+// claim it directly: upserts the customer row (may not exist yet — the bot may never
+// have saved their data) and opens a ticket straight into en_atencion.
+router.post('/:sessionId/take', async (req, res, next) => {
+  try {
+    const { phone } = await findConversationThread(req.params.sessionId);
+    if (!phone) return res.status(404).json({ error: 'not found' });
+
+    const { rows: customerRows } = await pool.query(
+      `INSERT INTO customers (whatsapp_number) VALUES ($1)
+       ON CONFLICT (whatsapp_number) DO UPDATE SET whatsapp_number = excluded.whatsapp_number
+       RETURNING id`,
+      [phone]
+    );
+    const customerId = customerRows[0].id;
+
+    const { rows: ticketRows } = await pool.query(
+      `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
+       VALUES ($1, 'en_atencion', 'tomado_manualmente', $2, now())
+       RETURNING id, status`,
+      [customerId, req.user.fullName]
+    );
+
+    res.json({ ticketId: ticketRows[0].id, ticketStatus: ticketRows[0].status });
+  } catch (err) { next(err); }
+});
+
 router.post('/:sessionId/messages', async (req, res, next) => {
   try {
     const { content, replyTo } = req.body ?? {};

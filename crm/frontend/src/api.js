@@ -70,6 +70,12 @@ export async function markConversationUnread(sessionId) {
   return res.json();
 }
 
+export async function takeConversation(sessionId) {
+  const res = await apiFetch(`/api/conversations/${sessionId}/take`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al tomar la conversación');
+  return res.json();
+}
+
 export async function startConversation({ phone, fullName, address }) {
   const res = await apiFetch('/api/conversations', {
     method: 'POST',

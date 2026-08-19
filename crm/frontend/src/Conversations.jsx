@@ -8,7 +8,7 @@ import {
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
-  fetchQuickReplies, markConversationUnread,
+  fetchQuickReplies, markConversationUnread, takeConversation,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -251,10 +251,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }
 
   async function handleTake() {
-    if (!thread?.ticketId) return;
+    if (!thread) return;
     setActionBusy(true);
     try {
-      await updateTicket(thread.ticketId, { status: 'en_atencion', assigned_advisor: user.fullName });
+      if (thread.ticketId) {
+        await updateTicket(thread.ticketId, { status: 'en_atencion', assigned_advisor: user.fullName });
+      } else {
+        // Bot state — no ticket exists yet at all (handoff never fired, or never needed
+        // to). Opens one straight into en_atencion so the advisor can respond.
+        await takeConversation(selectedId);
+      }
       await loadThread();
       load(false);
       showSuccess('Conversación asignada a ti');
@@ -569,9 +575,18 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 </span>
               )}
               {!thread.ticketStatus && (
-                <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
-                  <Bot size={12} /> Bot activo
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
+                    <Bot size={12} /> Bot activo
+                  </span>
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); handleTake(); }}
+                    className="flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-accent/20 transition-opacity hover:opacity-90"
+                  >
+                    <Headset size={12} /> {actionBusy ? '...' : 'Tomar conversación'}
+                  </span>
+                </div>
               )}
               {thread.messages[thread.messages.length - 1]?.type === 'human' && (
                 <span
@@ -678,7 +693,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                     outgoing ? 'border-white/30 bg-white/10' : 'border-line-soft bg-black/[0.03] dark:bg-white/[0.05]'
                                   }`}
                                 >
-                                  {(m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url) ? (
+                                  {/* When the message also carries a real attachment (WhatsApp
+                                      often re-delivers the ad's own photo as the actual attached
+                                      image on the first ad-referred message), skip the thumbnail
+                                      here — showing it twice back to back reads as one duplicated,
+                                      overlapping photo. The card below still renders it as the
+                                      full attachment. */}
+                                  {(m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url) && !m.attachment ? (
                                     <img
                                       src={m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url}
                                       alt=""
