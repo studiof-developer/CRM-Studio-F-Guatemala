@@ -77,13 +77,15 @@ async function findCustomerByPhone(phone) {
 export async function findConversationThread(threadKey) {
   let sessionIds;
   if (PHONE_RE.test(threadKey)) {
-    // Production session_ids are the phone itself, so match that directly — the
-    // content-equals-phone clause is only there for legacy sessions (random
-    // session_id) that merge into this thread because the customer once typed
-    // their own number as a message.
+    // Production session_ids are the phone itself, but some channels stamp a suffix
+    // on it (e.g. "<phone>__whatsapp") — LIKE-prefix match instead of exact-match so
+    // those aren't silently invisible to this lookup even though the list (which
+    // strips the suffix the same way) shows them just fine. The content-equals-phone
+    // clause is only there for legacy sessions (random session_id) that merge into
+    // this thread because the customer once typed their own number as a message.
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
-       WHERE session_id = $1
+       WHERE session_id LIKE $1 || '%'
           OR (message->>'type' = 'human' AND trim(message->>'content') = $1)`,
       [threadKey]
     );
@@ -191,9 +193,14 @@ router.get('/', async (req, res, next) => {
       -- with random session_ids and would otherwise misfire on the DPI in the current
       -- intake flow.
       threaded AS (
+        -- n8n stamps some channels' session_ids as "<phone>__whatsapp" (or similar) —
+        -- strip everything from the first "__" on before testing/using it as the phone,
+        -- the same way cleanSessionId() does on the JS side. Without this, a suffixed
+        -- session_id with no phone-as-message fallback resolves to a NULL phone, which
+        -- silently breaks the customer/ticket join and unread counting for that thread.
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN r.session_id ~ '^\\d{7,15}$' THEN r.session_id ELSE p.phone END AS phone,
-               CASE WHEN r.session_id ~ '^\\d{7,15}$' THEN r.session_id ELSE COALESCE(p.phone, r.session_id) END AS thread_key
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE COALESCE(p.phone, r.session_id) END AS thread_key
         FROM readable r
         LEFT JOIN phone_by_session p USING (session_id)
       ),
