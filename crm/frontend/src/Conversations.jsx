@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Check, CheckCheck, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
+  Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
   Megaphone, Mail,
 } from 'lucide-react';
@@ -69,6 +69,23 @@ function Tail({ side, color }) {
       : { left: -7, borderRight: '8px solid transparent' }),
   };
   return <span style={style} />;
+}
+
+// Lucide's Check/CheckCheck are 24px stroke icons — squeezed down to bubble-tick size
+// (~12px) the two strokes of CheckCheck sit almost on top of each other and read as a
+// smudge instead of a clean double tick. This is WhatsApp's own compact glyph (a filled
+// shape, not a stroke), which stays crisp that small.
+function MessageTicks({ status }) {
+  const color = status === 'read' ? '#34b7f1' : 'currentColor';
+  const doubleTick = status === 'read' || status === 'delivered';
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 15" fill={color} style={{ flexShrink: 0 }}>
+      {doubleTick && (
+        <path d="M11.671 3.316l-.478-.372a.365.365 0 0 0-.51.063L5.327 9.879a.32.32 0 0 1-.484.033L2.324 7.443a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.373-8.183a.365.365 0 0 0-.063-.512z" />
+      )}
+      <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z" />
+    </svg>
+  );
 }
 
 export default function Conversations({ user, openSessionId, onOpenedConversation }) {
@@ -762,15 +779,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                 }`}
                               >
                                 {formatBubbleTime(m.createdAt)}
-                                {outgoing && (
-                                  m.additional_kwargs?.status === 'read' ? (
-                                    <CheckCheck size={12} style={{ color: '#34b7f1' }} />
-                                  ) : m.additional_kwargs?.status === 'delivered' ? (
-                                    <CheckCheck size={12} />
-                                  ) : (
-                                    <Check size={12} />
-                                  )
-                                )}
+                                {outgoing && <MessageTicks status={m.additional_kwargs?.status} />}
                               </span>
                             </div>
                           </div>
