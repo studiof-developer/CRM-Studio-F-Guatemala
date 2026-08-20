@@ -67,4 +67,37 @@ inboundRouter.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Meta reports delivery as a separate "statuses" webhook event (sent → delivered →
+// read), keyed by the wamid we get back when a message is sent — n8n forwards those
+// here the same way it forwards inbound media, so the chat ticks show real state
+// instead of a single static checkmark. Upgrade-only: WhatsApp's read/delivered
+// events can arrive out of order, so a late "delivered" can't downgrade a "read".
+const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
+inboundRouter.post('/status', async (req, res, next) => {
+  try {
+    if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    const { wamid, status } = req.body ?? {};
+    if (!wamid || !STATUS_RANK[status]) return res.status(400).json({ error: 'wamid and a valid status required' });
+
+    const { rows } = await pool.query(
+      `UPDATE n8n_chat_histories
+       SET message = jsonb_set(message, '{additional_kwargs,status}', to_jsonb($2::text))
+       WHERE message->'additional_kwargs'->>'wamid' = $1
+         AND (
+           message->'additional_kwargs'->>'status' IS NULL
+           OR $3 > CASE message->'additional_kwargs'->>'status' WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END
+         )
+       RETURNING session_id`,
+      [wamid, status, STATUS_RANK[status]]
+    );
+    if (rows.length) {
+      await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
+    }
+
+    res.json({ updated: rows.length > 0 });
+  } catch (err) { next(err); }
+});
+
 export default router;

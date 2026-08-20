@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Check, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
+  Search, Send, Headset, MessageCircle, Check, CheckCheck, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
   Megaphone, Mail,
 } from 'lucide-react';
@@ -762,7 +762,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                 }`}
                               >
                                 {formatBubbleTime(m.createdAt)}
-                                {outgoing && <Check size={12} />}
+                                {outgoing && (
+                                  m.additional_kwargs?.status === 'read' ? (
+                                    <CheckCheck size={12} style={{ color: '#34b7f1' }} />
+                                  ) : m.additional_kwargs?.status === 'delivered' ? (
+                                    <CheckCheck size={12} />
+                                  ) : (
+                                    <Check size={12} />
+                                  )
+                                )}
                               </span>
                             </div>
                           </div>
