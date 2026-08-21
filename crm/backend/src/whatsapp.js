@@ -12,6 +12,11 @@ const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 const ENV_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const ENV_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
+// Throws rather than returning null: every caller runs in a fire-and-forget background
+// promise whose only failure signal is a rejection. Returning null there meant "no
+// WhatsApp configured" resolved successfully, the caller saw no wamid and quietly gave
+// up, and the advisor kept looking at a normal checkmark for a message that was never
+// sent to anyone. A missing config is a send failure and has to be loud.
 async function getActiveCredentials() {
   const { rows } = await pool.query(
     `SELECT phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`
@@ -22,7 +27,7 @@ async function getActiveCredentials() {
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
     return { phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
   }
-  return null;
+  throw new Error('WhatsApp no está configurado (no hay número activo en Configuración ni credenciales en el entorno)');
 }
 
 async function graphFetch(path, options, token) {
@@ -48,10 +53,6 @@ export async function verifyNumber(phoneNumberId, token) {
 // this as a native quoted reply on the customer's side — not just inside the CRM.
 export async function sendText(toPhone, body, contextMessageId) {
   const creds = await getActiveCredentials();
-  if (!creds) {
-    console.warn('WhatsApp not configured (no active number in Configuración, no env fallback) — skipping real send');
-    return null;
-  }
   return graphFetch(`${creds.phoneNumberId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -69,10 +70,6 @@ export async function sendText(toPhone, body, contextMessageId) {
 // must use a pre-approved Meta template — free text gets rejected outright.
 export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = []) {
   const creds = await getActiveCredentials();
-  if (!creds) {
-    console.warn('WhatsApp not configured (no active number in Configuración, no env fallback) — skipping real send');
-    return null;
-  }
   const components = bodyParams.length
     ? [{ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) }]
     : undefined;
@@ -90,10 +87,6 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
 
 export async function uploadMedia(buffer, mimeType) {
   const creds = await getActiveCredentials();
-  if (!creds) {
-    console.warn('WhatsApp not configured (no active number in Configuración, no env fallback) — skipping real upload');
-    return null;
-  }
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
   form.append('file', new Blob([buffer], { type: mimeType }));
@@ -104,11 +97,7 @@ export async function uploadMedia(buffer, mimeType) {
 
 export async function sendMedia(toPhone, kind, mediaId, filename, caption) {
   const creds = await getActiveCredentials();
-  if (!creds) {
-    console.warn('WhatsApp not configured (no active number in Configuración, no env fallback) — skipping real send');
-    return null;
-  }
-  const payload = { messaging_product: 'whatsapp', to: toPhone, type: kind, [kind]: { id: mediaId } };
+  const payload ={ messaging_product: 'whatsapp', to: toPhone, type: kind, [kind]: { id: mediaId } };
   if (kind === 'document' && filename) payload.document.filename = filename;
   // WhatsApp doesn't support captions on audio — silently ignored there is fine.
   if (caption && kind !== 'audio') payload[kind].caption = caption;

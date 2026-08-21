@@ -75,14 +75,17 @@ function Tail({ side, color }) {
 // (~12px) the two strokes of CheckCheck sit almost on top of each other and read as a
 // smudge instead of a clean double tick. This is WhatsApp's own compact glyph (a filled
 // shape, not a stroke), which stays crisp that small.
-function MessageTicks({ status }) {
+function MessageTicks({ status, statusError }) {
   // The actual WhatsApp send happens in the background after the message already shows
   // as "sent" here — if that fails (customer outside the 24h window, expired token,
   // Meta rate limit...) this is the only place it becomes visible to the advisor.
   if (status === 'failed') {
     return (
-      <span title="No se pudo enviar por WhatsApp" className="flex items-center gap-0.5 text-red-200">
-        <AlertTriangle size={11} /> falló
+      <span
+        title={statusError || 'No se pudo enviar por WhatsApp'}
+        className="flex items-center gap-0.5 font-semibold text-red-200"
+      >
+        <AlertTriangle size={11} /> no se envió
       </span>
     );
   }
@@ -135,6 +138,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const slashResults = slashMatch
     ? quickReplies.filter((q) => q.shortcut.startsWith(slashMatch[1].toLowerCase())).slice(0, 8)
     : [];
+
+  // WhatsApp only accepts free-form messages within 24h of the customer's last inbound
+  // message; outside that window Meta rejects the send outright and the customer never
+  // gets it. That rejection used to be invisible on both ends — the advisor saw a normal
+  // checkmark and the customer saw nothing — so warn before they type, not after.
+  const lastInboundAt = thread?.messages?.reduce(
+    (acc, m) => (m.type === 'human' && m.createdAt ? m.createdAt : acc),
+    null
+  );
+  const windowClosed = !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() > 24 * 60 * 60 * 1000;
 
   function applyQuickReply(item) {
     setDraft(item.content);
@@ -789,7 +802,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                 }`}
                               >
                                 {formatBubbleTime(m.createdAt)}
-                                {outgoing && <MessageTicks status={m.additional_kwargs?.status} />}
+                                {outgoing && (
+                                  <MessageTicks
+                                    status={m.additional_kwargs?.status}
+                                    statusError={m.additional_kwargs?.statusError}
+                                  />
+                                )}
                               </span>
                             </div>
                           </div>
@@ -896,6 +914,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
             {thread.enAtencion ? (
               <>
+              {windowClosed && (
+                <div className="flex items-start gap-2.5 border-t border-warn/30 bg-warn/10 px-4 py-2.5">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warn" />
+                  <p className="text-xs leading-relaxed text-ink">
+                    <span className="font-semibold">WhatsApp no permite escribirle ahora.</span>{' '}
+                    Pasaron más de 24 horas desde el último mensaje del cliente, así que Meta
+                    va a rechazar lo que envíes y <span className="font-semibold">no le va a llegar</span>.
+                    Espera a que el cliente escriba, o contáctalo por otro medio.
+                  </p>
+                </div>
+              )}
               {replyingTo && (
                 <div className="flex items-center gap-3 border-t border-line bg-accent-soft px-4 py-2.5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-accent shadow-sm">

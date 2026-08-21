@@ -72,26 +72,45 @@ inboundRouter.post('/', async (req, res, next) => {
 // here the same way it forwards inbound media, so the chat ticks show real state
 // instead of a single static checkmark. Upgrade-only: WhatsApp's read/delivered
 // events can arrive out of order, so a late "delivered" can't downgrade a "read".
+// "failed" is the one that matters most and is NOT part of the sent→delivered→read
+// ladder: Meta can accept a message (200 + wamid, so our own send looked fine) and only
+// afterwards discover it can't be delivered, reporting it through this webhook. Dropping
+// it meant the advisor kept seeing a checkmark for a message WhatsApp already told us
+// never arrived — so it bypasses the rank check and always wins.
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
 inboundRouter.post('/status', async (req, res, next) => {
   try {
     if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
       return res.status(401).json({ error: 'unauthorized' });
     }
-    const { wamid, status } = req.body ?? {};
-    if (!wamid || !STATUS_RANK[status]) return res.status(400).json({ error: 'wamid and a valid status required' });
+    const { wamid, status, error } = req.body ?? {};
+    if (!wamid || !(STATUS_RANK[status] || status === 'failed')) {
+      return res.status(400).json({ error: 'wamid and a valid status required' });
+    }
 
-    const { rows } = await pool.query(
-      `UPDATE n8n_chat_histories
-       SET message = jsonb_set(message, '{additional_kwargs,status}', to_jsonb($2::text))
-       WHERE message->'additional_kwargs'->>'wamid' = $1
-         AND (
-           message->'additional_kwargs'->>'status' IS NULL
-           OR $3 > CASE message->'additional_kwargs'->>'status' WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END
-         )
-       RETURNING session_id`,
-      [wamid, status, STATUS_RANK[status]]
-    );
+    const { rows } = status === 'failed'
+      ? await pool.query(
+          `UPDATE n8n_chat_histories
+           SET message = jsonb_set(
+                 jsonb_set(message, '{additional_kwargs,status}', '"failed"'),
+                 '{additional_kwargs,statusError}', to_jsonb($2::text))
+           WHERE message->'additional_kwargs'->>'wamid' = $1
+           RETURNING session_id`,
+          [wamid, String(error ?? 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
+        )
+      : await pool.query(
+          `UPDATE n8n_chat_histories
+           SET message = jsonb_set(message, '{additional_kwargs,status}', to_jsonb($2::text))
+           WHERE message->'additional_kwargs'->>'wamid' = $1
+             AND (
+               message->'additional_kwargs'->>'status' IS NULL
+               OR $3 > CASE message->'additional_kwargs'->>'status' WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END
+             )
+             -- a late sent/delivered must never overwrite a known failure
+             AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
+           RETURNING session_id`,
+          [wamid, status, STATUS_RANK[status]]
+        );
     if (rows.length) {
       await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
     }

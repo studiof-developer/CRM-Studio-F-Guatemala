@@ -31,13 +31,35 @@ export function cleanSessionId(sessionId) {
 // the message itself instead of vanishing silently.
 async function markSendFailed(messageId, err) {
   console.error('WhatsApp send failed', err);
+  // Store the reason too — without it, diagnosing "why didn't this arrive" means
+  // digging through container logs that may already have rotated away. Meta's error
+  // bodies are verbose, so keep just enough to identify the cause.
+  const reason = String(err?.message ?? err).slice(0, 500);
   const { rows } = await pool.query(
-    `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,status}', '"failed"') WHERE id = $1 RETURNING session_id`,
-    [messageId]
+    `UPDATE n8n_chat_histories
+     SET message = jsonb_set(
+           jsonb_set(message, '{additional_kwargs,status}', '"failed"'),
+           '{additional_kwargs,statusError}', to_jsonb($2::text))
+     WHERE id = $1 RETURNING session_id`,
+    [messageId, reason]
   );
   if (rows.length) {
     await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
   }
+}
+
+// A send that resolves without giving us a wamid never reached WhatsApp either — Meta
+// always returns one for an accepted message. Treated as a failure rather than "no tick
+// to update", which is how it used to slip through unnoticed.
+function handleSendResult(messageId, result) {
+  const sentWamid = result?.messages?.[0]?.id;
+  if (!sentWamid) {
+    return markSendFailed(messageId, new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó'));
+  }
+  return pool.query(
+    `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
+    [messageId, JSON.stringify(sentWamid)]
+  );
 }
 
 // 7-15 digits covers bare local numbers up through full E.164 (country code + number).
@@ -464,23 +486,23 @@ router.post('/:sessionId/messages', async (req, res, next) => {
 
     // The advisor's confirmation shouldn't wait on WhatsApp's network round-trip —
     // it's already saved, so respond first and let delivery happen in the background.
+    // ponytail: fire-and-forget, so a container restart in the gap between this insert
+    // and the send completing orphans the message — saved, never sent, never marked
+    // failed. Narrow window (a deploy landing mid-send), but the honest fix is an outbox
+    // table + a worker that retries anything still without a wamid after a few minutes.
     // replyTo.wamid (only present for customer messages n8n tagged with their WhatsApp
     // message id) makes this show as a native quoted reply on the customer's phone too.
     // We also save OUR OWN wamid back onto the row once Meta returns it, so that if the
     // customer later replies to THIS message using WhatsApp's own quote feature, we can
     // match their context.id back to it and show what they're replying to in the CRM.
-    if (phone) {
-      whatsapp.sendText(phone, content.trim(), replyTo?.wamid)
-        .then((result) => {
-          const sentWamid = result?.messages?.[0]?.id;
-          if (!sentWamid) return;
-          return pool.query(
-            `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
-            [inserted[0].id, JSON.stringify(sentWamid)]
-          );
-        })
-        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
-    }
+    // No phone means there is nobody to deliver to — previously this branch just did
+    // nothing at all, leaving the message sitting in the CRM looking sent forever.
+    const sendPromise = phone
+      ? whatsapp.sendText(phone, content.trim(), replyTo?.wamid).then((result) => handleSendResult(inserted[0].id, result))
+      : markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'));
+    sendPromise.catch((err) =>
+      markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e))
+    );
   } catch (err) { next(err); }
 });
 
@@ -543,19 +565,14 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       attachment: { id: attachmentId, kind, filename: req.file.originalname, mimeType: req.file.mimetype, sizeBytes: req.file.buffer.length },
     });
 
-    if (phone) {
-      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
-        .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
-        .then((result) => {
-          const sentWamid = result?.messages?.[0]?.id;
-          if (!sentWamid) return;
-          return pool.query(
-            `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
-            [inserted[0].id, JSON.stringify(sentWamid)]
-          );
-        })
-        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
-    }
+    const sendPromise = phone
+      ? whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
+          .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
+          .then((result) => handleSendResult(inserted[0].id, result))
+      : markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'));
+    sendPromise.catch((err) =>
+      markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e))
+    );
   } catch (err) { next(err); }
 });
 
