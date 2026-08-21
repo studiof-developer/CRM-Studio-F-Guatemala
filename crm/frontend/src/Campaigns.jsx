@@ -9,8 +9,13 @@ import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
+// "Todas las temperaturas" would read here the way it does everywhere else in this
+// app — "no filter, show everyone" — but in a broadcast that's the opposite of safe:
+// it's really "no bulk group selected", so leaving it as-is (with only a manual pick
+// added) sends to nobody extra. Named for what it actually does in this one screen,
+// since blasting the whole customer base by misreading a label is not a small mistake.
 const TEMP_OPTIONS = [
-  { value: '', label: 'Todas las temperaturas' },
+  { value: '', label: 'Sin envío masivo (solo clientes puntuales)' },
   ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
 ];
 
