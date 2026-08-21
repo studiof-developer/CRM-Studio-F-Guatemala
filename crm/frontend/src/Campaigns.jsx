@@ -150,6 +150,7 @@ function NewCampaignModal({ onClose, onSent }) {
   const [manualQuery, setManualQuery] = useState('');
   const [manualResults, setManualResults] = useState([]);
   const [manualPicked, setManualPicked] = useState([]);
+  const [newRecipientName, setNewRecipientName] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -183,6 +184,20 @@ function NewCampaignModal({ onClose, onSent }) {
     setManualResults([]);
   }
 
+  // A number nobody has talked to yet — same 7-15 digit rule the backend already uses
+  // to recognise a phone. Kept separate from addManual: this one doesn't exist as a
+  // customer, so it's added with a synthetic id and created for real only on send.
+  const trimmedQuery = manualQuery.trim();
+  const queryIsPhone = /^\d{7,15}$/.test(trimmedQuery);
+  const queryAlreadyPicked = pickedIds.has(`new:${trimmedQuery}`) || manualResults.some((r) => r.phone === trimmedQuery);
+
+  function addNewPhone(phone, fullName) {
+    setManualPicked((prev) => [...prev, { id: `new:${phone}`, phone, fullName: fullName.trim() || null, isNew: true }]);
+    setManualQuery('');
+    setNewRecipientName('');
+    setManualResults([]);
+  }
+
   const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
   const canSend = !!template && (temperature || manualPicked.length > 0) && totalRecipients > 0;
 
@@ -195,7 +210,8 @@ function NewCampaignModal({ onClose, onSent }) {
         temperature: temperature || undefined,
         count: temperature ? count : undefined,
         order,
-        customerIds: manualPicked.map((p) => p.id),
+        customerIds: manualPicked.filter((p) => !p.isNew).map((p) => p.id),
+        newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName })),
       });
       showSuccess(`Difusión en marcha — ${res.recipientCount} destinatarios`);
       onSent();
@@ -298,6 +314,24 @@ function NewCampaignModal({ onClose, onSent }) {
                     <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
                   </button>
                 ))}
+              </div>
+            )}
+            {/* No customer with this number exists yet — offer to add it fresh instead
+                of only ever searching who's already in the system. */}
+            {queryIsPhone && !queryAlreadyPicked && (
+              <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-dashed border-line p-2">
+                <input
+                  value={newRecipientName}
+                  onChange={(e) => setNewRecipientName(e.target.value)}
+                  placeholder="Nombre (opcional)"
+                  className="min-w-0 flex-1 rounded-md border border-line bg-black/[0.03] dark:bg-white/[0.05] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:bg-paper"
+                />
+                <button
+                  onClick={() => addNewPhone(trimmedQuery, newRecipientName)}
+                  className="flex shrink-0 items-center gap-1 rounded-md bg-accent-soft px-2.5 py-1.5 text-xs font-medium text-accent hover:opacity-80"
+                >
+                  <Plus size={12} /> Agregar {trimmedQuery} como nuevo
+                </button>
               </div>
             )}
             {manualPicked.length > 0 && (

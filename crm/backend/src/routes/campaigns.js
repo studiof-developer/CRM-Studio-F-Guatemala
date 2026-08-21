@@ -186,11 +186,19 @@ async function runCampaign(campaignId, audience, templateName, templateLanguage,
   await pool.query(`UPDATE campaigns SET status = 'completed', completed_at = now() WHERE id = $1`, [campaignId]);
 }
 
+// 7-15 digits covers bare local numbers up through full E.164 — same rule
+// findConversationThread() uses to recognise a phone as a phone.
+const PHONE_RE = /^\d{7,15}$/;
+
 router.post('/', async (req, res, next) => {
   try {
-    const { templateName, templateLanguage, temperature, count, order, customerIds } = req.body ?? {};
+    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients } = req.body ?? {};
     if (!templateName?.trim() || !templateLanguage?.trim()) {
       return res.status(400).json({ error: 'templateName and templateLanguage required' });
+    }
+    if (Array.isArray(newRecipients)) {
+      const bad = newRecipients.filter((r) => !PHONE_RE.test(String(r.phone ?? '').trim()));
+      if (bad.length) return res.status(400).json({ error: `Número inválido: ${bad.map((r) => r.phone).join(', ')}` });
     }
     if (temperature && !VALID_TEMPERATURES.includes(temperature)) {
       return res.status(400).json({ error: 'invalid temperature' });
@@ -230,6 +238,25 @@ router.post('/', async (req, res, next) => {
       );
       const seen = new Set(audience.map((c) => c.id));
       for (const c of rows) if (!seen.has(c.id)) { audience.push(c); seen.add(c.id); }
+    }
+
+    // A number typed in that isn't a customer yet — created the same way an advisor
+    // starting a fresh conversation already creates one (see POST /api/conversations),
+    // so it becomes a normal customer with a normal thread and temperature after this,
+    // not a special one-off case the rest of the app doesn't know about. Existing
+    // full_name is never overwritten — only filled in if it was empty.
+    if (Array.isArray(newRecipients) && newRecipients.length) {
+      const seen = new Set(audience.map((c) => c.id));
+      for (const { phone, fullName } of newRecipients) {
+        const { rows } = await pool.query(
+          `INSERT INTO customers (whatsapp_number, full_name) VALUES ($1, $2)
+           ON CONFLICT (whatsapp_number) DO UPDATE SET full_name = COALESCE(customers.full_name, EXCLUDED.full_name)
+           RETURNING id, full_name, whatsapp_number`,
+          [String(phone).trim(), fullName?.trim() || null]
+        );
+        const c = rows[0];
+        if (!seen.has(c.id)) { audience.push(c); seen.add(c.id); }
+      }
     }
 
     if (!audience.length) return res.status(400).json({ error: 'La audiencia quedó vacía' });
