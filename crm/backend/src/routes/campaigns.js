@@ -1,12 +1,23 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import multer from 'multer';
 import { pool } from '../db.js';
 import * as whatsapp from '../whatsapp.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread } from './conversations.js';
+import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+// Maps an opaque upload token to the file this backend itself wrote to disk. Never let
+// a client hand back a raw file path to store in message_attachments — GET
+// /api/attachments/:id/file streams whatever path is in that row with no extra checks,
+// so a client-controlled path there is an arbitrary-file-read hole. The token is the
+// only thing that crosses back over HTTP; the real path never leaves the server.
+// ponytail: in-process Map, single instance only, entries never expire — fine at the
+// volume this shop sends (a handful of uploads a day), revisit if that changes.
+const headerUploads = new Map();
 
 // Single word to plug into a template's name parameter when the customer never gave
 // one — most of the customer base didn't (see the reactivation-template fix). Kept in
@@ -61,7 +72,15 @@ router.post('/header-media', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
     const mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
-    res.json({ mediaId });
+    // Also kept on our own disk (separately from Meta's copy) so the CRM can show the
+    // same image inline in the conversation thread, the same way any other attachment
+    // renders — Meta's media id isn't fetchable back out to display in our own UI.
+    const filePath = await writeAttachmentFile(req.file.buffer);
+    const token = crypto.randomUUID();
+    headerUploads.set(token, {
+      filePath, mimeType: req.file.mimetype, filename: req.file.originalname, sizeBytes: req.file.buffer.length,
+    });
+    res.json({ mediaId, headerImageToken: token });
   } catch (err) { next(err); }
 });
 
@@ -169,7 +188,14 @@ router.get('/:id', async (req, res, next) => {
 const SEND_DELAY_MS = 350;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount, headerMediaId) {
+// Renders the literal text sent — {{1}}, {{2}}... all filled with the same name, same
+// as the params array built for the actual API call — so the thread shows what the
+// customer really received instead of the bare template name.
+function renderBody(bodyTemplate, name) {
+  return bodyTemplate.replace(/\{\{\d+\}\}/g, name);
+}
+
+async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
   const params = Array(paramCount).fill(name);
   let sentWamid = null;
@@ -191,7 +217,7 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   const sessionId = sessionIds?.[0] ?? customer.whatsapp_number;
   const message = {
     type: 'ai',
-    content: templateName,
+    content: renderBody(bodyTemplate, name),
     additional_kwargs: {
       sentBy: 'campaign',
       campaignId: String(campaignId),
@@ -200,12 +226,26 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
     response_metadata: {},
     tool_calls: [],
   };
-  await pool.query(`INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`, [sessionId, JSON.stringify(message)]);
+  const { rows } = await pool.query(
+    `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
+    [sessionId, JSON.stringify(message)]
+  );
+
+  if (headerAttachment) {
+    await linkExistingFile({
+      n8nMessageId: rows[0].id,
+      kind: 'image',
+      filename: headerAttachment.filename,
+      mimeType: headerAttachment.mimeType,
+      filePath: headerAttachment.filePath,
+      sizeBytes: headerAttachment.sizeBytes,
+    });
+  }
 }
 
-async function runCampaign(campaignId, audience, templateName, templateLanguage, paramCount, headerMediaId) {
+async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment) {
   for (const customer of audience) {
-    await sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount, headerMediaId).catch((err) =>
+    await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment).catch((err) =>
       console.error(`campaign ${campaignId} recipient ${customer.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
@@ -219,7 +259,7 @@ const PHONE_RE = /^\d{7,15}$/;
 
 router.post('/', async (req, res, next) => {
   try {
-    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId } = req.body ?? {};
+    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken } = req.body ?? {};
     if (!templateName?.trim() || !templateLanguage?.trim()) {
       return res.status(400).json({ error: 'templateName and templateLanguage required' });
     }
@@ -248,6 +288,13 @@ router.post('/', async (req, res, next) => {
     if (headerFormat === 'IMAGE' && !headerMediaId) {
       return res.status(400).json({ error: 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar' });
     }
+    // The token only ever resolves to a file this backend itself wrote — see the
+    // headerUploads comment above for why a client-supplied path is never trusted here.
+    const headerAttachment = headerImageToken ? headerUploads.get(headerImageToken) : null;
+    if (headerFormat === 'IMAGE' && !headerAttachment) {
+      return res.status(400).json({ error: 'La imagen subida ya no está disponible — vuelve a subirla e intenta de nuevo' });
+    }
+    const bodyTemplate = template.components?.find((c) => c.type === 'BODY')?.text ?? '';
 
     let audience = [];
     if (temperature) {
@@ -306,7 +353,7 @@ router.post('/', async (req, res, next) => {
     // Same pattern as every other outbound send in this app: respond once the audience
     // is locked in and stored, then let the actual WhatsApp calls happen in the
     // background instead of holding the request open for what could be minutes.
-    runCampaign(campaignId, audience, templateName, templateLanguage, paramCount, headerMediaId).catch((err) =>
+    runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment).catch((err) =>
       console.error(`campaign ${campaignId} failed`, err)
     );
 

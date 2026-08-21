@@ -158,6 +158,7 @@ function NewCampaignModal({ onClose, onSent }) {
   const [manualPicked, setManualPicked] = useState([]);
   const [newRecipientName, setNewRecipientName] = useState('');
   const [headerMediaId, setHeaderMediaId] = useState(null);
+  const [headerImageToken, setHeaderImageToken] = useState(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState(null);
   const [headerUploading, setHeaderUploading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -191,6 +192,7 @@ function NewCampaignModal({ onClose, onSent }) {
   function selectTemplate(key) {
     setTemplateKey(key);
     setHeaderMediaId(null);
+    setHeaderImageToken(null);
     setHeaderPreviewUrl(null);
   }
 
@@ -199,8 +201,9 @@ function NewCampaignModal({ onClose, onSent }) {
     setHeaderPreviewUrl(URL.createObjectURL(file));
     setHeaderUploading(true);
     try {
-      const { mediaId } = await uploadCampaignHeaderMedia(file);
+      const { mediaId, headerImageToken: token } = await uploadCampaignHeaderMedia(file);
       setHeaderMediaId(mediaId);
+      setHeaderImageToken(token);
     } catch (err) {
       showError(err.message);
       setHeaderPreviewUrl(null);
@@ -246,6 +249,7 @@ function NewCampaignModal({ onClose, onSent }) {
         customerIds: manualPicked.filter((p) => !p.isNew).map((p) => p.id),
         newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName })),
         headerMediaId: headerMediaId || undefined,
+        headerImageToken: headerImageToken || undefined,
       });
       showSuccess(`Difusión en marcha — ${res.recipientCount} destinatarios`);
       onSent();
