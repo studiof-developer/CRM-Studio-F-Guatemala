@@ -23,6 +23,23 @@ export function cleanSessionId(sessionId) {
   return sessionId.split('__')[0];
 }
 
+// The real WhatsApp send happens in the background after the advisor already sees
+// "sent" in the CRM (see the POST /messages and /attachments handlers below) — without
+// this, a failure (customer outside the 24h window, invalid token, Meta rate limit...)
+// was only ever a server-side console.error, completely invisible to the advisor and
+// the customer never got the message. This makes the failure show up as a red mark on
+// the message itself instead of vanishing silently.
+async function markSendFailed(messageId, err) {
+  console.error('WhatsApp send failed', err);
+  const { rows } = await pool.query(
+    `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,status}', '"failed"') WHERE id = $1 RETURNING session_id`,
+    [messageId]
+  );
+  if (rows.length) {
+    await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
+  }
+}
+
 // 7-15 digits covers bare local numbers up through full E.164 (country code + number).
 const PHONE_RE = /^\d{7,15}$/;
 
@@ -462,7 +479,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
             [inserted[0].id, JSON.stringify(sentWamid)]
           );
         })
-        .catch((err) => console.error('sendText failed', err));
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     }
   } catch (err) { next(err); }
 });
@@ -537,7 +554,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
             [inserted[0].id, JSON.stringify(sentWamid)]
           );
         })
-        .catch((err) => console.error('sendMedia failed', err));
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     }
   } catch (err) { next(err); }
 });

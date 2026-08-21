@@ -76,6 +76,16 @@ function Tail({ side, color }) {
 // smudge instead of a clean double tick. This is WhatsApp's own compact glyph (a filled
 // shape, not a stroke), which stays crisp that small.
 function MessageTicks({ status }) {
+  // The actual WhatsApp send happens in the background after the message already shows
+  // as "sent" here — if that fails (customer outside the 24h window, expired token,
+  // Meta rate limit...) this is the only place it becomes visible to the advisor.
+  if (status === 'failed') {
+    return (
+      <span title="No se pudo enviar por WhatsApp" className="flex items-center gap-0.5 text-red-200">
+        <AlertTriangle size={11} /> falló
+      </span>
+    );
+  }
   const color = status === 'read' ? '#34b7f1' : 'currentColor';
   const doubleTick = status === 'read' || status === 'delivered';
   return (
