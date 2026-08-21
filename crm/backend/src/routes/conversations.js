@@ -82,19 +82,9 @@ async function reactivationAlreadySent(sessionIds, lastInboundAt) {
   return rows.length > 0;
 }
 
-// The approved body opens with "Hola {{1}}," so {{1}} is the name on its own. First name
-// only — the full legal name reads like a collections notice, not a shop. Meta rejects
-// empty parameters, so an unnamed customer still needs a real word: "Hola de nuevo,"
-// reads naturally and is only ever reached when reviving a chat we already had.
-function templateGreetingName(fullName) {
-  return fullName?.trim().split(/\s+/)[0] || 'de nuevo';
-}
-
 async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboundAt) {
   if (await reactivationAlreadySent(sessionIds, lastInboundAt)) return;
-  const { customer } = await findCustomerByPhone(phone);
-  const greeting = templateGreetingName(customer?.full_name);
-  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [greeting]);
+  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG);
   // The literal text the customer received, not a note about it — the advisor needs to
   // read what was actually said before writing the next line. Doubles as the marker
   // that tells reactivationAlreadySent() this dormant stretch is already covered.
@@ -102,7 +92,7 @@ async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboun
     `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`,
     [sessionId, JSON.stringify({
       type: 'ai',
-      content: outreachTemplateBody(greeting),
+      content: OUTREACH_TEMPLATE_BODY,
       additional_kwargs: { sentBy: 'sistema', reactivationTemplate: true },
       response_metadata: {},
       tool_calls: [],
@@ -222,11 +212,16 @@ const OUTREACH_TEMPLATE_NAME = process.env.WHATSAPP_TEMPLATE_NAME || 'seguimient
 
 // Mirror of the body approved in WhatsApp Manager. Meta sends the real thing from its
 // own copy; this only goes into the CRM transcript so the advisor sees exactly what the
-// customer received. Deliberately generic so ONE template covers both uses — greeting a
-// customer for the first time, and waking a conversation that went past the 24h window.
-// If the template is edited in Meta, edit this line to match or the transcript lies.
-const outreachTemplateBody = (name) =>
-  `Hola ${name}, te escribimos de Studio F Guatemala. Un asesor está disponible para atenderte. Responde a este mensaje para continuar.`;
+// customer received. If the template is edited in Meta, edit this line to match or the
+// transcript lies.
+//
+// Deliberately parameterless: most customers never give their name, so a "Hola {{1}}"
+// template forced a guess for the majority of sends, and Meta rejects empty parameters
+// so there was no way to just leave it out. Greeting nobody by name is better than
+// greeting them wrong. Also generic enough that ONE template covers both uses —
+// first contact, and waking a conversation that went past the 24h window.
+const OUTREACH_TEMPLATE_BODY =
+  '¡Hola! 👋 Te escribimos de Studio F Guatemala ✨ Tenemos un asesor disponible para atenderte. Responde este mensaje y continuamos por aquí 😊';
 const OUTREACH_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
 
 // Advisor-initiated first contact (customer has no prior thread, or one that's gone
@@ -240,7 +235,7 @@ router.post('/', async (req, res, next) => {
     if (!address?.trim()) return res.status(400).json({ error: 'address required' });
 
     try {
-      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [templateGreetingName(fullName)]);
+      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG);
     } catch (err) {
       return res.status(502).json({ error: `no se pudo enviar la plantilla de WhatsApp: ${err.message}` });
     }
@@ -262,7 +257,7 @@ router.post('/', async (req, res, next) => {
 
     const message = {
       type: 'ai',
-      content: outreachTemplateBody(templateGreetingName(fullName)),
+      content: OUTREACH_TEMPLATE_BODY,
       additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName, template: OUTREACH_TEMPLATE_NAME },
       response_metadata: {},
       tool_calls: [],
