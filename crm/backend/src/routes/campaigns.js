@@ -159,6 +159,11 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   } catch (err) {
     error = err.message;
   }
+  // The catch in runCampaign's loop never fires — this never throws, it records the
+  // failure and returns normally — so without this the real reason only ever reached
+  // the database (statusError), never the console, making a genuine send failure look
+  // like nothing happened at all when someone checked the logs instead of the tooltip.
+  if (error) console.error(`campaign ${campaignId} send to ${customer.whatsapp_number} failed:`, error);
 
   const { sessionIds } = await findConversationThread(customer.whatsapp_number);
   const sessionId = sessionIds?.[0] ?? customer.whatsapp_number;
