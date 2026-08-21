@@ -72,11 +72,15 @@ export async function sendText(toPhone, body, contextMessageId) {
 
 // First-contact messages (customer never wrote in, or >24h since their last message)
 // must use a pre-approved Meta template — free text gets rejected outright.
-export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = []) {
+// headerMediaId is required when the template's own header component is an image —
+// Meta rejects the send with "(#132012) ... expected IMAGE, received UNKNOWN" if a
+// header the template defines is left out, not just if it's malformed.
+export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = [], headerMediaId) {
   const creds = await getActiveCredentials();
-  const components = bodyParams.length
-    ? [{ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) }]
-    : undefined;
+  const components = [
+    ...(headerMediaId ? [{ type: 'header', parameters: [{ type: 'image', image: { id: headerMediaId } }] }] : []),
+    ...(bodyParams.length ? [{ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) }] : []),
+  ];
   return graphFetch(`${creds.phoneNumberId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -84,7 +88,7 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
       messaging_product: 'whatsapp',
       to: toPhone,
       type: 'template',
-      template: { name: templateName, language: { code: languageCode }, components },
+      template: { name: templateName, language: { code: languageCode }, components: components.length ? components : undefined },
     }),
   }, creds.token);
 }

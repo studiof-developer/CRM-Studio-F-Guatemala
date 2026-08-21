@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { pool } from '../db.js';
 import * as whatsapp from '../whatsapp.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread } from './conversations.js';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Single word to plug into a template's name parameter when the customer never gave
 // one — most of the customer base didn't (see the reactivation-template fix). Kept in
@@ -26,6 +28,15 @@ function countBodyParams(template) {
   return matches ? new Set(matches).size : 0;
 }
 
+// Meta rejects the send outright if the template defines a media header and none is
+// attached — "(#132012) ... expected IMAGE, received UNKNOWN" — so the picker needs to
+// know up front whether it has to ask for one. Only IMAGE is supported for now; a
+// VIDEO/DOCUMENT header template will show clearly as unsupported rather than fail
+// silently at send time.
+function getHeaderFormat(template) {
+  return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
+}
+
 router.get('/templates', async (req, res, next) => {
   try {
     const templates = await whatsapp.listTemplates();
@@ -38,8 +49,19 @@ router.get('/templates', async (req, res, next) => {
           category: t.category,
           body: t.components?.find((c) => c.type === 'BODY')?.text ?? '',
           paramCount: countBodyParams(t),
+          headerFormat: getHeaderFormat(t),
         }))
     );
+  } catch (err) { next(err); }
+});
+
+// Uploaded once per campaign, not once per recipient — the resulting media id is valid
+// for 30 days and Meta allows reusing it across every send in the batch.
+router.post('/header-media', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'file required' });
+    const mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
+    res.json({ mediaId });
   } catch (err) { next(err); }
 });
 
@@ -147,13 +169,13 @@ router.get('/:id', async (req, res, next) => {
 const SEND_DELAY_MS = 350;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount) {
+async function sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount, headerMediaId) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
   const params = Array(paramCount).fill(name);
   let sentWamid = null;
   let error = null;
   try {
-    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params);
+    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params, headerMediaId);
     sentWamid = result?.messages?.[0]?.id ?? null;
     if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
   } catch (err) {
@@ -181,9 +203,9 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   await pool.query(`INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`, [sessionId, JSON.stringify(message)]);
 }
 
-async function runCampaign(campaignId, audience, templateName, templateLanguage, paramCount) {
+async function runCampaign(campaignId, audience, templateName, templateLanguage, paramCount, headerMediaId) {
   for (const customer of audience) {
-    await sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount).catch((err) =>
+    await sendToRecipient(campaignId, customer, templateName, templateLanguage, paramCount, headerMediaId).catch((err) =>
       console.error(`campaign ${campaignId} recipient ${customer.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
@@ -197,7 +219,7 @@ const PHONE_RE = /^\d{7,15}$/;
 
 router.post('/', async (req, res, next) => {
   try {
-    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients } = req.body ?? {};
+    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId } = req.body ?? {};
     if (!templateName?.trim() || !templateLanguage?.trim()) {
       return res.status(400).json({ error: 'templateName and templateLanguage required' });
     }
@@ -218,6 +240,14 @@ router.post('/', async (req, res, next) => {
     if (!template) return res.status(400).json({ error: 'La plantilla no existe o cambió' });
     if (template.status !== 'APPROVED') return res.status(400).json({ error: 'La plantilla no está activa en este momento' });
     const paramCount = countBodyParams(template);
+
+    const headerFormat = getHeaderFormat(template);
+    if (headerFormat && headerFormat !== 'IMAGE') {
+      return res.status(400).json({ error: `Las plantillas con encabezado de tipo ${headerFormat} todavía no están soportadas` });
+    }
+    if (headerFormat === 'IMAGE' && !headerMediaId) {
+      return res.status(400).json({ error: 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar' });
+    }
 
     let audience = [];
     if (temperature) {
@@ -276,7 +306,7 @@ router.post('/', async (req, res, next) => {
     // Same pattern as every other outbound send in this app: respond once the audience
     // is locked in and stored, then let the actual WhatsApp calls happen in the
     // background instead of holding the request open for what could be minutes.
-    runCampaign(campaignId, audience, templateName, templateLanguage, paramCount).catch((err) =>
+    runCampaign(campaignId, audience, templateName, templateLanguage, paramCount, headerMediaId).catch((err) =>
       console.error(`campaign ${campaignId} failed`, err)
     );
 

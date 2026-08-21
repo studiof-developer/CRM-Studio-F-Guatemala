@@ -119,6 +119,14 @@ export async function fetchCampaignTemplates() {
   return res.json();
 }
 
+export async function uploadCampaignHeaderMedia(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiFetch('/api/campaigns/header-media', { method: 'POST', body: formData });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al subir la imagen');
+  return res.json();
+}
+
 export async function searchCampaignAudience(temperature, q) {
   const params = new URLSearchParams();
   if (temperature) params.set('temperature', temperature);
