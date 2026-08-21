@@ -82,16 +82,27 @@ async function reactivationAlreadySent(sessionIds, lastInboundAt) {
   return rows.length > 0;
 }
 
-async function sendReactivationTemplate(sessionId, sessionIds, phone, customerName, lastInboundAt) {
+// The approved body opens with "Hola {{1}}," so {{1}} is the name on its own. First name
+// only — the full legal name reads like a collections notice, not a shop. Meta rejects
+// empty parameters, so an unnamed customer still needs a real word: "Hola de nuevo,"
+// reads naturally and is only ever reached when reviving a chat we already had.
+function templateGreetingName(fullName) {
+  return fullName?.trim().split(/\s+/)[0] || 'de nuevo';
+}
+
+async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboundAt) {
   if (await reactivationAlreadySent(sessionIds, lastInboundAt)) return;
-  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [customerName || 'Hola']);
-  // Recorded in the transcript so the advisor sees exactly what the customer got, and
-  // so the check above can tell this dormant stretch was already covered.
+  const { customer } = await findCustomerByPhone(phone);
+  const greeting = templateGreetingName(customer?.full_name);
+  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [greeting]);
+  // The literal text the customer received, not a note about it — the advisor needs to
+  // read what was actually said before writing the next line. Doubles as the marker
+  // that tells reactivationAlreadySent() this dormant stretch is already covered.
   await pool.query(
     `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`,
     [sessionId, JSON.stringify({
       type: 'ai',
-      content: `Se envió la plantilla "${OUTREACH_TEMPLATE_NAME}" para reactivar la conversación (pasaron más de 24 h desde el último mensaje del cliente).`,
+      content: outreachTemplateBody(greeting),
       additional_kwargs: { sentBy: 'sistema', reactivationTemplate: true },
       response_metadata: {},
       tool_calls: [],
@@ -208,6 +219,14 @@ export async function findConversationThread(threadKey) {
 // The template must already be approved in Meta's WhatsApp Manager under this exact
 // name/language — see the CRM ops notes for the approved wording ("seguimiento_asesor").
 const OUTREACH_TEMPLATE_NAME = process.env.WHATSAPP_TEMPLATE_NAME || 'seguimiento_asesor';
+
+// Mirror of the body approved in WhatsApp Manager. Meta sends the real thing from its
+// own copy; this only goes into the CRM transcript so the advisor sees exactly what the
+// customer received. Deliberately generic so ONE template covers both uses — greeting a
+// customer for the first time, and waking a conversation that went past the 24h window.
+// If the template is edited in Meta, edit this line to match or the transcript lies.
+const outreachTemplateBody = (name) =>
+  `Hola ${name}, te escribimos de Studio F Guatemala. Un asesor está disponible para atenderte. Responde a este mensaje para continuar.`;
 const OUTREACH_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
 
 // Advisor-initiated first contact (customer has no prior thread, or one that's gone
@@ -221,7 +240,7 @@ router.post('/', async (req, res, next) => {
     if (!address?.trim()) return res.status(400).json({ error: 'address required' });
 
     try {
-      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [fullName.trim()]);
+      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [templateGreetingName(fullName)]);
     } catch (err) {
       return res.status(502).json({ error: `no se pudo enviar la plantilla de WhatsApp: ${err.message}` });
     }
@@ -243,7 +262,7 @@ router.post('/', async (req, res, next) => {
 
     const message = {
       type: 'ai',
-      content: `Hola ${fullName.trim()}, te escribimos de Studio F Guatemala 😊 Un asesor quiere darte seguimiento personalizado. ¿Nos confirmas que podemos continuar la conversación por aquí?`,
+      content: outreachTemplateBody(templateGreetingName(fullName)),
       additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName, template: OUTREACH_TEMPLATE_NAME },
       response_metadata: {},
       tool_calls: [],
@@ -559,7 +578,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     } else if (!windowState.isOpen) {
       // Queued above; all that happens now is nudging the customer to reply so the
       // window reopens and flushQueuedMessages() can release it.
-      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, req.body?.customerName, windowState.lastInboundAt)
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
       whatsapp.sendText(phone, content.trim(), replyTo?.wamid)
@@ -640,7 +659,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
     } else if (!windowState.isOpen) {
       // The file is already on disk, so the flush re-uploads it from there once the
       // customer replies — this is exactly the case that lost the guía photo.
-      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, req.body?.customerName, windowState.lastInboundAt)
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
       whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
