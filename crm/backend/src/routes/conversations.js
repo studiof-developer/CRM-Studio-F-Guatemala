@@ -221,7 +221,7 @@ const OUTREACH_TEMPLATE_NAME = process.env.WHATSAPP_TEMPLATE_NAME || 'seguimient
 // greeting them wrong. Also generic enough that ONE template covers both uses —
 // first contact, and waking a conversation that went past the 24h window.
 const OUTREACH_TEMPLATE_BODY =
-  '¡Hola! 👋 Te escribimos de Studio F Guatemala ✨ Tenemos un asesor disponible para atenderte. Responde este mensaje y continuamos por aquí 😊';
+  '¡Hola! 👋 Te escribimos de Studio F Guatemala ✨ Nos gustaría brindarte información sobre nuestras prendas, tallas y envíos, y resolver cualquier duda que tengas. Responde este mensaje y un asesor te atiende enseguida 😊';
 const OUTREACH_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
 
 // Advisor-initiated first contact (customer has no prior thread, or one that's gone
