@@ -96,7 +96,9 @@ inboundRouter.post('/status', async (req, res, next) => {
                  '{additional_kwargs,statusError}', to_jsonb($2::text))
            WHERE message->'additional_kwargs'->>'wamid' = $1
            RETURNING session_id`,
-          [wamid, String(error ?? 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
+          // n8n sends "" (not null) when Meta reported no errors array, and ?? only
+          // catches null/undefined — without the trim check that stores a blank reason.
+          [wamid, (String(error ?? '').trim() || 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
         )
       : await pool.query(
           `UPDATE n8n_chat_histories
