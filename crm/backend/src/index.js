@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import ticketsRouter from './routes/tickets.js';
-import conversationsRouter from './routes/conversations.js';
+import conversationsRouter, { recoverOrphanedSends } from './routes/conversations.js';
 import customersRouter from './routes/customers.js';
 import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
@@ -68,6 +68,18 @@ app.get('/api/events', requireAuth, (req, res) => {
 });
 
 startListener();
+
+// A deploy landing mid-send used to strand that message forever. The startup pass
+// catches whatever the restart just orphaned; the interval catches sends that hung
+// rather than crashed. Delayed so the pool and the listener settle first.
+// ponytail: fine on one instance — two would both sweep and could double-send the
+// same row. Needs a SELECT ... FOR UPDATE SKIP LOCKED claim before scaling out.
+setTimeout(() => {
+  recoverOrphanedSends().catch((err) => console.error('recoverOrphanedSends failed', err));
+  setInterval(() => {
+    recoverOrphanedSends().catch((err) => console.error('recoverOrphanedSends failed', err));
+  }, 5 * 60 * 1000);
+}, 15000);
 
 app.use((err, req, res, next) => {
   console.error(err);

@@ -669,6 +669,28 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
 // the customer answering, the 24h window just reopened and everything the advisor wrote
 // while it was shut can finally go out — in the order they wrote it. This is what makes
 // a dead conversation resume by itself instead of the advisor having to remember.
+// Sends a message that is already stored in the transcript — used both when the queue
+// is released and when a restart-orphaned send is recovered. Attachments are re-read
+// from disk, since the original upload buffer is long gone by then.
+async function deliverStoredMessage(row, phone, attachment) {
+  let result;
+  if (attachment) {
+    const buffer = await fs.promises.readFile(attachment.file_path);
+    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type);
+    result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined);
+  } else {
+    result = await whatsapp.sendText(phone, row.message.content);
+  }
+  const sentWamid = result?.messages?.[0]?.id;
+  if (!sentWamid) throw new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó');
+  await pool.query(
+    `UPDATE n8n_chat_histories SET message = jsonb_set(
+       jsonb_set(message, '{additional_kwargs,status}', '"sent"'),
+       '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
+    [row.id, JSON.stringify(sentWamid)]
+  );
+}
+
 export async function flushQueuedMessages(rawSessionId) {
   if (!rawSessionId) return;
   const { sessionIds, phone } = await findConversationThread(cleanSessionId(rawSessionId));
@@ -696,23 +718,7 @@ export async function flushQueuedMessages(rawSessionId) {
 
   for (const row of queued) {
     try {
-      const attachment = attachmentFor.get(row.id);
-      let result;
-      if (attachment) {
-        const buffer = await fs.promises.readFile(attachment.file_path);
-        const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type);
-        result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined);
-      } else {
-        result = await whatsapp.sendText(phone, row.message.content);
-      }
-      const sentWamid = result?.messages?.[0]?.id;
-      if (!sentWamid) throw new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó');
-      await pool.query(
-        `UPDATE n8n_chat_histories SET message = jsonb_set(
-           jsonb_set(message, '{additional_kwargs,status}', '"sent"'),
-           '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
-        [row.id, JSON.stringify(sentWamid)]
-      );
+      await deliverStoredMessage(row, phone, attachmentFor.get(row.id));
     } catch (err) {
       // Stop on the first failure: the rest would fail the same way, and burning
       // through the whole queue just multiplies the errors the customer might see.
@@ -721,6 +727,73 @@ export async function flushQueuedMessages(rawSessionId) {
     }
   }
   await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionIds[0]]);
+}
+
+// Recovers sends orphaned by a restart. The real WhatsApp call happens in a background
+// promise after the row is already stored, so a container dying in that gap (a deploy
+// landing mid-send) left a message saved, never sent, and never marked failed — the
+// advisor saw a normal checkmark forever. No outbox table needed: a stored outgoing
+// message with no wamid and no terminal status IS a pending send.
+//
+// Three bounds keep this from doing damage, and none of them are optional:
+//   - sentBy = 'advisor': bot replies land in this same table from n8n, which sends
+//     them itself. Sweeping those would re-send every bot message ever written.
+//   - older than 2 minutes: anything younger may still be in flight right now.
+//   - younger than 1 hour: without an upper bound, the first run after deploy would
+//     pick up every historical message that predates wamid stamping and blast it at
+//     customers. An orphan from a restart is minutes old; nothing older is ours to fix.
+//
+// ponytail: retrying can duplicate a message that Meta actually accepted just before
+// the crash (we can't tell — the send API has no idempotency key). A duplicate is
+// recoverable, a silently lost message is the bug we're here to kill, so it retries.
+export async function recoverOrphanedSends() {
+  const { rows: orphans } = await pool.query(
+    `SELECT id, session_id, message FROM n8n_chat_histories
+     WHERE message->>'type' = 'ai'
+       AND message->'additional_kwargs'->>'sentBy' = 'advisor'
+       AND message->'additional_kwargs'->>'wamid' IS NULL
+       AND coalesce(message->'additional_kwargs'->>'status', '') NOT IN ('failed', 'queued')
+       AND created_at < now() - interval '2 minutes'
+       AND created_at > now() - interval '1 hour'
+     ORDER BY id ASC
+     LIMIT 25`
+  );
+  if (!orphans.length) return 0;
+  console.warn(`recovering ${orphans.length} orphaned send(s)`);
+
+  const { rows: attachments } = await pool.query(
+    `SELECT n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
+     WHERE n8n_message_id = ANY($1)`,
+    [orphans.map((o) => o.id)]
+  );
+  const attachmentFor = new Map(attachments.map((a) => [a.n8n_message_id, a]));
+
+  let recovered = 0;
+  for (const row of orphans) {
+    try {
+      const { sessionIds, phone } = await findConversationThread(cleanSessionId(row.session_id));
+      if (!phone) throw new Error('La conversación no tiene un número de teléfono asociado');
+
+      // Time passed while we were down, so the window may have shut in the meantime.
+      // Hand it to the queue rather than burning a doomed send — the reactivation
+      // template and the flush-on-reply already know what to do with it.
+      const { isOpen } = await getConversationWindow(sessionIds);
+      if (!isOpen) {
+        await pool.query(
+          `UPDATE n8n_chat_histories
+           SET message = jsonb_set(message, '{additional_kwargs,status}', '"queued"') WHERE id = $1`,
+          [row.id]
+        );
+        continue;
+      }
+
+      await deliverStoredMessage(row, phone, attachmentFor.get(row.id));
+      recovered += 1;
+    } catch (err) {
+      await markSendFailed(row.id, err).catch((e) => console.error('markSendFailed failed', e));
+    }
+  }
+  return recovered;
 }
 
 export default router;
