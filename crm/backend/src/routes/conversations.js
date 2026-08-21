@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
@@ -46,6 +47,56 @@ async function markSendFailed(messageId, err) {
   if (rows.length) {
     await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
   }
+}
+
+// Meta only delivers free-form messages within 24h of the customer's last inbound
+// message. Outside that window the ONLY thing that gets through is an approved
+// template — and a template does not reopen the window: just the customer replying
+// does. So anything written into a closed window is queued, a template goes out to
+// prompt a reply, and the queue flushes the moment they answer (see flushQueued below).
+const WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function getConversationWindow(sessionIds) {
+  const { rows } = await pool.query(
+    `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+     WHERE session_id = ANY($1) AND message->>'type' = 'human'`,
+    [sessionIds]
+  );
+  const lastInboundAt = rows[0]?.last_inbound_at ?? null;
+  // No inbound at all means the customer never wrote, so there is no open window either.
+  return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
+}
+
+// One template per dormant stretch — the advisor writing five lines into a dead chat
+// must not fire five billable templates at the customer, which is also how a number
+// gets flagged. Anything already sent since the last inbound counts as "asked already".
+async function reactivationAlreadySent(sessionIds, lastInboundAt) {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM n8n_chat_histories
+     WHERE session_id = ANY($1)
+       AND message->'additional_kwargs'->>'reactivationTemplate' = 'true'
+       AND ($2::timestamptz IS NULL OR created_at > $2)
+     LIMIT 1`,
+    [sessionIds, lastInboundAt]
+  );
+  return rows.length > 0;
+}
+
+async function sendReactivationTemplate(sessionId, sessionIds, phone, customerName, lastInboundAt) {
+  if (await reactivationAlreadySent(sessionIds, lastInboundAt)) return;
+  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [customerName || 'Hola']);
+  // Recorded in the transcript so the advisor sees exactly what the customer got, and
+  // so the check above can tell this dormant stretch was already covered.
+  await pool.query(
+    `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`,
+    [sessionId, JSON.stringify({
+      type: 'ai',
+      content: `Se envió la plantilla "${OUTREACH_TEMPLATE_NAME}" para reactivar la conversación (pasaron más de 24 h desde el último mensaje del cliente).`,
+      additional_kwargs: { sentBy: 'sistema', reactivationTemplate: true },
+      response_metadata: {},
+      tool_calls: [],
+    })]
+  );
 }
 
 // A send that resolves without giving us a wamid never reached WhatsApp either — Meta
@@ -459,12 +510,17 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [sessionIds]
     );
 
+    const windowState = await getConversationWindow(sessionIds);
+
     const message = {
       type: 'ai',
       content: content.trim(),
       additional_kwargs: {
         sentBy: 'advisor',
         advisorName: req.user.fullName,
+        // Held rather than sent: Meta would reject it outright right now. It goes out
+        // by itself as soon as the customer answers the reactivation template below.
+        ...(windowState.isOpen ? {} : { status: 'queued' }),
         // Snapshot, not a live reference — the quoted message stays exactly as it
         // looked when the advisor hit reply, even if the thread scrolls past it.
         ...(replyTo?.id ? { replyTo: {
@@ -497,12 +553,19 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     // match their context.id back to it and show what they're replying to in the CRM.
     // No phone means there is nobody to deliver to — previously this branch just did
     // nothing at all, leaving the message sitting in the CRM looking sent forever.
-    const sendPromise = phone
-      ? whatsapp.sendText(phone, content.trim(), replyTo?.wamid).then((result) => handleSendResult(inserted[0].id, result))
-      : markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'));
-    sendPromise.catch((err) =>
-      markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e))
-    );
+    if (!phone) {
+      markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'))
+        .catch((e) => console.error('markSendFailed failed', e));
+    } else if (!windowState.isOpen) {
+      // Queued above; all that happens now is nudging the customer to reply so the
+      // window reopens and flushQueuedMessages() can release it.
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, req.body?.customerName, windowState.lastInboundAt)
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
+    } else {
+      whatsapp.sendText(phone, content.trim(), replyTo?.wamid)
+        .then((result) => handleSendResult(inserted[0].id, result))
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
+    }
   } catch (err) { next(err); }
 });
 
@@ -535,10 +598,16 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
 
     const caption = (req.body?.caption ?? '').trim();
 
+    const windowState = await getConversationWindow(sessionIds);
+
     const message = {
       type: 'ai',
       content: caption,
-      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName },
+      additional_kwargs: {
+        sentBy: 'advisor',
+        advisorName: req.user.fullName,
+        ...(windowState.isOpen ? {} : { status: 'queued' }),
+      },
       response_metadata: {},
       tool_calls: [],
     };
@@ -565,15 +634,79 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       attachment: { id: attachmentId, kind, filename: req.file.originalname, mimeType: req.file.mimetype, sizeBytes: req.file.buffer.length },
     });
 
-    const sendPromise = phone
-      ? whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
-          .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
-          .then((result) => handleSendResult(inserted[0].id, result))
-      : markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'));
-    sendPromise.catch((err) =>
-      markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e))
-    );
+    if (!phone) {
+      markSendFailed(inserted[0].id, new Error('La conversación no tiene un número de teléfono asociado'))
+        .catch((e) => console.error('markSendFailed failed', e));
+    } else if (!windowState.isOpen) {
+      // The file is already on disk, so the flush re-uploads it from there once the
+      // customer replies — this is exactly the case that lost the guía photo.
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, req.body?.customerName, windowState.lastInboundAt)
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
+    } else {
+      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
+        .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
+        .then((result) => handleSendResult(inserted[0].id, result))
+        .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
+    }
   } catch (err) { next(err); }
 });
+
+// Called by the listener whenever any row lands in n8n_chat_histories. If that row was
+// the customer answering, the 24h window just reopened and everything the advisor wrote
+// while it was shut can finally go out — in the order they wrote it. This is what makes
+// a dead conversation resume by itself instead of the advisor having to remember.
+export async function flushQueuedMessages(rawSessionId) {
+  if (!rawSessionId) return;
+  const { sessionIds, phone } = await findConversationThread(cleanSessionId(rawSessionId));
+  if (!phone || !sessionIds?.length) return;
+
+  const { rows: queued } = await pool.query(
+    `SELECT id, message FROM n8n_chat_histories
+     WHERE session_id = ANY($1) AND message->'additional_kwargs'->>'status' = 'queued'
+     ORDER BY id ASC`,
+    [sessionIds]
+  );
+  if (!queued.length) return;
+
+  // Re-check rather than trust the notification: the row that woke us could have been
+  // our own outgoing message, in which case the window is still shut.
+  const { isOpen } = await getConversationWindow(sessionIds);
+  if (!isOpen) return;
+
+  const { rows: attachments } = await pool.query(
+    `SELECT n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
+     WHERE n8n_message_id = ANY($1)`,
+    [queued.map((q) => q.id)]
+  );
+  const attachmentFor = new Map(attachments.map((a) => [a.n8n_message_id, a]));
+
+  for (const row of queued) {
+    try {
+      const attachment = attachmentFor.get(row.id);
+      let result;
+      if (attachment) {
+        const buffer = await fs.promises.readFile(attachment.file_path);
+        const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type);
+        result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined);
+      } else {
+        result = await whatsapp.sendText(phone, row.message.content);
+      }
+      const sentWamid = result?.messages?.[0]?.id;
+      if (!sentWamid) throw new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó');
+      await pool.query(
+        `UPDATE n8n_chat_histories SET message = jsonb_set(
+           jsonb_set(message, '{additional_kwargs,status}', '"sent"'),
+           '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
+        [row.id, JSON.stringify(sentWamid)]
+      );
+    } catch (err) {
+      // Stop on the first failure: the rest would fail the same way, and burning
+      // through the whole queue just multiplies the errors the customer might see.
+      await markSendFailed(row.id, err).catch((e) => console.error('markSendFailed failed', e));
+      break;
+    }
+  }
+  await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionIds[0]]);
+}
 
 export default router;

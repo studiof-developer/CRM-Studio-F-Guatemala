@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot,
+  Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
   Megaphone, Mail,
 } from 'lucide-react';
@@ -86,6 +86,18 @@ function MessageTicks({ status, statusError }) {
         className="flex items-center gap-0.5 font-semibold text-red-200"
       >
         <AlertTriangle size={11} /> no se envió
+      </span>
+    );
+  }
+  // Written while WhatsApp's 24h window was shut. Nothing is lost — it goes out on its
+  // own the moment the customer answers the reactivation template.
+  if (status === 'queued') {
+    return (
+      <span
+        title="En espera: sale automáticamente cuando el cliente responda"
+        className="flex items-center gap-0.5 font-medium text-white/90"
+      >
+        <Clock size={11} /> en espera
       </span>
     );
   }
@@ -916,12 +928,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               <>
               {windowClosed && (
                 <div className="flex items-start gap-2.5 border-t border-warn/30 bg-warn/10 px-4 py-2.5">
-                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warn" />
+                  <Clock size={15} className="mt-0.5 shrink-0 text-warn" />
                   <p className="text-xs leading-relaxed text-ink">
-                    <span className="font-semibold">WhatsApp no permite escribirle ahora.</span>{' '}
-                    Pasaron más de 24 horas desde el último mensaje del cliente, así que Meta
-                    va a rechazar lo que envíes y <span className="font-semibold">no le va a llegar</span>.
-                    Espera a que el cliente escriba, o contáctalo por otro medio.
+                    <span className="font-semibold">Pasaron más de 24 h desde el último mensaje del cliente.</span>{' '}
+                    WhatsApp no deja escribirle directo, así que al enviar se le manda primero
+                    una plantilla para reactivar el chat y{' '}
+                    <span className="font-semibold">tu mensaje sale solo en cuanto responda</span>.
+                    No se pierde nada, pero puede tardar.
                   </p>
                 </div>
               )}
