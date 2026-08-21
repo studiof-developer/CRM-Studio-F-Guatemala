@@ -47,12 +47,21 @@ const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
 // Turns a message into what its quote preview should show — a document shows its
 // filename (not a generic "Adjunto"), an image shows nothing here since the preview
 // renders an actual thumbnail instead, audio gets a plain label.
+// One place that turns an attachment into readable text, so a photo sent with no
+// caption reads the same in the conversation list, in a reply quote, and anywhere else
+// a message has to be summarised in a single line. Prefers the real filename — that's
+// what tells an advisor which file it was — and falls back to the kind when WhatsApp
+// gave us no name, which is common for photos taken in the app.
+export function describeAttachment(attachment) {
+  if (!attachment) return '';
+  const icon = attachment.kind === 'image' ? '📷' : attachment.kind === 'audio' ? '🎵' : '📄';
+  const fallback = attachment.kind === 'image' ? 'Foto' : attachment.kind === 'audio' ? 'Audio' : 'Documento';
+  return `${icon} ${attachment.filename || fallback}`;
+}
+
 function describeQuoted(msg, from) {
   const att = msg.attachment;
-  let content = msg.content?.trim() || '';
-  if (!content && att) {
-    content = att.kind === 'document' ? (att.filename || 'Documento') : att.kind === 'audio' ? '🎵 Audio' : '';
-  }
+  const content = msg.content?.trim() || describeAttachment(att);
   return { from, content, attachmentKind: att?.kind ?? null, attachmentId: att?.id ?? null };
 }
 
@@ -531,7 +540,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className={`truncate text-xs ${unread ? 'font-semibold text-ink' : 'text-greige-ink'}`}>
-                      {typeof c.lastMessage?.content === 'string' ? c.lastMessage.content : ''}
+                      {(typeof c.lastMessage?.content === 'string' && c.lastMessage.content.trim())
+                        || describeAttachment(c.lastAttachment)}
                     </p>
                     <div className="flex shrink-0 items-center gap-1">
                     {unread > 0 && (
@@ -797,9 +807,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                       {quotePreview.from || '—'}
                                     </p>
                                     <p className={`truncate ${outgoing ? 'text-white/90' : 'text-greige-ink'}`}>
-                                      {quotePreview.attachmentKind === 'image'
-                                        ? (quotePreview.content || '📷 Foto')
-                                        : (quotePreview.content || '📎 Adjunto')}
+                                      {quotePreview.content || '📎 Adjunto'}
                                     </p>
                                   </div>
                                 </div>

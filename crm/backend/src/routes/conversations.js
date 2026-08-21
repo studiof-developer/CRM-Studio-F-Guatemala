@@ -275,12 +275,19 @@ router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       WITH readable AS (
-        -- Skip tool-call/tool-result rows (empty content, raw JSON) — only
-        -- real human/assistant text counts as a "message" here.
-        SELECT session_id, id, message, created_at
-        FROM n8n_chat_histories
-        WHERE message->>'type' IN ('human', 'ai')
-          AND coalesce(message->>'content', '') <> ''
+        -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
+        -- human/assistant messages count here. Empty content alone can't be the test
+        -- though: a photo or document sent with no caption is a real message with an
+        -- empty content field, and excluding it meant a customer who sent only a photo
+        -- never bumped the thread's position, never raised its unread badge and never
+        -- showed in the preview — the advisor had no signal anything had arrived.
+        SELECT h.session_id, h.id, h.message, h.created_at
+        FROM n8n_chat_histories h
+        WHERE h.message->>'type' IN ('human', 'ai')
+          AND (
+            coalesce(h.message->>'content', '') <> ''
+            OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
+          )
       ),
       phone_by_session AS (
         SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
@@ -331,10 +338,14 @@ router.get('/', async (req, res, next) => {
       SELECT l.thread_key, l.id AS last_id, l.message, l.created_at, cnt.message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, t.status AS ticket_status,
              CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
-             COALESCE(uc.unread_count, 0) AS unread_count
+             COALESCE(uc.unread_count, 0) AS unread_count,
+             att.kind AS last_attachment_kind, att.filename AS last_attachment_filename
       FROM last_msg l
       JOIN counts cnt USING (thread_key)
       LEFT JOIN unread_counts uc USING (thread_key)
+      -- So the preview can name the file when the last message is an attachment with
+      -- no caption, instead of rendering an empty line.
+      LEFT JOIN message_attachments att ON att.n8n_message_id = l.id
       LEFT JOIN customers c ON c.whatsapp_number = l.phone
       LEFT JOIN LATERAL (
         SELECT status FROM tickets
@@ -373,6 +384,9 @@ router.get('/', async (req, res, next) => {
       lastMessageAt: r.created_at,
       messageCount: Number(r.message_count),
       lastMessage: r.message,
+      lastAttachment: r.last_attachment_kind
+        ? { kind: r.last_attachment_kind, filename: r.last_attachment_filename }
+        : null,
       customerName: r.full_name,
       phone: r.phone,
       ticketStatus: r.ticket_status,
