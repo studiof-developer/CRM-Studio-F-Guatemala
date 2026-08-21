@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
@@ -13,6 +13,7 @@ import Users from './Users.jsx';
 import Catalog from './Catalog.jsx';
 import Audit from './Audit.jsx';
 import QuickReplies from './QuickReplies.jsx';
+import Campaigns from './Campaigns.jsx';
 import WhatsappNumbers from './WhatsappNumbers.jsx';
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
@@ -30,6 +31,14 @@ const BASE_TABS = {
 // Admin and supervisor only.
 const AUDIT_TABS = {
   audit: { label: 'Auditoría', icon: ShieldCheck, Component: Audit },
+};
+
+// Admin and supervisor only — a broadcast reaches many customers at once and costs real
+// money per message, so it's held to the same bar as auditoría rather than open to
+// every asesor. Matches the backend's own requireRole('admin', 'supervisor') on
+// /api/campaigns.
+const CAMPAIGN_TABS = {
+  campaigns: { label: 'Difusión', icon: Megaphone, Component: Campaigns },
 };
 
 // Admin only.
@@ -126,6 +135,7 @@ export default function App() {
   const tabs = {
     ...BASE_TABS,
     ...(user.role === 'admin' || user.role === 'supervisor' ? AUDIT_TABS : {}),
+    ...(user.role === 'admin' || user.role === 'supervisor' ? CAMPAIGN_TABS : {}),
     ...(user.role === 'admin' ? ADMIN_TABS : {}),
     ...(user.role === 'admin' ? SETTINGS_TABS : {}),
   };

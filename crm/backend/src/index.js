@@ -12,6 +12,7 @@ import authRouter from './routes/auth.js';
 import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import quickRepliesRouter from './routes/quickReplies.js';
 import whatsappNumbersRouter from './routes/whatsappNumbers.js';
+import campaignsRouter from './routes/campaigns.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
@@ -37,6 +38,9 @@ app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRout
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 app.use('/api/quick-replies', requireAuth, quickRepliesRouter);
 app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin'), whatsappNumbersRouter);
+// A broadcast reaches hundreds of customers at once and costs real money per message —
+// restricted the same way WhatsApp number configuration is, not opened to every asesor.
+app.use('/api/campaigns', requireAuth, requireRole('admin', 'supervisor'), campaignsRouter);
 // No requireAuth: n8n calls this directly (no advisor session), protected by its own
 // shared-secret header check inside the router instead.
 app.use('/api/whatsapp-inbound', inboundRouter);

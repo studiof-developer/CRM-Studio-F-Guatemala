@@ -1,0 +1,344 @@
+import { useEffect, useState, useCallback } from 'react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2 } from 'lucide-react';
+import {
+  fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
+} from './api.js';
+import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
+import Select from './components/Select.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
+
+const TEMP_OPTIONS = [
+  { value: '', label: 'Todas las temperaturas' },
+  ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
+];
+
+const STATUS_META = {
+  sent: { label: 'Enviado', className: 'text-greige-ink' },
+  delivered: { label: 'Recibido', className: 'text-ink' },
+  read: { label: 'Leído', className: 'text-accent' },
+  failed: { label: 'Falló', className: 'text-danger' },
+};
+
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-GT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+export default function Campaigns() {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchCampaigns().then(setCampaigns).catch((err) => setError(err.message)).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!openId) { setDetail(null); return; }
+    fetchCampaign(openId).then(setDetail).catch((err) => showError(err.message));
+  }, [openId]);
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Difusión</h1>
+            <p className="mt-1 text-sm text-greige-ink">Enviar una plantilla aprobada a varios clientes a la vez.</p>
+          </div>
+          <button
+            onClick={() => setNewOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            <Plus size={15} /> Nueva difusión
+          </button>
+        </div>
+      </div>
+
+      <div className="px-8 pb-8">
+        {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+        {loading && <p className="text-sm text-greige-ink">Cargando…</p>}
+        {!loading && campaigns.length === 0 && (
+          <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-greige-ink">
+            Todavía no se ha enviado ninguna difusión.
+          </div>
+        )}
+        <div className="flex flex-col gap-2">
+          {campaigns.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setOpenId(c.id)}
+              className="flex items-center justify-between gap-4 rounded-xl border border-line bg-paper p-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                    <Megaphone size={13} />
+                  </span>
+                  <p className="truncate text-sm font-semibold text-ink">{c.templateName}</p>
+                  {c.status === 'sending' && (
+                    <span className="flex items-center gap-1 text-xs font-medium text-warn"><Loader2 size={11} className="animate-spin" /> enviando</span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-greige-ink">
+                  {c.temperature ? TEMP_META[c.temperature]?.label : 'Sin filtro de temperatura'} · {c.recipientCount} destinatarios · {formatDateTime(c.createdAt)} · {c.createdBy}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3 text-xs">
+                <span className="text-ink">{c.sentCount} enviados</span>
+                <span className="text-accent">{c.readCount} leídos</span>
+                {c.failedCount > 0 && <span className="text-danger">{c.failedCount} fallidos</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {detail && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={() => setOpenId(null)}>
+          <div
+            className="glass-card max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-ink">{detail.templateName}</h3>
+                <p className="mt-0.5 text-xs text-greige-ink">{detail.recipientCount} destinatarios · {formatDateTime(detail.createdAt)}</p>
+              </div>
+              <button onClick={() => setOpenId(null)} className="text-greige hover:text-ink"><X size={16} /></button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {detail.recipients.map((r, i) => {
+                const meta = STATUS_META[r.status] ?? STATUS_META.sent;
+                return (
+                  <div key={i} className="flex items-center justify-between gap-3 rounded-lg bg-black/[0.02] dark:bg-white/[0.03] px-3 py-2 text-sm">
+                    <span className="truncate text-ink">{r.customerName || r.phone}</span>
+                    <span className={`shrink-0 text-xs font-medium ${meta.className}`} title={r.statusError || ''}>{meta.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newOpen && (
+        <NewCampaignModal
+          onClose={() => setNewOpen(false)}
+          onSent={() => { setNewOpen(false); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewCampaignModal({ onClose, onSent }) {
+  const [templates, setTemplates] = useState(null);
+  const [templatesError, setTemplatesError] = useState(null);
+  const [templateKey, setTemplateKey] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [order, setOrder] = useState('recent');
+  const [count, setCount] = useState(50);
+  const [audienceCount, setAudienceCount] = useState(null);
+  const [manualQuery, setManualQuery] = useState('');
+  const [manualResults, setManualResults] = useState([]);
+  const [manualPicked, setManualPicked] = useState([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetchCampaignTemplates().then(setTemplates).catch((err) => setTemplatesError(err.message));
+  }, []);
+
+  useEffect(() => {
+    if (!temperature) { setAudienceCount(null); return; }
+    let cancelled = false;
+    searchCampaignAudience(temperature).then((rows) => { if (!cancelled) setAudienceCount(rows.length); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [temperature]);
+
+  useEffect(() => {
+    if (!manualQuery.trim()) { setManualResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      searchCampaignAudience('', manualQuery.trim()).then((rows) => { if (!cancelled) setManualResults(rows); }).catch(() => {});
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [manualQuery]);
+
+  const template = templates?.find((t) => `${t.name}__${t.language}` === templateKey);
+  const pickedIds = new Set(manualPicked.map((p) => p.id));
+
+  function addManual(customer) {
+    if (pickedIds.has(customer.id)) return;
+    setManualPicked((prev) => [...prev, customer]);
+    setManualQuery('');
+    setManualResults([]);
+  }
+
+  const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
+  const canSend = !!template && (temperature || manualPicked.length > 0) && totalRecipients > 0;
+
+  async function handleSend() {
+    setBusy(true);
+    try {
+      const res = await createCampaign({
+        templateName: template.name,
+        templateLanguage: template.language,
+        temperature: temperature || undefined,
+        count: temperature ? count : undefined,
+        order,
+        customerIds: manualPicked.map((p) => p.id),
+      });
+      showSuccess(`Difusión en marcha — ${res.recipientCount} destinatarios`);
+      onSent();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setBusy(false);
+      setConfirmOpen(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={onClose}>
+      <div
+        className="glass-card max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-ink">Nueva difusión</h3>
+          <button onClick={onClose} className="text-greige hover:text-ink"><X size={16} /></button>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Plantilla de Meta</label>
+            {templatesError && <p className="text-xs text-danger">{templatesError}</p>}
+            {!templatesError && !templates && <p className="text-xs text-greige-ink">Cargando plantillas de WhatsApp Manager…</p>}
+            {templates && templates.length === 0 && <p className="text-xs text-greige-ink">No hay plantillas activas en este momento.</p>}
+            {templates && templates.length > 0 && (
+              <Select
+                value={templateKey}
+                onChange={setTemplateKey}
+                placeholder="Elegir plantilla…"
+                options={templates.map((t) => ({ value: `${t.name}__${t.language}`, label: t.name, meta: t.category }))}
+              />
+            )}
+            {template && (
+              <p className="mt-2 rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-xs leading-relaxed text-greige-ink">
+                {template.body}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Audiencia masiva por temperatura</label>
+            <Select value={temperature} onChange={setTemperature} options={TEMP_OPTIONS} />
+            {temperature && (
+              <div className="mt-2.5 flex items-center gap-2.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={count}
+                  onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-24 rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                />
+                <span className="text-xs text-greige-ink">
+                  de {audienceCount ?? '…'} disponibles con esa temperatura
+                </span>
+              </div>
+            )}
+            {temperature && (
+              <div className="mt-2 inline-flex rounded-lg border border-line p-0.5 text-xs">
+                <button
+                  onClick={() => setOrder('recent')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'recent' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                >
+                  <ArrowDownWideNarrow size={12} /> Más recientes primero
+                </button>
+                <button
+                  onClick={() => setOrder('oldest')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'oldest' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                >
+                  <Clock size={12} /> Más antiguos primero
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Agregar clientes puntuales (por nombre o teléfono)</label>
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-greige" />
+              <input
+                value={manualQuery}
+                onChange={(e) => setManualQuery(e.target.value)}
+                placeholder="ej. 50255529660 o Erika"
+                className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+              />
+            </div>
+            {manualResults.length > 0 && (
+              <div className="mt-1.5 flex flex-col gap-1 rounded-lg border border-line bg-paper p-1.5 shadow-sm">
+                {manualResults.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => addManual(c)}
+                    disabled={pickedIds.has(c.id)}
+                    className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:opacity-40"
+                  >
+                    <span className="truncate text-ink">{c.fullName || c.phone}</span>
+                    <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {manualPicked.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {manualPicked.map((c) => (
+                  <span key={c.id} className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                    {c.fullName || c.phone}
+                    <button onClick={() => setManualPicked((prev) => prev.filter((p) => p.id !== c.id))} className="hover:opacity-70">
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-between border-t border-line-soft pt-4">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <Users size={14} className="text-greige" /> {totalRecipients} destinatario{totalRecipients === 1 ? '' : 's'}
+          </p>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={!canSend}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            <Send size={14} /> Enviar difusión
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Confirmar difusión"
+        message={`Se va a enviar la plantilla "${template?.name}" a ${totalRecipients} clientes. Esto no se puede deshacer y cada mensaje tiene costo real en tu cuenta de Meta.`}
+        confirmLabel={busy ? 'Enviando…' : 'Sí, enviar'}
+        busy={busy}
+        danger
+        onConfirm={handleSend}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </div>
+  );
+}

@@ -113,6 +113,43 @@ export function attachmentDownloadUrl(id) {
   return `${attachmentUrl(id)}?download=1`;
 }
 
+export async function fetchCampaignTemplates() {
+  const res = await apiFetch('/api/campaigns/templates');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las plantillas');
+  return res.json();
+}
+
+export async function searchCampaignAudience(temperature, q) {
+  const params = new URLSearchParams();
+  if (temperature) params.set('temperature', temperature);
+  if (q) params.set('q', q);
+  const res = await apiFetch(`/api/campaigns/audience?${params.toString()}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al buscar clientes');
+  return res.json();
+}
+
+export async function fetchCampaigns() {
+  const res = await apiFetch('/api/campaigns');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las campañas');
+  return res.json();
+}
+
+export async function fetchCampaign(id) {
+  const res = await apiFetch(`/api/campaigns/${id}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar la campaña');
+  return res.json();
+}
+
+export async function createCampaign(payload) {
+  const res = await apiFetch('/api/campaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la campaña');
+  return res.json();
+}
+
 export async function fetchCustomerCounts() {
   const res = await apiFetch('/api/customers/counts');
   if (!res.ok) throw new Error('Error al cargar los conteos de clientes');

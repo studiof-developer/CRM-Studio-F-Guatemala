@@ -19,13 +19,15 @@ const ENV_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 // sent to anyone. A missing config is a send failure and has to be loud.
 async function getActiveCredentials() {
   const { rows } = await pool.query(
-    `SELECT phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`
+    `SELECT waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`
   );
   if (rows.length) {
-    return { phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
+    return { wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
   }
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
-    return { phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
+    // No waba_id in the env fallback — fine for sending (needs only phoneNumberId),
+    // not for listTemplates below, which will throw its own clear error if reached.
+    return { wabaId: null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
   }
   throw new Error('WhatsApp no está configurado (no hay número activo en Configuración ni credenciales en el entorno)');
 }
@@ -83,6 +85,22 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
       template: { name: templateName, language: { code: languageCode }, components },
     }),
   }, creds.token);
+}
+
+// Live from Meta rather than mirrored in our own DB — a template's approval status
+// changes on Meta's side (review, reclassification, pause) and a stale local copy is
+// exactly how a campaign could try to send with a template that no longer works.
+export async function listTemplates() {
+  const creds = await getActiveCredentials();
+  if (!creds.wabaId) {
+    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
+  }
+  const { data } = await graphFetch(
+    `${creds.wabaId}/message_templates?fields=name,status,category,language,components&limit=100`,
+    { method: 'GET' },
+    creds.token
+  );
+  return data ?? [];
 }
 
 export async function uploadMedia(buffer, mimeType) {
