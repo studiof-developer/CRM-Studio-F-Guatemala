@@ -11,6 +11,10 @@ const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 // Once whatsapp_numbers has an active row, that row always wins.
 const ENV_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const ENV_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+// Optional — only listTemplates() (the campaign/broadcast picker) needs it. Sending a
+// message never has, so this stayed unset with everything else working fine until the
+// broadcast feature needed to ask Meta "which templates does this account have".
+const ENV_WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
 // Throws rather than returning null: every caller runs in a fire-and-forget background
 // promise whose only failure signal is a rejection. Returning null there meant "no
@@ -25,9 +29,7 @@ async function getActiveCredentials() {
     return { wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
   }
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
-    // No waba_id in the env fallback — fine for sending (needs only phoneNumberId),
-    // not for listTemplates below, which will throw its own clear error if reached.
-    return { wabaId: null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
+    return { wabaId: ENV_WABA_ID ?? null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
   }
   throw new Error('WhatsApp no está configurado (no hay número activo en Configuración ni credenciales en el entorno)');
 }
