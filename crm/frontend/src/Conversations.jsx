@@ -213,19 +213,31 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   // below with showLoading=true — that was what made the list flash "Cargando..." and jump.
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
+  // Loading all 1000+ threads at once was what made the list feel heavy — start with the
+  // most recently active PAGE_SIZE and grow it as the advisor scrolls. Live refreshes
+  // (SSE/poll) re-fetch this same growing count, not a fixed page, so scrolling down
+  // doesn't get silently truncated back to the top page on the next update.
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [hasMore, setHasMore] = useState(true);
+
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
       const isUnreadFilter = ticketStatusFilter === UNREAD_FILTER;
-      const data = await fetchConversations(search, temperature, isUnreadFilter ? '' : ticketStatusFilter);
+      const data = await fetchConversations(search, temperature, isUnreadFilter ? '' : ticketStatusFilter, visibleCount);
       setConversations(isUnreadFilter ? data.filter((r) => r.unreadCount > 0) : data);
+      setHasMore(data.length >= visibleCount);
     } catch (err) {
       setError(err.message);
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature, ticketStatusFilter]);
+  }, [search, temperature, ticketStatusFilter, visibleCount]);
+
+  // A new search/filter is a fresh list — start back at one page of it.
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -519,7 +531,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           />
         </div>
 
-        <div className="relative flex-1 overflow-y-auto">
+        <div
+          className="relative flex-1 overflow-y-auto"
+          onScroll={(e) => {
+            if (!hasMore || loading) return;
+            const el = e.currentTarget;
+            if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+              setVisibleCount((n) => n + 10);
+            }
+          }}
+        >
           {/* Overlaid, not in-flow — a loading blip here must never push the list around. */}
           <AnimatePresence>
             {loading && (

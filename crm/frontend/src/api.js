@@ -47,11 +47,12 @@ export async function updateTicket(id, patch) {
   return res.json();
 }
 
-export async function fetchConversations(q, temperature, ticketStatus) {
+export async function fetchConversations(q, temperature, ticketStatus, limit) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (temperature) params.set('temperature', temperature);
   if (ticketStatus) params.set('ticketStatus', ticketStatus);
+  if (limit) params.set('limit', limit);
   const qs = params.toString();
   const res = await apiFetch(`/api/conversations${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar conversaciones');

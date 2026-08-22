@@ -273,6 +273,14 @@ router.post('/', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
+    const { q, temperature, ticketStatus } = req.query;
+    // Loading every conversation up front got heavy once the list passed ~1000 threads.
+    // Filters run in JS below (over fields the SQL doesn't have a clean WHERE for), so a
+    // filtered view still needs the full set — only the plain, most-common "just open the
+    // list" case is capped here, newest-active first, with the frontend paging in more as
+    // the advisor scrolls.
+    const hasFilter = !!(q?.trim() || temperature || ticketStatus);
+    const limit = hasFilter ? null : Math.min(Number(req.query.limit) || 50, 5000);
     const { rows } = await pool.query(`
       WITH readable AS (
         -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
@@ -353,18 +361,18 @@ router.get('/', async (req, res, next) => {
         ORDER BY created_at DESC LIMIT 1
       ) t ON true
       ORDER BY l.id DESC
-    `);
+      ${limit ? 'LIMIT $1' : ''}
+    `, limit ? [limit] : []);
     // The advisor team handles every zone, so no zone filtering here.
     let visible = rows;
 
-    const q = req.query.q?.trim().toLowerCase();
-    if (q) {
+    const qLower = q?.trim().toLowerCase();
+    if (qLower) {
       visible = visible.filter((r) =>
-        (r.full_name ?? '').toLowerCase().includes(q) || (r.phone ?? '').includes(q)
+        (r.full_name ?? '').toLowerCase().includes(qLower) || (r.phone ?? '').includes(qLower)
       );
     }
 
-    const { temperature } = req.query;
     if (temperature) {
       if (!VALID_TEMPERATURES.includes(temperature)) return res.status(400).json({ error: 'invalid temperature' });
       visible = visible.filter((r) => r.temperature === temperature);
@@ -372,7 +380,6 @@ router.get('/', async (req, res, next) => {
 
     // "bot" isn't a real ticket status — it means no active ticket exists at all.
     const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'en_atencion', 'resuelto'];
-    const { ticketStatus } = req.query;
     if (ticketStatus) {
       if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
       visible = visible.filter((r) => (ticketStatus === 'bot' ? !r.ticket_status : r.ticket_status === ticketStatus));
