@@ -181,6 +181,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     null
   );
   const windowClosed = !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() > 24 * 60 * 60 * 1000;
+  // A broadcast (or the reactivation template itself) already prompted the customer in
+  // this same dormant stretch — the backend won't fire another one on top of it (see
+  // reactivationAlreadySent), so the banner shouldn't claim it's about to.
+  const templateAlreadySent = thread?.messages?.some((m) =>
+    (m.additional_kwargs?.reactivationTemplate === true || m.additional_kwargs?.sentBy === 'campaign') &&
+    (!lastInboundAt || new Date(m.createdAt) > new Date(lastInboundAt))
+  );
 
   function applyQuickReply(item) {
     setDraft(item.content);
@@ -998,7 +1005,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
             {thread.enAtencion ? (
               <>
-              {windowClosed && (
+              {windowClosed && templateAlreadySent && (
+                <div className="flex items-start gap-2.5 border-t border-cyan/30 bg-cyan-bg px-4 py-2.5">
+                  <Megaphone size={15} className="mt-0.5 shrink-0 text-cyan" />
+                  <p className="text-xs leading-relaxed text-ink">
+                    <span className="font-semibold">Ya se envió una plantilla de WhatsApp a este cliente</span>{' '}
+                    (difusión o reactivación) y sigue sin responder — no hace falta mandar otra.{' '}
+                    <span className="font-semibold">Tu mensaje sale solo en cuanto responda.</span>
+                  </p>
+                </div>
+              )}
+              {windowClosed && !templateAlreadySent && (
                 <div className="flex items-start gap-2.5 border-t border-warn/30 bg-warn/10 px-4 py-2.5">
                   <Clock size={15} className="mt-0.5 shrink-0 text-warn" />
                   <p className="text-xs leading-relaxed text-ink">

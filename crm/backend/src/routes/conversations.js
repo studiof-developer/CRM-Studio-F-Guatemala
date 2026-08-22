@@ -74,7 +74,14 @@ async function reactivationAlreadySent(sessionIds, lastInboundAt) {
   const { rows } = await pool.query(
     `SELECT 1 FROM n8n_chat_histories
      WHERE session_id = ANY($1)
-       AND message->'additional_kwargs'->>'reactivationTemplate' = 'true'
+       AND (
+         message->'additional_kwargs'->>'reactivationTemplate' = 'true'
+         -- A broadcast template (difusión) already prompted the customer within this
+         -- same dormant stretch — firing the reactivation template on top of that risks
+         -- Meta's per-user marketing frequency cap for no benefit, since either one
+         -- reopens the window the same way (only the customer's reply actually does).
+         OR message->'additional_kwargs'->>'campaignId' IS NOT NULL
+       )
        AND ($2::timestamptz IS NULL OR created_at > $2)
      LIMIT 1`,
     [sessionIds, lastInboundAt]
