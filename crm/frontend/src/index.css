@@ -33,6 +33,7 @@
   --warn: #b45309;
   --danger: #b91c1c;
   --purple: #7e22ce;
+  --cyan: #0e7490;
 
   /* Back-compat aliases for the pre-Persiinova token names */
   --muted: rgba(0, 0, 0, 0.04);
@@ -49,6 +50,7 @@
   --info-bg: var(--accent-soft);
   --danger-bg: rgba(185, 28, 28, 0.1);
   --purple-bg: rgba(126, 34, 206, 0.1);
+  --cyan-bg: rgba(14, 116, 144, 0.1);
 }
 
 .dark {
@@ -75,6 +77,7 @@
   --warn: #f59e0b;
   --danger: #ef4444;
   --purple: #a855f7;
+  --cyan: #22d3ee;
 
   --muted: rgba(255, 255, 255, 0.05);
   
@@ -83,6 +86,7 @@
   --info-bg: var(--accent-soft);
   --danger-bg: rgba(239, 68, 68, 0.15);
   --purple-bg: rgba(168, 85, 247, 0.15);
+  --cyan-bg: rgba(34, 211, 238, 0.15);
 }
 
 @theme inline {
@@ -107,6 +111,7 @@
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-purple: var(--purple);
+  --color-cyan: var(--cyan);
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
@@ -122,6 +127,7 @@
   --color-info-bg: var(--info-bg);
   --color-danger-bg: var(--danger-bg);
   --color-purple-bg: var(--purple-bg);
+  --color-cyan-bg: var(--cyan-bg);
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
 }

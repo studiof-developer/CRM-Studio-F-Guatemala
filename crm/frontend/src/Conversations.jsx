@@ -626,7 +626,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       </span>
                     )}
                     {!c.ticketStatus && isUnansweredBroadcast(c.lastMessage) && (
-                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-bg px-2 py-0.5 text-[10px] font-semibold text-cyan">
                         <Megaphone size={10} /> difusión
                       </span>
                     )}
@@ -697,7 +697,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               {!thread.ticketStatus && (
                 <div className="flex items-center gap-2">
                   {isUnansweredBroadcast(thread.messages[thread.messages.length - 1]) ? (
-                    <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                    <span className="flex items-center gap-1.5 rounded-full bg-cyan-bg px-2.5 py-1 text-xs font-medium text-cyan">
                       <Megaphone size={12} /> Difusión enviada — sin respuesta
                     </span>
                   ) : (
