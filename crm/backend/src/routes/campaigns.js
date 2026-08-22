@@ -39,6 +39,9 @@ async function getCooldownMap() {
     `SELECT split_part(session_id, '__', 1) AS phone, max(created_at) AS last_sent
      FROM n8n_chat_histories
      WHERE message->'additional_kwargs'->>'campaignId' IS NOT NULL
+       -- A send that failed (at dispatch, or later via the delivery-status webhook)
+       -- never reached the customer, so it shouldn't block a retry for 42h.
+       AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
        AND created_at > now() - interval '${COOLDOWN_HOURS} hours'
      GROUP BY phone`
   );
