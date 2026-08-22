@@ -29,6 +29,26 @@ function firstName(fullName) {
   return fullName?.trim().split(/\s+/)[0] || null;
 }
 
+// A number that already got a broadcast recently shouldn't get another one — that's how
+// the same pauta ends up repeated on the same person. Only broadcast sends count here
+// (regular conversation stays open); campaign sends are already tagged with campaignId,
+// so this only ever scans that (small, indexed) subset of the table, not all of it.
+const COOLDOWN_HOURS = 42;
+async function getCooldownMap() {
+  const { rows } = await pool.query(
+    `SELECT split_part(session_id, '__', 1) AS phone, max(created_at) AS last_sent
+     FROM n8n_chat_histories
+     WHERE message->'additional_kwargs'->>'campaignId' IS NOT NULL
+       AND created_at > now() - interval '${COOLDOWN_HOURS} hours'
+     GROUP BY phone`
+  );
+  const map = new Map();
+  for (const r of rows) {
+    map.set(r.phone, new Date(new Date(r.last_sent).getTime() + COOLDOWN_HOURS * 3600 * 1000));
+  }
+  return map;
+}
+
 // A template's body can carry {{1}}, {{2}}... in order — this app only ever fills them
 // all with the same value (the customer's name), which covers every template in use
 // today. A template needing distinct values per placeholder (e.g. name + order number)
@@ -106,7 +126,16 @@ router.get('/audience', async (req, res, next) => {
        LIMIT 200`,
       params
     );
-    res.json(rows.map((r) => ({ id: r.id, fullName: r.full_name, phone: r.whatsapp_number, temperature: r.temperature })));
+    const cooldown = await getCooldownMap();
+    // The temperature-only pool (no q) is what feeds the "X disponibles" count — that
+    // count needs to already exclude cooldown numbers, since POST / backfills around
+    // them too. A manual name/phone search (q) keeps a cooling-down person visible but
+    // flagged, so the picker can explain why it won't let them be added.
+    const withCooldown = rows.map((r) => ({
+      id: r.id, fullName: r.full_name, phone: r.whatsapp_number, temperature: r.temperature,
+      cooldownUntil: cooldown.get(r.whatsapp_number)?.toISOString() ?? null,
+    }));
+    res.json(temperature && !q?.trim() ? withCooldown.filter((r) => !r.cooldownUntil) : withCooldown);
   } catch (err) { next(err); }
 });
 
@@ -296,8 +325,14 @@ router.post('/', async (req, res, next) => {
     }
     const bodyTemplate = template.components?.find((c) => c.type === 'BODY')?.text ?? '';
 
+    const cooldown = await getCooldownMap();
+    const skippedCooldown = [];
+
     let audience = [];
     if (temperature) {
+      // Excluded in SQL, before the LIMIT, so a number in cooldown gets skipped over in
+      // favor of the next eligible one in the same order — not just a shorter batch.
+      const cooldownPhones = [...cooldown.keys()];
       const { rows } = await pool.query(
         `SELECT c.id, c.full_name, c.whatsapp_number
          FROM customers c
@@ -306,9 +341,10 @@ router.post('/', async (req, res, next) => {
            WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'type' = 'human'
          ) act ON true
          WHERE (${EFFECTIVE_STATUS_SQL}) = $1
+           AND NOT (c.whatsapp_number = ANY($3::text[]))
          ORDER BY act.last_seen ${sortOrder} NULLS LAST
          LIMIT $2`,
-        [temperature, count && count > 0 ? count : 100000]
+        [temperature, count && count > 0 ? count : 100000, cooldownPhones]
       );
       audience = rows;
     }
@@ -319,7 +355,13 @@ router.post('/', async (req, res, next) => {
         [customerIds]
       );
       const seen = new Set(audience.map((c) => c.id));
-      for (const c of rows) if (!seen.has(c.id)) { audience.push(c); seen.add(c.id); }
+      for (const c of rows) {
+        if (seen.has(c.id)) continue;
+        // A deliberate, one-off pick — skip and report it rather than silently sending
+        // (or silently dropping), same as the manual-search picker already flags it.
+        if (cooldown.has(c.whatsapp_number)) { skippedCooldown.push({ phone: c.whatsapp_number, fullName: c.full_name }); continue; }
+        audience.push(c); seen.add(c.id);
+      }
     }
 
     // A number typed in that isn't a customer yet — created the same way an advisor
@@ -330,18 +372,26 @@ router.post('/', async (req, res, next) => {
     if (Array.isArray(newRecipients) && newRecipients.length) {
       const seen = new Set(audience.map((c) => c.id));
       for (const { phone, fullName } of newRecipients) {
+        const trimmedPhone = String(phone).trim();
+        if (cooldown.has(trimmedPhone)) { skippedCooldown.push({ phone: trimmedPhone, fullName: fullName?.trim() || null }); continue; }
         const { rows } = await pool.query(
           `INSERT INTO customers (whatsapp_number, full_name) VALUES ($1, $2)
            ON CONFLICT (whatsapp_number) DO UPDATE SET full_name = COALESCE(customers.full_name, EXCLUDED.full_name)
            RETURNING id, full_name, whatsapp_number`,
-          [String(phone).trim(), fullName?.trim() || null]
+          [trimmedPhone, fullName?.trim() || null]
         );
         const c = rows[0];
         if (!seen.has(c.id)) { audience.push(c); seen.add(c.id); }
       }
     }
 
-    if (!audience.length) return res.status(400).json({ error: 'La audiencia quedó vacía' });
+    if (!audience.length) {
+      return res.status(400).json({
+        error: skippedCooldown.length
+          ? 'Todos los destinatarios seleccionados recibieron una difusión en las últimas 42 horas'
+          : 'La audiencia quedó vacía',
+      });
+    }
 
     const { rows: created } = await pool.query(
       `INSERT INTO campaigns (template_name, template_language, temperature, requested_count, customer_ids, recipient_count, created_by)
@@ -357,7 +407,7 @@ router.post('/', async (req, res, next) => {
       console.error(`campaign ${campaignId} failed`, err)
     );
 
-    res.status(201).json({ id: campaignId, recipientCount: audience.length });
+    res.status(201).json({ id: campaignId, recipientCount: audience.length, skippedCooldown });
   } catch (err) { next(err); }
 });
 

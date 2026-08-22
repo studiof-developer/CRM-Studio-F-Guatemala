@@ -56,10 +56,29 @@ export default function Dashboard() {
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
-  // The aggregates here shift with both ticket and message activity — push-refresh
-  // instead of the once-on-mount load this page had before.
-  useLiveEvent('ticket_changes', loadDashboard);
-  useLiveEvent('message_changes', loadDashboard);
+  // message_changes fires on every message across every conversation, for every advisor
+  // — reloading (and every chart destroying/redrawing) on each one made the dashboard
+  // look like it was constantly refreshing itself. Throttled so a burst of chat activity
+  // collapses into at most one reload every 20s, with a trailing call so it still lands.
+  const lastLoadRef = useRef(0);
+  const pendingTimerRef = useRef(null);
+  const REFRESH_MIN_INTERVAL_MS = 20000;
+  const loadDashboardThrottled = useCallback(() => {
+    const elapsed = Date.now() - lastLoadRef.current;
+    clearTimeout(pendingTimerRef.current);
+    if (elapsed >= REFRESH_MIN_INTERVAL_MS) {
+      lastLoadRef.current = Date.now();
+      loadDashboard();
+    } else {
+      pendingTimerRef.current = setTimeout(() => {
+        lastLoadRef.current = Date.now();
+        loadDashboard();
+      }, REFRESH_MIN_INTERVAL_MS - elapsed);
+    }
+  }, [loadDashboard]);
+
+  useLiveEvent('ticket_changes', loadDashboardThrottled);
+  useLiveEvent('message_changes', loadDashboardThrottled);
 
   useChart(pipelineRef, () => {
     const entries = Object.entries(data.pipeline);

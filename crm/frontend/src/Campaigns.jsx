@@ -252,6 +252,12 @@ function NewCampaignModal({ onClose, onSent }) {
         headerImageToken: headerImageToken || undefined,
       });
       showSuccess(`Difusión en marcha — ${res.recipientCount} destinatarios`);
+      if (res.skippedCooldown?.length) {
+        showError(
+          `${res.skippedCooldown.length} número(s) omitido(s) por cooldown de 42h: ` +
+          res.skippedCooldown.map((s) => s.fullName || s.phone).join(', ')
+        );
+      }
       onSent();
     } catch (err) {
       showError(err.message);
@@ -374,11 +380,16 @@ function NewCampaignModal({ onClose, onSent }) {
                   <button
                     key={c.id}
                     onClick={() => addManual(c)}
-                    disabled={pickedIds.has(c.id)}
+                    disabled={pickedIds.has(c.id) || !!c.cooldownUntil}
+                    title={c.cooldownUntil ? `Ya recibió una difusión — disponible de nuevo el ${formatDateTime(c.cooldownUntil)}` : undefined}
                     className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:opacity-40"
                   >
                     <span className="truncate text-ink">{c.fullName || c.phone}</span>
-                    <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
+                    {c.cooldownUntil ? (
+                      <span className="shrink-0 text-xs font-medium text-amber-600">En cooldown</span>
+                    ) : (
+                      <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
+                    )}
                   </button>
                 ))}
               </div>
