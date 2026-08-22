@@ -59,6 +59,14 @@ export function describeAttachment(attachment) {
   return `${icon} ${attachment.filename || fallback}`;
 }
 
+// A ticket-less thread whose last message is an unreplied broadcast has no agent (bot or
+// human) actually doing anything — nobody has engaged since it went out. Showing it as
+// "Agente activo" implied otherwise; this tells those two states apart using data the
+// list/thread responses already carry, no extra query needed.
+function isUnansweredBroadcast(message) {
+  return message?.type === 'ai' && message?.additional_kwargs?.sentBy === 'campaign';
+}
+
 function describeQuoted(msg, from) {
   const att = msg.attachment;
   const content = msg.content?.trim() || describeAttachment(att);
@@ -617,7 +625,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         <CheckCircle2 size={10} /> resuelto
                       </span>
                     )}
-                    {!c.ticketStatus && (
+                    {!c.ticketStatus && isUnansweredBroadcast(c.lastMessage) && (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
+                        <Megaphone size={10} /> difusión
+                      </span>
+                    )}
+                    {!c.ticketStatus && !isUnansweredBroadcast(c.lastMessage) && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-greige-ink">
                         <Bot size={10} /> agente
                       </span>
@@ -683,9 +696,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               )}
               {!thread.ticketStatus && (
                 <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
-                    <Bot size={12} /> Agente activo
-                  </span>
+                  {isUnansweredBroadcast(thread.messages[thread.messages.length - 1]) ? (
+                    <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                      <Megaphone size={12} /> Difusión enviada — sin respuesta
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
+                      <Bot size={12} /> Agente activo
+                    </span>
+                  )}
                   <span
                     role="button"
                     onClick={(e) => { e.stopPropagation(); handleTake(); }}
