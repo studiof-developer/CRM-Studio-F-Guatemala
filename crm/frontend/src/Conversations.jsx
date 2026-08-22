@@ -132,7 +132,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
+  // Keyed by sessionId rather than a plain boolean, so a slow send in one chat doesn't
+  // lock the compose box in every other chat — that "everything is stuck" feeling was
+  // exactly what pushed advisors to switch chats mid-send in the first place.
+  const [sendingFor, setSendingFor] = useState(null);
+  const sending = sendingFor === selectedId;
   const [actionBusy, setActionBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -256,6 +260,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     loadThread();
     setInfoOpen(false);
     setReplyingTo(null);
+    // Left uncleared before, this was a real mis-send risk: an advisor types for
+    // customer A, the send is slow, they switch to customer B while it's in flight —
+    // the leftover text was still sitting in B's compose box and could get sent to B
+    // by mistake. Wiping it on every switch is the only way to guarantee that never
+    // happens, even at the cost of losing an unsent draft when you switch away.
+    setDraft('');
     lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
   }, [loadThread]);
 
@@ -297,17 +307,27 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
   async function handleSend(e) {
     e.preventDefault();
-    if (!draft.trim() || sending) return;
-    setSending(true);
+    // Captured now, not read again after the await — selectedId/draft can change while
+    // this request is in flight if the advisor switches chats, and the send must stay
+    // pinned to the chat it was actually written for.
+    const targetId = selectedId;
+    const content = draft.trim();
+    const target = replyingTo;
+    if (!content || sendingFor === targetId) return;
+    setSendingFor(targetId);
     try {
-      await sendConversationMessage(selectedId, draft.trim(), replyingTo ?? undefined);
-      setDraft('');
-      setReplyingTo(null);
+      await sendConversationMessage(targetId, content, target ?? undefined);
+      // Only touch the compose box if we're still looking at the same chat — otherwise
+      // this would wipe out whatever the advisor has since typed for a different one.
+      if (selectedId === targetId) {
+        setDraft('');
+        setReplyingTo(null);
+      }
       loadThread();
     } catch (err) {
       showError(err.message);
     } finally {
-      setSending(false);
+      setSendingFor((prev) => (prev === targetId ? null : prev));
     }
   }
 
@@ -366,13 +386,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }
 
   async function uploadFile(file) {
+    // Same pin-to-the-chat-it-was-for treatment as handleSend, and for the same
+    // reason: uploads can be slow, and switching chats mid-upload must not let the
+    // file (or its caption) land on whoever's open when it finally finishes.
+    const targetId = selectedId;
     setUploading(true);
     try {
       // Whatever's typed in the compose box rides along as the WhatsApp caption —
       // same gesture as WhatsApp itself (write, then attach, sends as one message).
       const caption = draft.trim();
-      await sendConversationAttachment(selectedId, file, caption || undefined);
-      if (caption) setDraft('');
+      await sendConversationAttachment(targetId, file, caption || undefined);
+      if (caption && selectedId === targetId) setDraft('');
       loadThread();
     } catch (err) {
       showError(err.message);
