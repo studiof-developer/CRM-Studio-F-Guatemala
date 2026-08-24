@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw } from 'lucide-react';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
-  uploadCampaignHeaderMedia,
+  uploadCampaignHeaderMedia, retryCampaignFailed,
 } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
+import { useLiveEvent } from './lib/liveEvents.js';
 import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -38,6 +39,7 @@ export default function Campaigns() {
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -46,10 +48,31 @@ export default function Campaigns() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
+  const loadDetail = useCallback(() => {
     if (!openId) { setDetail(null); return; }
     fetchCampaign(openId).then(setDetail).catch((err) => showError(err.message));
   }, [openId]);
+
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+  // A retry batch updates recipient rows one at a time in the background — this is what
+  // makes each one flip from "Falló" to its real status live instead of needing to
+  // reopen the modal.
+  useLiveEvent('message_changes', loadDetail);
+
+  const failedCount = detail?.recipients.filter((r) => r.status === 'failed').length ?? 0;
+
+  async function handleRetryFailed() {
+    setRetrying(true);
+    try {
+      const res = await retryCampaignFailed(openId);
+      showSuccess(`Reintentando ${res.retrying} envío(s) fallido(s)`);
+      load();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -118,7 +141,19 @@ export default function Campaigns() {
                 <h3 className="text-sm font-semibold text-ink">{detail.templateName}</h3>
                 <p className="mt-0.5 text-xs text-greige-ink">{detail.recipientCount} destinatarios · {formatDateTime(detail.createdAt)}</p>
               </div>
-              <button onClick={() => setOpenId(null)} className="text-greige hover:text-ink"><X size={16} /></button>
+              <div className="flex shrink-0 items-center gap-2">
+                {failedCount > 0 && (
+                  <button
+                    onClick={handleRetryFailed}
+                    disabled={retrying}
+                    className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
+                  >
+                    {retrying ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                    Reintentar {failedCount} fallido{failedCount === 1 ? '' : 's'}
+                  </button>
+                )}
+                <button onClick={() => setOpenId(null)} className="text-greige hover:text-ink"><X size={16} /></button>
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               {detail.recipients.map((r, i) => {

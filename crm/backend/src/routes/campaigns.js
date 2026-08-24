@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
 import multer from 'multer';
 import { pool } from '../db.js';
 import * as whatsapp from '../whatsapp.js';
@@ -210,6 +211,58 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Re-sends only the recipients still marked failed — updates their existing row in place
+// (not a new one) so campaign counts stay one-row-per-recipient instead of double
+// counting a retried customer. The header image, if any, is pulled back off disk from
+// whichever recipient's message_attachments row already has it (linkExistingFile ran for
+// every recipient, success or fail) and re-uploaded fresh, since the original Meta media
+// id was never persisted and headerUploads is only an in-process, short-lived map.
+router.post('/:id/retry-failed', async (req, res, next) => {
+  try {
+    const { rows: campaignRows } = await pool.query(`SELECT * FROM campaigns WHERE id = $1`, [req.params.id]);
+    if (!campaignRows.length) return res.status(404).json({ error: 'not found' });
+    const campaign = campaignRows[0];
+
+    const resolved = await resolveTemplate(campaign.template_name, campaign.template_language);
+    if (resolved.error) return res.status(400).json({ error: resolved.error });
+    const { paramCount, headerFormat, bodyTemplate } = resolved;
+
+    const { rows: failed } = await pool.query(
+      `SELECT h.id, h.session_id, c.full_name,
+              coalesce(c.whatsapp_number, split_part(h.session_id, '__', 1)) AS phone
+       FROM n8n_chat_histories h
+       LEFT JOIN customers c ON c.whatsapp_number = split_part(h.session_id, '__', 1)
+       WHERE h.message->'additional_kwargs'->>'campaignId' = $1
+         AND h.message->'additional_kwargs'->>'status' = 'failed'`,
+      [String(campaign.id)]
+    );
+    if (!failed.length) return res.status(400).json({ error: 'No hay envíos fallidos en esta difusión' });
+
+    let headerMediaId = null;
+    if (headerFormat === 'IMAGE') {
+      const { rows: attRows } = await pool.query(
+        `SELECT a.file_path, a.mime_type FROM message_attachments a
+         JOIN n8n_chat_histories h ON h.id = a.n8n_message_id
+         WHERE h.message->'additional_kwargs'->>'campaignId' = $1 LIMIT 1`,
+        [String(campaign.id)]
+      );
+      if (!attRows.length) {
+        return res.status(400).json({ error: 'No se encontró la imagen original de esta difusión — no se puede reintentar' });
+      }
+      const buffer = await fs.promises.readFile(attRows[0].file_path);
+      headerMediaId = await whatsapp.uploadMedia(buffer, attRows[0].mime_type);
+    }
+
+    // Same respond-then-background pattern as a fresh send — the campaign detail view
+    // is already SSE-driven, so each recipient's status flips live as retries land.
+    retryFailedRecipients(campaign.id, failed, campaign.template_name, campaign.template_language, bodyTemplate, paramCount, headerMediaId).catch((err) =>
+      console.error(`campaign ${campaign.id} retry batch failed`, err)
+    );
+
+    res.json({ retrying: failed.length });
+  } catch (err) { next(err); }
+});
+
 // A batch send is throttled to one every ~350ms rather than fired all at once — Meta
 // rate-limits bursts, and blasting them concurrently is also how a number's quality
 // rating takes a hit. Fine for the volumes this shop sends today.
@@ -275,6 +328,50 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   }
 }
 
+// Updates the recipient's existing row in place instead of inserting a new one — see the
+// retry-failed route for why (avoids double-counting the recipient in campaign stats).
+async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId) {
+  const name = firstName(fullName) || FALLBACK_TEMPLATE_NAME;
+  const params = Array(paramCount).fill(name);
+  let sentWamid = null;
+  let error = null;
+  try {
+    const result = await whatsapp.sendTemplate(phone, templateName, templateLanguage, params, headerMediaId);
+    sentWamid = result?.messages?.[0]?.id ?? null;
+    if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
+  } catch (err) {
+    error = err.message;
+  }
+  if (error) console.error(`campaign retry message ${messageId} to ${phone} failed:`, error);
+
+  const { rows } = await pool.query(`SELECT message FROM n8n_chat_histories WHERE id = $1`, [messageId]);
+  const prev = rows[0]?.message;
+  if (!prev) return false;
+  const message = {
+    ...prev,
+    content: renderBody(bodyTemplate, name),
+    additional_kwargs: {
+      sentBy: 'campaign',
+      campaignId: prev.additional_kwargs?.campaignId,
+      ...(sentWamid ? { wamid: sentWamid } : { status: 'failed', statusError: error }),
+    },
+  };
+  await pool.query(`UPDATE n8n_chat_histories SET message = $2::jsonb WHERE id = $1`, [messageId, JSON.stringify(message)]);
+  // session_id (not the row id) is what listener.js reads to flush anything an advisor
+  // had queued for this same customer, same as every other message-mutating route.
+  await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionId]);
+  return !!sentWamid;
+}
+
+async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId) {
+  for (const r of failed) {
+    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId).catch((err) =>
+      console.error(`campaign ${campaignId} retry recipient ${r.id} failed`, err)
+    );
+    await sleep(SEND_DELAY_MS);
+  }
+}
+
 async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment) {
   for (const customer of audience) {
     await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment).catch((err) =>
@@ -288,6 +385,25 @@ async function runCampaign(campaignId, audience, templateName, templateLanguage,
 // 7-15 digits covers bare local numbers up through full E.164 — same rule
 // findConversationThread() uses to recognise a phone as a phone.
 const PHONE_RE = /^\d{7,15}$/;
+
+// Shared by a fresh send and a retry — re-checked against Meta both times, not just
+// trusted from the templates screen, since a template can be paused or fail review
+// between when the tab loaded and when send is clicked (or between the original send
+// and a retry days later).
+async function resolveTemplate(templateName, templateLanguage) {
+  const templates = await whatsapp.listTemplates();
+  const template = templates.find((t) => t.name === templateName && t.language === templateLanguage);
+  if (!template) return { error: 'La plantilla no existe o cambió' };
+  if (template.status !== 'APPROVED') return { error: 'La plantilla no está activa en este momento' };
+  const headerFormat = getHeaderFormat(template);
+  if (headerFormat && headerFormat !== 'IMAGE') {
+    return { error: `Las plantillas con encabezado de tipo ${headerFormat} todavía no están soportadas` };
+  }
+  return {
+    template, headerFormat, paramCount: countBodyParams(template),
+    bodyTemplate: template.components?.find((c) => c.type === 'BODY')?.text ?? '',
+  };
+}
 
 router.post('/', async (req, res, next) => {
   try {
@@ -304,19 +420,9 @@ router.post('/', async (req, res, next) => {
     }
     const sortOrder = order === 'oldest' ? 'ASC' : 'DESC';
 
-    // Re-checked against Meta here, not just trusted from the templates screen — a
-    // template can be paused or fail review between when the tab loaded and when send
-    // is clicked, and sending against a dead template would fail every single recipient.
-    const templates = await whatsapp.listTemplates();
-    const template = templates.find((t) => t.name === templateName && t.language === templateLanguage);
-    if (!template) return res.status(400).json({ error: 'La plantilla no existe o cambió' });
-    if (template.status !== 'APPROVED') return res.status(400).json({ error: 'La plantilla no está activa en este momento' });
-    const paramCount = countBodyParams(template);
-
-    const headerFormat = getHeaderFormat(template);
-    if (headerFormat && headerFormat !== 'IMAGE') {
-      return res.status(400).json({ error: `Las plantillas con encabezado de tipo ${headerFormat} todavía no están soportadas` });
-    }
+    const resolved = await resolveTemplate(templateName, templateLanguage);
+    if (resolved.error) return res.status(400).json({ error: resolved.error });
+    const { paramCount, headerFormat, bodyTemplate } = resolved;
     if (headerFormat === 'IMAGE' && !headerMediaId) {
       return res.status(400).json({ error: 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar' });
     }
@@ -326,7 +432,6 @@ router.post('/', async (req, res, next) => {
     if (headerFormat === 'IMAGE' && !headerAttachment) {
       return res.status(400).json({ error: 'La imagen subida ya no está disponible — vuelve a subirla e intenta de nuevo' });
     }
-    const bodyTemplate = template.components?.find((c) => c.type === 'BODY')?.text ?? '';
 
     const cooldown = await getCooldownMap();
     const skippedCooldown = [];

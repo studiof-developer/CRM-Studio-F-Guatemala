@@ -34,16 +34,36 @@ async function getActiveCredentials() {
   throw new Error('WhatsApp no está configurado (no hay número activo en Configuración ni credenciales en el entorno)');
 }
 
+// A 4xx business error (bad template, invalid number, missing permission) fails again
+// identically on retry — not worth the wait. Only Meta's own infra hiccups (5xx) or a
+// short-lived throttle (429) are.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 800;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function graphFetch(path, options, token) {
-  const res = await fetch(`${GRAPH_BASE}/${path}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, ...options.headers },
-  });
-  if (!res.ok) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res;
+    try {
+      res = await fetch(`${GRAPH_BASE}/${path}`, {
+        ...options,
+        headers: { Authorization: `Bearer ${token}`, ...options.headers },
+      });
+    } catch (err) {
+      // Network-level failure (DNS, connection reset, timeout) — no response at all,
+      // same "might just be transient" logic applies as a 5xx.
+      if (attempt === MAX_ATTEMPTS) throw err;
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+      continue;
+    }
+    if (res.ok) return res.json();
     const body = await res.text();
-    throw new Error(`WhatsApp API ${res.status}: ${body}`);
+    if (!RETRYABLE_STATUS.has(res.status) || attempt === MAX_ATTEMPTS) {
+      throw new Error(`WhatsApp API ${res.status}: ${body}`);
+    }
+    await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
   }
-  return res.json();
 }
 
 // Used by the Configuración "probar conexión" flow to validate a number/token

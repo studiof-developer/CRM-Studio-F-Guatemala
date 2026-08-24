@@ -159,6 +159,12 @@ export async function createCampaign(payload) {
   return res.json();
 }
 
+export async function retryCampaignFailed(id) {
+  const res = await apiFetch(`/api/campaigns/${id}/retry-failed`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al reintentar los envíos fallidos');
+  return res.json();
+}
+
 export async function fetchCustomerCounts() {
   const res = await apiFetch('/api/customers/counts');
   if (!res.ok) throw new Error('Error al cargar los conteos de clientes');
