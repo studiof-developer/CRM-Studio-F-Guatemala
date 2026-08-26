@@ -9,6 +9,7 @@ import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid,
+  fetchMessageDistance,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -297,6 +298,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   // what they replied to instead of rendering the reply as a context-less fragment.
   const quoteFetchedRef = useRef(new Set());
   const [quoteCache, setQuoteCache] = useState({});
+  // The advisor's own reply button snapshots the quoted content at send time — nothing
+  // to fetch to render it, only how far back it is, to size the window before jumping.
+  const distanceFetchedRef = useRef(new Set());
+  const [distanceCache, setDistanceCache] = useState({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -323,6 +328,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     setSearchResults([]);
     quoteFetchedRef.current = new Set();
     setQuoteCache({});
+    distanceFetchedRef.current = new Set();
+    setDistanceCache({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -343,6 +350,25 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       quoteFetchedRef.current.add(wamid);
       fetchMessageByWamid(selectedId, wamid)
         .then((orig) => setQuoteCache((prev) => ({ ...prev, [wamid]: orig })))
+        .catch(() => {});
+    }
+  }, [thread, selectedId]);
+
+  // Same idea for the advisor's own reply-button quotes — the content is already in
+  // additional_kwargs.replyTo, only the distance needs fetching, and only when the
+  // target isn't already loaded (jumpToMessage would find it locally otherwise).
+  useEffect(() => {
+    if (!thread || !selectedId) return;
+    const localIds = new Set(thread.messages.map((m) => m.id));
+    const missing = [...new Set(
+      thread.messages
+        .map((m) => m.additional_kwargs?.replyTo?.id)
+        .filter((id) => id != null && !localIds.has(id) && !distanceFetchedRef.current.has(id))
+    )];
+    for (const id of missing) {
+      distanceFetchedRef.current.add(id);
+      fetchMessageDistance(selectedId, id)
+        .then(({ distanceFromLatest }) => setDistanceCache((prev) => ({ ...prev, [id]: distanceFromLatest })))
         .catch(() => {});
     }
   }, [thread, selectedId]);
@@ -950,7 +976,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       // or the customer used WhatsApp's own quote feature — in that case we only
                       // got the wamid of the original, so look it up in this same thread by the
                       // wamid we stamped on our own outgoing messages (or captured on theirs).
-                      const quotePreview = m.additional_kwargs?.replyTo || (() => {
+                      const quotePreview = m.additional_kwargs?.replyTo
+                        ? { ...m.additional_kwargs.replyTo, distanceFromLatest: distanceCache[m.additional_kwargs.replyTo.id] }
+                        : (() => {
                         const targetWamid = m.additional_kwargs?.replyToWamid;
                         if (!targetWamid) return null;
                         const orig = thread.messages.find((x) => x.additional_kwargs?.wamid === targetWamid) ?? quoteCache[targetWamid];

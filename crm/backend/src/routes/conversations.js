@@ -551,6 +551,24 @@ router.get('/:sessionId/message-by-wamid/:wamid', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// The advisor's own reply button snapshots the quoted message's content at send time
+// (id, text, from), so unlike a customer's native quote-reply there's nothing to fetch
+// to render the preview — only distanceFromLatest is missing, needed to size the window
+// before jumping to it if it's older than what's currently loaded.
+router.get('/:sessionId/message-distance/:id', async (req, res, next) => {
+  try {
+    const sessionIds = await resolveSessionIds(req.params.sessionId);
+    if (!sessionIds.length) return res.status(404).json({ error: 'not found' });
+    const { rows } = await pool.query(
+      `SELECT count(*) AS distance_from_latest FROM n8n_chat_histories
+       WHERE session_id = ANY($1) AND id >= $2`,
+      [sessionIds, req.params.id]
+    );
+    if (Number(rows[0].distance_from_latest) === 0) return res.status(404).json({ error: 'not found' });
+    res.json({ distanceFromLatest: Number(rows[0].distance_from_latest) });
+  } catch (err) { next(err); }
+});
+
 // Searches the WHOLE thread, not just whatever page is currently loaded in the UI —
 // the message list only ever keeps the most recent `limit` in memory. distanceFromLatest
 // tells the frontend how big a "most recent N" window it needs to request for this
