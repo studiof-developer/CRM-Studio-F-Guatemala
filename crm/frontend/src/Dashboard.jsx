@@ -183,7 +183,7 @@ export default function Dashboard() {
         },
       },
     };
-  }, [data.pautaByDay]);
+  }, [data]);
 
   useChart(advisorRef, () => {
     return {
