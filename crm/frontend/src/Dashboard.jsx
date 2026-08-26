@@ -81,6 +81,14 @@ export default function Dashboard() {
   useLiveEvent('ticket_changes', loadDashboardThrottled);
   useLiveEvent('message_changes', loadDashboardThrottled);
 
+  // Live events are the fast path, but there's no guarantee one fires soon after a day
+  // rolls over — without this, a dashboard tab left open with no fresh activity nearby
+  // keeps showing yesterday as the last point on every "by day" chart indefinitely.
+  useEffect(() => {
+    const id = setInterval(loadDashboard, 30 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [loadDashboard]);
+
   useChart(pipelineRef, () => {
     const entries = Object.entries(data.pipeline);
     return {
