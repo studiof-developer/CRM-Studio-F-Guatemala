@@ -519,8 +519,10 @@ router.get('/:sessionId/message-by-wamid/:wamid', async (req, res, next) => {
     const sessionIds = await resolveSessionIds(req.params.sessionId);
     if (!sessionIds.length) return res.status(404).json({ error: 'not found' });
     const { rows } = await pool.query(
-      `SELECT id, message, created_at FROM n8n_chat_histories
-       WHERE session_id = ANY($1) AND message->'additional_kwargs'->>'wamid' = $2
+      `SELECT h.id, h.message, h.created_at,
+              (SELECT count(*) FROM n8n_chat_histories h2 WHERE h2.session_id = ANY($1) AND h2.id >= h.id) AS distance_from_latest
+       FROM n8n_chat_histories h
+       WHERE h.session_id = ANY($1) AND h.message->'additional_kwargs'->>'wamid' = $2
        LIMIT 1`,
       [sessionIds, req.params.wamid]
     );
@@ -536,6 +538,9 @@ router.get('/:sessionId/message-by-wamid/:wamid', async (req, res, next) => {
       createdAt: r.created_at,
       ...r.message,
       attachment: a ? { id: a.id, kind: a.kind, filename: a.filename, mimeType: a.mime_type, sizeBytes: a.size_bytes } : null,
+      // Lets the frontend grow its loaded window to exactly fit this message before
+      // trying to scroll to it, the same trick already used for in-chat search jumps.
+      distanceFromLatest: Number(r.distance_from_latest),
     });
   } catch (err) { next(err); }
 });

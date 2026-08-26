@@ -362,18 +362,24 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     return () => { cancelled = true; clearTimeout(t); };
   }, [searchQuery, selectedId]);
 
-  // A result older than what's currently loaded needs a bigger window before it exists
-  // in the DOM to scroll to — grown here, then jumped to once that reload lands (below).
+  // Shared by search results and quote-preview clicks: a target older than what's
+  // currently loaded needs a bigger window before it exists in the DOM to scroll to —
+  // grown here, then jumped to once that reload lands (see the [thread] effect above).
+  function jumpToMessage(id, distanceFromLatest) {
+    if (thread?.messages.some((m) => m.id === id)) {
+      scrollToMessage(id);
+      return;
+    }
+    if (distanceFromLatest == null) return; // no way to size the window — nothing to do
+    searchJumpRef.current = id;
+    setThreadLimit(distanceFromLatest + 10);
+  }
+
   function jumpToSearchResult(result) {
     setSearchOpen(false);
     setSearchQuery('');
     setSearchResults([]);
-    if (result.distanceFromLatest <= threadLimit) {
-      scrollToMessage(result.id);
-      return;
-    }
-    searchJumpRef.current = result.id;
-    setThreadLimit(result.distanceFromLatest + 10);
+    jumpToMessage(result.id, result.distanceFromLatest);
   }
 
   // Scrolling near the top asks for an older page instead of relying on the poll/live
@@ -952,7 +958,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         const origOutgoing = orig.type === 'ai';
                         const origFromAdvisor = orig.additional_kwargs?.sentBy === 'advisor';
                         const origFrom = origOutgoing ? (origFromAdvisor ? orig.additional_kwargs.advisorName : 'Studio F (Agente)') : (thread.customerName || thread.phone);
-                        return { ...describeQuoted(orig, origFrom), id: orig.id };
+                        return { ...describeQuoted(orig, origFrom), id: orig.id, distanceFromLatest: orig.distanceFromLatest };
                       })();
                       // Only while the advisor actually has the chat — the reply
                       // compose bar itself is bot-handled/waiting chats can't use it anyway.
@@ -1043,7 +1049,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                               )}
                               {quotePreview && (
                                 <div
-                                  onClick={() => quotePreview.id != null && scrollToMessage(quotePreview.id)}
+                                  onClick={() => quotePreview.id != null && jumpToMessage(quotePreview.id, quotePreview.distanceFromLatest)}
                                   className={`mb-1.5 flex items-center gap-2 rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-snug ${
                                     quotePreview.id != null ? 'cursor-pointer' : ''
                                   } ${outgoing ? 'border-white/70 bg-white/10' : 'border-accent bg-black/[0.04] dark:bg-white/[0.06]'}`}
