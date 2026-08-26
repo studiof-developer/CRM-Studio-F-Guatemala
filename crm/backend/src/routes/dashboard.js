@@ -46,7 +46,11 @@ router.get('/', async (req, res, next) => {
          GROUP BY t.status`
       ),
       pool.query(
-        `SELECT date_trunc('day', c.created_at)::date AS day, count(*) AS count
+        // created_at is stored as a UTC instant — grouping by date_trunc('day', created_at)
+        // directly buckets by UTC calendar day, whose midnight boundary falls at 6pm
+        // Guatemala time. Anything from 6pm-midnight local was landing in the *next*
+        // day's bucket instead of the day it actually happened on locally.
+        `SELECT date_trunc('day', c.created_at AT TIME ZONE 'America/Guatemala')::date AS day, count(*) AS count
          FROM customers c
          WHERE c.created_at >= now() - interval '14 days'
          GROUP BY day ORDER BY day`
@@ -82,9 +86,12 @@ router.get('/', async (req, res, next) => {
       // referral on more than one message, which would have double-counted the same
       // contact as two separate arrivals. Admin/supervisor only — ad performance isn't
       // something every advisor needs to see day to day.
+      // Bucketed by Guatemala's calendar day, not UTC's — same reason as conversationsByDay
+      // above — so this lines up with how Meta's own ad reporting divides up a "day"
+      // instead of shifting evening messages into the next day's count.
       canSeePauta
         ? pool.query(
-            `SELECT date_trunc('day', h.created_at)::date AS day, count(DISTINCT h.session_id) AS count
+            `SELECT date_trunc('day', h.created_at AT TIME ZONE 'America/Guatemala')::date AS day, count(DISTINCT h.session_id) AS count
              FROM n8n_chat_histories h
              WHERE h.message->>'type' = 'human'
                AND h.message->'additional_kwargs'->'referral' IS NOT NULL
