@@ -3,6 +3,7 @@ import fs from 'fs';
 import { pool } from '../db.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { compressImageBuffer } from '../imageCompression.js';
+import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 
 const router = Router();
@@ -57,7 +58,10 @@ inboundRouter.post('/', async (req, res, next) => {
     );
 
     // Never re-sent anywhere by us — this copy only ever gets read back for the CRM's
-    // own display, so it's always safe to compress it before it even hits disk.
+    // own display, so it's always safe to compress it before it even hits disk. Most
+    // multi-MB customer PDFs turn out to be a single scanned receipt/guía photo wrapped
+    // in a PDF container by the phone's scan app — Ghostscript shrinks that the same way
+    // resizing shrinks a photo, without touching a PDF that's genuinely text/vectors.
     let buffer = Buffer.from(base64, 'base64');
     let storedMimeType = mimeType;
     if (kind === 'image') {
@@ -66,6 +70,12 @@ inboundRouter.post('/', async (req, res, next) => {
         return null;
       });
       if (compressed) { buffer = compressed; storedMimeType = 'image/jpeg'; }
+    } else if (mimeType === 'application/pdf') {
+      const compressed = await compressPdfBuffer(buffer).catch((err) => {
+        console.error('inbound PDF compression failed', err);
+        return null;
+      });
+      if (compressed) buffer = compressed;
     }
 
     const attachmentId = await saveAttachment({

@@ -6,7 +6,7 @@ import { logAccess } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
-import { compressStoredImageAttachment } from '../imageCompression.js';
+import { compressStoredAttachment } from '../attachmentCompression.js';
 
 const router = Router();
 const upload = multer({
@@ -124,7 +124,7 @@ async function handleSendResult(messageId, result) {
   // exact file from disk to send it, so compressing any earlier would ship a lower
   // quality photo to the customer instead of just shrinking what the CRM stores.
   const { rows } = await pool.query(`SELECT id FROM message_attachments WHERE n8n_message_id = $1`, [messageId]);
-  if (rows.length) compressStoredImageAttachment(rows[0].id);
+  if (rows.length) compressStoredAttachment(rows[0].id);
 }
 
 // 7-15 digits covers bare local numbers up through full E.164 (country code + number).
@@ -833,7 +833,7 @@ async function deliverStoredMessage(row, phone, attachment) {
   // Only now, delivery confirmed — this function is exactly what re-reads the file from
   // disk to send it, so compressing any earlier would ship the customer a lower-quality
   // photo instead of just shrinking what the CRM keeps.
-  if (attachment) compressStoredImageAttachment(attachment.id);
+  if (attachment) compressStoredAttachment(attachment.id);
 }
 
 export async function flushQueuedMessages(rawSessionId) {

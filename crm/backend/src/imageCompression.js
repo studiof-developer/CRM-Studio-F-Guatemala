@@ -1,6 +1,4 @@
 import sharp from 'sharp';
-import fs from 'fs';
-import { pool } from './db.js';
 
 // 1600px keeps a photo clearly identifiable (product detail, a screenshot's text) while
 // cutting the multi-MB originals phone cameras produce down to a few hundred KB. Quality
@@ -20,31 +18,4 @@ export async function compressImageBuffer(buffer) {
     .jpeg({ quality: JPEG_QUALITY })
     .toBuffer();
   return out.length < buffer.length ? out : null;
-}
-
-// Recompresses an already-saved attachment in place. Only ever call this on a copy that
-// will never be re-read to actually send to WhatsApp again — an advisor's outgoing photo
-// is re-read from disk by the queued/orphan-recovery send paths, so this must only run
-// after a send is confirmed delivered (see handleSendResult/deliverStoredMessage).
-export async function compressStoredImageAttachment(attachmentId) {
-  try {
-    const { rows } = await pool.query(
-      `SELECT file_path, mime_type, kind FROM message_attachments WHERE id = $1`,
-      [attachmentId]
-    );
-    const a = rows[0];
-    if (!a || a.kind !== 'image') return;
-    const original = await fs.promises.readFile(a.file_path);
-    const compressed = await compressImageBuffer(original);
-    if (!compressed) return;
-    await fs.promises.writeFile(a.file_path, compressed);
-    await pool.query(
-      `UPDATE message_attachments SET mime_type = 'image/jpeg', size_bytes = $2 WHERE id = $1`,
-      [attachmentId, compressed.length]
-    );
-  } catch (err) {
-    // Never worth failing a send or a webhook over — this is a background storage
-    // optimization, not something the advisor or customer should ever see fail.
-    console.error(`compressStoredImageAttachment(${attachmentId}) failed`, err);
-  }
 }
