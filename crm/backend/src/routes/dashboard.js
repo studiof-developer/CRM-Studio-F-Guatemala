@@ -77,12 +77,14 @@ router.get('/', async (req, res, next) => {
       ),
       // Meta stamps a `referral` object on the inbound message when a customer arrives
       // by clicking a Click-to-WhatsApp ad — that's the only signal of "this came from
-      // a pauta" in the data, so counting messages carrying one is counting ad-driven
-      // contact. Admin/supervisor only — ad performance isn't something every advisor
-      // needs to see day to day.
+      // a pauta" in the data. Counted by distinct session_id, not raw message count —
+      // verified against production on 2026-08-26 that a handful of conversations carry
+      // referral on more than one message, which would have double-counted the same
+      // contact as two separate arrivals. Admin/supervisor only — ad performance isn't
+      // something every advisor needs to see day to day.
       canSeePauta
         ? pool.query(
-            `SELECT date_trunc('day', h.created_at)::date AS day, count(*) AS count
+            `SELECT date_trunc('day', h.created_at)::date AS day, count(DISTINCT h.session_id) AS count
              FROM n8n_chat_histories h
              WHERE h.message->>'type' = 'human'
                AND h.message->'additional_kwargs'->'referral' IS NOT NULL
