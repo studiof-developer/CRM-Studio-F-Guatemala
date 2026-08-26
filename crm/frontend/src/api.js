@@ -70,6 +70,12 @@ export async function fetchConversation(sessionId, limit) {
   return res.json();
 }
 
+export async function fetchMessageByWamid(sessionId, wamid) {
+  const res = await apiFetch(`/api/conversations/${sessionId}/message-by-wamid/${encodeURIComponent(wamid)}`);
+  if (!res.ok) throw new Error('not found');
+  return res.json();
+}
+
 export async function searchConversation(sessionId, q) {
   const res = await apiFetch(`/api/conversations/${sessionId}/search?q=${encodeURIComponent(q)}`);
   if (!res.ok) throw new Error('Error al buscar en la conversación');

@@ -508,6 +508,38 @@ router.get('/:sessionId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// A customer's native WhatsApp quote-reply only carries the wamid of what they replied
+// to, not a snapshot of it (unlike the advisor's own reply button, which stores one at
+// send time) — the preview has to look that message up. If it's older than the
+// currently-loaded page, this fetches just that one row instead of growing the whole
+// window just to render a quote. Reuses the wamid partial index already built for the
+// delivery-status webhook.
+router.get('/:sessionId/message-by-wamid/:wamid', async (req, res, next) => {
+  try {
+    const sessionIds = await resolveSessionIds(req.params.sessionId);
+    if (!sessionIds.length) return res.status(404).json({ error: 'not found' });
+    const { rows } = await pool.query(
+      `SELECT id, message, created_at FROM n8n_chat_histories
+       WHERE session_id = ANY($1) AND message->'additional_kwargs'->>'wamid' = $2
+       LIMIT 1`,
+      [sessionIds, req.params.wamid]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    const r = rows[0];
+    const { rows: attRows } = await pool.query(
+      `SELECT id, kind, filename, mime_type, size_bytes FROM message_attachments WHERE n8n_message_id = $1`,
+      [r.id]
+    );
+    const a = attRows[0];
+    res.json({
+      id: r.id,
+      createdAt: r.created_at,
+      ...r.message,
+      attachment: a ? { id: a.id, kind: a.kind, filename: a.filename, mimeType: a.mime_type, sizeBytes: a.size_bytes } : null,
+    });
+  } catch (err) { next(err); }
+});
+
 // Searches the WHOLE thread, not just whatever page is currently loaded in the UI —
 // the message list only ever keeps the most recent `limit` in memory. distanceFromLatest
 // tells the frontend how big a "most recent N" window it needs to request for this

@@ -8,7 +8,7 @@ import {
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
-  fetchQuickReplies, markConversationUnread, takeConversation, searchConversation,
+  fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -292,6 +292,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const scrollRestoreRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const searchJumpRef = useRef(null);
+  // A customer's native WhatsApp quote-reply that points at a message older than the
+  // loaded page — fetched one at a time and cached here so the preview can still show
+  // what they replied to instead of rendering the reply as a context-less fragment.
+  const quoteFetchedRef = useRef(new Set());
+  const [quoteCache, setQuoteCache] = useState({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -316,10 +321,31 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     setSearchOpen(false);
     setSearchQuery('');
     setSearchResults([]);
+    quoteFetchedRef.current = new Set();
+    setQuoteCache({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => { loadThread(); }, [loadThread]);
+
+  // Fetches, one time each, the original message behind any quote-reply that isn't in
+  // the currently-loaded page — a ref (not quoteCache itself) tracks "already tried" so
+  // this doesn't refetch on every poll/live refresh of the thread.
+  useEffect(() => {
+    if (!thread || !selectedId) return;
+    const localWamids = new Set(thread.messages.map((m) => m.additional_kwargs?.wamid).filter(Boolean));
+    const missing = [...new Set(
+      thread.messages
+        .map((m) => m.additional_kwargs?.replyToWamid)
+        .filter((w) => w && !localWamids.has(w) && !quoteFetchedRef.current.has(w))
+    )];
+    for (const wamid of missing) {
+      quoteFetchedRef.current.add(wamid);
+      fetchMessageByWamid(selectedId, wamid)
+        .then((orig) => setQuoteCache((prev) => ({ ...prev, [wamid]: orig })))
+        .catch(() => {});
+    }
+  }, [thread, selectedId]);
 
   // Searches the whole thread server-side, not just the currently-loaded page.
   useEffect(() => {
@@ -921,7 +947,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       const quotePreview = m.additional_kwargs?.replyTo || (() => {
                         const targetWamid = m.additional_kwargs?.replyToWamid;
                         if (!targetWamid) return null;
-                        const orig = thread.messages.find((x) => x.additional_kwargs?.wamid === targetWamid);
+                        const orig = thread.messages.find((x) => x.additional_kwargs?.wamid === targetWamid) ?? quoteCache[targetWamid];
                         if (!orig) return null;
                         const origOutgoing = orig.type === 'ai';
                         const origFromAdvisor = orig.additional_kwargs?.sentBy === 'advisor';
