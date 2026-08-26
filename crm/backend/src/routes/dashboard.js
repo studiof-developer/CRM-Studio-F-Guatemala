@@ -16,7 +16,9 @@ router.get('/', async (req, res, next) => {
     const pipelineParams = [];
     const pipelineZone = zoneClause(req.user, pipelineParams);
 
-    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets, paidMethods, handoffReasons] = await Promise.all([
+    const canSeePauta = req.user.role === 'admin' || req.user.role === 'supervisor';
+
+    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets, paidMethods, handoffReasons, pautaByDay] = await Promise.all([
       pool.query(
         `SELECT
            (SELECT count(*) FROM customers c WHERE true ${kpiZone}) AS clientes_totales,
@@ -73,6 +75,21 @@ router.get('/', async (req, res, next) => {
          WHERE handoff_reason IS NOT NULL AND created_at >= now() - interval '30 days'
          GROUP BY handoff_reason ORDER BY count DESC LIMIT 8`
       ),
+      // Meta stamps a `referral` object on the inbound message when a customer arrives
+      // by clicking a Click-to-WhatsApp ad — that's the only signal of "this came from
+      // a pauta" in the data, so counting messages carrying one is counting ad-driven
+      // contact. Admin/supervisor only — ad performance isn't something every advisor
+      // needs to see day to day.
+      canSeePauta
+        ? pool.query(
+            `SELECT date_trunc('day', h.created_at)::date AS day, count(*) AS count
+             FROM n8n_chat_histories h
+             WHERE h.message->>'type' = 'human'
+               AND h.message->'additional_kwargs'->'referral' IS NOT NULL
+               AND h.created_at >= now() - interval '14 days'
+             GROUP BY day ORDER BY day`
+          )
+        : Promise.resolve({ rows: [] }),
     ]);
 
     const pipelineCounts = Object.fromEntries(VALID_TEMPERATURES.map((t) => [t, 0]));
@@ -104,6 +121,7 @@ router.get('/', async (req, res, next) => {
       })),
       paidMethods: paidMethods.rows.map((r) => ({ method: r.paid_method, count: Number(r.count) })),
       handoffReasons: handoffReasons.rows.map((r) => ({ reason: r.handoff_reason, count: Number(r.count) })),
+      pautaByDay: canSeePauta ? pautaByDay.rows.map((r) => ({ day: r.day, count: Number(r.count) })) : null,
     });
   } catch (err) { next(err); }
 });

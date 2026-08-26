@@ -47,6 +47,7 @@ export default function Dashboard() {
   const pipelineRef = useRef(null);
   const ticketStatusRef = useRef(null);
   const conversationsRef = useRef(null);
+  const pautaRef = useRef(null);
   const advisorRef = useRef(null);
   const paidMethodRef = useRef(null);
 
@@ -153,6 +154,36 @@ export default function Dashboard() {
       },
     };
   }, [data]);
+
+  // null (not an empty array) when the backend withheld this for the user's role —
+  // useChart itself isn't called at all in that case, see the JSX below.
+  useChart(pautaRef, () => {
+    return {
+      type: 'line',
+      data: {
+        labels: data.pautaByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })),
+        datasets: [{
+          data: data.pautaByDay.map((r) => r.count),
+          borderColor: '#0891b2',
+          backgroundColor: 'rgba(8,145,178,0.08)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#0891b2',
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grid: { color: '#e4e4e7' }, ticks: { precision: 0 } },
+        },
+      },
+    };
+  }, [data.pautaByDay]);
 
   useChart(advisorRef, () => {
     return {
@@ -271,6 +302,24 @@ export default function Dashboard() {
           )}
         </ChartCard>
       </div>
+
+      {data.pautaByDay && (
+        <div className="mb-6 grid grid-cols-1 gap-6">
+          <ChartCard title="Mensajes por pauta, últimos 14 días">
+            {data.pautaByDay.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Todavía no ha llegado ningún mensaje desde un anuncio en este período.</p>
+            ) : (
+              <div style={{ position: 'relative', height: 200 }}>
+                <canvas
+                  ref={pautaRef}
+                  role="img"
+                  aria-label="Gráfico de línea de mensajes recibidos por anuncio de Meta por día en los últimos 14 días"
+                />
+              </div>
+            )}
+          </ChartCard>
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-6">
         <ChartCard title="Medio de pago (clientes marcados como Pagado)">
