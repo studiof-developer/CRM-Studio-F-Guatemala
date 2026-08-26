@@ -36,25 +36,6 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
-  postgres-backup:
-    image: prodrigestivill/postgres-backup-local:16
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: studio_f,n8n
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      SCHEDULE: "@daily"
-      BACKUP_KEEP_DAYS: 7
-      BACKUP_KEEP_WEEKS: 4
-      BACKUP_KEEP_MONTHS: 6
-      BACKUP_DIR: /backups
-    volumes:
-      - ./backups:/backups
-
   crm-backend:
     build: ./crm/backend
     restart: unless-stopped
