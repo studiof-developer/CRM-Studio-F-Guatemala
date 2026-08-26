@@ -139,7 +139,7 @@ export default function Dashboard() {
     return {
       type: 'line',
       data: {
-        labels: data.conversationsByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })),
+        labels: data.conversationsByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', timeZone: 'UTC' })),
         datasets: [{
           data: data.conversationsByDay.map((r) => r.count),
           borderColor: '#4338ca',
@@ -169,7 +169,7 @@ export default function Dashboard() {
     return {
       type: 'line',
       data: {
-        labels: data.pautaByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })),
+        labels: data.pautaByDay.map((r) => new Date(r.day).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', timeZone: 'UTC' })),
         datasets: [{
           data: data.pautaByDay.map((r) => r.count),
           borderColor: '#0891b2',

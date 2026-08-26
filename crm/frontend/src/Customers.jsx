@@ -243,7 +243,7 @@ export default function Customers() {
               <InfoRow icon={MapPin} label="Dirección" value={detail.address || '—'} />
               <InfoRow icon={ShoppingBag} label="Línea preferida" value={detail.preferred_line || '—'} />
               <InfoRow icon={ShoppingBag} label="Talla" value={detail.preferred_size || '—'} />
-              <InfoRow icon={Calendar} label="Fecha de nacimiento" value={detail.birth_date ? new Date(detail.birth_date).toLocaleDateString('es-GT') : '—'} />
+              <InfoRow icon={Calendar} label="Fecha de nacimiento" value={detail.birth_date ? new Date(detail.birth_date).toLocaleDateString('es-GT', { timeZone: 'UTC' }) : '—'} />
               <InfoRow icon={Package} label="Estado de compra" value={detail.purchase_status || '—'} />
               <InfoRow icon={CircleDollarSign} label="Compras totales" value={detail.purchase_frequency} />
               <InfoRow icon={MessageSquareWarning} label="Conversaciones" value={detail.conversationSessionIds.length} />
