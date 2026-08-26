@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
-  Megaphone, Mail,
+  Megaphone, Mail, Loader2,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
-  fetchQuickReplies, markConversationUnread, takeConversation,
+  fetchQuickReplies, markConversationUnread, takeConversation, searchConversation,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -278,13 +278,27 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     onOpenedConversation?.();
   }, [openSessionId, onOpenedConversation]);
 
+  // A long thread used to load in full on every open, every 15s poll, and every live
+  // event — same "loads everything, gets slower as it grows" problem as the list.
+  // Starts at the most recent THREAD_PAGE_SIZE and grows when the advisor scrolls up.
+  const THREAD_PAGE_SIZE = 50;
+  const [threadLimit, setThreadLimit] = useState(THREAD_PAGE_SIZE);
+  const loadingOlderRef = useRef(false);
+  const scrollRestoreRef = useRef(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const searchJumpRef = useRef(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
   const loadThread = useCallback(() => {
     if (!selectedId) { setThread(null); return; }
-    fetchConversation(selectedId).then(setThread).catch((err) => setError(err.message));
-  }, [selectedId]);
+    fetchConversation(selectedId, threadLimit).then(setThread).catch((err) => setError(err.message));
+  }, [selectedId, threadLimit]);
 
   useEffect(() => {
-    loadThread();
+    setThreadLimit(THREAD_PAGE_SIZE);
     setInfoOpen(false);
     setReplyingTo(null);
     // Left uncleared before, this was a real mis-send risk: an advisor types for
@@ -294,7 +308,54 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     // happens, even at the cost of losing an unsent draft when you switch away.
     setDraft('');
     lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
-  }, [loadThread]);
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  useEffect(() => { loadThread(); }, [loadThread]);
+
+  // Searches the whole thread server-side, not just the currently-loaded page.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || !selectedId) { setSearchResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      searchConversation(selectedId, q)
+        .then((rows) => { if (!cancelled) setSearchResults(rows); })
+        .catch((err) => { if (!cancelled) showError(err.message); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchQuery, selectedId]);
+
+  // A result older than what's currently loaded needs a bigger window before it exists
+  // in the DOM to scroll to — grown here, then jumped to once that reload lands (below).
+  function jumpToSearchResult(result) {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    if (result.distanceFromLatest <= threadLimit) {
+      scrollToMessage(result.id);
+      return;
+    }
+    searchJumpRef.current = result.id;
+    setThreadLimit(result.distanceFromLatest + 10);
+  }
+
+  // Scrolling near the top asks for an older page instead of relying on the poll/live
+  // refresh, which only ever re-fetches the currently-loaded window.
+  function handleThreadScroll(e) {
+    const el = e.currentTarget;
+    if (el.scrollTop < 100 && thread?.hasMoreOlder && !loadingOlderRef.current) {
+      loadingOlderRef.current = true;
+      setLoadingOlder(true);
+      scrollRestoreRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      setThreadLimit((n) => n + THREAD_PAGE_SIZE);
+    }
+  }
 
   useLiveEvent('message_changes', loadThread);
   // Without this, another advisor taking/resolving the ticket you have open right now
@@ -314,18 +375,61 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   useEffect(() => {
     if (!thread) return;
     const lastId = thread.messages[thread.messages.length - 1]?.id ?? null;
+    const container = scrollContainerRef.current;
+
+    // This update just grew the window to fit a search result found further back than
+    // what was loaded — jump straight to it instead of running the usual first-load or
+    // new-message scroll logic.
+    if (searchJumpRef.current != null) {
+      const targetId = searchJumpRef.current;
+      searchJumpRef.current = null;
+      lastMessageIdRef.current = lastId;
+      setTimeout(() => scrollToMessage(targetId), 50);
+      setTimeout(() => scrollToMessage(targetId), 350);
+      return;
+    }
+
+    // This update just prepended an older page the advisor asked for by scrolling up —
+    // restore the exact spot they were looking at instead of jumping anywhere.
+    if (loadingOlderRef.current) {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+      lastMessageIdRef.current = lastId;
+      const restore = scrollRestoreRef.current;
+      if (container && restore) {
+        container.scrollTop = container.scrollHeight - restore.height + restore.top;
+      }
+      return;
+    }
+
     if (lastId === lastMessageIdRef.current) return;
     const isFirstLoadForThread = lastMessageIdRef.current === null;
-    const container = scrollContainerRef.current;
     const nearBottom = !container || container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     lastMessageIdRef.current = lastId;
-    if (isFirstLoadForThread || nearBottom) {
-      // Direct scrollTop instead of scrollIntoView, reapplied after paint and again
-      // shortly after — attachment images finish loading late and grow the container,
-      // which otherwise leaves the view sitting above the true bottom.
-      const scrollToBottom = () => {
-        if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      };
+
+    // Direct scrollTop instead of scrollIntoView, reapplied after paint and again
+    // shortly after — attachment images finish loading late and grow the container,
+    // which otherwise leaves the view sitting above the true bottom.
+    const scrollToBottom = () => {
+      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    };
+
+    if (isFirstLoadForThread) {
+      // Opening a chat with unread messages waiting should land right on the first one
+      // of those, not dump the advisor at the newest message assuming they'll scroll up
+      // to find where they left off.
+      const unreadCount = selected?.unreadCount ?? 0;
+      const humanMessages = thread.messages.filter((m) => m.type === 'human');
+      const firstUnread = unreadCount > 0 ? humanMessages[Math.max(0, humanMessages.length - unreadCount)] : null;
+      if (firstUnread) {
+        setTimeout(() => scrollToMessage(firstUnread.id), 50);
+        setTimeout(() => scrollToMessage(firstUnread.id), 350);
+        return;
+      }
+      scrollToBottom();
+      requestAnimationFrame(scrollToBottom);
+      setTimeout(scrollToBottom, 300);
+    } else if (nearBottom) {
       scrollToBottom();
       requestAnimationFrame(scrollToBottom);
       setTimeout(scrollToBottom, 300);
@@ -731,11 +835,58 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   <Mail size={12} /> Marcar como no leído
                 </span>
               )}
+              <span
+                role="button"
+                title="Buscar en la conversación"
+                onClick={(e) => { e.stopPropagation(); setSearchOpen((v) => !v); }}
+                className="flex shrink-0 items-center rounded-full p-1.5 text-greige transition-colors hover:bg-black/[0.04] hover:text-ink dark:hover:bg-white/[0.06]"
+              >
+                <Search size={15} />
+              </span>
               <Info size={16} className="shrink-0 text-greige" />
             </button>
 
+            {searchOpen && (
+              <div className="relative border-b border-line bg-paper px-5 py-2.5" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-2">
+                  <Search size={14} className="shrink-0 text-greige" />
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar mensajes en este chat…"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-greige"
+                  />
+                  {searching && <Loader2 size={13} className="shrink-0 animate-spin text-greige" />}
+                  <button onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); }} className="shrink-0 text-greige hover:text-ink">
+                    <X size={14} />
+                  </button>
+                </div>
+                {searchQuery.trim() && !searching && searchResults.length === 0 && (
+                  <p className="mt-2 text-xs text-greige-ink">Sin resultados.</p>
+                )}
+                {searchResults.length > 0 && (
+                  <div className="mt-2 flex max-h-64 flex-col gap-1 overflow-y-auto">
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => jumpToSearchResult(r)}
+                        className="rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                      >
+                        <span className="text-greige-ink">{formatBubbleTime(r.createdAt)} · </span>
+                        <span className="text-ink">{r.content?.slice(0, 120) || '(sin texto)'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex min-h-0 flex-1">
-              <div ref={scrollContainerRef} className="flex-1 space-y-1 overflow-y-auto px-6 py-4">
+              <div ref={scrollContainerRef} onScroll={handleThreadScroll} className="flex-1 space-y-1 overflow-y-auto px-6 py-4">
+                {loadingOlder && (
+                  <p className="py-2 text-center text-xs text-greige-ink">Cargando mensajes anteriores…</p>
+                )}
                 {dayGroups.map((group) => (
                   <div key={group.label}>
                     <div className="sticky top-0 z-10 my-3 flex justify-center">

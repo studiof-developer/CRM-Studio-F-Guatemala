@@ -59,9 +59,16 @@ export async function fetchConversations(q, temperature, ticketStatus, limit) {
   return res.json();
 }
 
-export async function fetchConversation(sessionId) {
-  const res = await apiFetch(`/api/conversations/${sessionId}`);
+export async function fetchConversation(sessionId, limit) {
+  const qs = limit ? `?limit=${limit}` : '';
+  const res = await apiFetch(`/api/conversations/${sessionId}${qs}`);
   if (!res.ok) throw new Error('Error al cargar la conversación');
+  return res.json();
+}
+
+export async function searchConversation(sessionId, q) {
+  const res = await apiFetch(`/api/conversations/${sessionId}/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error('Error al buscar en la conversación');
   return res.json();
 }
 

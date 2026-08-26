@@ -172,8 +172,7 @@ async function findCustomerByPhone(phone) {
 // phone is known, EVERY session_id that ever mentioned it is merged into one thread —
 // keyed by phone instead of session_id. Chats where no phone has been captured yet
 // (very start of onboarding) still fall back to their raw session_id as the key.
-export async function findConversationThread(threadKey) {
-  let sessionIds;
+async function resolveSessionIds(threadKey) {
   if (PHONE_RE.test(threadKey)) {
     // Production session_ids are the phone itself, but some channels stamp a suffix
     // on it (e.g. "<phone>__whatsapp") — LIKE-prefix match instead of exact-match so
@@ -187,30 +186,48 @@ export async function findConversationThread(threadKey) {
           OR (message->>'type' = 'human' AND trim(message->>'content') = $1)`,
       [threadKey]
     );
-    sessionIds = rows.map((r) => r.session_id);
-  } else {
-    const { rows } = await pool.query(
-      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1`,
-      [`${threadKey}%`]
-    );
-    sessionIds = rows.map((r) => r.session_id);
+    return rows.map((r) => r.session_id);
   }
-  if (!sessionIds.length) return { messages: [], customer: null, phone: null };
-
-  // id is a single global sequence across all sessions, so merging by id ASC
-  // already interleaves multiple session_ids in true chronological order.
-  const { rows: messages } = await pool.query(
-    `SELECT id, message, created_at FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id ASC`,
-    [sessionIds]
+  const { rows } = await pool.query(
+    `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1`,
+    [`${threadKey}%`]
   );
+  return rows.map((r) => r.session_id);
+}
 
+export async function findConversationThread(threadKey, { limit = 50 } = {}) {
+  const sessionIds = await resolveSessionIds(threadKey);
+  if (!sessionIds.length) return { messages: [], customer: null, phone: null, hasMoreOlder: false };
+
+  // A long-running customer's full history used to load unconditionally on every open,
+  // every 15s poll, and every live event while the thread was open — the same "loads
+  // everything, gets slower as it grows" problem already fixed for the conversation
+  // list. Only the most recent `limit` messages load by default; the frontend grows
+  // `limit` and re-fetches when the advisor scrolls up wanting older ones.
+  const { rows: messagesDesc } = await pool.query(
+    `SELECT id, message, created_at FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT $2`,
+    [sessionIds, limit]
+  );
+  const messages = messagesDesc.reverse();
+  const hasMoreOlder = messagesDesc.length === limit;
+
+  // Was previously read off of `messages` itself, which broke once that stopped being
+  // the full history — a targeted query stays correct regardless of the page window,
+  // and only runs at all for legacy sessions where the key isn't already the phone.
   const phone = PHONE_RE.test(threadKey)
     ? threadKey
-    : messages.find((r) => r.message.type === 'human' && PHONE_RE.test(String(r.message.content).trim()))
-        ?.message.content.trim() ?? null;
+    : await (async () => {
+        const { rows } = await pool.query(
+          `SELECT trim(message->>'content') AS phone FROM n8n_chat_histories
+           WHERE session_id = ANY($1) AND message->>'type' = 'human' AND trim(message->>'content') ~ '^\\d{7,15}$'
+           ORDER BY id ASC LIMIT 1`,
+          [sessionIds]
+        );
+        return rows[0]?.phone ?? null;
+      })();
 
   const customer = phone ? (await findCustomerByPhone(phone)).customer : null;
-  return { messages, customer, phone, sessionIds };
+  return { messages, customer, phone, sessionIds, hasMoreOlder };
 }
 
 // The template must already be approved in Meta's WhatsApp Manager under this exact
@@ -416,7 +433,8 @@ router.get('/', async (req, res, next) => {
 
 router.get('/:sessionId', async (req, res, next) => {
   try {
-    const { messages, customer, phone } = await findConversationThread(req.params.sessionId);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 5000);
+    const { messages, customer, phone, hasMoreOlder } = await findConversationThread(req.params.sessionId, { limit });
     if (!messages.length) return res.status(404).json({ error: 'not found' });
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
@@ -466,6 +484,7 @@ router.get('/:sessionId', async (req, res, next) => {
       paidLocked: customer?.paid_locked ?? false,
       paidMethod: customer?.paid_method ?? null,
       phone,
+      hasMoreOlder,
       messages: messages.map((r) => {
         const a = attachmentByMessageId.get(r.id);
         return {
@@ -478,6 +497,31 @@ router.get('/:sessionId', async (req, res, next) => {
         };
       }),
     });
+  } catch (err) { next(err); }
+});
+
+// Searches the WHOLE thread, not just whatever page is currently loaded in the UI —
+// the message list only ever keeps the most recent `limit` in memory. distanceFromLatest
+// tells the frontend how big a "most recent N" window it needs to request for this
+// result to actually be in `messages`, so it can jump straight there.
+router.get('/:sessionId/search', async (req, res, next) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) return res.json([]);
+    const sessionIds = await resolveSessionIds(req.params.sessionId);
+    if (!sessionIds.length) return res.json([]);
+    const { rows } = await pool.query(
+      `SELECT h.id, h.message->>'content' AS content, h.message->>'type' AS type, h.created_at,
+              (SELECT count(*) FROM n8n_chat_histories h2 WHERE h2.session_id = ANY($1) AND h2.id >= h.id) AS distance_from_latest
+       FROM n8n_chat_histories h
+       WHERE h.session_id = ANY($1) AND h.message->>'content' ILIKE $2
+       ORDER BY h.id DESC LIMIT 25`,
+      [sessionIds, `%${q}%`]
+    );
+    res.json(rows.map((r) => ({
+      id: r.id, content: r.content, type: r.type, createdAt: r.created_at,
+      distanceFromLatest: Number(r.distance_from_latest),
+    })));
   } catch (err) { next(err); }
 });
 
