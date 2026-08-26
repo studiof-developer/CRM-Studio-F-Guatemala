@@ -2,6 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import { pool } from '../db.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
+import { compressImageBuffer } from '../imageCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 
 const router = Router();
@@ -55,12 +56,24 @@ inboundRouter.post('/', async (req, res, next) => {
       [sessionId, JSON.stringify(message)]
     );
 
+    // Never re-sent anywhere by us — this copy only ever gets read back for the CRM's
+    // own display, so it's always safe to compress it before it even hits disk.
+    let buffer = Buffer.from(base64, 'base64');
+    let storedMimeType = mimeType;
+    if (kind === 'image') {
+      const compressed = await compressImageBuffer(buffer).catch((err) => {
+        console.error('inbound image compression failed', err);
+        return null;
+      });
+      if (compressed) { buffer = compressed; storedMimeType = 'image/jpeg'; }
+    }
+
     const attachmentId = await saveAttachment({
       n8nMessageId: inserted[0].id,
       kind,
       filename,
-      mimeType,
-      buffer: Buffer.from(base64, 'base64'),
+      mimeType: storedMimeType,
+      buffer,
     });
 
     res.status(201).json({ attachmentId, sessionId: cleanSessionId(sessionId) });

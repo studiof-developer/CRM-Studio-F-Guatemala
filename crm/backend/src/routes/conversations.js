@@ -6,6 +6,7 @@ import { logAccess } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
+import { compressStoredImageAttachment } from '../imageCompression.js';
 
 const router = Router();
 const upload = multer({
@@ -110,15 +111,20 @@ async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboun
 // A send that resolves without giving us a wamid never reached WhatsApp either — Meta
 // always returns one for an accepted message. Treated as a failure rather than "no tick
 // to update", which is how it used to slip through unnoticed.
-function handleSendResult(messageId, result) {
+async function handleSendResult(messageId, result) {
   const sentWamid = result?.messages?.[0]?.id;
   if (!sentWamid) {
     return markSendFailed(messageId, new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó'));
   }
-  return pool.query(
+  await pool.query(
     `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
     [messageId, JSON.stringify(sentWamid)]
   );
+  // Only now that delivery is confirmed — the queued/orphan-recovery paths re-read this
+  // exact file from disk to send it, so compressing any earlier would ship a lower
+  // quality photo to the customer instead of just shrinking what the CRM stores.
+  const { rows } = await pool.query(`SELECT id FROM message_attachments WHERE n8n_message_id = $1`, [messageId]);
+  if (rows.length) compressStoredImageAttachment(rows[0].id);
 }
 
 // 7-15 digits covers bare local numbers up through full E.164 (country code + number).
@@ -806,6 +812,10 @@ async function deliverStoredMessage(row, phone, attachment) {
        '{additional_kwargs,wamid}', $2::jsonb) WHERE id = $1`,
     [row.id, JSON.stringify(sentWamid)]
   );
+  // Only now, delivery confirmed — this function is exactly what re-reads the file from
+  // disk to send it, so compressing any earlier would ship the customer a lower-quality
+  // photo instead of just shrinking what the CRM keeps.
+  if (attachment) compressStoredImageAttachment(attachment.id);
 }
 
 export async function flushQueuedMessages(rawSessionId) {
@@ -827,7 +837,7 @@ export async function flushQueuedMessages(rawSessionId) {
   if (!isOpen) return;
 
   const { rows: attachments } = await pool.query(
-    `SELECT n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
+    `SELECT id, n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
      WHERE n8n_message_id = ANY($1)`,
     [queued.map((q) => q.id)]
   );
@@ -879,7 +889,7 @@ export async function recoverOrphanedSends() {
   console.warn(`recovering ${orphans.length} orphaned send(s)`);
 
   const { rows: attachments } = await pool.query(
-    `SELECT n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
+    `SELECT id, n8n_message_id, kind, filename, mime_type, file_path FROM message_attachments
      WHERE n8n_message_id = ANY($1)`,
     [orphans.map((o) => o.id)]
   );
