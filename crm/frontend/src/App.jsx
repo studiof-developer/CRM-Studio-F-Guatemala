@@ -110,8 +110,11 @@ export default function App() {
   // correct across tabs, reloads, and different advisors without any local bookkeeping.
   const loadUnanswered = useCallback(async () => {
     try {
-      const rows = await fetchConversations();
-      setUnansweredCount(rows.filter((r) => r.unreadCount > 0).length);
+      // unread=true fetches every unread thread, not just the most-recently-active
+      // page — without it this badge silently missed any unread thread that fell
+      // outside the default recency window (the bug reported 2026-08-26).
+      const rows = await fetchConversations('', '', '', undefined, true);
+      setUnansweredCount(rows.length);
     } catch { /* leave the last known count showing rather than flash to 0 */ }
   }, []);
 

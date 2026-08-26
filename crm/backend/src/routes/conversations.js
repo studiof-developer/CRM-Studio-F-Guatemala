@@ -298,12 +298,16 @@ router.post('/', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   try {
     const { q, temperature, ticketStatus } = req.query;
+    const unreadOnly = req.query.unread === 'true';
     // Loading every conversation up front got heavy once the list passed ~1000 threads.
     // Filters run in JS below (over fields the SQL doesn't have a clean WHERE for), so a
     // filtered view still needs the full set — only the plain, most-common "just open the
     // list" case is capped here, newest-active first, with the frontend paging in more as
-    // the advisor scrolls.
-    const hasFilter = !!(q?.trim() || temperature || ticketStatus);
+    // the advisor scrolls. Unread is always a small slice of the total regardless of how
+    // many threads exist, so it's cheap to never cap — capping it was the bug: the "no
+    // leído" filter and the sidebar badge were both silently missing any unread thread
+    // that fell outside the default recency window instead of showing every real one.
+    const hasFilter = !!(q?.trim() || temperature || ticketStatus || unreadOnly);
     const limit = hasFilter ? null : Math.min(Number(req.query.limit) || 50, 5000);
     const { rows } = await pool.query(`
       WITH readable AS (
@@ -407,6 +411,10 @@ router.get('/', async (req, res, next) => {
     if (ticketStatus) {
       if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
       visible = visible.filter((r) => (ticketStatus === 'bot' ? !r.ticket_status : r.ticket_status === ticketStatus));
+    }
+
+    if (unreadOnly) {
+      visible = visible.filter((r) => Number(r.unread_count) > 0);
     }
 
     res.json(visible.map((r) => ({

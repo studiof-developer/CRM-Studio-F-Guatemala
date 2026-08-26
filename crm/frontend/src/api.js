@@ -47,12 +47,16 @@ export async function updateTicket(id, patch) {
   return res.json();
 }
 
-export async function fetchConversations(q, temperature, ticketStatus, limit) {
+export async function fetchConversations(q, temperature, ticketStatus, limit, unreadOnly) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (temperature) params.set('temperature', temperature);
   if (ticketStatus) params.set('ticketStatus', ticketStatus);
   if (limit) params.set('limit', limit);
+  // Unread is always a small slice regardless of how many threads exist — never
+  // capped by the recency limit above, or a real unread thread outside that window
+  // would silently disappear from both this filter and the sidebar badge count.
+  if (unreadOnly) params.set('unread', 'true');
   const qs = params.toString();
   const res = await apiFetch(`/api/conversations${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar conversaciones');

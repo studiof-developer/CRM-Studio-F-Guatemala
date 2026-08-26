@@ -241,9 +241,14 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     setError(null);
     try {
       const isUnreadFilter = ticketStatusFilter === UNREAD_FILTER;
-      const data = await fetchConversations(search, temperature, isUnreadFilter ? '' : ticketStatusFilter, visibleCount);
-      setConversations(isUnreadFilter ? data.filter((r) => r.unreadCount > 0) : data);
-      setHasMore(data.length >= visibleCount);
+      // Unread is fetched whole, never paginated — it's always a small slice, and
+      // capping it the same way as the plain list silently hid real unread threads
+      // that fell outside the recency window (the bug reported 2026-08-26).
+      const data = isUnreadFilter
+        ? await fetchConversations(search, temperature, '', undefined, true)
+        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount);
+      setConversations(data);
+      setHasMore(isUnreadFilter ? false : data.length >= visibleCount);
     } catch (err) {
       setError(err.message);
     } finally {
