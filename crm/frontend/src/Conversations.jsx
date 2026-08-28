@@ -1244,6 +1244,44 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     <InfoRow icon={CircleDollarSign} label="Compras totales" value={thread.purchaseFrequency ?? '—'} />
                   </div>
 
+                  {/* Only shows up when this phone matches a real purchase record in the
+                      ERP — a brand-new WhatsApp lead with no store history just doesn't
+                      get this section, same profile as before this existed. */}
+                  {thread.erp && (
+                    <div className="mt-6 border-t border-line-soft pt-5">
+                      <div className="mb-3 flex items-center gap-1.5">
+                        <span className="flex items-center gap-1 rounded-full bg-cyan-bg px-2 py-0.5 text-[10px] font-semibold text-cyan">
+                          <CircleDollarSign size={10} /> Cliente ERP
+                        </span>
+                        <p className="truncate text-xs text-greige-ink">{thread.erp.nombre}</p>
+                      </div>
+                      <div className="flex flex-col gap-4">
+                        <InfoRow icon={CircleDollarSign} label="Venta total histórica" value={thread.erp.ventaNetaTotal != null ? `Q${Number(thread.erp.ventaNetaTotal).toLocaleString('es-GT')}` : '—'} />
+                        <InfoRow icon={ShoppingBag} label="Facturas / unidades" value={`${thread.erp.facturasTotales ?? 0} facturas · ${thread.erp.unidadesTotales ?? 0} unidades`} />
+                        <InfoRow icon={Clock} label="Última compra" value={thread.erp.fechaUltimaCompra ? `${new Date(thread.erp.fechaUltimaCompra).toLocaleDateString('es-GT', { timeZone: 'UTC' })} (${thread.erp.diasSinCompra} días)` : '—'} />
+                        <InfoRow icon={MapPin} label="Sucursal preferida" value={thread.erp.sucursalPreferida || '—'} />
+                        <InfoRow
+                          icon={ShoppingBag}
+                          label="Interés por línea"
+                          value={
+                            [['Blusas', thread.erp.blusas], ['Jeans', thread.erp.jeans], ['Vestidos', thread.erp.vestidos], ['Pantalones', thread.erp.pantalones], ['Otros', thread.erp.otros]]
+                              .filter(([, n]) => n > 0)
+                              .sort((a, b) => b[1] - a[1])
+                              .map(([label, n]) => `${label} (${n})`)
+                              .join(', ') || '—'
+                          }
+                        />
+                        {(thread.erp.tallaBlusa || thread.erp.tallaJean || thread.erp.tallaCalzado) && (
+                          <InfoRow
+                            icon={ShoppingBag}
+                            label="Tallas (histórico ERP)"
+                            value={[thread.erp.tallaBlusa && `Blusa ${thread.erp.tallaBlusa}`, thread.erp.tallaJean && `Jean ${thread.erp.tallaJean}`, thread.erp.tallaCalzado && `Calzado ${thread.erp.tallaCalzado}`].filter(Boolean).join(' · ')}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {thread.handoffReason && (
                     <div className="mt-6 border-t border-line-soft pt-5">
                       <p className="mb-1.5 text-xs font-medium text-greige-ink">Motivo del handoff</p>

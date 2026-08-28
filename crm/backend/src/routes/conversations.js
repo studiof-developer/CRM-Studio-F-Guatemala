@@ -156,17 +156,34 @@ async function findCustomerByPhone(phone) {
   // The most recent ticket regardless of status — not just active ones. A resolved
   // ticket still means a human has this relationship; the compose box shouldn't lock
   // back up and pretend it's "bot" again just because the last issue was closed out.
+  // erp_customers.telefono/celular are bare 8-digit Guatemala local numbers with no
+  // country code, while whatsapp_number is the full number (country code included) —
+  // matched by the last 8 digits instead of an exact match, which would never hit.
+  // A customer with no purchase in the ERP simply gets no match here — every erp_*
+  // field below comes back null, nothing else about their profile is affected.
   const { rows } = await pool.query(
     `SELECT c.id, c.full_name, c.zone, c.department, c.municipio, c.preferred_line, c.preferred_size, c.purchase_frequency, c.address,
             c.dpi, c.email, c.birth_date,
             c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
-            t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason
+            t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
+            e.nombre AS erp_nombre, e.venta_neta_total AS erp_venta_neta_total,
+            e.facturas_totales AS erp_facturas_totales, e.unidades_totales AS erp_unidades_totales,
+            e.fecha_ultima_compra AS erp_fecha_ultima_compra, e.dias_sin_compra AS erp_dias_sin_compra,
+            e.segmento_sin_compra AS erp_segmento_sin_compra, e.sucursal_preferida AS erp_sucursal_preferida,
+            e.blusas AS erp_blusas, e.jeans AS erp_jeans, e.vestidos AS erp_vestidos,
+            e.pantalones AS erp_pantalones, e.otros AS erp_otros,
+            e.talla_blusa AS erp_talla_blusa, e.talla_jean AS erp_talla_jean, e.talla_calzado AS erp_talla_calzado
      FROM customers c
      LEFT JOIN LATERAL (
        SELECT id, status, handoff_reason FROM tickets
        WHERE customer_id = c.id
        ORDER BY created_at DESC LIMIT 1
      ) t ON true
+     LEFT JOIN LATERAL (
+       SELECT * FROM erp_customers
+       WHERE right(c.whatsapp_number, 8) IN (telefono, celular)
+       ORDER BY venta_neta_total DESC NULLS LAST LIMIT 1
+     ) e ON true
      WHERE c.whatsapp_number = $1`,
     [phone]
   );
@@ -495,6 +512,26 @@ router.get('/:sessionId', async (req, res, next) => {
       birthDate: customer?.birth_date ?? null,
       temperature: customer?.temperature ?? null,
       manualStatus: customer?.manual_status ?? null,
+      // null when this phone has no match in erp_customers — the frontend hides the
+      // whole section in that case, same as any other "cliente nuevo, sin historial".
+      erp: customer?.erp_nombre == null ? null : {
+        nombre: customer.erp_nombre,
+        ventaNetaTotal: customer.erp_venta_neta_total,
+        facturasTotales: customer.erp_facturas_totales,
+        unidadesTotales: customer.erp_unidades_totales,
+        fechaUltimaCompra: customer.erp_fecha_ultima_compra,
+        diasSinCompra: customer.erp_dias_sin_compra,
+        segmentoSinCompra: customer.erp_segmento_sin_compra,
+        sucursalPreferida: customer.erp_sucursal_preferida,
+        blusas: customer.erp_blusas,
+        jeans: customer.erp_jeans,
+        vestidos: customer.erp_vestidos,
+        pantalones: customer.erp_pantalones,
+        otros: customer.erp_otros,
+        tallaBlusa: customer.erp_talla_blusa,
+        tallaJean: customer.erp_talla_jean,
+        tallaCalzado: customer.erp_talla_calzado,
+      },
       paidLocked: customer?.paid_locked ?? false,
       paidMethod: customer?.paid_method ?? null,
       phone,
