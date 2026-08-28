@@ -53,6 +53,20 @@ const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
 // a message has to be summarised in a single line. Prefers the real filename — that's
 // what tells an advisor which file it was — and falls back to the kind when WhatsApp
 // gave us no name, which is common for photos taken in the app.
+// Wraps every occurrence of the search term in a highlighted span, like WhatsApp's own
+// global search does — lets an advisor scan a page of results for the match instead of
+// reading each snippet in full.
+function highlightMatch(text, query) {
+  if (!query?.trim()) return text;
+  const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = String(text ?? '').split(new RegExp(`(${escaped})`, 'gi'));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.trim().toLowerCase()
+      ? <mark key={i} className="rounded bg-accent-soft px-0.5 font-semibold text-accent">{part}</mark>
+      : part
+  );
+}
+
 export function describeAttachment(attachment) {
   if (!attachment) return '';
   const icon = attachment.kind === 'image' ? '📷' : attachment.kind === 'audio' ? '🎵' : '📄';
@@ -834,7 +848,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       <p className="truncate text-sm font-medium text-ink">{r.customerName || r.phone}</p>
                       <span className="shrink-0 text-[11px] text-greige-ink">{formatListTime(r.createdAt)}</span>
                     </div>
-                    <p className="truncate text-xs text-greige-ink">{r.content}</p>
+                    <p className="truncate text-xs text-greige-ink">{highlightMatch(r.content, search)}</p>
                   </div>
                 </button>
               ))}
@@ -1045,7 +1059,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         className="rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                       >
                         <span className="text-greige-ink">{formatBubbleTime(r.createdAt)} · </span>
-                        <span className="text-ink">{r.content?.slice(0, 120) || '(sin texto)'}</span>
+                        <span className="text-ink">{r.content ? highlightMatch(r.content.slice(0, 120), searchQuery) : '(sin texto)'}</span>
                       </button>
                     ))}
                   </div>
