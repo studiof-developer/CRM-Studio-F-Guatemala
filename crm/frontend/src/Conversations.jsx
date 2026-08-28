@@ -148,7 +148,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const sending = sendingFor === selectedId;
   const [actionBusy, setActionBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  // Attach several files, then send them together — instead of each one going out the
+  // instant it's picked. { file, id, previewUrl (images only) }.
+  const [stagedFiles, setStagedFiles] = useState([]);
+  const textareaRef = useRef(null);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -196,20 +199,40 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }
 
   function handleDraftKeyDown(e) {
-    if (!slashResults.length) return;
-    if (e.key === 'ArrowDown') {
+    if (slashResults.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex((i) => (i + 1) % slashResults.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applyQuickReply(slashResults[slashIndex] ?? slashResults[0]);
+      } else if (e.key === 'Escape') {
+        setDraft('');
+      }
+      return;
+    }
+    // Plain Enter sends, same as before (the box used to be a single-line input that
+    // couldn't hold a newline at all). Ctrl+Enter or Shift+Enter falls through to the
+    // textarea's own default behavior and inserts a line break instead — asked for by
+    // the advisors so a multi-line message can be composed before sending.
+    if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
-      setSlashIndex((i) => (i + 1) % slashResults.length);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length);
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
-      e.preventDefault();
-      applyQuickReply(slashResults[slashIndex] ?? slashResults[0]);
-    } else if (e.key === 'Escape') {
-      setDraft('');
+      handleSend();
     }
   }
+
+  // Grows with the content (up to a cap, then scrolls) instead of staying a fixed
+  // single line — re-runs on every draft change, typed or programmatic (e.g. cleared
+  // after sending), so it also snaps back to one line once the message goes out.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [draft]);
 
   // Tapping a quote preview jumps to (and briefly flashes) the original message,
   // same as WhatsApp itself — only works if that message is still loaded in this thread.
@@ -322,6 +345,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     // by mistake. Wiping it on every switch is the only way to guarantee that never
     // happens, even at the cost of losing an unsent draft when you switch away.
     setDraft('');
+    // Same reasoning as the draft above — staged-but-unsent attachments must not
+    // silently ride along to whatever chat is open when they'd otherwise have been sent.
+    setStagedFiles((prev) => { for (const f of prev) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl); return []; });
     lastMessageIdRef.current = null; // switching threads always scrolls to bottom once, below
     setSearchOpen(false);
     setSearchQuery('');
@@ -500,17 +526,29 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }, [thread]);
 
   async function handleSend(e) {
-    e.preventDefault();
-    // Captured now, not read again after the await — selectedId/draft can change while
-    // this request is in flight if the advisor switches chats, and the send must stay
-    // pinned to the chat it was actually written for.
+    e?.preventDefault();
+    // Captured now, not read again after the await — selectedId/draft/staged files can
+    // change while this request is in flight if the advisor switches chats, and the
+    // send must stay pinned to the chat it was actually written for.
     const targetId = selectedId;
     const content = draft.trim();
     const target = replyingTo;
-    if (!content || sendingFor === targetId) return;
+    const files = stagedFiles;
+    if (!content && !files.length) return;
+    if (sendingFor === targetId) return;
     setSendingFor(targetId);
     try {
-      await sendConversationMessage(targetId, content, target ?? undefined);
+      if (files.length) {
+        // Whatever's typed rides along as the caption on the first file — same gesture
+        // as WhatsApp itself (write, then attach several, sends as one batch).
+        for (let i = 0; i < files.length; i++) {
+          await sendConversationAttachment(targetId, files[i].file, i === 0 ? (content || undefined) : undefined);
+        }
+        for (const f of files) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+        if (selectedId === targetId) setStagedFiles([]);
+      } else {
+        await sendConversationMessage(targetId, content, target ?? undefined);
+      }
       // Only touch the compose box if we're still looking at the same chat — otherwise
       // this would wipe out whatever the advisor has since typed for a different one.
       if (selectedId === targetId) {
@@ -579,37 +617,34 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
 
-  async function uploadFile(file) {
-    // Same pin-to-the-chat-it-was-for treatment as handleSend, and for the same
-    // reason: uploads can be slow, and switching chats mid-upload must not let the
-    // file (or its caption) land on whoever's open when it finally finishes.
-    const targetId = selectedId;
-    setUploading(true);
-    try {
-      // Whatever's typed in the compose box rides along as the WhatsApp caption —
-      // same gesture as WhatsApp itself (write, then attach, sends as one message).
-      const caption = draft.trim();
-      await sendConversationAttachment(targetId, file, caption || undefined);
-      if (caption && selectedId === targetId) setDraft('');
-      loadThread();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setUploading(false);
-    }
+  // Adds files to the staging strip instead of sending immediately — lets an advisor
+  // attach several photos or documents and send them together as one batch.
+  function stageFiles(files) {
+    const staged = files.map((file) => ({
+      file,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
+    setStagedFiles((prev) => [...prev, ...staged]);
   }
 
-  async function handleFileSelected(e) {
-    const file = e.target.files?.[0];
+  function removeStagedFile(id) {
+    setStagedFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((f) => f.id !== id);
+    });
+  }
+
+  function handleFileSelected(e) {
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    await uploadFile(file);
+    if (files.length) stageFiles(files);
   }
 
   // Lets an advisor Ctrl+V a copied screenshot/image straight into the chat,
   // same as WhatsApp Web — no need to save it to disk first just to attach it.
   function handlePaste(e) {
-    if (uploading) return;
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const item of items) {
@@ -617,7 +652,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         const file = item.getAsFile();
         if (file) {
           e.preventDefault();
-          uploadFile(file);
+          stageFiles([file]);
         }
         return;
       }
@@ -1262,17 +1297,41 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   </button>
                 </div>
               )}
-              <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
+              {stagedFiles.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto border-t border-line bg-paper px-4 py-2.5">
+                  {stagedFiles.map((f) => (
+                    <div key={f.id} className="group relative shrink-0">
+                      {f.previewUrl ? (
+                        <img src={f.previewUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                      ) : (
+                        <div className="flex h-14 w-28 flex-col items-center justify-center gap-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] px-2">
+                          <span className="text-base">{f.file.type.startsWith('audio/') ? '🎵' : '📄'}</span>
+                          <span className="w-full truncate text-center text-[10px] text-greige-ink">{f.file.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeStagedFile(f.id)}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-paper shadow-sm transition-opacity hover:opacity-80"
+                        aria-label="Quitar adjunto"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-line bg-paper p-3">
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   accept="image/*,audio/*,.pdf,.doc,.docx"
                   className="hidden"
                   onChange={handleFileSelected}
                 />
                 <button
                   type="button"
-                  disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
                   aria-label="Adjuntar archivo"
@@ -1298,19 +1357,27 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       ))}
                     </div>
                   )}
-                  <input
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onPaste={handlePaste}
                     onKeyDown={handleDraftKeyDown}
-                    placeholder={uploading ? 'Enviando archivo…' : 'Escribe tu respuesta como asesor… ( / para plantillas )'}
-                    disabled={uploading}
-                    className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
+                    placeholder={
+                      sending
+                        ? 'Enviando…'
+                        : stagedFiles.length
+                          ? 'Agrega un mensaje (opcional)… Enter para enviar'
+                          : 'Escribe tu respuesta como asesor… ( / para plantillas )'
+                    }
+                    disabled={sending}
+                    className="max-h-[120px] w-full resize-none overflow-y-auto rounded-2xl border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={sending || uploading || !draft.trim()}
+                  disabled={sending || (!draft.trim() && !stagedFiles.length)}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
                   aria-label="Enviar"
                 >
