@@ -88,6 +88,12 @@ export async function searchConversation(sessionId, q) {
   return res.json();
 }
 
+export async function searchAllConversations(q) {
+  const res = await apiFetch(`/api/conversations/search-all?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error('Error al buscar en las conversaciones');
+  return res.json();
+}
+
 export async function markConversationUnread(sessionId) {
   const res = await apiFetch(`/api/conversations/${sessionId}/mark-unread`, { method: 'POST' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al marcar como no leído');

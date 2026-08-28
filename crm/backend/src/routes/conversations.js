@@ -462,6 +462,42 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Searches every conversation, not just whatever's currently open — WhatsApp's own
+// "search all chats" feature. Registered before /:sessionId on purpose: Express would
+// otherwise match "search-all" as a sessionId value on that route instead of this one.
+// distanceFromLatest lets the frontend jump straight to the exact message in whichever
+// chat it's in, reusing the same grow-the-window trick as the in-chat search.
+router.get('/search-all', async (req, res, next) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) return res.json([]);
+    const { rows } = await pool.query(
+      `WITH matches AS (
+         SELECT h.id, h.session_id, h.message->>'content' AS content, h.created_at,
+                (SELECT count(*) FROM n8n_chat_histories h2 WHERE h2.session_id = h.session_id AND h2.id >= h.id) AS distance_from_latest
+         FROM n8n_chat_histories h
+         WHERE h.message->>'content' ILIKE $1
+         ORDER BY h.id DESC
+         LIMIT 30
+       )
+       SELECT m.*, split_part(m.session_id, '__', 1) AS phone, c.full_name
+       FROM matches m
+       LEFT JOIN customers c ON c.whatsapp_number = split_part(m.session_id, '__', 1)
+       ORDER BY m.id DESC`,
+      [`%${q}%`]
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      sessionId: cleanSessionId(r.session_id),
+      customerName: r.full_name,
+      phone: r.phone,
+      content: r.content,
+      createdAt: r.created_at,
+      distanceFromLatest: Number(r.distance_from_latest),
+    })));
+  } catch (err) { next(err); }
+});
+
 router.get('/:sessionId', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 5000);

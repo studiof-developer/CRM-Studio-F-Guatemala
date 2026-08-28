@@ -8,7 +8,7 @@ import {
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
-  fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid,
+  fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
@@ -134,6 +134,10 @@ function MessageTicks({ status, statusError }) {
 export default function Conversations({ user, openSessionId, onOpenedConversation }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
+  // "Buscar en todos los chats" — matches WhatsApp's own global search, distinct from
+  // the name/phone filter above (search) and from the in-chat search built earlier.
+  const [globalResults, setGlobalResults] = useState([]);
+  const [globalSearching, setGlobalSearching] = useState(false);
   const [temperature, setTemperature] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -285,6 +289,32 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
   useEffect(() => { load(); }, [load]);
 
+  // Global message search — every chat, not just the one open. Separate from the
+  // name/phone filter above; both run off the same search box, shown as two sections.
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) { setGlobalResults([]); return; }
+    let cancelled = false;
+    setGlobalSearching(true);
+    const t = setTimeout(() => {
+      searchAllConversations(q)
+        .then((rows) => { if (!cancelled) setGlobalResults(rows); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setGlobalSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search]);
+
+  function jumpToGlobalResult(result) {
+    setSearch('');
+    if (result.sessionId === selectedId) {
+      jumpToMessage(result.id, result.distanceFromLatest);
+    } else {
+      pendingJumpRef.current = { id: result.id, distanceFromLatest: result.distanceFromLatest };
+      setSelectedId(result.sessionId);
+    }
+  }
+
   const loadQuiet = useCallback(() => load(false), [load]);
   useLiveEvent('message_changes', loadQuiet);
   useLiveEvent('ticket_changes', loadQuiet);
@@ -316,6 +346,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const scrollRestoreRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const searchJumpRef = useRef(null);
+  // Set right before switching to a chat opened from a global search result — read once
+  // by the [selectedId] reset effect below, so the very first fetch for that chat is
+  // already sized to include the target message instead of a second grow-and-refetch.
+  const pendingJumpRef = useRef(null);
   // A customer's native WhatsApp quote-reply that points at a message older than the
   // loaded page — fetched one at a time and cached here so the preview can still show
   // what they replied to instead of rendering the reply as a context-less fragment.
@@ -336,7 +370,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }, [selectedId, threadLimit]);
 
   useEffect(() => {
-    setThreadLimit(THREAD_PAGE_SIZE);
+    // A global search result for a chat that wasn't already open sets this before
+    // switching — sized here instead of the default page, so the target message is
+    // already inside the first fetch instead of needing a second grow-and-refetch.
+    const pending = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    if (pending) {
+      setThreadLimit(Math.max(THREAD_PAGE_SIZE, pending.distanceFromLatest + 10));
+      searchJumpRef.current = pending.id;
+    } else {
+      setThreadLimit(THREAD_PAGE_SIZE);
+    }
     setInfoOpen(false);
     setReplyingTo(null);
     // Left uncleared before, this was a real mis-send risk: an advisor types for
@@ -773,7 +817,36 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             )}
           </AnimatePresence>
           {error && <p className="p-4 text-sm text-danger">{error}</p>}
-          {!loading && conversations.length === 0 && (
+          {search.trim() && (globalResults.length > 0 || globalSearching) && (
+            <div className="border-b border-line-soft">
+              <p className="px-4 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-wide text-greige-ink">
+                Mensajes {globalSearching && <Loader2 size={10} className="ml-1 inline animate-spin" />}
+              </p>
+              {globalResults.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => jumpToGlobalResult(r)}
+                  className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                >
+                  <Avatar name={r.customerName || r.phone} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-ink">{r.customerName || r.phone}</p>
+                      <span className="shrink-0 text-[11px] text-greige-ink">{formatListTime(r.createdAt)}</span>
+                    </div>
+                    <p className="truncate text-xs text-greige-ink">{r.content}</p>
+                  </div>
+                </button>
+              ))}
+              {!globalSearching && globalResults.length === 0 && (
+                <p className="px-4 pb-2 text-xs text-greige-ink">Sin mensajes que coincidan.</p>
+              )}
+            </div>
+          )}
+          {search.trim() && conversations.length > 0 && (
+            <p className="px-4 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-wide text-greige-ink">Chats</p>
+          )}
+          {!loading && conversations.length === 0 && globalResults.length === 0 && !globalSearching && (
             <p className="p-4 text-sm text-greige-ink">Sin conversaciones.</p>
           )}
           {conversations.map((c) => {
