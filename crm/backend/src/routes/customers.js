@@ -94,7 +94,7 @@ router.get('/:id', async (req, res, next) => {
 
     logAccess(req.user, customer.id, 'view_customer');
 
-    const [orders, tickets, consents, conversations] = await Promise.all([
+    const [orders, tickets, consents, conversations, erp] = await Promise.all([
       pool.query(
         `SELECT id, ticket_code, status, total, payment_method, shipping_address, created_at
          FROM orders WHERE customer_id = $1 ORDER BY created_at DESC`,
@@ -118,6 +118,14 @@ router.get('/:id', async (req, res, next) => {
          )`,
         [customer.whatsapp_number]
       ),
+      // Same last-8-digit match used in Conversations — erp_customers.telefono/celular
+      // are bare local numbers, whatsapp_number carries the country code. No match just
+      // means this customer has never bought anything the ERP has a record of.
+      pool.query(
+        `SELECT * FROM erp_customers WHERE right($1::text, 8) IN (telefono, celular)
+         ORDER BY venta_neta_total DESC NULLS LAST LIMIT 1`,
+        [customer.whatsapp_number]
+      ),
     ]);
 
     res.json({
@@ -126,6 +134,24 @@ router.get('/:id', async (req, res, next) => {
       tickets: tickets.rows,
       consents: consents.rows,
       conversationSessionIds: conversations.rows.map((r) => r.session_id.split('__')[0]),
+      erp: erp.rows[0] ? {
+        nombre: erp.rows[0].nombre,
+        ventaNetaTotal: erp.rows[0].venta_neta_total,
+        facturasTotales: erp.rows[0].facturas_totales,
+        unidadesTotales: erp.rows[0].unidades_totales,
+        fechaUltimaCompra: erp.rows[0].fecha_ultima_compra,
+        diasSinCompra: erp.rows[0].dias_sin_compra,
+        segmentoSinCompra: erp.rows[0].segmento_sin_compra,
+        sucursalPreferida: erp.rows[0].sucursal_preferida,
+        blusas: erp.rows[0].blusas,
+        jeans: erp.rows[0].jeans,
+        vestidos: erp.rows[0].vestidos,
+        pantalones: erp.rows[0].pantalones,
+        otros: erp.rows[0].otros,
+        tallaBlusa: erp.rows[0].talla_blusa,
+        tallaJean: erp.rows[0].talla_jean,
+        tallaCalzado: erp.rows[0].talla_calzado,
+      } : null,
     });
   } catch (err) { next(err); }
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil } from 'lucide-react';
+import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil, Clock } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
@@ -248,6 +248,44 @@ export default function Customers() {
               <InfoRow icon={CircleDollarSign} label="Compras totales" value={detail.purchase_frequency} />
               <InfoRow icon={MessageSquareWarning} label="Conversaciones" value={detail.conversationSessionIds.length} />
             </div>
+
+            {/* Only shows up when this phone matches a real purchase record in the ERP —
+                a customer who's only ever chatted, never bought, just doesn't get this
+                section, same profile as before this existed. */}
+            {detail.erp && (
+              <div className="border-b border-line py-6">
+                <div className="mb-3 flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 rounded-full bg-cyan-bg px-2 py-0.5 text-[10px] font-semibold text-cyan">
+                    <CircleDollarSign size={10} /> Cliente ERP
+                  </span>
+                  <p className="truncate text-xs text-greige-ink">{detail.erp.nombre}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-5">
+                  <InfoRow icon={CircleDollarSign} label="Venta total histórica" value={detail.erp.ventaNetaTotal != null ? `Q${Number(detail.erp.ventaNetaTotal).toLocaleString('es-GT')}` : '—'} />
+                  <InfoRow icon={ShoppingBag} label="Facturas / unidades" value={`${detail.erp.facturasTotales ?? 0} facturas · ${detail.erp.unidadesTotales ?? 0} unidades`} />
+                  <InfoRow icon={Clock} label="Última compra" value={detail.erp.fechaUltimaCompra ? `${new Date(detail.erp.fechaUltimaCompra).toLocaleDateString('es-GT', { timeZone: 'UTC' })} (${detail.erp.diasSinCompra} días)` : '—'} />
+                  <InfoRow icon={MapPin} label="Sucursal preferida" value={detail.erp.sucursalPreferida || '—'} />
+                  <InfoRow
+                    icon={ShoppingBag}
+                    label="Interés por línea"
+                    value={
+                      [['Blusas', detail.erp.blusas], ['Jeans', detail.erp.jeans], ['Vestidos', detail.erp.vestidos], ['Pantalones', detail.erp.pantalones], ['Otros', detail.erp.otros]]
+                        .filter(([, n]) => n > 0)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([label, n]) => `${label} (${n})`)
+                        .join(', ') || '—'
+                    }
+                  />
+                  {(detail.erp.tallaBlusa || detail.erp.tallaJean || detail.erp.tallaCalzado) && (
+                    <InfoRow
+                      icon={ShoppingBag}
+                      label="Tallas (histórico ERP)"
+                      value={[detail.erp.tallaBlusa && `Blusa ${detail.erp.tallaBlusa}`, detail.erp.tallaJean && `Jean ${detail.erp.tallaJean}`, detail.erp.tallaCalzado && `Calzado ${detail.erp.tallaCalzado}`].filter(Boolean).join(' · ')}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="mt-6">
               <h3 className="text-sm font-medium text-greige-ink">Consentimientos</h3>
