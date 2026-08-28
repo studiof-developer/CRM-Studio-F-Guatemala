@@ -8,6 +8,7 @@ import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
 import dashboardRouter from './routes/dashboard.js';
 import auditRouter from './routes/audit.js';
+import { runErpSync } from './erpSync.js';
 import authRouter from './routes/auth.js';
 import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import quickRepliesRouter from './routes/quickReplies.js';
@@ -84,6 +85,19 @@ setTimeout(() => {
     recoverOrphanedSends().catch((err) => console.error('recoverOrphanedSends failed', err));
   }, 5 * 60 * 1000);
 }, 15000);
+
+// Read-only: pulls the ERP's customer summary and inventory into our own tables so the
+// CRM (and eventually the bot) never has to hit their server live per request — see
+// erpSync.js. Off entirely if the credentials aren't configured (local dev, or before
+// they're set in production), same graceful-degradation pattern as WhatsApp's env-var
+// fallback. 20 minutes, inside the 15-30 min window agreed on.
+if (process.env.ERP_API_KEY) {
+  const ERP_SYNC_INTERVAL_MS = 20 * 60 * 1000;
+  setTimeout(() => {
+    runErpSync();
+    setInterval(runErpSync, ERP_SYNC_INTERVAL_MS);
+  }, 15000);
+}
 
 app.use((err, req, res, next) => {
   console.error(err);
