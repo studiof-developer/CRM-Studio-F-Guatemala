@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
@@ -15,6 +15,7 @@ import Audit from './Audit.jsx';
 import QuickReplies from './QuickReplies.jsx';
 import Campaigns from './Campaigns.jsx';
 import WhatsappNumbers from './WhatsappNumbers.jsx';
+import AgentTest from './AgentTest.jsx';
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
@@ -44,6 +45,13 @@ const CAMPAIGN_TABS = {
 // Admin only.
 const ADMIN_TABS = {
   users: { label: 'Usuarios', icon: UserCog, Component: Users },
+};
+
+// Admin only — a sandbox to try the AI agent before it ever reaches a real customer.
+// Reachable directly at crm.bagneres.online/pruebas (see the pathname sync below);
+// falls back to Dashboard for any role that doesn't have this key in its own tabs.
+const TEST_TABS = {
+  pruebas: { label: 'Pruebas', icon: TestTube, Component: AgentTest },
 };
 
 // Admin only — kept out of ADMIN_TABS and rendered in its own section at the
@@ -88,7 +96,14 @@ function NavButton({ tabKey, label, Icon, active, badge, onClick }) {
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
-  const [tab, setTab] = useState('dashboard');
+  // The app has no real router — every other tab lives at "/" regardless. "pruebas" is
+  // the one exception, reachable as its own bookmarkable URL, so its initial value (and
+  // only its value) is read from the actual path instead of always starting at dashboard.
+  const [tab, setTab] = useState(() => (window.location.pathname === '/pruebas' ? 'pruebas' : 'dashboard'));
+  useEffect(() => {
+    const path = tab === 'pruebas' ? '/pruebas' : '/';
+    if (window.location.pathname !== path) window.history.pushState(null, '', path);
+  }, [tab]);
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -140,6 +155,7 @@ export default function App() {
     ...(user.role === 'admin' || user.role === 'supervisor' ? AUDIT_TABS : {}),
     ...(user.role === 'admin' || user.role === 'supervisor' ? CAMPAIGN_TABS : {}),
     ...(user.role === 'admin' ? ADMIN_TABS : {}),
+    ...(user.role === 'admin' ? TEST_TABS : {}),
     ...(user.role === 'admin' ? SETTINGS_TABS : {}),
   };
   const { Component } = tabs[tab] ?? tabs.dashboard;

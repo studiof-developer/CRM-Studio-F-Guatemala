@@ -42,6 +42,8 @@ services:
       ERP_CERT_FINGERPRINT: ${ERP_CERT_FINGERPRINT}
       ERP_HOST: ${ERP_HOST}
       ERP_PORT: ${ERP_PORT}
+      N8N_TEST_AGENT_URL: ${N8N_TEST_AGENT_URL}
+      N8N_TEST_AGENT_SECRET: ${N8N_TEST_AGENT_SECRET}
     ports:
       - "4000:4000"
     volumes:

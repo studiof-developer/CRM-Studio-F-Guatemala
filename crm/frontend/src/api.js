@@ -76,6 +76,17 @@ export async function fetchMessageByWamid(sessionId, wamid) {
   return res.json();
 }
 
+export async function sendAgentTestMessage(testSessionId, message) {
+  const res = await apiFetch('/api/agent-test/message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ testSessionId, message }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'Error al hablar con el agente de prueba');
+  return data.reply;
+}
+
 export async function fetchMessageDistance(sessionId, id) {
   const res = await apiFetch(`/api/conversations/${sessionId}/message-distance/${id}`);
   if (!res.ok) throw new Error('not found');
