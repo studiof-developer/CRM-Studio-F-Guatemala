@@ -65,6 +65,7 @@ services:
       ERP_PORT: ${ERP_PORT}
       N8N_TEST_AGENT_URL: ${N8N_TEST_AGENT_URL}
       N8N_TEST_AGENT_SECRET: ${N8N_TEST_AGENT_SECRET}
+      AGENT_TOOLS_SECRET: ${AGENT_TOOLS_SECRET}
     ports:
       - "4000:4000"
     volumes:

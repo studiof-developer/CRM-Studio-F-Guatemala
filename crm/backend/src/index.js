@@ -15,6 +15,7 @@ import quickRepliesRouter from './routes/quickReplies.js';
 import whatsappNumbersRouter from './routes/whatsappNumbers.js';
 import campaignsRouter from './routes/campaigns.js';
 import agentTestRouter from './routes/agentTest.js';
+import agentToolsRouter from './routes/agentTools.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
@@ -48,6 +49,9 @@ app.use('/api/agent-test', requireAuth, requireRole('admin'), agentTestRouter);
 // No requireAuth: n8n calls this directly (no advisor session), protected by its own
 // shared-secret header check inside the router instead.
 app.use('/api/whatsapp-inbound', inboundRouter);
+// Called by the n8n AI Agent as tools (inventory/customer lookup) — server-to-server,
+// not a logged-in CRM session, same as whatsapp-inbound above.
+app.use('/api/agent-tools', agentToolsRouter);
 
 app.get('/api/events', requireAuth, (req, res) => {
   res.set({

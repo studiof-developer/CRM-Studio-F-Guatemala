@@ -30,11 +30,21 @@ router.get('/:id/file', async (req, res, next) => {
 // bytes from Meta itself and forwards them here. Protected by a shared secret instead of
 // a user session, since there's no advisor logged in on that side.
 export const inboundRouter = Router();
+// An unset WHATSAPP_INBOUND_SECRET (undefined) would otherwise match a request sent
+// with no header at all (also undefined) — a misconfiguration silently becoming no
+// authentication at all instead of a loud, obvious failure. Applied to every route on
+// this router, not just re-checked per handler.
+inboundRouter.use((req, res, next) => {
+  if (!process.env.WHATSAPP_INBOUND_SECRET) {
+    return res.status(503).json({ error: 'WHATSAPP_INBOUND_SECRET no está configurado' });
+  }
+  if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+});
 inboundRouter.post('/', async (req, res, next) => {
   try {
-    if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
-      return res.status(401).json({ error: 'unauthorized' });
-    }
     const { phone, kind, filename, mimeType, base64, wamid, caption, replyToWamid, referral } = req.body ?? {};
     if (!phone || !kind || !mimeType || !base64) {
       return res.status(400).json({ error: 'phone, kind, mimeType, base64 required' });
@@ -103,9 +113,6 @@ inboundRouter.post('/', async (req, res, next) => {
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
 inboundRouter.post('/status', async (req, res, next) => {
   try {
-    if (req.headers['x-webhook-secret'] !== process.env.WHATSAPP_INBOUND_SECRET) {
-      return res.status(401).json({ error: 'unauthorized' });
-    }
     const { wamid, status, error } = req.body ?? {};
     if (!wamid || !(STATUS_RANK[status] || status === 'failed')) {
       return res.status(400).json({ error: 'wamid and a valid status required' });
