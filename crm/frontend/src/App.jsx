@@ -155,7 +155,7 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', true);
+  const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', false);
   const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
   const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
   const [openConversationId, setOpenConversationId] = useState(null);
