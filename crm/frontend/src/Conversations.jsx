@@ -618,6 +618,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       showError(err.message);
     } finally {
       setSendingFor((prev) => (prev === targetId ? null : prev));
+      // The textarea is disabled while sending (that's the whole point of that flag),
+      // so focusing it here — before that disabled attribute clears on the next render
+      // — would silently no-op. Deferred one frame so it lands right after.
+      if (selectedId === targetId) {
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      }
     }
   }
 
