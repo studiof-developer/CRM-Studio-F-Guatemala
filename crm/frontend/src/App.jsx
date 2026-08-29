@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
@@ -48,8 +48,11 @@ const ADMIN_TABS = {
 };
 
 // Admin only — a sandbox to try the AI agent before it ever reaches a real customer.
-// Reachable directly at crm.bagneres.online/pruebas (see the pathname sync below);
-// falls back to Dashboard for any role that doesn't have this key in its own tabs.
+// Reachable directly at crm.bagneres.online/pruebas (see the pathname sync below).
+// Not shown in the regular nav list at all — it's launched from the floating button
+// instead (see the fixed TestTube button below) so it doesn't add another row to an
+// already-long sidebar. Still merged into `tabs` so tabs[tab] resolves its Component,
+// and still falls back to Dashboard for any role that doesn't have this key.
 const TEST_TABS = {
   pruebas: { label: 'Pruebas', icon: TestTube, Component: AgentTest },
 };
@@ -61,7 +64,52 @@ const SETTINGS_TABS = {
   whatsappNumbers: { label: 'Configuración', icon: Smartphone, Component: WhatsappNumbers },
 };
 
+// Sidebar layout: a handful of pages used constantly stay pinned at the top; everything
+// else lives in a named, collapsible group so the sidebar doesn't just grow a new row
+// every time a feature is added. A key only shows up if it's also present in the current
+// user's `tabs` (role-gated), so e.g. an asesor never sees an empty "Administración" group.
+const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
+const NAV_GROUPS = [
+  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns'] },
+  { key: 'admin', title: 'Administración', keys: ['audit', 'users'] },
+];
+
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
+
+// Remembers a per-user UI preference (a group's expanded/collapsed state) across
+// reloads. Falls back to defaultValue if localStorage is unavailable (private mode) or
+// simply hasn't been set yet.
+function usePersistedBool(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored === null ? defaultValue : stored === '1';
+    } catch { return defaultValue; }
+  });
+  const setPersisted = useCallback((next) => {
+    setValue((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      try { localStorage.setItem(key, resolved ? '1' : '0'); } catch { /* private mode etc. */ }
+      return resolved;
+    });
+  }, [key]);
+  return [value, setPersisted];
+}
+
+function NavGroup({ title, expanded, onToggle, children }) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wider text-greige/70 transition-colors hover:text-ink"
+      >
+        {title}
+        <ChevronDown size={14} className={`transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`} />
+      </button>
+      {expanded && <div className="flex flex-col gap-2 pt-1">{children}</div>}
+    </div>
+  );
+}
 
 function NavButton({ tabKey, label, Icon, active, badge, onClick }) {
   return (
@@ -107,6 +155,9 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', true);
+  const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
+  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
   const [openConversationId, setOpenConversationId] = useState(null);
   const handleOpenConversation = useCallback((phone) => {
     setOpenConversationId(phone);
@@ -170,6 +221,24 @@ export default function App() {
       {/* Toast visuals live in components/Toast.jsx (showSuccess/showError) — this
           just mounts the portal and positions it. */}
       <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
+
+      {/* Always-visible launcher for the admin test sandbox — kept out of the nav list
+          entirely (see TEST_TABS above) so it doesn't compete for space with the pages
+          used every day, but still reachable from any tab in one click. */}
+      {user.role === 'admin' && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setTab('pruebas')}
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/30 transition-colors ${
+            tab === 'pruebas' ? 'bg-accent text-white' : 'border border-line bg-paper text-ink hover:bg-black/5 dark:hover:bg-white/5'
+          }`}
+        >
+          <TestTube size={18} strokeWidth={2} />
+          Pruebas
+        </motion.button>
+      )}
+
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
@@ -197,17 +266,38 @@ export default function App() {
           </div>
 
           <nav className="flex flex-col gap-2 p-4">
-            {Object.entries(tabs).filter(([key]) => !(key in SETTINGS_TABS)).map(([key, { label, icon: Icon }]) => (
+            {PINNED_KEYS.filter((key) => key in tabs).map((key) => (
               <NavButton
                 key={key}
                 tabKey={key}
-                label={label}
-                Icon={Icon}
+                label={tabs[key].label}
+                Icon={tabs[key].icon}
                 active={key === tab}
                 badge={key === 'handoff' ? pendingCount : key === 'conversations' ? unansweredCount : 0}
                 onClick={() => { setTab(key); setMobileNavOpen(false); }}
               />
             ))}
+
+            {NAV_GROUPS.map((group) => {
+              const keys = group.keys.filter((key) => key in tabs);
+              if (!keys.length) return null;
+              const [expanded, setExpanded] = groupExpandState[group.key];
+              return (
+                <NavGroup key={group.key} title={group.title} expanded={expanded} onToggle={() => setExpanded((v) => !v)}>
+                  {keys.map((key) => (
+                    <NavButton
+                      key={key}
+                      tabKey={key}
+                      label={tabs[key].label}
+                      Icon={tabs[key].icon}
+                      active={key === tab}
+                      badge={0}
+                      onClick={() => { setTab(key); setMobileNavOpen(false); }}
+                    />
+                  ))}
+                </NavGroup>
+              );
+            })}
           </nav>
         </div>
 
