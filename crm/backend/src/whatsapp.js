@@ -40,15 +40,24 @@ async function getActiveCredentials() {
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 800;
+// Native fetch has no default timeout — a connection that stalls instead of erroring
+// (common enough against Meta's API) used to hang this forever: no wamid, no error, the
+// message just sat there until the orphan-recovery sweep caught it minutes later and
+// resent it, which is how the same message could reach a customer twice. Media uploads
+// get a longer allowance — a real, slow-but-working transfer of a large document
+// shouldn't be mistaken for a stall the same way a tiny JSON send would be.
+const REQUEST_TIMEOUT_MS = 20000;
+const UPLOAD_TIMEOUT_MS = 90000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function graphFetch(path, options, token) {
+async function graphFetch(path, options, token, timeoutMs = REQUEST_TIMEOUT_MS) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let res;
     try {
       res = await fetch(`${GRAPH_BASE}/${path}`, {
         ...options,
         headers: { Authorization: `Bearer ${token}`, ...options.headers },
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
       // Network-level failure (DNS, connection reset, timeout) — no response at all,
@@ -135,7 +144,7 @@ export async function uploadMedia(buffer, mimeType) {
   form.append('messaging_product', 'whatsapp');
   form.append('file', new Blob([buffer], { type: mimeType }));
   form.append('type', mimeType);
-  const { id } = await graphFetch(`${creds.phoneNumberId}/media`, { method: 'POST', body: form }, creds.token);
+  const { id } = await graphFetch(`${creds.phoneNumberId}/media`, { method: 'POST', body: form }, creds.token, UPLOAD_TIMEOUT_MS);
   return id;
 }
 
