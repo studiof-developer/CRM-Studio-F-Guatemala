@@ -378,7 +378,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     return () => clearInterval(id);
   }, [load]);
 
-  // Coming from "Tomar ticket" in Cola de Handoff — jump straight to that chat
+  // Coming from "Tomar" in the Pipeline board — jump straight to that chat
   // instead of leaving the advisor to hunt for it in the list.
   useEffect(() => {
     if (!openSessionId) return;

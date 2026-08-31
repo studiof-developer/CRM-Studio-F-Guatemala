@@ -206,9 +206,10 @@ router.patch('/:id/tags', async (req, res, next) => {
       `UPDATE customers AS c SET
          manual_status = CASE WHEN $1 THEN $2 ELSE manual_status END,
          paid_locked = paid_locked OR COALESCE($3, false),
-         paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END
+         paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END,
+         updated_at = now()
        WHERE c.id = $4
-       RETURNING id, manual_status, paid_locked, paid_method, ${EFFECTIVE_STATUS_SQL} AS temperature`,
+       RETURNING id, manual_status, paid_locked, paid_method, updated_at, ${EFFECTIVE_STATUS_SQL} AS temperature`,
       [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id, paidMethod ?? null]
     );
     res.json(rows[0]);

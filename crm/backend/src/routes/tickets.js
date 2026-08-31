@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess } from '../auditLog.js';
+import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
 
@@ -10,6 +11,80 @@ const router = Router();
 function zoneClause() {
   return '';
 }
+
+// Every column a contact can land in, and the order they're drawn in on the board.
+// "pendiente" and "resuelto" come straight from the ticket's own status; everything
+// else in between is really the customer's temperature wearing a pipeline-stage name
+// (see the 2026-08-31 conversation that settled this — Cotización is just "tibio",
+// Medio de pago is "caliente", etc., under a name that means something to an advisor
+// instead of a weather word). One ticket can only ever be in exactly one column, so
+// this is a strict priority order, not a set of independent flags: a resolved ticket
+// shows as resuelto no matter what temperature is sitting on the customer underneath.
+export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
+
+// Called by both GET /pipeline below and (indirectly, by staying in sync with it)
+// anywhere else that needs to know "which column does this row belong to" — kept in
+// one place so the board and the SQL CASE that mirrors it can't drift apart silently.
+const BUCKET_CASE_SQL = `
+  CASE
+    WHEN ticket_status = 'resuelto' THEN 'resuelto'
+    WHEN ticket_status = 'esperando_asesor' THEN 'pendiente'
+    WHEN temperature = 'pqrs' THEN 'pqrs'
+    WHEN temperature = 'pagado' THEN 'pagado'
+    WHEN temperature = 'caliente' THEN 'medio_pago'
+    WHEN temperature = 'tibio' THEN 'cotizacion'
+    ELSE 'en_atencion'
+  END
+`;
+
+// Bounded per column, not per query — without the window function a busy "resuelto"
+// column (which only ever grows) could crowd out everything else within a flat overall
+// LIMIT. 40 cards is already more than a board is meant to be read at a glance; bucket_total
+// (the real count before truncating) is what the column header shows.
+const CARDS_PER_COLUMN = 40;
+
+router.get('/pipeline', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      WITH temped AS (
+        SELECT t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
+               c.id AS customer_id, c.full_name, c.whatsapp_number,
+               ${EFFECTIVE_STATUS_SQL} AS temperature,
+               GREATEST(t.updated_at, c.updated_at) AS stage_since
+        FROM tickets t
+        JOIN customers c ON c.id = t.customer_id
+        WHERE t.status != 'bot'
+      ),
+      bucketed AS (
+        SELECT *, ${BUCKET_CASE_SQL} AS bucket FROM temped
+      )
+      SELECT * FROM (
+        SELECT *,
+               row_number() OVER (PARTITION BY bucket ORDER BY stage_since DESC) AS rn,
+               count(*) OVER (PARTITION BY bucket) AS bucket_total
+        FROM bucketed
+      ) ranked
+      WHERE rn <= ${CARDS_PER_COLUMN}
+      ORDER BY bucket, stage_since DESC
+    `);
+
+    const columns = Object.fromEntries(PIPELINE_COLUMNS.map((key) => [key, { total: 0, cards: [] }]));
+    for (const r of rows) {
+      columns[r.bucket].total = Number(r.bucket_total);
+      columns[r.bucket].cards.push({
+        ticketId: r.ticket_id,
+        customerId: r.customer_id,
+        fullName: r.full_name,
+        whatsappNumber: r.whatsapp_number,
+        temperature: r.temperature,
+        ticketStatus: r.ticket_status,
+        handoffReason: r.handoff_reason,
+        stageSince: r.stage_since,
+      });
+    }
+    res.json(columns);
+  } catch (err) { next(err); }
+});
 
 router.get('/', async (req, res, next) => {
   try {

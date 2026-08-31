@@ -33,6 +33,12 @@ export async function fetchMe() {
   return res.json();
 }
 
+export async function fetchPipeline() {
+  const res = await apiFetch('/api/tickets/pipeline');
+  if (!res.ok) throw new Error('Error al cargar el pipeline');
+  return res.json();
+}
+
 export async function fetchTickets(status = 'esperando_asesor') {
   const res = await apiFetch(`/api/tickets?status=${status}`);
   if (!res.ok) throw new Error('Error al cargar tickets');

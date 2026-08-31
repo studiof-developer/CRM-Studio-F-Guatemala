@@ -53,7 +53,7 @@ function TabLoading() {
 const BASE_TABS = {
   dashboard: { label: 'Dashboard', icon: LayoutDashboard, Component: Dashboard },
   customers: { label: 'Clientes', icon: UsersIcon, Component: Customers },
-  handoff: { label: 'Cola de Handoff', icon: Inbox, Component: HandoffQueue },
+  handoff: { label: 'Pipeline', icon: Inbox, Component: HandoffQueue },
   conversations: { label: 'Conversaciones', icon: MessagesSquare, Component: Conversations },
   catalog: { label: 'Catálogo', icon: ShoppingBag, Component: Catalog },
   quickReplies: { label: 'Respuestas rápidas', icon: Zap, Component: QuickReplies },
