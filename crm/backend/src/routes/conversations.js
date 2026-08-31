@@ -155,7 +155,7 @@ async function handleSendResult(messageId, result) {
 }
 
 // 7-15 digits covers bare local numbers up through full E.164 (country code + number).
-const PHONE_RE = /^\d{7,15}$/;
+export const PHONE_RE = /^\d{7,15}$/;
 
 // The customer's phone number is the first thing the script asks for, so it's
 // sitting in the transcript as plain text — no n8n changes needed to find it.

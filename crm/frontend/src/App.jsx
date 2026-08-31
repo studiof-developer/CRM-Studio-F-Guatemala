@@ -197,6 +197,15 @@ export default function App() {
 
   useEffect(() => { fetchMe().then(setUser); }, []);
 
+  // Any API call anywhere getting a 401 means the session's gone (see api.js) — drop
+  // straight to Login instead of leaving whatever page was open failing silently with
+  // its own generic error message.
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener('studio-f-session-expired', onExpired);
+    return () => window.removeEventListener('studio-f-session-expired', onExpired);
+  }, []);
+
   const loadPending = useCallback(() => {
     fetchTickets('esperando_asesor').then((rows) => setPendingCount(rows.length)).catch(() => {});
   }, []);

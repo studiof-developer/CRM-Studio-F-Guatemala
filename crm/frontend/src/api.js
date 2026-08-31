@@ -1,7 +1,15 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
+// A 401 from any endpoint (except the login attempt itself — a wrong password is
+// also a 401, not an expired session) means the session cookie is gone or expired.
+// Without this, each page just failed its own request with its own generic error
+// message — scattered and confusing, with nothing telling the advisor to log back
+// in. App.jsx listens for this and drops straight to the Login screen instead.
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+  if (res.status === 401 && path !== '/api/auth/login') {
+    window.dispatchEvent(new Event('studio-f-session-expired'));
+  }
   return res;
 }
 

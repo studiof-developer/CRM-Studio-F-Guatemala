@@ -17,6 +17,12 @@ export function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'not authenticated' });
   try {
     req.user = jwt.verify(token, getSecret());
+    // Sliding expiration: every authenticated request re-issues the cookie with a
+    // fresh 8h window, so an advisor actively working never hits a mid-shift
+    // logout — only a genuinely abandoned session (idle 8h+) actually expires.
+    // { id, fullName, role, zone } is exactly what signSession put in originally;
+    // req.user already holds that same shape from the jwt.verify() above.
+    setSessionCookie(res, signSession({ id: req.user.id, full_name: req.user.fullName, role: req.user.role, zone: req.user.zone }));
     next();
   } catch {
     res.status(401).json({ error: 'invalid session' });
