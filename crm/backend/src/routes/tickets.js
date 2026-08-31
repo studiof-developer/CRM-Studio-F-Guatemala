@@ -90,10 +90,14 @@ router.get('/pipeline', async (req, res, next) => {
         ORDER BY stage_since ${sort}
         OFFSET $2 LIMIT $3
       )
-      -- One LATERAL per page row, each an index-backed prefix lookup on session_id
+      -- Two LATERALs per page row, both index-backed prefix lookups on session_id
       -- (idx_n8n_chat_histories_session_id is text_pattern_ops specifically for this)
       -- — not a scan, so this stays cheap no matter how deep a column gets paged.
-      SELECT p.*, lm.content AS last_message, lm.created_at AS last_message_at
+      SELECT p.*, lm.content AS last_message, lm.created_at AS last_message_at,
+             -- "Awaiting reply" only means something if the CUSTOMER has the last word —
+             -- if the advisor already answered, the clock is on the customer, not us,
+             -- no matter how long it's been.
+             (latest.type = 'human') AS awaiting_reply
       FROM page p
       LEFT JOIN LATERAL (
         SELECT h.message->>'content' AS content, h.created_at
@@ -104,6 +108,13 @@ router.get('/pipeline', async (req, res, next) => {
         ORDER BY h.id DESC
         LIMIT 1
       ) lm ON true
+      LEFT JOIN LATERAL (
+        SELECT h.message->>'type' AS type
+        FROM n8n_chat_histories h
+        WHERE h.session_id LIKE p.whatsapp_number || '%'
+        ORDER BY h.id DESC
+        LIMIT 1
+      ) latest ON true
       ORDER BY p.stage_since ${sort}
     `, [bucket, offset, limit]));
 
@@ -117,6 +128,7 @@ router.get('/pipeline', async (req, res, next) => {
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         lastMessage: r.last_message,
+        awaitingReply: r.awaiting_reply === true,
         // stageSince is when the STATUS/temperature last changed, not when the customer
         // last wrote — those drift apart constantly (a customer can send several
         // messages while the ticket sits untouched), which is exactly why the "hace X"

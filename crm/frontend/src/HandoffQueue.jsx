@@ -3,7 +3,7 @@ import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDolla
 import { fetchPipelineColumn, updateTicket, updateCustomerTags } from './api.js';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
-import { isOverdue, formatWait, SLA_MINUTES } from './lib/sla.js';
+import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
@@ -31,6 +31,14 @@ const DEFAULT_SORT = {};
 // only: taking a ticket and marking someone paid both stay deliberate button actions.
 const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
 const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto']);
+
+// "No atendidos" is overdue on raw wait time (nobody's even looked yet, SLA_MINUTES=15
+// is meant to be aggressive there). These 4 are already claimed/active — what actually
+// matters is whether the CUSTOMER is the one waiting: if the advisor already replied,
+// the clock is on the customer, not us, no matter how long it's been. A longer window
+// (an hour, not 15 minutes) since this is a real back-and-forth, not an unclaimed queue.
+const AWAITING_REPLY_COLUMNS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
+const AWAITING_REPLY_OVERDUE_MINUTES = 60;
 const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio_pago: 'caliente', pqrs: 'pqrs' };
 
 const PAGE_SIZE = 50;
@@ -221,7 +229,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                   <p className="p-3 text-center text-xs text-muted-foreground">Nada aquí.</p>
                 )}
                 {cards.map((card) => {
-                  const overdue = key === 'pendiente' && isOverdue(card.stageSince);
+                  const overdue = key === 'pendiente'
+                    ? isOverdue(card.stageSince)
+                    : AWAITING_REPLY_COLUMNS.has(key) && card.awaitingReply && card.lastMessageAt
+                      && minutesSince(card.lastMessageAt) > AWAITING_REPLY_OVERDUE_MINUTES;
                   return (
                     <div
                       key={card.ticketId}
@@ -245,7 +256,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`flex items-center gap-1 text-[11px] ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>
                           {overdue
-                            ? `Esperando hace ${formatWait(card.stageSince)} (más de ${SLA_MINUTES} min)`
+                            ? key === 'pendiente'
+                              ? `Esperando hace ${formatWait(card.stageSince)} (más de ${SLA_MINUTES} min)`
+                              : `Sin responder hace ${formatWait(card.lastMessageAt)} (más de 1h)`
                             : `hace ${formatWait(card.lastMessageAt ?? card.stageSince)}`}
                         </span>
                         {key === 'pendiente' ? (
