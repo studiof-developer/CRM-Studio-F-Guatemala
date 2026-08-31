@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown } from 'lucide-react';
-import { fetchMe, logout, fetchTickets, fetchConversations } from './api.js';
+import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
 import Dashboard from './Dashboard.jsx';
@@ -176,11 +176,13 @@ export default function App() {
   // correct across tabs, reloads, and different advisors without any local bookkeeping.
   const loadUnanswered = useCallback(async () => {
     try {
-      // unread=true fetches every unread thread, not just the most-recently-active
-      // page — without it this badge silently missed any unread thread that fell
-      // outside the default recency window (the bug reported 2026-08-26).
-      const rows = await fetchConversations('', '', '', undefined, true);
-      setUnansweredCount(rows.length);
+      // A dedicated lightweight count instead of fetching every unread thread's full
+      // row (customer/ticket/attachment joins included) just to read rows.length — this
+      // badge refreshes on every page load, poll, and live event, in every open tab, so
+      // that was the single biggest driver of the connection-storm slowness reported
+      // 2026-08-31. Same underlying thread/unread logic server-side, just without the
+      // display-only joins — still won't miss a thread outside any recency window.
+      setUnansweredCount(await fetchUnreadCount());
     } catch { /* leave the last known count showing rather than flash to 0 */ }
   }, []);
 

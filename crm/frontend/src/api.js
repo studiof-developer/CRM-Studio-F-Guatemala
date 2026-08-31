@@ -63,6 +63,13 @@ export async function fetchConversations(q, temperature, ticketStatus, limit, un
   return res.json();
 }
 
+export async function fetchUnreadCount() {
+  const res = await apiFetch('/api/conversations/unread-count');
+  if (!res.ok) throw new Error('Error al cargar el conteo de no leídos');
+  const { count } = await res.json();
+  return count;
+}
+
 export async function fetchConversation(sessionId, limit) {
   const qs = limit ? `?limit=${limit}` : '';
   const res = await apiFetch(`/api/conversations/${sessionId}${qs}`);

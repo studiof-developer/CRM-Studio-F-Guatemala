@@ -469,6 +469,51 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Just the badge number (top nav, sidebar) — called on every page load, every poll, and
+// every live event, in every open tab, so it can't afford to do what GET / above does:
+// build the full row set with customer/ticket/attachment joins just to report rows.length.
+// Same thread-collapsing and unread-watermark logic (correctness matters here — this is
+// exactly the kind of count that silently going wrong was the 2026-08-26 bug), just
+// without last_msg/counts or any of the LEFT JOINs GET / needs for display.
+// Registered before /:sessionId for the same reason as /search-all below.
+router.get('/unread-count', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      WITH readable AS (
+        SELECT h.session_id, h.id, h.message
+        FROM n8n_chat_histories h
+        WHERE h.message->>'type' IN ('human', 'ai')
+          AND (
+            coalesce(h.message->>'content', '') <> ''
+            OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
+          )
+      ),
+      phone_by_session AS (
+        SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
+        FROM readable
+        WHERE message->>'type' = 'human'
+          AND trim(message->>'content') ~ '^\\d{7,15}$'
+        ORDER BY session_id, id ASC
+      ),
+      threaded AS (
+        SELECT r.id, r.message,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE COALESCE(p.phone, r.session_id) END AS thread_key
+        FROM readable r
+        LEFT JOIN phone_by_session p USING (session_id)
+      )
+      SELECT count(*)::int AS count FROM (
+        SELECT th.thread_key
+        FROM threaded th
+        LEFT JOIN conversation_reads cr ON cr.phone = th.phone
+        WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
+        GROUP BY th.thread_key
+      ) unread
+    `);
+    res.json({ count: rows[0].count });
+  } catch (err) { next(err); }
+});
+
 // Searches every conversation, not just whatever's currently open — WhatsApp's own
 // "search all chats" feature. Registered before /:sessionId on purpose: Express would
 // otherwise match "search-all" as a sessionId value on that route instead of this one.
