@@ -391,6 +391,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }, [selectedId, threadLimit]);
 
   useEffect(() => {
+    // Clears the PREVIOUS chat's messages immediately, before the new one's have even
+    // started loading — the compose box only renders when `thread` is set, so this is
+    // what makes it disappear the instant you switch chats instead of staying up (still
+    // showing the old conversation, still accepting input) until the new fetch resolves.
+    // Under real lag that gap was long enough for an advisor to type a reply while still
+    // looking at the previous customer's messages and send it to whoever was newly
+    // selected instead — this closes that window at the root instead of just making
+    // loads faster (2026-08-31).
+    setThread(null);
     // A global search result for a chat that wasn't already open sets this before
     // switching — sized here instead of the default page, so the target message is
     // already inside the first fetch instead of needing a second grow-and-refetch.
@@ -964,6 +973,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 <button onClick={loadThread} className="text-xs font-semibold text-accent hover:underline">
                   Reintentar
                 </button>
+              </>
+            ) : selectedId ? (
+              <>
+                <Loader2 size={28} strokeWidth={1.5} className="animate-spin text-greige" />
+                Cargando conversación…
               </>
             ) : (
               <>
