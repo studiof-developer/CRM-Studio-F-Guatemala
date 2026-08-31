@@ -37,17 +37,38 @@ const BUCKET_CASE_SQL = `
   END
 `;
 
-// Bounded per column, not per query — without the window function a busy "resuelto"
-// column (which only ever grows) could crowd out everything else within a flat overall
-// LIMIT. 40 cards is already more than a board is meant to be read at a glance; bucket_total
-// (the real count before truncating) is what the column header shows.
-const CARDS_PER_COLUMN = 40;
+// One column at a time, paged — "traer todo" (2026-08-31: 2733 in "en_atencion" alone)
+// still can't mean one query that returns thousands of rows. Instead every column loads
+// its first page up front and pulls the next one as the advisor scrolls that column,
+// same PAGE_SIZE-at-a-time pattern already used for the conversation list — nothing is
+// ever hidden, it just arrives incrementally instead of all at once.
+const PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+// Coalesces identical concurrent requests (same reasoning as conversations.js/
+// dashboard.js) — several advisors opening the board within the same few seconds share
+// one query per column instead of each firing their own.
+const READ_CACHE_TTL_MS = 3000;
+const pipelineCache = new Map();
+function cachedRead(key, run) {
+  const hit = pipelineCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = run().catch((err) => { pipelineCache.delete(key); throw err; });
+  pipelineCache.set(key, { expires: Date.now() + READ_CACHE_TTL_MS, promise });
+  return promise;
+}
 
 router.get('/pipeline', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`
+    const bucket = req.query.bucket;
+    if (!PIPELINE_COLUMNS.includes(bucket)) return res.status(400).json({ error: 'invalid bucket' });
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(Math.max(Number(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+    const sort = req.query.sort === 'asc' ? 'ASC' : 'DESC';
+
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}`, () => pool.query(`
       WITH temped AS (
-        SELECT t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
+        SELECT t.id AS ticket_id, t.status AS ticket_status,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since
@@ -55,52 +76,40 @@ router.get('/pipeline', async (req, res, next) => {
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status != 'bot'
       ),
-      bucketed AS (
-        SELECT *, ${BUCKET_CASE_SQL} AS bucket FROM temped
+      -- bucket_total counted here, over the whole (small — tickets/customers, not
+      -- messages) set, before narrowing to just this one column.
+      totaled AS (
+        SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
+        FROM temped
       ),
-      -- Bounded to the ≤${CARDS_PER_COLUMN}-per-column set BEFORE the message lookup
-      -- below runs, not after — a plain WHERE on the outer query wouldn't guarantee
-      -- that ordering, and doing this lookup for every non-bot ticket instead of just
-      -- the ones actually shown is exactly the "scan way more than we're going to
-      -- render" mistake fixed elsewhere today.
-      ranked AS (
-        SELECT * FROM (
-          SELECT *,
-                 -- "pendiente" ranks oldest-waiting-first (that's who the SLA actually
-                 -- cares about) — every other column ranks most-recently-active-first.
-                 -- Negating the epoch for everything but pendiente lets both directions
-                 -- share one ORDER BY: whichever 40 make the cut per column are always
-                 -- the ones that matter for that column, not just "whatever's newest".
-                 row_number() OVER (
-                   PARTITION BY bucket
-                   ORDER BY CASE WHEN bucket = 'pendiente' THEN extract(epoch FROM stage_since) ELSE -extract(epoch FROM stage_since) END ASC
-                 ) AS rn,
-                 count(*) OVER (PARTITION BY bucket) AS bucket_total
-          FROM bucketed
-        ) x
-        WHERE rn <= ${CARDS_PER_COLUMN}
+      -- The page is decided here — before the message lookup below runs, not after.
+      -- Doing that lookup for the whole column instead of just this one page is exactly
+      -- the "scan way more than we're going to render" mistake fixed elsewhere today.
+      page AS (
+        SELECT * FROM totaled WHERE bucket = $1
+        ORDER BY stage_since ${sort}
+        OFFSET $2 LIMIT $3
       )
-      -- One LATERAL per (already-bounded) row, each an index-backed prefix lookup on
-      -- session_id (idx_n8n_chat_histories_session_id is text_pattern_ops specifically
-      -- for this) — not a scan, so this stays cheap even at ~280 rows.
-      SELECT r.*, lm.content AS last_message
-      FROM ranked r
+      -- One LATERAL per page row, each an index-backed prefix lookup on session_id
+      -- (idx_n8n_chat_histories_session_id is text_pattern_ops specifically for this)
+      -- — not a scan, so this stays cheap no matter how deep a column gets paged.
+      SELECT p.*, lm.content AS last_message
+      FROM page p
       LEFT JOIN LATERAL (
         SELECT h.message->>'content' AS content
         FROM n8n_chat_histories h
-        WHERE h.session_id LIKE r.whatsapp_number || '%'
+        WHERE h.session_id LIKE p.whatsapp_number || '%'
           AND h.message->>'type' = 'human'
           AND coalesce(h.message->>'content', '') <> ''
         ORDER BY h.id DESC
         LIMIT 1
       ) lm ON true
-      ORDER BY r.bucket, r.rn
-    `);
+      ORDER BY p.stage_since ${sort}
+    `, [bucket, offset, limit]));
 
-    const columns = Object.fromEntries(PIPELINE_COLUMNS.map((key) => [key, { total: 0, cards: [] }]));
-    for (const r of rows) {
-      columns[r.bucket].total = Number(r.bucket_total);
-      columns[r.bucket].cards.push({
+    res.json({
+      total: rows[0] ? Number(rows[0].bucket_total) : 0,
+      cards: rows.map((r) => ({
         ticketId: r.ticket_id,
         customerId: r.customer_id,
         fullName: r.full_name,
@@ -109,9 +118,8 @@ router.get('/pipeline', async (req, res, next) => {
         ticketStatus: r.ticket_status,
         lastMessage: r.last_message,
         stageSince: r.stage_since,
-      });
-    }
-    res.json(columns);
+      })),
+    });
   } catch (err) { next(err); }
 });
 

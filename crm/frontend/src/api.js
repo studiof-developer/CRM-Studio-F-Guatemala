@@ -33,8 +33,9 @@ export async function fetchMe() {
   return res.json();
 }
 
-export async function fetchPipeline() {
-  const res = await apiFetch('/api/tickets/pipeline');
+export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc' } = {}) {
+  const params = new URLSearchParams({ bucket, offset, limit, sort });
+  const res = await apiFetch(`/api/tickets/pipeline?${params}`);
   if (!res.ok) throw new Error('Error al cargar el pipeline');
   return res.json();
 }
