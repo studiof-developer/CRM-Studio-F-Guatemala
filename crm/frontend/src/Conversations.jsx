@@ -200,7 +200,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
   const [actionBusy, setActionBusy] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(true);
   // Attach several files, then send them together — instead of each one going out the
   // instant it's picked. { file, id, previewUrl (images only) }.
   const [stagedFiles, setStagedFiles] = useState([]);
@@ -441,7 +441,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     } else {
       setThreadLimit(THREAD_PAGE_SIZE);
     }
-    setInfoOpen(false);
+    // Stays open across chats now — closing it every switch meant re-opening it by hand
+    // on almost every chat, since checking the customer's info is normal, not exceptional.
+    setInfoOpen(true);
     setReplyingTo(null);
     setThreadError(null);
     // Left uncleared before, this was a real mis-send risk: an advisor types for

@@ -21,9 +21,9 @@ const COLUMN_META = {
   resuelto: { label: 'Resuelto', icon: CheckCircle2, iconBg: 'bg-success-bg', iconText: 'text-success' },
 };
 const COLUMN_ORDER = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
-// "No atendidos" defaults oldest-waiting-first (that's who the SLA cares about);
-// everywhere else defaults most-recently-active-first. Every column can be flipped.
-const DEFAULT_SORT = { pendiente: 'asc' };
+// Every column defaults most-recently-active-first and can be flipped — real pagination
+// means flipping a column never hides anything, it's purely a display preference now.
+const DEFAULT_SORT = {};
 
 // Only these move by dragging — each is a plain, reversible manual_status write, no
 // extra info required. Dropping onto "resuelto" is also allowed (a natural way to
@@ -246,7 +246,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         <span className={`flex items-center gap-1 text-[11px] ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>
                           {overdue
                             ? `Esperando hace ${formatWait(card.stageSince)} (más de ${SLA_MINUTES} min)`
-                            : `hace ${formatWait(card.stageSince)}`}
+                            : `hace ${formatWait(card.lastMessageAt ?? card.stageSince)}`}
                         </span>
                         {key === 'pendiente' ? (
                           <Button

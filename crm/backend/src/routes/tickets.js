@@ -93,10 +93,10 @@ router.get('/pipeline', async (req, res, next) => {
       -- One LATERAL per page row, each an index-backed prefix lookup on session_id
       -- (idx_n8n_chat_histories_session_id is text_pattern_ops specifically for this)
       -- — not a scan, so this stays cheap no matter how deep a column gets paged.
-      SELECT p.*, lm.content AS last_message
+      SELECT p.*, lm.content AS last_message, lm.created_at AS last_message_at
       FROM page p
       LEFT JOIN LATERAL (
-        SELECT h.message->>'content' AS content
+        SELECT h.message->>'content' AS content, h.created_at
         FROM n8n_chat_histories h
         WHERE h.session_id LIKE p.whatsapp_number || '%'
           AND h.message->>'type' = 'human'
@@ -117,7 +117,14 @@ router.get('/pipeline', async (req, res, next) => {
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         lastMessage: r.last_message,
+        // stageSince is when the STATUS/temperature last changed, not when the customer
+        // last wrote — those drift apart constantly (a customer can send several
+        // messages while the ticket sits untouched), which is exactly why the "hace X"
+        // shown next to their latest message looked wrong. lastMessageAt is what the
+        // card's time display should use; stageSince stays reserved for the "No
+        // atendidos" SLA check, which really is about ticket wait time.
         stageSince: r.stage_since,
+        lastMessageAt: r.last_message_at,
       })),
     });
   } catch (err) { next(err); }
