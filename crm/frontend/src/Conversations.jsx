@@ -158,6 +158,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Separate from `error` above (which is the conversation LIST's own load failure,
+  // rendered in the sidebar) — this used to share that same state, so a single chat
+  // failing to load showed "Error al cargar la conversación" inside the list itself,
+  // sitting there indefinitely since only the list's own reload cleared it.
+  const [threadError, setThreadError] = useState(null);
   const [draft, setDraft] = useState('');
   // Keyed by sessionId rather than a plain boolean, so a slow send in one chat doesn't
   // lock the compose box in every other chat — that "everything is stuck" feeling was
@@ -380,7 +385,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
   const loadThread = useCallback(() => {
     if (!selectedId) { setThread(null); return; }
-    fetchConversation(selectedId, threadLimit).then(setThread).catch((err) => setError(err.message));
+    fetchConversation(selectedId, threadLimit)
+      .then((t) => { setThread(t); setThreadError(null); })
+      .catch((err) => setThreadError(err.message));
   }, [selectedId, threadLimit]);
 
   useEffect(() => {
@@ -397,6 +404,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
     setInfoOpen(false);
     setReplyingTo(null);
+    setThreadError(null);
     // Left uncleared before, this was a real mis-send risk: an advisor types for
     // customer A, the send is slow, they switch to customer B while it's in flight —
     // the leftover text was still sitting in B's compose box and could get sent to B
@@ -950,8 +958,19 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       <div className="flex min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02]">
         {!thread && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
-            <MessageCircle size={32} strokeWidth={1.5} className="text-greige" />
-            Selecciona una conversación para ver los mensajes.
+            {threadError ? (
+              <>
+                <p className="text-danger">Error al cargar la conversación</p>
+                <button onClick={loadThread} className="text-xs font-semibold text-accent hover:underline">
+                  Reintentar
+                </button>
+              </>
+            ) : (
+              <>
+                <MessageCircle size={32} strokeWidth={1.5} className="text-greige" />
+                Selecciona una conversación para ver los mensajes.
+              </>
+            )}
           </div>
         )}
         {thread && (
