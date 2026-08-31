@@ -12,5 +12,10 @@ export function isOverdue(createdAt) {
 export function formatWait(createdAt) {
   const m = minutesSince(createdAt);
   if (m < 60) return `${m} min`;
-  return `${Math.floor(m / 60)}h ${m % 60}min`;
+  if (m < 24 * 60) return `${Math.floor(m / 60)}h ${m % 60}min`;
+  // Past a day, "385h 58min" stops meaning anything at a glance — a date reads
+  // instantly instead. Drops the year unless it's not the current one.
+  const date = new Date(createdAt);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString('es-GT', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
 }

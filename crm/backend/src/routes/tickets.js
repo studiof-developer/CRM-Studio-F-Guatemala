@@ -66,12 +66,25 @@ router.get('/pipeline', async (req, res, next) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const sort = req.query.sort === 'asc' ? 'ASC' : 'DESC';
 
+    // "No atendidos" sorts/displays by stage_since (ticket wait time — that's what its
+    // SLA is actually about). Every other column sorts/displays by
+    // last_customer_message_at instead, falling back to stage_since only for the rare
+    // contact with a temperature set but no message history at all. Sorting and
+    // displaying by two DIFFERENT timestamps was exactly the bug reported 2026-08-31 —
+    // the board's order (by stage_since) and the "hace X" next to each message (by a
+    // separately-fetched last-message time) didn't correspond to each other at all.
+    // Both now come from customers.last_customer_message_at — kept current by a trigger
+    // on n8n_chat_histories (db/init/031) instead of a per-request LATERAL lookup, so
+    // this stays a plain indexed sort no matter how deep a column gets paged.
+    const orderExpr = bucket === 'pendiente' ? 'stage_since' : 'COALESCE(last_customer_message_at, stage_since)';
+
     const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
-               GREATEST(t.updated_at, c.updated_at) AS stage_since
+               GREATEST(t.updated_at, c.updated_at) AS stage_since,
+               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status != 'bot'
@@ -81,41 +94,10 @@ router.get('/pipeline', async (req, res, next) => {
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
         FROM temped
-      ),
-      -- The page is decided here — before the message lookup below runs, not after.
-      -- Doing that lookup for the whole column instead of just this one page is exactly
-      -- the "scan way more than we're going to render" mistake fixed elsewhere today.
-      page AS (
-        SELECT * FROM totaled WHERE bucket = $1
-        ORDER BY stage_since ${sort}
-        OFFSET $2 LIMIT $3
       )
-      -- Two LATERALs per page row, both index-backed prefix lookups on session_id
-      -- (idx_n8n_chat_histories_session_id is text_pattern_ops specifically for this)
-      -- — not a scan, so this stays cheap no matter how deep a column gets paged.
-      SELECT p.*, lm.content AS last_message, lm.created_at AS last_message_at,
-             -- "Awaiting reply" only means something if the CUSTOMER has the last word —
-             -- if the advisor already answered, the clock is on the customer, not us,
-             -- no matter how long it's been.
-             (latest.type = 'human') AS awaiting_reply
-      FROM page p
-      LEFT JOIN LATERAL (
-        SELECT h.message->>'content' AS content, h.created_at
-        FROM n8n_chat_histories h
-        WHERE h.session_id LIKE p.whatsapp_number || '%'
-          AND h.message->>'type' = 'human'
-          AND coalesce(h.message->>'content', '') <> ''
-        ORDER BY h.id DESC
-        LIMIT 1
-      ) lm ON true
-      LEFT JOIN LATERAL (
-        SELECT h.message->>'type' AS type
-        FROM n8n_chat_histories h
-        WHERE h.session_id LIKE p.whatsapp_number || '%'
-        ORDER BY h.id DESC
-        LIMIT 1
-      ) latest ON true
-      ORDER BY p.stage_since ${sort}
+      SELECT * FROM totaled WHERE bucket = $1
+      ORDER BY ${orderExpr} ${sort}
+      OFFSET $2 LIMIT $3
     `, [bucket, offset, limit]));
 
     res.json({
@@ -127,16 +109,10 @@ router.get('/pipeline', async (req, res, next) => {
         whatsappNumber: r.whatsapp_number,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
-        lastMessage: r.last_message,
+        lastMessage: r.last_customer_message,
         awaitingReply: r.awaiting_reply === true,
-        // stageSince is when the STATUS/temperature last changed, not when the customer
-        // last wrote — those drift apart constantly (a customer can send several
-        // messages while the ticket sits untouched), which is exactly why the "hace X"
-        // shown next to their latest message looked wrong. lastMessageAt is what the
-        // card's time display should use; stageSince stays reserved for the "No
-        // atendidos" SLA check, which really is about ticket wait time.
         stageSince: r.stage_since,
-        lastMessageAt: r.last_message_at,
+        lastMessageAt: r.last_customer_message_at,
       })),
     });
   } catch (err) { next(err); }
