@@ -7,7 +7,7 @@ import conversationsRouter, { recoverOrphanedSends } from './routes/conversation
 import customersRouter from './routes/customers.js';
 import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
-import dashboardRouter from './routes/dashboard.js';
+import dashboardRouter, { refreshDashboardSnapshots } from './routes/dashboard.js';
 import auditRouter from './routes/audit.js';
 import { runErpSync } from './erpSync.js';
 import authRouter from './routes/auth.js';
@@ -106,6 +106,24 @@ if (process.env.ERP_API_KEY) {
     setInterval(runErpSync, ERP_SYNC_INTERVAL_MS);
   }, 15000);
 }
+
+// The Dashboard is a once-a-day snapshot now, not a live query — refreshed here instead
+// of on every page load (see dashboard.js). Guatemala doesn't observe DST (fixed UTC-6
+// year-round), so "7am local" is reliably 13:00 UTC and a flat 24h interval after the
+// first run never drifts. Every request before the first run today gets dashboard.js's
+// own cold-start fallback (computes once, keeps it until this actually fires).
+function msUntilNext7amGuatemala() {
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 13, 0, 0));
+  if (target <= now) target.setUTCDate(target.getUTCDate() + 1);
+  return target - now;
+}
+setTimeout(() => {
+  refreshDashboardSnapshots().catch((err) => console.error('refreshDashboardSnapshots failed', err));
+  setInterval(() => {
+    refreshDashboardSnapshots().catch((err) => console.error('refreshDashboardSnapshots failed', err));
+  }, 24 * 60 * 60 * 1000);
+}, msUntilNext7amGuatemala());
 
 app.use((err, req, res, next) => {
   // multer throws this before any route handler runs, so the per-kind WhatsApp-limit

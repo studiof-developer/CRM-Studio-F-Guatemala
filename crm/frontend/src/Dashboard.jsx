@@ -4,7 +4,6 @@ import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Heads
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';
 import { PAID_METHOD_LABELS } from './lib/paymentMethods.js';
-import { useLiveEvent } from './lib/liveEvents.js';
 
 const PAID_METHOD_COLORS = { tarjeta: '#4338ca', efectivo: '#15803d', transferencia: '#b45309', deposito: '#0891b2' };
 
@@ -51,43 +50,16 @@ export default function Dashboard() {
   const advisorRef = useRef(null);
   const paidMethodRef = useRef(null);
 
+  // The backend now serves a fixed once-a-day snapshot (refreshed at 7am Guatemala time
+  // — see dashboard.js/index.js) instead of computing live on every request, so there's
+  // nothing to gain from reloading here on a timer or on every ticket/message event
+  // anymore — the data behind those events won't change until tomorrow's snapshot either
+  // way. Just the one load when the page opens.
   const loadDashboard = useCallback(() => {
     fetchDashboard().then(setData).catch((err) => setError(err.message));
   }, []);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
-
-  // message_changes fires on every message across every conversation, for every advisor
-  // — reloading (and every chart destroying/redrawing) on each one made the dashboard
-  // look like it was constantly refreshing itself. Throttled so a burst of chat activity
-  // collapses into at most one reload every 20s, with a trailing call so it still lands.
-  const lastLoadRef = useRef(0);
-  const pendingTimerRef = useRef(null);
-  const REFRESH_MIN_INTERVAL_MS = 20000;
-  const loadDashboardThrottled = useCallback(() => {
-    const elapsed = Date.now() - lastLoadRef.current;
-    clearTimeout(pendingTimerRef.current);
-    if (elapsed >= REFRESH_MIN_INTERVAL_MS) {
-      lastLoadRef.current = Date.now();
-      loadDashboard();
-    } else {
-      pendingTimerRef.current = setTimeout(() => {
-        lastLoadRef.current = Date.now();
-        loadDashboard();
-      }, REFRESH_MIN_INTERVAL_MS - elapsed);
-    }
-  }, [loadDashboard]);
-
-  useLiveEvent('ticket_changes', loadDashboardThrottled);
-  useLiveEvent('message_changes', loadDashboardThrottled);
-
-  // Live events are the fast path, but there's no guarantee one fires soon after a day
-  // rolls over — without this, a dashboard tab left open with no fresh activity nearby
-  // keeps showing yesterday as the last point on every "by day" chart indefinitely.
-  useEffect(() => {
-    const id = setInterval(loadDashboard, 30 * 60 * 1000);
-    return () => clearInterval(id);
-  }, [loadDashboard]);
 
   useChart(pipelineRef, () => {
     const entries = Object.entries(data.pipeline);
@@ -247,7 +219,15 @@ export default function Dashboard() {
     <div className="mx-auto max-w-6xl">
       <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Panorama general de Studio F.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Panorama general de Studio F.
+          {data?.generatedAt && (
+            <span className="ml-1">
+              Actualizado hoy a las{' '}
+              {new Date(data.generatedAt).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}.
+            </span>
+          )}
+        </p>
       </div>
 
       <div className="px-8 pb-8">
