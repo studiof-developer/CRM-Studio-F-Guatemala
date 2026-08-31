@@ -21,6 +21,22 @@ export function onLiveEvent(channel, callback) {
 
 // React convenience wrapper — pass a useCallback'd handler (this codebase already
 // wraps its load functions in useCallback everywhere, so this matches that pattern).
-export function useLiveEvent(channel, callback) {
-  useEffect(() => onLiveEvent(channel, callback), [channel, callback]);
+//
+// Debounced by default: every callback here is some flavor of "reload the list/counts",
+// and a burst of same-channel events (several messages landing within the same second —
+// a few customers texting close together, a template blast, etc.) used to fire one full
+// reload PER event. Every open tab/badge doing that at once is exactly what piled up as
+// dozens of duplicate requests and overlapping heavy queries fighting each other in
+// Postgres (seen 2026-08-31). Collapsing a burst into one reload after it settles fixes
+// that at the source instead of in each individual caller.
+export function useLiveEvent(channel, callback, delayMs = 400) {
+  useEffect(() => {
+    let timer = null;
+    const debounced = () => {
+      clearTimeout(timer);
+      timer = setTimeout(callback, delayMs);
+    };
+    const unsubscribe = onLiveEvent(channel, debounced);
+    return () => { clearTimeout(timer); unsubscribe(); };
+  }, [channel, callback, delayMs]);
 }
