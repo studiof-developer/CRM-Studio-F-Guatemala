@@ -59,12 +59,13 @@ services:
   # the ERP admin already knows FileZilla's compare-and-sync workflow, just pointed at
   # a new connection instead of their own server). atmoz/sftp is a small, widely-used,
   # single-purpose image made exactly for "one user, one folder, nothing else" — no
-  # shell access, chrooted to /home/erpimages/images.
+  # shell access, chrooted to /home/erpimages/fotos_productos. Named for clarity in
+  # FileZilla, not because the path itself means anything to the app.
   product-images-sftp:
     image: atmoz/sftp
     restart: unless-stopped
     volumes:
-      - product_images:/home/erpimages/images
+      - product_images:/home/erpimages/fotos_productos
     ports:
       - "2222:22"
     command: erpimages:${PRODUCT_IMAGES_SFTP_PASSWORD}:1001
