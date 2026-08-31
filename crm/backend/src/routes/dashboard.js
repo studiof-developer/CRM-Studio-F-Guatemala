@@ -4,6 +4,24 @@ import { TEMPERATURE_SQL, VALID_TEMPERATURES, zoneClause } from './customers.js'
 
 const router = Router();
 
+// Same request-coalescing as conversations.js's list/unread-count (see that file for the
+// full reasoning) — several people opening the Dashboard within the same few seconds
+// used to mean several full 9-query fan-outs running at once, all competing for the same
+// CPU. One person's load now serves everyone else who asks within the window instead of
+// each starting their own. Keyed by canSeePauta since that's the only thing that changes
+// which queries run (zoneClause is currently a no-op, so every role sees the same rows
+// otherwise) — an asesor's cached result is never handed to an admin/supervisor missing
+// the pauta breakdown they're allowed to see, or vice versa.
+const DASHBOARD_CACHE_TTL_MS = 3000;
+const dashboardCache = new Map();
+function cachedDashboard(key, run) {
+  const hit = dashboardCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = run().catch((err) => { dashboardCache.delete(key); throw err; });
+  dashboardCache.set(key, { expires: Date.now() + DASHBOARD_CACHE_TTL_MS, promise });
+  return promise;
+}
+
 // orders/order_items are dead tables — nothing in this app (CRM UI or n8n) ever
 // writes to them, so a revenue/products dashboard built on them always reads zero
 // in real operation. This reflects what's actually populated: customers, tickets,
@@ -18,7 +36,7 @@ router.get('/', async (req, res, next) => {
 
     const canSeePauta = req.user.role === 'admin' || req.user.role === 'supervisor';
 
-    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets, paidMethods, handoffReasons, pautaByDay] = await Promise.all([
+    const [kpis, pipeline, ticketsByStatus, conversationsByDay, advisorActivity, recentTickets, paidMethods, handoffReasons, pautaByDay] = await cachedDashboard(String(canSeePauta), () => Promise.all([
       pool.query(
         `SELECT
            (SELECT count(*) FROM customers c WHERE true ${kpiZone}) AS clientes_totales,
@@ -99,7 +117,7 @@ router.get('/', async (req, res, next) => {
              GROUP BY day ORDER BY day`
           )
         : Promise.resolve({ rows: [] }),
-    ]);
+    ]));
 
     const pipelineCounts = Object.fromEntries(VALID_TEMPERATURES.map((t) => [t, 0]));
     for (const r of pipeline.rows) pipelineCounts[r.temperature] = Number(r.count);
