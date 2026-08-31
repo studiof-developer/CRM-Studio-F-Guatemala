@@ -9,7 +9,7 @@ import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
-  fetchMessageDistance,
+  fetchMessageDistance, retryFailedMessage,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -107,17 +107,27 @@ function Tail({ side, color }) {
 // (~12px) the two strokes of CheckCheck sit almost on top of each other and read as a
 // smudge instead of a clean double tick. This is WhatsApp's own compact glyph (a filled
 // shape, not a stroke), which stays crisp that small.
-function MessageTicks({ status, statusError }) {
+function MessageTicks({ status, statusError, onRetry, retrying }) {
   // The actual WhatsApp send happens in the background after the message already shows
   // as "sent" here — if that fails (customer outside the 24h window, expired token,
-  // Meta rate limit...) this is the only place it becomes visible to the advisor.
+  // Meta rate limit...) this is the only place it becomes visible to the advisor. Unlike
+  // a hung/orphaned send, a "failed" one is never auto-retried — a transient blip
+  // reaching Meta's API (confirmed 2026-08-31) otherwise left it stuck until someone
+  // retyped the whole message from scratch, so this is a one-click way to just try again.
   if (status === 'failed') {
     return (
-      <span
-        title={statusError || 'No se pudo enviar por WhatsApp'}
-        className="flex items-center gap-0.5 font-semibold text-red-200"
-      >
+      <span title={statusError || 'No se pudo enviar por WhatsApp'} className="flex items-center gap-1 font-semibold text-red-200">
         <AlertTriangle size={11} /> no se envió
+        {onRetry && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRetry(); }}
+            disabled={retrying}
+            className="underline decoration-dotted underline-offset-2 hover:text-white disabled:opacity-60"
+          >
+            {retrying ? 'reintentando…' : 'reintentar'}
+          </button>
+        )}
       </span>
     );
   }
@@ -169,6 +179,19 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   // exactly what pushed advisors to switch chats mid-send in the first place.
   const [sendingFor, setSendingFor] = useState(null);
   const sending = sendingFor === selectedId;
+  const [retryingId, setRetryingId] = useState(null);
+  async function handleRetry(messageId) {
+    if (!selectedId) return;
+    setRetryingId(messageId);
+    try {
+      await retryFailedMessage(selectedId, messageId);
+      loadThread();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setRetryingId(null);
+    }
+  }
   const [actionBusy, setActionBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   // Attach several files, then send them together — instead of each one going out the
@@ -1274,6 +1297,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                   <MessageTicks
                                     status={m.additional_kwargs?.status}
                                     statusError={m.additional_kwargs?.statusError}
+                                    onRetry={() => handleRetry(m.id)}
+                                    retrying={retryingId === m.id}
                                   />
                                 )}
                               </span>

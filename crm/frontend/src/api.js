@@ -152,6 +152,12 @@ export async function sendConversationMessage(sessionId, content, replyTo) {
   return res.json();
 }
 
+export async function retryFailedMessage(sessionId, messageId) {
+  const res = await apiFetch(`/api/conversations/${sessionId}/messages/${messageId}/retry`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo reenviar el mensaje');
+  return res.json();
+}
+
 export async function sendConversationAttachment(sessionId, file, caption) {
   const formData = new FormData();
   formData.append('file', file);

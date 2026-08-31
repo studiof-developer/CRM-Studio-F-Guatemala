@@ -945,6 +945,45 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
   } catch (err) { next(err); }
 });
 
+// Manual retry for a message marked "failed" — before this the advisor's only recourse
+// was retyping it as a brand new message. A failed send (unlike an orphaned/hung one)
+// never gets auto-retried, so a transient blip reaching Meta's API (confirmed 2026-08-31:
+// several sends failed to even connect for ~40 minutes, then connectivity was fine again)
+// left the message stuck until someone did this by hand. Reuses the exact same delivery
+// path as the queue-flush/orphan-recovery.
+router.post('/:sessionId/messages/:messageId/retry', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(req.params.messageId)) return res.status(400).json({ error: 'invalid message id' });
+
+    const { sessionIds, phone } = await findConversationThread(cleanSessionId(req.params.sessionId));
+    if (!phone || !sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
+
+    const { rows } = await pool.query(
+      `SELECT id, session_id, message FROM n8n_chat_histories WHERE id = $1 AND session_id = ANY($2)`,
+      [req.params.messageId, sessionIds]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'message not found' });
+    const row = rows[0];
+    if (row.message?.additional_kwargs?.status !== 'failed') {
+      return res.status(400).json({ error: 'only a failed message can be retried' });
+    }
+
+    const { rows: attachmentRows } = await pool.query(
+      `SELECT id, kind, filename, mime_type, file_path FROM message_attachments WHERE n8n_message_id = $1`,
+      [row.id]
+    );
+
+    try {
+      await deliverStoredMessage(row, phone, attachmentRows[0]);
+    } catch (err) {
+      await markSendFailed(row.id, err);
+      return res.status(502).json({ error: 'no se pudo reenviar' });
+    }
+    await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionIds[0]]);
+    res.json({ retried: true });
+  } catch (err) { next(err); }
+});
+
 // Called by the listener whenever any row lands in n8n_chat_histories. If that row was
 // the customer answering, the 24h window just reopened and everything the advisor wrote
 // while it was shut can finally go out — in the order they wrote it. This is what makes
