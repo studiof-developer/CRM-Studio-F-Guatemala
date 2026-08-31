@@ -1,5 +1,25 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Chart from 'chart.js/auto';
+// 'chart.js/auto' registers every controller/element/scale/plugin Chart.js ships —
+// this page only ever draws bar, doughnut, and line charts, so importing just those
+// (plus the scales/plugins they actually use: category/linear axes, legend, tooltip,
+// and fill for the two area charts) cuts real weight out of the bundle for no
+// behavior change.
+import {
+  Chart,
+  BarController, BarElement,
+  DoughnutController, ArcElement,
+  LineController, LineElement, PointElement,
+  CategoryScale, LinearScale,
+  Legend, Tooltip, Filler,
+} from 'chart.js';
+
+Chart.register(
+  BarController, BarElement,
+  DoughnutController, ArcElement,
+  LineController, LineElement, PointElement,
+  CategoryScale, LinearScale,
+  Legend, Tooltip, Filler,
+);
 import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Headset, AlertTriangle } from 'lucide-react';
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';

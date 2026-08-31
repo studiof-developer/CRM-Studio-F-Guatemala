@@ -1,23 +1,53 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2 } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
-import Dashboard from './Dashboard.jsx';
-import HandoffQueue from './HandoffQueue.jsx';
-import Conversations from './Conversations.jsx';
-import Customers from './Customers.jsx';
-import Users from './Users.jsx';
-import Catalog from './Catalog.jsx';
-import Audit from './Audit.jsx';
-import QuickReplies from './QuickReplies.jsx';
-import Campaigns from './Campaigns.jsx';
-import WhatsappNumbers from './WhatsappNumbers.jsx';
-import AgentTest from './AgentTest.jsx';
+// Lazy — each tab's code (and whatever it pulls in, like Dashboard's Chart.js) only
+// downloads the first time that tab is actually opened, instead of every visit
+// downloading the whole app up front regardless of which pages a role ever uses.
+const Dashboard = lazy(() => import('./Dashboard.jsx'));
+const HandoffQueue = lazy(() => import('./HandoffQueue.jsx'));
+const Conversations = lazy(() => import('./Conversations.jsx'));
+const Customers = lazy(() => import('./Customers.jsx'));
+const Users = lazy(() => import('./Users.jsx'));
+const Catalog = lazy(() => import('./Catalog.jsx'));
+const Audit = lazy(() => import('./Audit.jsx'));
+const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
+const Campaigns = lazy(() => import('./Campaigns.jsx'));
+const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
+const AgentTest = lazy(() => import('./AgentTest.jsx'));
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
+
+// Catches the one real failure mode lazy tabs add: someone has the app open across a
+// deploy, then switches to a tab whose chunk got replaced under them — the browser
+// requests a filename that no longer exists. Rather than a blank/broken tab, reload
+// once to pick up the current build. Guarded by sessionStorage so a real, persistent
+// error doesn't reload-loop; cleared on a clean mount so it can recover again later.
+class ChunkErrorBoundary extends ReactComponent {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidMount() { sessionStorage.removeItem('crm-chunk-reload-attempted'); }
+  componentDidCatch(error) {
+    const isChunkError = /dynamically imported module|failed to fetch|loading chunk/i.test(String(error?.message ?? error));
+    if (isChunkError && !sessionStorage.getItem('crm-chunk-reload-attempted')) {
+      sessionStorage.setItem('crm-chunk-reload-attempted', '1');
+      window.location.reload();
+    }
+  }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
+
+function TabLoading() {
+  return (
+    <div className="flex h-full items-center justify-center text-greige-ink">
+      <Loader2 size={22} className="animate-spin" />
+    </div>
+  );
+}
 
 // Visible to everyone: admin, supervisor, and asesor.
 const BASE_TABS = {
@@ -365,12 +395,16 @@ export default function App() {
             transition={{ duration: 0.5, ease: 'easeOut' }}
             className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden rounded-3xl border border-line bg-paper shadow-sm"
           >
-            <Component
-              user={user}
-              onOpenConversation={handleOpenConversation}
-              openSessionId={openConversationId}
-              onOpenedConversation={handleOpenedConversation}
-            />
+            <ChunkErrorBoundary key={tab}>
+              <Suspense fallback={<TabLoading />}>
+                <Component
+                  user={user}
+                  onOpenConversation={handleOpenConversation}
+                  openSessionId={openConversationId}
+                  onOpenedConversation={handleOpenedConversation}
+                />
+              </Suspense>
+            </ChunkErrorBoundary>
           </motion.div>
         </main>
       </div>
