@@ -15,6 +15,26 @@ import { compressStoredAttachment } from '../attachmentCompression.js';
 const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
 const WHATSAPP_KIND_LABEL = { image: 'imágenes', audio: 'audios', document: 'documentos' };
 
+// Request coalescing for the two heaviest, most-frequently-polled reads (the list and
+// the unread badge) — both re-scan the whole message history from scratch. One person
+// on the CRM was always fine; the problem was several people (or several tabs) hitting
+// the same query within the same couple seconds, each starting their own full run and
+// all of them fighting for CPU at once (confirmed 2026-08-31: the same query alone took
+// under 1s, four of them at once took 11-12s each). A short-lived cache means whoever
+// asks first actually runs it — everyone else within the window gets that same
+// in-flight/just-finished result instead of starting a second identical computation.
+// Small, bounded key space (a boolean and a handful of limit values), so this can't grow
+// unbounded the way caching by free-text search terms would.
+const READ_CACHE_TTL_MS = 3000;
+const readCache = new Map();
+function cachedRead(key, run) {
+  const hit = readCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = run().catch((err) => { readCache.delete(key); throw err; });
+  readCache.set(key, { expires: Date.now() + READ_CACHE_TTL_MS, promise });
+  return promise;
+}
+
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -339,7 +359,7 @@ router.get('/', async (req, res, next) => {
     // that fell outside the default recency window instead of showing every real one.
     const hasFilter = !!(q?.trim() || temperature || ticketStatus || unreadOnly);
     const limit = hasFilter ? null : Math.min(Number(req.query.limit) || 50, 5000);
-    const { rows } = await pool.query(`
+    const { rows } = await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
         -- human/assistant messages count here. Empty content alone can't be the test
@@ -420,7 +440,7 @@ router.get('/', async (req, res, next) => {
       ) t ON true
       ORDER BY l.id DESC
       ${limit ? 'LIMIT $1' : ''}
-    `, limit ? [limit] : []);
+    `, limit ? [limit] : []));
     // The advisor team handles every zone, so no zone filtering here.
     let visible = rows;
 
@@ -478,7 +498,7 @@ router.get('/', async (req, res, next) => {
 // Registered before /:sessionId for the same reason as /search-all below.
 router.get('/unread-count', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await cachedRead('unread-count', () => pool.query(`
       WITH readable AS (
         SELECT h.session_id, h.id, h.message
         FROM n8n_chat_histories h
@@ -509,7 +529,7 @@ router.get('/unread-count', async (req, res, next) => {
         WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
         GROUP BY th.thread_key
       ) unread
-    `);
+    `));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
 });
