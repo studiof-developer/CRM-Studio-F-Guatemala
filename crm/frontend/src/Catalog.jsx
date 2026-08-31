@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, PackageX, Search } from 'lucide-react';
-import { fetchProducts, importProducts } from './api.js';
+import { Upload, PackageX, Search, ImageOff } from 'lucide-react';
+import { fetchProducts, importProducts, productImageUrl } from './api.js';
 import Badge from './components/Badge.jsx';
 import Pagination from './components/Pagination.jsx';
 import Select from './components/Select.jsx';
@@ -143,6 +143,7 @@ export default function Catalog() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted text-xs text-muted-foreground">
             <tr>
+              <th className="px-4 py-3 font-medium">Foto</th>
               <th className="px-4 py-3 font-medium">SKU</th>
               <th className="px-4 py-3 font-medium">Nombre</th>
               <th className="px-4 py-3 font-medium">Talla</th>
@@ -154,13 +155,26 @@ export default function Catalog() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Cargando…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Cargando…</td></tr>
             )}
             {!loading && pageItems.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Sin resultados.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Sin resultados.</td></tr>
             )}
             {pageItems.map((p) => (
               <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/50">
+                <td className="px-4 py-3">
+                  {p.image_url ? (
+                    <img
+                      src={productImageUrl(p.image_url)}
+                      alt=""
+                      className="h-10 w-10 rounded-lg border border-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
+                      <ImageOff size={16} />
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
                 <td className="px-4 py-3">{p.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.size}</td>

@@ -1,8 +1,11 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
+import { PRODUCT_IMAGES_DIR } from '../productImageSync.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -12,11 +15,21 @@ const REQUIRED_COLUMNS = ['sku', 'name', 'category', 'price'];
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active
+      `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
        FROM products ORDER BY id DESC LIMIT 500`
     );
     res.json(rows);
   } catch (err) { next(err); }
+});
+
+// Serves a file straight out of the SFTP drop-off folder (see productImageSync.js) —
+// path.basename strips any directory component a crafted filename might carry, so this
+// can never be walked outside PRODUCT_IMAGES_DIR regardless of what's in the URL.
+router.get('/images/:filename', (req, res) => {
+  const filePath = path.join(PRODUCT_IMAGES_DIR, path.basename(req.params.filename));
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'not found' });
+  });
 });
 
 router.post('/import', requireRole('supervisor'), upload.single('file'), async (req, res, next) => {

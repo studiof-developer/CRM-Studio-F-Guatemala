@@ -10,6 +10,7 @@ import productsRouter from './routes/products.js';
 import dashboardRouter, { refreshDashboardSnapshots } from './routes/dashboard.js';
 import auditRouter from './routes/audit.js';
 import { runErpSync } from './erpSync.js';
+import { syncProductImages } from './productImageSync.js';
 import authRouter from './routes/auth.js';
 import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import quickRepliesRouter from './routes/quickReplies.js';
@@ -106,6 +107,15 @@ if (process.env.ERP_API_KEY) {
     setInterval(runErpSync, ERP_SYNC_INTERVAL_MS);
   }, 15000);
 }
+
+// A local disk scan (see productImageSync.js), not a network call, so this can run
+// often without it costing anything — 5 minutes means a photo the ERP admin drops via
+// SFTP shows up in Catálogo well within the same work session. No-ops harmlessly if the
+// folder isn't mounted (local dev without the sftp service).
+setTimeout(() => {
+  syncProductImages();
+  setInterval(syncProductImages, 5 * 60 * 1000);
+}, 15000);
 
 // The Dashboard is a once-a-day snapshot now, not a live query — refreshed here instead
 // of on every page load (see dashboard.js). Guatemala doesn't observe DST (fixed UTC-6

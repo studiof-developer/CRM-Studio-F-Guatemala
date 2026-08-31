@@ -49,6 +49,25 @@ services:
       - "4000:4000"
     volumes:
       - backend_uploads:/app/uploads
+      # Read-only — this container only ever displays product photos the ERP admin
+      # drops via SFTP, never writes here itself (that's the sftp service's job below).
+      - product_images:/app/product-images:ro
+
+  # Receives product photos from the ERP's Windows server over SFTP (FTPS/FileZilla
+  # sync from their side turned out to be more fragile than just hosting the drop-off
+  # folder ourselves — no NAT/passive-port issues, no client-cert pinning needed, and
+  # the ERP admin already knows FileZilla's compare-and-sync workflow, just pointed at
+  # a new connection instead of their own server). atmoz/sftp is a small, widely-used,
+  # single-purpose image made exactly for "one user, one folder, nothing else" — no
+  # shell access, chrooted to /home/erpimages/images.
+  product-images-sftp:
+    image: atmoz/sftp
+    restart: unless-stopped
+    volumes:
+      - product_images:/home/erpimages/images
+    ports:
+      - "2222:22"
+    command: erpimages:${PRODUCT_IMAGES_SFTP_PASSWORD}:1001
 
   crm-frontend:
     build:
@@ -65,3 +84,4 @@ services:
 volumes:
   postgres_data:
   backend_uploads:
+  product_images:
