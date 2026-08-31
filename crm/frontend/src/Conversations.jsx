@@ -177,8 +177,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   // Keyed by sessionId rather than a plain boolean, so a slow send in one chat doesn't
   // lock the compose box in every other chat — that "everything is stuck" feeling was
   // exactly what pushed advisors to switch chats mid-send in the first place.
-  const [sendingFor, setSendingFor] = useState(null);
-  const sending = sendingFor === selectedId;
+  // Optimistic sends, keyed by sessionId — a locally-created "sending…" bubble that
+  // appears the instant you hit send and resolves itself once the network request
+  // actually completes, instead of the compose box sitting blocked the whole time.
+  // The slow part was never the backend (it inserts the row and responds before the
+  // real WhatsApp call even happens) — it's the advisor's own upload of a large
+  // attachment to our server, which used to freeze the input for however long that
+  // took (up to 50s for a 20MB PDF on a modest connection). Real WhatsApp doesn't wait
+  // either: it shows "sending" and lets you keep typing.
+  const [pendingSends, setPendingSends] = useState({});
   const [retryingId, setRetryingId] = useState(null);
   async function handleRetry(messageId) {
     if (!selectedId) return;
@@ -623,48 +630,86 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }, [thread]);
 
-  async function handleSend(e) {
+  // Fires the actual network request for one optimistic entry, entirely in the
+  // background — nothing in the compose box is waiting on this. Success removes the
+  // local bubble (the real message is already in the DB by the time our request
+  // resolves, so the next loadThread() picks it up); failure leaves it in place marked
+  // failed, with its content intact, so "reintentar" can fire the exact same request
+  // again without the advisor having to retype anything.
+  async function sendPendingEntry(targetId, entry) {
+    try {
+      if (entry.file) {
+        await sendConversationAttachment(targetId, entry.file, entry.caption);
+      } else {
+        await sendConversationMessage(targetId, entry.content, entry.replyTo ?? undefined);
+      }
+      if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+      setPendingSends((prev) => ({ ...prev, [targetId]: (prev[targetId] ?? []).filter((p) => p.localId !== entry.localId) }));
+      if (selectedId === targetId) loadThread();
+    } catch (err) {
+      setPendingSends((prev) => ({
+        ...prev,
+        [targetId]: (prev[targetId] ?? []).map((p) => (p.localId === entry.localId ? { ...p, status: 'failed', error: err.message } : p)),
+      }));
+    }
+  }
+
+  function retryPendingEntry(targetId, entry) {
+    setPendingSends((prev) => ({
+      ...prev,
+      [targetId]: (prev[targetId] ?? []).map((p) => (p.localId === entry.localId ? { ...p, status: 'sending', error: null } : p)),
+    }));
+    sendPendingEntry(targetId, entry);
+  }
+
+  function dismissPendingEntry(targetId, localId) {
+    setPendingSends((prev) => {
+      const list = prev[targetId] ?? [];
+      const entry = list.find((p) => p.localId === localId);
+      if (entry?.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+      return { ...prev, [targetId]: list.filter((p) => p.localId !== localId) };
+    });
+  }
+
+  function handleSend(e) {
     e?.preventDefault();
-    // Captured now, not read again after the await — selectedId/draft/staged files can
-    // change while this request is in flight if the advisor switches chats, and the
-    // send must stay pinned to the chat it was actually written for.
     const targetId = selectedId;
     const content = draft.trim();
     const target = replyingTo;
     const files = stagedFiles;
     if (!content && !files.length) return;
-    if (sendingFor === targetId) return;
-    setSendingFor(targetId);
-    try {
-      if (files.length) {
-        // Whatever's typed rides along as the caption on the first file — same gesture
-        // as WhatsApp itself (write, then attach several, sends as one batch).
-        for (let i = 0; i < files.length; i++) {
-          await sendConversationAttachment(targetId, files[i].file, i === 0 ? (content || undefined) : undefined);
-        }
-        for (const f of files) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-        if (selectedId === targetId) setStagedFiles([]);
-      } else {
-        await sendConversationMessage(targetId, content, target ?? undefined);
-      }
-      // Only touch the compose box if we're still looking at the same chat — otherwise
-      // this would wipe out whatever the advisor has since typed for a different one.
-      if (selectedId === targetId) {
-        setDraft('');
-        setReplyingTo(null);
-      }
-      loadThread();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setSendingFor((prev) => (prev === targetId ? null : prev));
-      // The textarea is disabled while sending (that's the whole point of that flag),
-      // so focusing it here — before that disabled attribute clears on the next render
-      // — would silently no-op. Deferred one frame so it lands right after.
-      if (selectedId === targetId) {
-        requestAnimationFrame(() => textareaRef.current?.focus());
-      }
+
+    // The compose box clears and refocuses immediately — it never waits for the send
+    // to actually complete, so the advisor can keep typing the next message right away
+    // (only for the chat currently open — switching away wipes the draft anyway, same
+    // mis-send protection as before).
+    if (selectedId === targetId) {
+      setDraft('');
+      setReplyingTo(null);
+      setStagedFiles([]);
+      requestAnimationFrame(() => textareaRef.current?.focus());
     }
+
+    const entries = files.length
+      // Whatever's typed rides along as the caption on the first file — same gesture
+      // as WhatsApp itself (write, then attach several, sends as one batch). Each file
+      // is its own bubble/message, same as the backend already treats them.
+      ? files.map((f, i) => ({
+          localId: `${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+          file: f.file,
+          previewUrl: f.previewUrl,
+          caption: i === 0 ? (content || undefined) : undefined,
+          status: 'sending',
+        }))
+      : [{
+          localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          content,
+          replyTo: target,
+          status: 'sending',
+        }];
+
+    setPendingSends((prev) => ({ ...prev, [targetId]: [...(prev[targetId] ?? []), ...entries] }));
+    for (const entry of entries) sendPendingEntry(targetId, entry);
   }
 
   async function handleTake() {
@@ -1310,6 +1355,46 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     })}
                   </div>
                 ))}
+                {(pendingSends[selectedId] ?? []).map((entry) => (
+                  <div key={entry.localId} className="mb-1.5 flex justify-end">
+                    <div className="max-w-[70%] rounded-2xl rounded-tr-none px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm" style={{ backgroundColor: 'var(--accent)', opacity: entry.status === 'failed' ? 1 : 0.7 }}>
+                      {entry.file ? (
+                        <p className="flex items-center gap-1.5">
+                          {entry.previewUrl
+                            ? <img src={entry.previewUrl} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+                            : <FileText size={14} className="shrink-0" />}
+                          <span className="truncate">{entry.file.name}</span>
+                        </p>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{entry.content}</p>
+                      )}
+                      <span className="mt-0.5 flex items-center justify-end gap-1.5 text-[10px] text-white/90">
+                        {entry.status === 'sending' ? (
+                          <span className="flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> enviando…</span>
+                        ) : (
+                          <span className="flex items-center gap-1.5" title={entry.error}>
+                            <AlertTriangle size={11} /> no se pudo enviar
+                            <button
+                              type="button"
+                              onClick={() => retryPendingEntry(selectedId, entry)}
+                              className="underline decoration-dotted underline-offset-2 hover:text-white"
+                            >
+                              reintentar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => dismissPendingEntry(selectedId, entry.localId)}
+                              className="hover:text-white"
+                              aria-label="Descartar"
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
                 <div ref={bottomRef} />
               </div>
 
@@ -1554,19 +1639,16 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     onPaste={handlePaste}
                     onKeyDown={handleDraftKeyDown}
                     placeholder={
-                      sending
-                        ? 'Enviando…'
-                        : stagedFiles.length
-                          ? 'Agrega un mensaje (opcional)… Enter para enviar'
-                          : 'Escribe tu respuesta como asesor… ( / para plantillas )'
+                      stagedFiles.length
+                        ? 'Agrega un mensaje (opcional)… Enter para enviar'
+                        : 'Escribe tu respuesta como asesor… ( / para plantillas )'
                     }
-                    disabled={sending}
                     className="max-h-[120px] w-full resize-none overflow-y-auto rounded-2xl border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={sending || (!draft.trim() && !stagedFiles.length)}
+                  disabled={!draft.trim() && !stagedFiles.length}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
                   aria-label="Enviar"
                 >
