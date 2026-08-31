@@ -57,15 +57,44 @@ router.get('/pipeline', async (req, res, next) => {
       ),
       bucketed AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket FROM temped
+      ),
+      -- Bounded to the ≤${CARDS_PER_COLUMN}-per-column set BEFORE the message lookup
+      -- below runs, not after — a plain WHERE on the outer query wouldn't guarantee
+      -- that ordering, and doing this lookup for every non-bot ticket instead of just
+      -- the ones actually shown is exactly the "scan way more than we're going to
+      -- render" mistake fixed elsewhere today.
+      ranked AS (
+        SELECT * FROM (
+          SELECT *,
+                 -- "pendiente" ranks oldest-waiting-first (that's who the SLA actually
+                 -- cares about) — every other column ranks most-recently-active-first.
+                 -- Negating the epoch for everything but pendiente lets both directions
+                 -- share one ORDER BY: whichever 40 make the cut per column are always
+                 -- the ones that matter for that column, not just "whatever's newest".
+                 row_number() OVER (
+                   PARTITION BY bucket
+                   ORDER BY CASE WHEN bucket = 'pendiente' THEN extract(epoch FROM stage_since) ELSE -extract(epoch FROM stage_since) END ASC
+                 ) AS rn,
+                 count(*) OVER (PARTITION BY bucket) AS bucket_total
+          FROM bucketed
+        ) x
+        WHERE rn <= ${CARDS_PER_COLUMN}
       )
-      SELECT * FROM (
-        SELECT *,
-               row_number() OVER (PARTITION BY bucket ORDER BY stage_since DESC) AS rn,
-               count(*) OVER (PARTITION BY bucket) AS bucket_total
-        FROM bucketed
-      ) ranked
-      WHERE rn <= ${CARDS_PER_COLUMN}
-      ORDER BY bucket, stage_since DESC
+      -- One LATERAL per (already-bounded) row, each an index-backed prefix lookup on
+      -- session_id (idx_n8n_chat_histories_session_id is text_pattern_ops specifically
+      -- for this) — not a scan, so this stays cheap even at ~280 rows.
+      SELECT r.*, lm.content AS last_message
+      FROM ranked r
+      LEFT JOIN LATERAL (
+        SELECT h.message->>'content' AS content
+        FROM n8n_chat_histories h
+        WHERE h.session_id LIKE r.whatsapp_number || '%'
+          AND h.message->>'type' = 'human'
+          AND coalesce(h.message->>'content', '') <> ''
+        ORDER BY h.id DESC
+        LIMIT 1
+      ) lm ON true
+      ORDER BY r.bucket, r.rn
     `);
 
     const columns = Object.fromEntries(PIPELINE_COLUMNS.map((key) => [key, { total: 0, cards: [] }]));
@@ -78,7 +107,7 @@ router.get('/pipeline', async (req, res, next) => {
         whatsappNumber: r.whatsapp_number,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
-        handoffReason: r.handoff_reason,
+        lastMessage: r.last_message,
         stageSince: r.stage_since,
       });
     }

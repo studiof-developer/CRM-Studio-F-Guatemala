@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle } from 'lucide-react';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown } from 'lucide-react';
 import { fetchPipeline, updateTicket, updateCustomerTags } from './api.js';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -12,8 +12,8 @@ import { useLiveEvent } from './lib/liveEvents.js';
 // own dedicated, deliberate actions elsewhere (paid needs a payment method captured
 // too, and is one-way once set — not something to flip with a casual drag).
 const COLUMN_META = {
-  pendiente: { label: 'Pendiente', icon: Clock, iconBg: 'bg-warning-bg', iconText: 'text-warning' },
-  en_atencion: { label: 'En atención', icon: Snowflake, iconBg: 'bg-info-bg', iconText: 'text-info' },
+  pendiente: { label: 'No atendidos', icon: Clock, iconBg: 'bg-warning-bg', iconText: 'text-warning' },
+  en_atencion: { label: 'En conversación', icon: Snowflake, iconBg: 'bg-info-bg', iconText: 'text-info' },
   cotizacion: { label: 'Cotización', icon: Thermometer, iconBg: 'bg-warning-bg', iconText: 'text-warning' },
   medio_pago: { label: 'Medio de pago', icon: Flame, iconBg: 'bg-danger-bg', iconText: 'text-danger' },
   pagado: { label: 'Pagado', icon: CircleDollarSign, iconBg: 'bg-success-bg', iconText: 'text-success' },
@@ -40,6 +40,11 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
+  // Only "No atendidos" gets this control — the backend already sends exactly those
+  // 40 (oldest-waiting-first, the ones the SLA cares about) regardless of which way
+  // this is flipped, so re-sorting here is always safe: never hides a card the other
+  // direction would have shown.
+  const [pendienteOldestFirst, setPendienteOldestFirst] = useState(true);
   const dragDataRef = useRef(null);
 
   const load = useCallback(async (showLoading = true) => {
@@ -146,7 +151,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           {COLUMN_ORDER.map((key) => {
             const meta = COLUMN_META[key];
             const Icon = meta.icon;
-            const cards = columns[key].cards.filter(matches);
+            let cards = columns[key].cards.filter(matches);
+            // The backend already sends this column oldest-first — only reverse for
+            // display, never re-fetch or re-derive which cards are in the set.
+            if (key === 'pendiente' && !pendienteOldestFirst) cards = [...cards].reverse();
             const isDropTarget = DROP_TARGETS.has(key);
             return (
               <div
@@ -160,6 +168,17 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                     <Icon size={13} />
                   </span>
                   <span className="text-sm font-semibold">{meta.label}</span>
+                  {key === 'pendiente' && (
+                    <button
+                      type="button"
+                      onClick={() => setPendienteOldestFirst((v) => !v)}
+                      title={pendienteOldestFirst ? 'Más antiguo primero' : 'Más reciente primero'}
+                      className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ArrowUpDown size={10} />
+                      {pendienteOldestFirst ? 'Antiguo' : 'Reciente'}
+                    </button>
+                  )}
                   <span className="ml-auto rounded-full bg-paper px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
                     {q ? cards.length : columns[key].total}
                   </span>
@@ -187,8 +206,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           </span>
                         )}
                       </div>
-                      {card.handoffReason && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{card.handoffReason}</p>
+                      {card.lastMessage && (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{card.lastMessage}</p>
                       )}
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`flex items-center gap-1 text-[11px] ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>
