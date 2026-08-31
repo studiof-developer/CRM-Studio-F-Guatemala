@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import multer from 'multer';
 import ticketsRouter from './routes/tickets.js';
 import conversationsRouter, { recoverOrphanedSends } from './routes/conversations.js';
 import customersRouter from './routes/customers.js';
@@ -107,6 +108,12 @@ if (process.env.ERP_API_KEY) {
 }
 
 app.use((err, req, res, next) => {
+  // multer throws this before any route handler runs, so the per-kind WhatsApp-limit
+  // check in conversations.js never gets a chance to give its friendlier message —
+  // this only fires for a file past the largest limit we accept for any kind (documents).
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'El archivo pesa demasiado (máx. 100MB).' });
+  }
   console.error(err);
   res.status(500).json({ error: 'internal error' });
 });

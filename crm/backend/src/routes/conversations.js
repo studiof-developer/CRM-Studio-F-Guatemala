@@ -8,10 +8,17 @@ import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { compressStoredAttachment } from '../attachmentCompression.js';
 
+// WhatsApp's own per-type caps (not ours) — checked again per-kind below, once we know
+// the file's mimetype. Multer's limit has to be a single outer bound before that, so it
+// uses the largest of the three (documents) rather than an arbitrary smaller number that
+// would reject a valid, under-the-WhatsApp-limit document before it even reaches that check.
+const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
+const WHATSAPP_KIND_LABEL = { image: 'imágenes', audio: 'audios', document: 'documentos' };
+
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: Math.max(...Object.values(WHATSAPP_MAX_BYTES)) },
   fileFilter: (req, file, cb) => cb(null, isAllowedAttachmentMime(file.mimetype)),
 });
 
@@ -796,12 +803,6 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     }
   } catch (err) { next(err); }
 });
-
-// WhatsApp's own per-type caps (not ours) — our multer limit above is just the outer
-// bound; sending something under that but over Meta's limit fails at their end with
-// a generic "file too large" error that doesn't say which limit, so we catch it first.
-const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
-const WHATSAPP_KIND_LABEL = { image: 'imágenes', audio: 'audios', document: 'documentos' };
 
 router.post('/:sessionId/attachments', upload.single('file'), async (req, res, next) => {
   try {
