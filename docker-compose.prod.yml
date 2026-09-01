@@ -66,6 +66,10 @@ services:
     restart: unless-stopped
     volumes:
       - product_images:/home/erpimages/fotos_productos
+      # A fresh named volume mounts owned by root — this fixes that on every start
+      # (see sftp-init/fix-permissions.sh) instead of it silently rejecting every
+      # upload with "Permission denied" until someone chowns it by hand.
+      - ./sftp-init:/etc/sftp.d:ro
     ports:
       - "2222:22"
     command: erpimages:${PRODUCT_IMAGES_SFTP_PASSWORD}:1001
