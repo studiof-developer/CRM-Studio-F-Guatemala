@@ -167,6 +167,8 @@ export default function Catalog() {
                     <img
                       src={productImageUrl(p.image_url)}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-10 w-10 rounded-lg border border-border object-cover"
                     />
                   ) : (

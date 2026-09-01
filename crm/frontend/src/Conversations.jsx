@@ -1283,6 +1283,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                     <img
                                       src={m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url}
                                       alt=""
+                                      loading="lazy"
+                                      decoding="async"
                                       className="aspect-square w-full object-cover"
                                     />
                                   ) : (
@@ -1317,6 +1319,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                     <img
                                       src={attachmentUrl(quotePreview.attachmentId)}
                                       alt=""
+                                      loading="lazy"
+                                      decoding="async"
                                       className="h-9 w-9 shrink-0 rounded object-cover"
                                     />
                                   )}
