@@ -258,7 +258,11 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    // 100vh on a phone counts the space hidden behind the browser's collapsible address
+    // bar as visible, so anything sized off h-screen ends up taller than what's actually
+    // on screen — that's what was clipping the compose box and forcing a scrollbar.
+    // h-dvh tracks the real visible viewport instead.
+    <div className="flex h-dvh overflow-hidden bg-background">
       {/* Toast visuals live in components/Toast.jsx (showSuccess/showError) — this
           just mounts the portal and positions it. */}
       <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
@@ -291,7 +295,7 @@ export default function App() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className={`glass-card fixed inset-y-0 left-0 z-50 m-4 flex h-[calc(100vh-2rem)] w-64 shrink-0 flex-col justify-between rounded-3xl transition-transform duration-300 md:sticky md:top-4 md:translate-x-0 ${
+        className={`glass-card fixed inset-y-0 left-0 z-50 m-4 flex h-[calc(100dvh-2rem)] w-64 shrink-0 flex-col justify-between rounded-3xl transition-transform duration-300 md:sticky md:top-4 md:translate-x-0 ${
           mobileNavOpen ? 'translate-x-0' : '-translate-x-[calc(100%+2rem)] md:translate-x-0'
         }`}
       >
