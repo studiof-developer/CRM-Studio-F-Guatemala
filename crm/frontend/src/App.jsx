@@ -400,13 +400,13 @@ export default function App() {
             visible background gutter around it) only makes sense once there's room to
             spare, on tablet/desktop. On a phone the page should fill the screen like a
             normal app, edge to edge. */}
-        <main className="h-full w-full min-w-0 flex-1 overflow-hidden md:p-5 md:py-8 md:pl-2 md:pr-8">
+        <main className="w-full min-w-0 min-h-0 flex-1 overflow-hidden md:p-5 md:py-8 md:pl-2 md:pr-8">
           <motion.div
             key={tab}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden bg-paper md:rounded-3xl md:border md:border-line md:shadow-sm"
+            className="h-full w-full overflow-y-auto overflow-x-hidden bg-paper md:rounded-3xl md:border md:border-line md:shadow-sm"
           >
             <ChunkErrorBoundary key={tab}>
               <Suspense fallback={<TabLoading />}>
