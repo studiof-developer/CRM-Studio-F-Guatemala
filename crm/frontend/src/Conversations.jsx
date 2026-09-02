@@ -9,12 +9,13 @@ import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
-  fetchMessageDistance, retryFailedMessage,
+  fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
-import { useLiveEvent } from './lib/liveEvents.js';
+import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
+import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import Avatar from './components/Avatar.jsx';
 import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -173,6 +174,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [temperature, setTemperature] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState(null);
+  // Who (if anyone) currently has each chat open — { sessionId: { userId, fullName } }.
+  // Populated once from a snapshot on mount, kept current from live presence_changes
+  // events after that (see the effects below, near where selectedId's own heartbeat lives).
+  const [presenceBySession, setPresenceBySession] = useState({});
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -477,6 +482,48 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }, [selectedId]);
 
   useEffect(() => { loadThread(); }, [loadThread]);
+
+  // Presence: a snapshot once on mount (SSE only carries FUTURE events, so a tab opened
+  // after others already have chats up needs this to know current state), then kept
+  // current from live presence_changes pushes — no re-fetching, just applying each delta,
+  // since this can fire often (every advisor's heartbeat) and a full reload per event
+  // would be wasteful for what's just "highlight/un-highlight one row".
+  useEffect(() => {
+    let cancelled = false;
+    fetchPresenceSnapshot().then((rows) => {
+      if (cancelled) return;
+      const map = {};
+      for (const r of rows) map[r.sessionId] = { userId: r.userId, fullName: r.fullName };
+      setPresenceBySession(map);
+    }).catch(() => {});
+    const unsubscribe = onLiveEvent('presence_changes', (data) => {
+      let payload;
+      try { payload = JSON.parse(data); } catch { return; }
+      const { sessionId, userId, fullName } = payload;
+      setPresenceBySession((prev) => {
+        const next = { ...prev };
+        if (userId) next[sessionId] = { userId, fullName };
+        else delete next[sessionId];
+        return next;
+      });
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
+
+  // Heartbeat while a chat is open — tells everyone else's list to highlight it. Renewed
+  // every 20s (server treats anything older than 45s as stale and clears it on its own,
+  // covering a crashed tab or lost connection); an explicit leave fires immediately on
+  // switching away or closing, so the highlight doesn't linger for the ~45s window that
+  // safety-net sweep exists for.
+  useEffect(() => {
+    if (!selectedId) return;
+    sendPresenceHeartbeat(selectedId).catch(() => {});
+    const interval = setInterval(() => sendPresenceHeartbeat(selectedId).catch(() => {}), 20000);
+    return () => {
+      clearInterval(interval);
+      leavePresence(selectedId).catch(() => {});
+    };
+  }, [selectedId]);
 
   // Fetches, one time each, the original message behind any quote-reply that isn't in
   // the currently-loaded page — a ref (not quoteCache itself) tracks "already tried" so
@@ -985,6 +1032,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           {conversations.map((c) => {
             const name = c.customerName || c.phone || c.sessionId.slice(0, 12);
             const unread = c.unreadCount ?? 0;
+            // Someone (possibly me, on another tab/device) currently has this chat open —
+            // see the presence effects above. Local selection always wins visually; my own
+            // presence elsewhere gets a neutral dark tint, everyone else gets their own
+            // avatar color, low-opacity so the text underneath stays readable.
+            const presence = presenceBySession[c.sessionId];
+            const isMyPresence = presence?.userId === user.id;
+            const isSelected = c.sessionId === selectedId;
             return (
               <button
                 key={c.sessionId}
@@ -996,9 +1050,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     setConversations((prev) => prev.map((x) => (x.sessionId === c.sessionId ? { ...x, unreadCount: 0 } : x)));
                   }
                 }}
+                title={presence && !isSelected ? `${presence.fullName || 'Alguien'} tiene este chat abierto` : undefined}
                 className={`flex w-full items-center gap-3 border-b border-line-soft px-4 py-3 text-left transition-colors ${
-                  c.sessionId === selectedId ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                  isSelected
+                    ? 'bg-accent-soft'
+                    : isMyPresence
+                      ? 'bg-black/10 dark:bg-white/15'
+                      : presence
+                        ? ''
+                        : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                 }`}
+                style={presence && !isMyPresence && !isSelected ? { backgroundColor: hexToRgba(colorFor(presence.fullName), 0.14) } : undefined}
               >
                 <Avatar name={name} />
                 <div className="min-w-0 flex-1">

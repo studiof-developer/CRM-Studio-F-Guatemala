@@ -7,6 +7,7 @@ import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { compressStoredAttachment } from '../attachmentCompression.js';
+import { broadcast } from '../events.js';
 
 // WhatsApp's own per-type caps (not ours) — checked again per-kind below, once we know
 // the file's mimetype. Multer's limit has to be a single outer bound before that, so it
@@ -534,6 +535,61 @@ router.get('/unread-count', async (req, res, next) => {
     `));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
+});
+
+// Who's currently looking at which chat — so two advisors don't both start answering
+// the same customer. In-process Map, not a DB table: this is purely ephemeral "right
+// now" state, gone the moment nobody's looking, so there's nothing worth persisting.
+// ponytail: single-instance only, like headerUploads (campaigns.js) — fine while this
+// app runs one backend replica (documented elsewhere as a real constraint already).
+// Keyed by phone/cleaned session id, matching what the frontend's conversation list
+// already uses as each row's identity.
+const presenceBySession = new Map(); // sessionId -> { userId, fullName, lastSeenAt }
+const PRESENCE_STALE_MS = 45000; // ~2 missed heartbeats (frontend pings every 20s)
+
+// Sweeps entries nobody's renewed — covers a closed tab, a lost connection, a crash —
+// anything that skips the explicit /presence/leave call. Broadcasts the same shape a
+// real "leave" would, so the frontend doesn't need two different code paths.
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, p] of presenceBySession) {
+    if (now - p.lastSeenAt > PRESENCE_STALE_MS) {
+      presenceBySession.delete(sessionId);
+      broadcast('presence_changes', JSON.stringify({ sessionId, userId: null }));
+    }
+  }
+}, 20000);
+
+// Snapshot for a client that just connected — SSE only carries future events, so a
+// browser tab opened after others already have chats up needs this once on load, then
+// stays current from presence_changes alone. Registered before /:sessionId for the same
+// reason as /search-all below.
+router.get('/presence', (req, res) => {
+  res.json(
+    [...presenceBySession.entries()].map(([sessionId, p]) => ({ sessionId, userId: p.userId, fullName: p.fullName }))
+  );
+});
+
+router.post('/:sessionId/presence', (req, res) => {
+  const sessionId = cleanSessionId(req.params.sessionId);
+  presenceBySession.set(sessionId, { userId: req.user.id, fullName: req.user.fullName, lastSeenAt: Date.now() });
+  broadcast('presence_changes', JSON.stringify({ sessionId, userId: req.user.id, fullName: req.user.fullName }));
+  res.status(204).end();
+});
+
+// A plain POST (not DELETE) so the frontend can fire this from navigator.sendBeacon on
+// tab close/navigation — sendBeacon only ever sends POST, and a beacon is the only way
+// to reliably get a "closing" signal out during unload.
+router.post('/:sessionId/presence/leave', (req, res) => {
+  const sessionId = cleanSessionId(req.params.sessionId);
+  const current = presenceBySession.get(sessionId);
+  // Only the advisor who holds it can clear it — otherwise a stale/delayed leave from
+  // whoever had it open two people ago could wipe the CURRENT viewer's highlight.
+  if (current && current.userId === req.user.id) {
+    presenceBySession.delete(sessionId);
+    broadcast('presence_changes', JSON.stringify({ sessionId, userId: null }));
+  }
+  res.status(204).end();
 });
 
 // Searches every conversation, not just whatever's currently open — WhatsApp's own

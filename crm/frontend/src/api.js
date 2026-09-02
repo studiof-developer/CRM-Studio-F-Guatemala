@@ -139,6 +139,21 @@ export async function takeConversation(sessionId) {
   return res.json();
 }
 
+// "Who's viewing what" — a heartbeat while a chat is open, so the conversation list can
+// highlight it for the rest of the team. Best-effort: a failure here shouldn't interrupt
+// reading/answering a chat, so callers swallow errors rather than surface them.
+export async function fetchPresenceSnapshot() {
+  const res = await apiFetch('/api/conversations/presence');
+  if (!res.ok) throw new Error('Error al cargar presencia');
+  return res.json();
+}
+export async function sendPresenceHeartbeat(sessionId) {
+  return apiFetch(`/api/conversations/${sessionId}/presence`, { method: 'POST' });
+}
+export async function leavePresence(sessionId) {
+  return apiFetch(`/api/conversations/${sessionId}/presence/leave`, { method: 'POST' });
+}
+
 export async function startConversation({ phone, fullName, address }) {
   const res = await apiFetch('/api/conversations', {
     method: 'POST',
