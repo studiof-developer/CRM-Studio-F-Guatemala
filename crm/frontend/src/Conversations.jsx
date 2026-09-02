@@ -1093,9 +1093,21 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       );
                     })()}
                     {c.ticketStatus === 'en_atencion' && (
-                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
-                        <Headset size={10} /> asesor
-                      </span>
+                      presence ? (
+                        // Whoever's actually looking at it right now, by name and in
+                        // their own color — same idea as the row tint, just here too.
+                        // Falls back to the generic "asesor" the moment nobody's in it.
+                        <span
+                          className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ backgroundColor: hexToRgba(colorFor(presence.fullName), 0.16), color: colorFor(presence.fullName) }}
+                        >
+                          <Headset size={10} /> {presence.fullName?.split(' ')[0] || 'asesor'}
+                        </span>
+                      ) : (
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
+                          <Headset size={10} /> asesor
+                        </span>
+                      )
                     )}
                     {c.ticketStatus === 'esperando_asesor' && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn">
