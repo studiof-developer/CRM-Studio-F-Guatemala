@@ -5,6 +5,7 @@ import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js
 import { compressImageBuffer } from '../imageCompression.js';
 import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
+import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
 
@@ -100,11 +101,14 @@ inboundRouter.post('/', async (req, res, next) => {
     // auto-mark" flag the text-keyword trigger sets (db/init/032), just raised from here
     // instead of a trigger since inbound media already passes through this route (n8n
     // writes plain text straight into Postgres with no Node hook, but forwards media
-    // here for us to download/store).
+    // here for us to download/store). Only while the customer is already in Medio de
+    // pago, though — a photo at any earlier stage is much more likely to be a product
+    // reference ("quiero esta blusa") than a receipt, and flagging those as a possible
+    // payment would just be noise the advisor has to keep dismissing.
     if (kind === 'image') {
       await pool.query(
-        `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
-         WHERE whatsapp_number = $1 AND paid_locked = false`,
+        `UPDATE customers AS c SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
+         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
         [phone, 'El cliente envió una imagen (posible comprobante de pago)']
       );
     }

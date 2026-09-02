@@ -37,7 +37,11 @@ BEGIN
   END IF;
 
   IF v_type = 'human' THEN
-    IF v_content !~* '(ya\s+(pagu[eé]|deposit[eé]|transfer[ií])|comprobante|pago\s+(realizado|hecho)|(ya\s+)?(esta|está)\s+pagado|listo\s+el\s+pago)' THEN
+    -- Broader than just "ya transferí" glued together — real messages are "ya hice la
+    -- transferencia", "ya realicé el pago", etc., so the verb and the "ya" don't have to
+    -- be adjacent, and the payment-method nouns (transferencia/depósito) alone are
+    -- enough too, not just their verb forms.
+    IF v_content !~* '(ya\s+\w+\s+(el|la)\s+(pago|transferencia|dep[oó]sito)|ya\s+(pagu[eé]|deposit[eé]|transfer[ií])|transferencia|dep[oó]sito|comprobante|pago\s+(realizado|hecho)|(ya\s+)?(esta|está)\s+pagado|listo\s+el\s+pago)' THEN
       RETURN NEW;
     END IF;
     v_reason := 'El cliente escribió: "' || left(v_content, 120) || '"';
