@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
 import Select from './components/Select.jsx';
@@ -256,6 +256,35 @@ function UnansweredTab({ onOpenConversation }) {
       .catch(() => showError('No se pudo copiar — tu navegador puede estar bloqueando el portapapeles'));
   }
 
+  // A .csv opens straight in Excel (double-click, no import dialog) without needing an
+  // xlsx-writing library in the bundle for what's otherwise a plain flat table.
+  function downloadExcel() {
+    const headers = ['Cliente', 'Teléfono', 'Hora de entrada', 'Descuento', 'Último mensaje', 'Esperando desde', 'Mensajes en el chat'];
+    const lines = rows.map((r) => {
+      const pct = discountFor(r.firstMessageAt);
+      return [
+        r.fullName ?? '',
+        r.phone,
+        formatTime(r.firstMessageAt),
+        pct != null ? `${pct}%` : 'Por definir',
+        r.lastMessage ?? '',
+        formatWait(r.lastMessageAt),
+        r.messageCount,
+      ];
+    });
+    const csv = [headers, ...lines]
+      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    // Leading BOM so Excel reads the UTF-8 accents/ñ correctly instead of guessing wrong.
+    const blob = new Blob([String.fromCharCode(0xfeff) + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sin_responder_${from}_a_${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -281,13 +310,22 @@ function UnansweredTab({ onOpenConversation }) {
         </label>
         <span className="text-xs text-greige-ink">{rows.length} clientes en Frío · más de 24h sin respuesta</span>
         {rows.length > 0 && (
-          <button
-            type="button"
-            onClick={copyPhones}
-            className="ml-auto flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
-          >
-            <Copy size={12} /> Copiar números para difusión
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadExcel}
+              className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+            >
+              <Download size={12} /> Descargar Excel
+            </button>
+            <button
+              type="button"
+              onClick={copyPhones}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+            >
+              <Copy size={12} /> Copiar números para difusión
+            </button>
+          </div>
         )}
       </div>
 
@@ -324,7 +362,7 @@ function UnansweredTab({ onOpenConversation }) {
                     <td className="px-4 py-3 font-mono text-xs text-greige-ink">{r.phone}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatTime(r.firstMessageAt)}</td>
                     <td className="px-4 py-3">
-                      {pct != null ? <Badge variant="success">{pct}% off</Badge> : <span className="text-greige-ink">—</span>}
+                      {pct != null ? <Badge variant="success">{pct}% off</Badge> : <Badge variant="warning">Por definir</Badge>}
                     </td>
                     <td className="max-w-xs truncate px-4 py-3 text-greige-ink" title={r.lastMessage ?? ''}>{r.lastMessage ?? '—'}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-danger">{formatWait(r.lastMessageAt)}</td>
