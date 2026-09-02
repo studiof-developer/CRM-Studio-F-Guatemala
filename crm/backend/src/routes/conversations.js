@@ -12,7 +12,7 @@ import { compressStoredAttachment } from '../attachmentCompression.js';
 // the file's mimetype. Multer's limit has to be a single outer bound before that, so it
 // uses the largest of the three (documents) rather than an arbitrary smaller number that
 // would reject a valid, under-the-WhatsApp-limit document before it even reaches that check.
-const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
+export const WHATSAPP_MAX_BYTES = { image: 5 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
 const WHATSAPP_KIND_LABEL = { image: 'imágenes', audio: 'audios', document: 'documentos' };
 
 // Request coalescing for the two heaviest, most-frequently-polled reads (the list and

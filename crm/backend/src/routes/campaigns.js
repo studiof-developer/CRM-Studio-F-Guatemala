@@ -5,11 +5,15 @@ import multer from 'multer';
 import { pool } from '../db.js';
 import * as whatsapp from '../whatsapp.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
-import { findConversationThread, MIME_KIND } from './conversations.js';
+import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+// Was capped at a flat 5MB back when a header could only ever be an IMAGE (WhatsApp's own
+// image limit) — now that DOCUMENT headers (e.g. a PDF catalog) are supported too, this
+// needs to allow up to whatever the largest WhatsApp media type permits, same reasoning
+// as conversations.js's own attachment upload limit.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.max(...Object.values(WHATSAPP_MAX_BYTES)) } });
 
 // Maps an opaque upload token to the file this backend itself wrote to disk. Never let
 // a client hand back a raw file path to store in message_attachments — GET
