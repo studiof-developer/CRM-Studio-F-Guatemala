@@ -20,6 +20,9 @@ const TEMP_OPTIONS = [
   ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
 ];
 
+// Same 7-15 digit rule the backend uses to recognise a phone (see campaigns.js).
+const PHONE_RE = /^\d{7,15}$/;
+
 const STATUS_META = {
   sent: { label: 'Enviado', className: 'text-greige-ink' },
   delivered: { label: 'Recibido', className: 'text-ink' },
@@ -258,8 +261,47 @@ function NewCampaignModal({ onClose, onSent }) {
   // to recognise a phone. Kept separate from addManual: this one doesn't exist as a
   // customer, so it's added with a synthetic id and created for real only on send.
   const trimmedQuery = manualQuery.trim();
-  const queryIsPhone = /^\d{7,15}$/.test(trimmedQuery);
+  const queryIsPhone = PHONE_RE.test(trimmedQuery);
   const queryAlreadyPicked = pickedIds.has(`new:${trimmedQuery}`) || manualResults.some((r) => r.phone === trimmedQuery);
+
+  // Pasting a whole column copied from Excel — one number per line (sometimes with a
+  // trailing comma/semicolon if it came out of a CSV instead). A single-value paste
+  // still goes through the normal input so the existing search-as-you-type flow isn't
+  // disturbed; this only takes over once there's clearly more than one number involved.
+  // No existence check against current customers here — createCampaign's newRecipients
+  // already upserts by phone (see backend), so an already-known number just resolves to
+  // its real customer server-side, same as if it had been found and clicked here.
+  function handleManualPaste(e) {
+    const text = e.clipboardData?.getData('text');
+    if (!text) return;
+    const lines = text.split(/[\r\n,;]+/).map((s) => s.trim()).filter(Boolean);
+    if (lines.length < 2) return; // let the browser's default single-value paste happen
+
+    e.preventDefault();
+    const known = new Set(manualPicked.map((p) => p.phone));
+    const toAdd = [];
+    let duplicates = 0;
+    const invalid = [];
+    for (const raw of lines) {
+      const digits = raw.replace(/\D/g, '');
+      // A bare 8-digit number is the local Guatemala convention (no country code) — every
+      // number in this app otherwise carries the 502 prefix, so that's what WhatsApp needs.
+      const phone = digits.length === 8 ? `502${digits}` : digits;
+      if (!PHONE_RE.test(phone)) { invalid.push(raw); continue; }
+      if (known.has(phone)) { duplicates++; continue; }
+      known.add(phone);
+      toAdd.push({ id: `new:${phone}`, phone, fullName: null, isNew: true });
+    }
+    if (toAdd.length) setManualPicked((prev) => [...prev, ...toAdd]);
+    setManualQuery('');
+    setManualResults([]);
+    const parts = [];
+    if (toAdd.length) parts.push(`${toAdd.length} número(s) agregado(s)`);
+    if (duplicates) parts.push(`${duplicates} ya estaba(n) en la lista`);
+    if (invalid.length) parts.push(`${invalid.length} no se reconoció(eron): ${invalid.slice(0, 3).join(', ')}${invalid.length > 3 ? '…' : ''}`);
+    if (invalid.length) showError(parts.join(' · '));
+    else if (toAdd.length) showSuccess(parts.join(' · '));
+  }
 
   function addNewPhone(phone, fullName) {
     setManualPicked((prev) => [...prev, { id: `new:${phone}`, phone, fullName: fullName.trim() || null, isNew: true }]);
@@ -399,13 +441,16 @@ function NewCampaignModal({ onClose, onSent }) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Agregar clientes puntuales (por nombre o teléfono)</label>
+            <label className="mb-1.5 block text-xs font-medium text-greige-ink">
+              Agregar clientes puntuales (por nombre o teléfono) — o pega una columna de números copiada de Excel
+            </label>
             <div className="relative">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-greige" />
               <input
                 value={manualQuery}
                 onChange={(e) => setManualQuery(e.target.value)}
-                placeholder="ej. 50255529660 o Erika"
+                onPaste={handleManualPaste}
+                placeholder="ej. 50255529660, Erika, o pega una columna de números"
                 className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
               />
             </div>
