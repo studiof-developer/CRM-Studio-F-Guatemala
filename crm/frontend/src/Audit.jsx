@@ -40,6 +40,25 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatTime(iso) {
+  return iso ? new Date(iso).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '—';
+}
+
+// FASHION TIME promo tiers, keyed by the hour the customer's first message (the pauta
+// click, for an ad-driven lead) came in — earlier in the day gets the bigger discount.
+// Nothing after 21:00 has an assigned tier; shown as "—" rather than guessing one.
+const DISCOUNT_TIERS = [
+  { maxMinutes: 13 * 60, pct: 60 },
+  { maxMinutes: 17 * 60, pct: 50 },
+  { maxMinutes: 21 * 60, pct: 40 },
+];
+function discountFor(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const minutes = d.getHours() * 60 + d.getMinutes();
+  return DISCOUNT_TIERS.find((t) => minutes <= t.maxMinutes)?.pct ?? null;
+}
+
 export default function Audit({ onOpenConversation }) {
   const [tab, setTab] = useState('access');
 
@@ -282,11 +301,13 @@ function UnansweredTab({ onOpenConversation }) {
       {(loading || rows.length > 0) && (
         <div className="overflow-hidden rounded-2xl border border-line bg-paper">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
                 <tr>
                   <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Teléfono</th>
+                  <th className="px-4 py-3 font-medium">Hora de entrada</th>
+                  <th className="px-4 py-3 font-medium">Descuento</th>
                   <th className="px-4 py-3 font-medium">Último mensaje del cliente</th>
                   <th className="px-4 py-3 font-medium">Esperando desde</th>
                   <th className="px-4 py-3 font-medium">Mensajes en el chat</th>
@@ -294,11 +315,17 @@ function UnansweredTab({ onOpenConversation }) {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
-                {!loading && rows.map((r) => (
+                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
+                {!loading && rows.map((r) => {
+                  const pct = discountFor(r.firstMessageAt);
+                  return (
                   <tr key={r.phone} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3 text-ink">{r.fullName ?? '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-greige-ink">{r.phone}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatTime(r.firstMessageAt)}</td>
+                    <td className="px-4 py-3">
+                      {pct != null ? <Badge variant="success">{pct}% off</Badge> : <span className="text-greige-ink">—</span>}
+                    </td>
                     <td className="max-w-xs truncate px-4 py-3 text-greige-ink" title={r.lastMessage ?? ''}>{r.lastMessage ?? '—'}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-danger">{formatWait(r.lastMessageAt)}</td>
                     <td className="px-4 py-3 text-ink">{r.messageCount}</td>
@@ -312,7 +339,8 @@ function UnansweredTab({ onOpenConversation }) {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

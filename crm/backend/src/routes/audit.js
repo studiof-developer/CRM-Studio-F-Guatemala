@@ -142,7 +142,10 @@ router.get('/unanswered', async (req, res, next) => {
       `SELECT
          c.id AS customer_id, c.full_name, c.whatsapp_number AS phone,
          c.last_customer_message_at, c.last_customer_message,
-         (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count
+         (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count,
+         -- For someone who came in through an ad click, this IS the pauta message —
+         -- WhatsApp attaches the referral context to that very first inbound message.
+         (SELECT min(h.created_at) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'type' = 'human') AS first_message_at
        FROM customers c
        LEFT JOIN LATERAL (
          SELECT status FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
@@ -169,6 +172,7 @@ router.get('/unanswered', async (req, res, next) => {
       fullName: r.full_name,
       lastMessageAt: r.last_customer_message_at,
       lastMessage: r.last_customer_message,
+      firstMessageAt: r.first_message_at,
       messageCount: Number(r.message_count),
     })));
   } catch (err) { next(err); }
