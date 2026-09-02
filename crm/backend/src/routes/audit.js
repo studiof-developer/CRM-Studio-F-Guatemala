@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { findCustomerBySessionId, PHONE_RE } from './conversations.js';
+import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
 
@@ -111,11 +112,16 @@ router.get('/ai-decisions', async (req, res, next) => {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Per-message, not just "is this customer currently awaiting a reply" — a customer who
-// got answered for an earlier message but then sent another that sat unanswered until
-// the range closed (even if picked up later, after `to`) still counts. Guatemala never
-// observes DST, so a fixed -06 offset for the day boundaries is always correct — same
-// assumption the dashboard snapshot's 7am refresh already relies on.
+// "Currently still unanswered", not "was unanswered at some point in the range" — a
+// customer who got a late reply already has awaiting_reply flipped back to false by the
+// trigger that maintains it (031), so they drop off this list on their own the moment
+// they're properly attended, however late. The >24h floor is deliberate too: this feeds
+// a "send these people a broadcast" action, so a message that's only been sitting for an
+// hour shouldn't be swept up with genuinely abandoned ones. message_count is returned
+// (not filtered on) so an admin can judge "poca conversación" themselves rather than
+// this guessing an arbitrary cutoff. Guatemala never observes DST, so a fixed -06 offset
+// for the day boundaries is always correct — same assumption the dashboard snapshot's
+// 7am refresh already relies on.
 router.get('/unanswered', async (req, res, next) => {
   try {
     const { from, to } = req.query;
@@ -130,41 +136,28 @@ router.get('/unanswered', async (req, res, next) => {
     }
 
     const { rows } = await pool.query(
-      `WITH customer_msgs AS (
-         SELECT session_id, id, created_at
-         FROM n8n_chat_histories
-         WHERE message->>'type' = 'human'
-           AND created_at >= $1::timestamptz AND created_at < $2::timestamptz
-       ),
-       sin_responder AS (
-         SELECT cm.session_id, cm.created_at
-         FROM customer_msgs cm
-         WHERE NOT EXISTS (
-           SELECT 1 FROM n8n_chat_histories h2
-           WHERE h2.session_id = cm.session_id
-             AND h2.message->>'type' = 'ai'
-             AND h2.created_at > cm.created_at
-             AND h2.created_at < $2::timestamptz
-         )
-       )
-       SELECT
-         split_part(s.session_id, '__', 1) AS phone,
-         c.id AS customer_id,
-         c.full_name,
-         min(s.created_at) AS first_unanswered_at,
-         count(*) AS unanswered_count
-       FROM sin_responder s
-       LEFT JOIN customers c ON c.whatsapp_number = split_part(s.session_id, '__', 1)
-       GROUP BY split_part(s.session_id, '__', 1), c.id, c.full_name
-       ORDER BY first_unanswered_at ASC`,
+      `SELECT
+         c.id AS customer_id, c.full_name, c.whatsapp_number AS phone,
+         c.last_customer_message_at, c.last_customer_message,
+         (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count
+       FROM customers c
+       WHERE c.awaiting_reply = true
+         AND c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
+         AND c.last_customer_message_at <= now() - interval '24 hours'
+         -- Someone already in Cotización or further along got real follow-up already
+         -- (even if the very last reply was late) — this list is for genuinely cold,
+         -- never-really-engaged leads, not anyone mid-negotiation.
+         AND (${EFFECTIVE_STATUS_SQL}) = 'frio'
+       ORDER BY c.last_customer_message_at ASC`,
       [fromTs.toISOString(), toTs.toISOString()]
     );
     res.json(rows.map((r) => ({
       phone: r.phone,
       customerId: r.customer_id,
       fullName: r.full_name,
-      firstUnansweredAt: r.first_unanswered_at,
-      unansweredCount: Number(r.unanswered_count),
+      lastMessageAt: r.last_customer_message_at,
+      lastMessage: r.last_customer_message,
+      messageCount: Number(r.message_count),
     })));
   } catch (err) { next(err); }
 });

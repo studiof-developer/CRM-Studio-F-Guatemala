@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
 import Select from './components/Select.jsx';
+import { showSuccess, showError } from './components/Toast.jsx';
+import { formatWait } from './lib/sla.js';
 
 // Data-access actions are tied to a customer record; account actions are not
 // (their "Cliente" column shows an em dash) — grouped and color-coded so the
@@ -208,9 +210,10 @@ function isoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
-// Per-message, not "still waiting right now" — a customer who got answered once but
-// then sent another message that sat unanswered until the range closed shows up too,
-// even if it's since been picked up. See GET /api/audit/unanswered for the exact rule.
+// Currently still unanswered (not "was unanswered at some point") and waiting more than
+// 24h — this feeds sending these people a broadcast, so a customer who already got a
+// late reply has already dropped off (see GET /api/audit/unanswered). message_count is
+// shown, not filtered, so an admin can judge "poca conversación" case by case.
 function UnansweredTab({ onOpenConversation }) {
   const [from, setFrom] = useState(() => isoDate(new Date(Date.now() - 2 * 86400000)));
   const [to, setTo] = useState(() => isoDate(new Date()));
@@ -226,6 +229,13 @@ function UnansweredTab({ onOpenConversation }) {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [from, to]);
+
+  function copyPhones() {
+    const phones = rows.map((r) => r.phone).join('\n');
+    navigator.clipboard.writeText(phones)
+      .then(() => showSuccess(`${rows.length} número(s) copiado(s) — pegalos en Difusión → Nueva difusión`))
+      .catch(() => showError('No se pudo copiar — tu navegador puede estar bloqueando el portapapeles'));
+  }
 
   return (
     <div>
@@ -250,37 +260,48 @@ function UnansweredTab({ onOpenConversation }) {
             className="rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
           />
         </label>
-        <span className="text-xs text-greige-ink">{rows.length} clientes</span>
+        <span className="text-xs text-greige-ink">{rows.length} clientes en Frío · más de 24h sin respuesta</span>
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={copyPhones}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+          >
+            <Copy size={12} /> Copiar números para difusión
+          </button>
+        )}
       </div>
 
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
       {!error && !loading && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-greige-ink">
-          Nadie se quedó sin respuesta en ese rango de fechas.
+          Nadie en Frío lleva más de 24h sin respuesta en ese rango de fechas.
         </p>
       )}
 
       {(loading || rows.length > 0) && (
         <div className="overflow-hidden rounded-2xl border border-line bg-paper">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
                 <tr>
                   <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Teléfono</th>
-                  <th className="px-4 py-3 font-medium">Primer mensaje sin responder</th>
-                  <th className="px-4 py-3 font-medium">Mensajes sin responder</th>
+                  <th className="px-4 py-3 font-medium">Último mensaje del cliente</th>
+                  <th className="px-4 py-3 font-medium">Esperando desde</th>
+                  <th className="px-4 py-3 font-medium">Mensajes en el chat</th>
                   <th className="px-4 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={5} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
+                {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
                 {!loading && rows.map((r) => (
                   <tr key={r.phone} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3 text-ink">{r.fullName ?? '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-greige-ink">{r.phone}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.firstUnansweredAt)}</td>
-                    <td className="px-4 py-3 text-ink">{r.unansweredCount}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-greige-ink" title={r.lastMessage ?? ''}>{r.lastMessage ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-danger">{formatWait(r.lastMessageAt)}</td>
+                    <td className="px-4 py-3 text-ink">{r.messageCount}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
