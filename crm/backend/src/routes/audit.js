@@ -149,16 +149,17 @@ router.get('/unanswered', async (req, res, next) => {
        ) t ON true
        WHERE c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
          AND c.last_customer_message_at <= now() - interval '24 hours'
-         -- Someone already in Cotización or further along got real follow-up already
-         -- (even if the very last reply was late) — this list is for genuinely cold,
-         -- never-really-engaged leads, not anyone mid-negotiation.
-         AND (${EFFECTIVE_STATUS_SQL}) = 'frio'
-         -- The customer's MOST RECENT ticket, not "ever in their whole history" — a
-         -- ticket an advisor closed months ago on a different inquiry shouldn't exclude
-         -- someone whose CURRENT conversation never got that far. No ticket at all means
-         -- it never even escalated past the bot; esperando_asesor means it escalated but
-         -- nobody claimed it — both are exactly "no atendidos" in the Pipeline's terms.
-         AND (t.status IS NULL OR t.status = 'esperando_asesor')
+         -- Two different populations, two different bars. "No atendidos" (no ticket at
+         -- all — never escalated past the bot — or esperando_asesor — escalated, nobody
+         -- claimed it) shows up on the 24h+date filter alone, same as the Pipeline's own
+         -- bucket for it, no extra condition. A ticket that WAS claimed (en_atencion)
+         -- only counts here if it never developed past Frío either — that's the "se
+         -- tomó pero no se le dio seguimiento" case; if it's Cotización or further the
+         -- advisor DID make real progress, just slowly, and doesn't belong in this list.
+         AND (
+           t.status IS NULL OR t.status = 'esperando_asesor'
+           OR (t.status = 'en_atencion' AND (${EFFECTIVE_STATUS_SQL}) = 'frio')
+         )
        ORDER BY c.last_customer_message_at ASC`,
       [fromTs.toISOString(), toTs.toISOString()]
     );
