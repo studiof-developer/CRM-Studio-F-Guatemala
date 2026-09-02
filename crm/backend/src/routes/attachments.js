@@ -96,6 +96,19 @@ inboundRouter.post('/', async (req, res, next) => {
       buffer,
     });
 
+    // A photo from the customer is often a payment receipt — same "suggest, don't
+    // auto-mark" flag the text-keyword trigger sets (db/init/032), just raised from here
+    // instead of a trigger since inbound media already passes through this route (n8n
+    // writes plain text straight into Postgres with no Node hook, but forwards media
+    // here for us to download/store).
+    if (kind === 'image') {
+      await pool.query(
+        `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
+         WHERE whatsapp_number = $1 AND paid_locked = false`,
+        [phone, 'El cliente envió una imagen (posible comprobante de pago)']
+      );
+    }
+
     res.status(201).json({ attachmentId, sessionId: cleanSessionId(sessionId) });
   } catch (err) { next(err); }
 });

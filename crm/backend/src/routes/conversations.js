@@ -192,6 +192,7 @@ async function findCustomerByPhone(phone) {
     `SELECT c.id, c.full_name, c.zone, c.department, c.municipio, c.preferred_line, c.preferred_size, c.purchase_frequency, c.address,
             c.dpi, c.email, c.birth_date,
             c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
+            c.payment_suggested_at, c.payment_suggestion_reason, c.payment_suggestion_method,
             t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
             e.nombre AS erp_nombre, e.venta_neta_total AS erp_venta_neta_total,
             e.facturas_totales AS erp_facturas_totales, e.unidades_totales AS erp_unidades_totales,
@@ -422,7 +423,7 @@ router.get('/', async (req, res, next) => {
         GROUP BY th.thread_key
       )
       SELECT l.thread_key, l.id AS last_id, l.message, l.created_at, cnt.message_count,
-             l.phone, c.full_name, c.zone, c.paid_locked, t.status AS ticket_status,
+             l.phone, c.full_name, c.zone, c.paid_locked, c.payment_suggested_at, t.status AS ticket_status,
              CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
              COALESCE(uc.unread_count, 0) AS unread_count,
              att.kind AS last_attachment_kind, att.filename AS last_attachment_filename
@@ -484,6 +485,7 @@ router.get('/', async (req, res, next) => {
       enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
       temperature: r.temperature,
       paidLocked: r.paid_locked ?? false,
+      paymentSuggested: r.payment_suggested_at != null,
       unreadCount: Number(r.unread_count),
     })));
   } catch (err) { next(err); }
@@ -642,6 +644,9 @@ router.get('/:sessionId', async (req, res, next) => {
       },
       paidLocked: customer?.paid_locked ?? false,
       paidMethod: customer?.paid_method ?? null,
+      paymentSuggestedAt: customer?.payment_suggested_at ?? null,
+      paymentSuggestionReason: customer?.payment_suggestion_reason ?? null,
+      paymentSuggestionMethod: customer?.payment_suggestion_method ?? null,
       phone,
       hasMoreOlder,
       messages: messages.map((r) => {

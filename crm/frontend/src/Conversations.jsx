@@ -849,6 +849,19 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
 
+  // "False alarm" for the payment-suggestion banner — the customer said something that
+  // matched the trigger's keywords but wasn't actually a payment. Doesn't touch
+  // paidLocked at all, just clears the flag so the banner stops showing.
+  async function handleDismissPaymentSuggestion() {
+    if (!thread?.customerId) return;
+    try {
+      await updateCustomerTags(thread.customerId, { dismissPaymentSuggestion: true });
+      await loadThread();
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
   async function handleStartConversation() {
     setNewChatBusy(true);
     try {
@@ -1002,6 +1015,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     {unread > 0 && (
                       <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
                         {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
+                    {c.paymentSuggested && !c.paidLocked && (
+                      <span title="Posible pago detectado" className="flex shrink-0 items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-[10px] font-semibold text-success">
+                        <CircleDollarSign size={10} /> pago?
                       </span>
                     )}
                     {c.temperature && (() => {
@@ -1204,6 +1222,34 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {thread.paymentSuggestedAt && !thread.paidLocked && (
+              // Set by a Postgres trigger watching for confirmation phrases/a customer
+              // photo (db/init/032) — a suggestion only, never auto-marks paid_locked.
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-success-bg bg-success-bg/40 px-5 py-2.5">
+                <CircleDollarSign size={15} className="shrink-0 text-success" />
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink">
+                  <span className="font-semibold">Posible pago detectado.</span>{' '}
+                  {thread.paymentSuggestionReason}
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setPaidMethod(thread.paymentSuggestionMethod || ''); setConfirmPaidOpen(true); }}
+                    className="rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                  >
+                    Marcar como Pagado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissPaymentSuggestion}
+                    className="rounded-full px-2.5 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08]"
+                  >
+                    Descartar
+                  </button>
+                </div>
               </div>
             )}
 

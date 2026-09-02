@@ -191,7 +191,7 @@ router.patch('/:id/tags', async (req, res, next) => {
     const { rows: existing } = await pool.query(`SELECT id FROM customers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
 
-    const { manualStatus, paidLocked, paidMethod } = req.body ?? {};
+    const { manualStatus, paidLocked, paidMethod, dismissPaymentSuggestion } = req.body ?? {};
     if (manualStatus !== undefined && manualStatus !== null && !VALID_TEMPERATURES.includes(manualStatus)) {
       return res.status(400).json({ error: 'invalid manualStatus' });
     }
@@ -202,15 +202,26 @@ router.patch('/:id/tags', async (req, res, next) => {
       return res.status(400).json({ error: 'paidMethod is required when marking as paid' });
     }
 
+    // The payment-suggestion flag (set by a Postgres trigger watching for confirmation
+    // phrases/a customer photo — see db/init/032) is resolved the moment an advisor acts
+    // on it either way: confirming clears it because paidLocked just got set, dismissing
+    // clears it because the advisor said it was a false positive.
+    const clearSuggestion = paidLocked === true || dismissPaymentSuggestion === true;
+
     const { rows } = await pool.query(
       `UPDATE customers AS c SET
          manual_status = CASE WHEN $1 THEN $2 ELSE manual_status END,
          paid_locked = paid_locked OR COALESCE($3, false),
          paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END,
+         payment_suggested_at = CASE WHEN $6 THEN NULL ELSE payment_suggested_at END,
+         payment_suggestion_reason = CASE WHEN $6 THEN NULL ELSE payment_suggestion_reason END,
+         payment_suggestion_method = CASE WHEN $6 THEN NULL ELSE payment_suggestion_method END,
          updated_at = now()
        WHERE c.id = $4
-       RETURNING id, manual_status, paid_locked, paid_method, updated_at, ${EFFECTIVE_STATUS_SQL} AS temperature`,
-      [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id, paidMethod ?? null]
+       RETURNING id, manual_status, paid_locked, paid_method, updated_at,
+                 payment_suggested_at, payment_suggestion_reason, payment_suggestion_method,
+                 ${EFFECTIVE_STATUS_SQL} AS temperature`,
+      [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id, paidMethod ?? null, clearSuggestion]
     );
     res.json(rows[0]);
   } catch (err) { next(err); }
