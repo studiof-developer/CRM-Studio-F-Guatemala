@@ -115,13 +115,16 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // "No advisor ever really engaged", not "nobody replied at all" — the bot's own
 // automatic replies (a greeting, a catalog link, a canned "ya te atiende un asesor")
 // flip awaiting_reply off without a human ever actually touching the conversation, so
-// that flag alone undercounts real neglect. This checks for the literal absence of any
-// message stamped sentBy: 'advisor' anywhere in the customer's history instead. Frío
-// only, since Cotización/Medio de pago/etc. means the chat DID develop (a price got
-// quoted, 033) — this is for chats that never got that far. The >24h floor and date
-// range matter because this feeds a "send these people a broadcast" action. Guatemala
-// never observes DST, so a fixed -06 offset for the day boundaries is always correct —
-// same assumption the dashboard snapshot's 7am refresh already relies on.
+// that flag alone undercounts real neglect. This is exactly the Pipeline's own "No
+// atendidos" bucket (tickets.js's BUCKET_CASE_SQL: no ticket, or ticket still
+// esperando_asesor) checked against the customer's MOST RECENT ticket only — an advisor
+// closing an unrelated ticket months ago shouldn't exclude someone whose CURRENT
+// conversation never got that far. Frío only, since Cotización/Medio de pago/etc. means
+// the chat DID develop (a price got quoted, 033) — this is for chats that never got that
+// far. The >24h floor and date range matter because this feeds a "send these people a
+// broadcast" action. Guatemala never observes DST, so a fixed -06 offset for the day
+// boundaries is always correct — same assumption the dashboard snapshot's 7am refresh
+// already relies on.
 router.get('/unanswered', async (req, res, next) => {
   try {
     const { from, to } = req.query;
@@ -141,17 +144,21 @@ router.get('/unanswered', async (req, res, next) => {
          c.last_customer_message_at, c.last_customer_message,
          (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count
        FROM customers c
+       LEFT JOIN LATERAL (
+         SELECT status FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
+       ) t ON true
        WHERE c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
          AND c.last_customer_message_at <= now() - interval '24 hours'
          -- Someone already in Cotización or further along got real follow-up already
          -- (even if the very last reply was late) — this list is for genuinely cold,
          -- never-really-engaged leads, not anyone mid-negotiation.
          AND (${EFFECTIVE_STATUS_SQL}) = 'frio'
-         AND NOT EXISTS (
-           SELECT 1 FROM n8n_chat_histories h
-           WHERE h.session_id LIKE c.whatsapp_number || '%'
-             AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
-         )
+         -- The customer's MOST RECENT ticket, not "ever in their whole history" — a
+         -- ticket an advisor closed months ago on a different inquiry shouldn't exclude
+         -- someone whose CURRENT conversation never got that far. No ticket at all means
+         -- it never even escalated past the bot; esperando_asesor means it escalated but
+         -- nobody claimed it — both are exactly "no atendidos" in the Pipeline's terms.
+         AND (t.status IS NULL OR t.status = 'esperando_asesor')
        ORDER BY c.last_customer_message_at ASC`,
       [fromTs.toISOString(), toTs.toISOString()]
     );
