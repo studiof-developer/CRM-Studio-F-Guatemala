@@ -63,13 +63,21 @@ BEGIN
   -- Captures just the digits after "Q" (substring's first parenthesized group) and
   -- range-checks them — "Q" can show up glued to something that isn't really a garment
   -- price (an order code, a stray fragment), so this only counts it as a real quote when
-  -- the number falls in the range a clothing item actually sells for.
-  v_price := NULLIF(substring(v_content from 'Q\s?(\d{1,5})\b'), '')::NUMERIC;
+  -- the number falls in the range a clothing item actually sells for. No trailing \b: in
+  -- Postgres's regex flavor that means a literal backspace character, not "word
+  -- boundary" like in most languages — it would never match real text at all. Not
+  -- needed anyway: \d already can't blend into a following letter, and a run of more
+  -- than 5 digits just gets rejected by the BETWEEN check below instead.
+  v_price := NULLIF(substring(v_content from 'Q\s?(\d{1,5})'), '')::NUMERIC;
 
   -- Checked highest-first so a single message hitting both patterns (rare, but a
   -- message can quote a price AND ask how they want to pay) lands on the higher stage
   -- in one step instead of needing a second message to get there.
-  IF v_rank < 2 AND v_content ~* '(m[eé]todo\s+de\s+pago|medio\s+de\s+pago|c[oó]mo\s+(vas\s+a|deseas|quieres|prefieres)\s+pagar|(link|enlace)\s+(de|para)\s+(el\s+)?pago)' THEN
+  -- "NIT o DPI"/"completar tu envío" is the advisor collecting shipping and billing
+  -- data — the real-world workflow does this right alongside asking for the payment
+  -- method (often together with the Medios de Pago image, a separate signal), so it's
+  -- just as reliable a sign the sale is closing.
+  IF v_rank < 2 AND v_content ~* '(m[eé]todo\s+de\s+pago|medio\s+de\s+pago|c[oó]mo\s+(vas\s+a|deseas|quieres|prefieres)\s+pagar|(link|enlace)\s+(de|para)\s+(el\s+)?pago|completar\s+tu\s+env[ií]o|nit\s+o\s+dpi)' THEN
     v_new_status := 'caliente';
   ELSIF v_rank < 1 AND v_price IS NOT NULL AND v_price BETWEEN 0 AND 10000 THEN
     v_new_status := 'tibio';
