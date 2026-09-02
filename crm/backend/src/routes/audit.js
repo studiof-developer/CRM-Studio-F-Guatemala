@@ -112,16 +112,16 @@ router.get('/ai-decisions', async (req, res, next) => {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// "Currently still unanswered", not "was unanswered at some point in the range" — a
-// customer who got a late reply already has awaiting_reply flipped back to false by the
-// trigger that maintains it (031), so they drop off this list on their own the moment
-// they're properly attended, however late. The >24h floor is deliberate too: this feeds
-// a "send these people a broadcast" action, so a message that's only been sitting for an
-// hour shouldn't be swept up with genuinely abandoned ones. message_count is returned
-// (not filtered on) so an admin can judge "poca conversación" themselves rather than
-// this guessing an arbitrary cutoff. Guatemala never observes DST, so a fixed -06 offset
-// for the day boundaries is always correct — same assumption the dashboard snapshot's
-// 7am refresh already relies on.
+// "No advisor ever really engaged", not "nobody replied at all" — the bot's own
+// automatic replies (a greeting, a catalog link, a canned "ya te atiende un asesor")
+// flip awaiting_reply off without a human ever actually touching the conversation, so
+// that flag alone undercounts real neglect. This checks for the literal absence of any
+// message stamped sentBy: 'advisor' anywhere in the customer's history instead. Frío
+// only, since Cotización/Medio de pago/etc. means the chat DID develop (a price got
+// quoted, 033) — this is for chats that never got that far. The >24h floor and date
+// range matter because this feeds a "send these people a broadcast" action. Guatemala
+// never observes DST, so a fixed -06 offset for the day boundaries is always correct —
+// same assumption the dashboard snapshot's 7am refresh already relies on.
 router.get('/unanswered', async (req, res, next) => {
   try {
     const { from, to } = req.query;
@@ -141,13 +141,17 @@ router.get('/unanswered', async (req, res, next) => {
          c.last_customer_message_at, c.last_customer_message,
          (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count
        FROM customers c
-       WHERE c.awaiting_reply = true
-         AND c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
+       WHERE c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
          AND c.last_customer_message_at <= now() - interval '24 hours'
          -- Someone already in Cotización or further along got real follow-up already
          -- (even if the very last reply was late) — this list is for genuinely cold,
          -- never-really-engaged leads, not anyone mid-negotiation.
          AND (${EFFECTIVE_STATUS_SQL}) = 'frio'
+         AND NOT EXISTS (
+           SELECT 1 FROM n8n_chat_histories h
+           WHERE h.session_id LIKE c.whatsapp_number || '%'
+             AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+         )
        ORDER BY c.last_customer_message_at ASC`,
       [fromTs.toISOString(), toTs.toISOString()]
     );
