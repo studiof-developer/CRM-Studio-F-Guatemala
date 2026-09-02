@@ -5,7 +5,7 @@ import multer from 'multer';
 import { pool } from '../db.js';
 import * as whatsapp from '../whatsapp.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
-import { findConversationThread } from './conversations.js';
+import { findConversationThread, MIME_KIND } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 
 const router = Router();
@@ -65,9 +65,10 @@ function countBodyParams(template) {
 
 // Meta rejects the send outright if the template defines a media header and none is
 // attached — "(#132012) ... expected IMAGE, received UNKNOWN" — so the picker needs to
-// know up front whether it has to ask for one. Only IMAGE is supported for now; a
-// VIDEO/DOCUMENT header template will show clearly as unsupported rather than fail
-// silently at send time.
+// know up front whether it has to ask for one. IMAGE and DOCUMENT (e.g. a PDF catalog)
+// are supported; a VIDEO header template will show clearly as unsupported rather than
+// fail silently at send time.
+const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT'];
 function getHeaderFormat(template) {
   return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
 }
@@ -239,23 +240,25 @@ router.post('/:id/retry-failed', async (req, res, next) => {
     if (!failed.length) return res.status(400).json({ error: 'No hay envíos fallidos en esta difusión' });
 
     let headerMediaId = null;
-    if (headerFormat === 'IMAGE') {
+    let headerFilename = null;
+    if (SUPPORTED_HEADER_FORMATS.includes(headerFormat)) {
       const { rows: attRows } = await pool.query(
-        `SELECT a.file_path, a.mime_type FROM message_attachments a
+        `SELECT a.file_path, a.mime_type, a.filename FROM message_attachments a
          JOIN n8n_chat_histories h ON h.id = a.n8n_message_id
          WHERE h.message->'additional_kwargs'->>'campaignId' = $1 LIMIT 1`,
         [String(campaign.id)]
       );
       if (!attRows.length) {
-        return res.status(400).json({ error: 'No se encontró la imagen original de esta difusión — no se puede reintentar' });
+        return res.status(400).json({ error: 'No se encontró el archivo original de esta difusión — no se puede reintentar' });
       }
       const buffer = await fs.promises.readFile(attRows[0].file_path);
       headerMediaId = await whatsapp.uploadMedia(buffer, attRows[0].mime_type);
+      headerFilename = attRows[0].filename;
     }
 
     // Same respond-then-background pattern as a fresh send — the campaign detail view
     // is already SSE-driven, so each recipient's status flips live as retries land.
-    retryFailedRecipients(campaign.id, failed, campaign.template_name, campaign.template_language, bodyTemplate, paramCount, headerMediaId).catch((err) =>
+    retryFailedRecipients(campaign.id, failed, campaign.template_name, campaign.template_language, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename).catch((err) =>
       console.error(`campaign ${campaign.id} retry batch failed`, err)
     );
 
@@ -280,13 +283,13 @@ function renderBody(bodyTemplate, name) {
   return bodyTemplate.replace(/\{\{\d+\}\}/g, name);
 }
 
-async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment) {
+async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
   const params = Array(paramCount).fill(name);
   let sentWamid = null;
   let error = null;
   try {
-    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params, headerMediaId);
+    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params, headerMediaId, headerFormat, headerAttachment?.filename);
     sentWamid = result?.messages?.[0]?.id ?? null;
     if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
   } catch (err) {
@@ -319,7 +322,7 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   if (headerAttachment) {
     await linkExistingFile({
       n8nMessageId: rows[0].id,
-      kind: 'image',
+      kind: MIME_KIND(headerAttachment.mimeType),
       filename: headerAttachment.filename,
       mimeType: headerAttachment.mimeType,
       filePath: headerAttachment.filePath,
@@ -330,13 +333,13 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
 
 // Updates the recipient's existing row in place instead of inserting a new one — see the
 // retry-failed route for why (avoids double-counting the recipient in campaign stats).
-async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId) {
+async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename) {
   const name = firstName(fullName) || FALLBACK_TEMPLATE_NAME;
   const params = Array(paramCount).fill(name);
   let sentWamid = null;
   let error = null;
   try {
-    const result = await whatsapp.sendTemplate(phone, templateName, templateLanguage, params, headerMediaId);
+    const result = await whatsapp.sendTemplate(phone, templateName, templateLanguage, params, headerMediaId, headerFormat, headerFilename);
     sentWamid = result?.messages?.[0]?.id ?? null;
     if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
   } catch (err) {
@@ -363,18 +366,18 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   return !!sentWamid;
 }
 
-async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId) {
+async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename) {
   for (const r of failed) {
-    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId).catch((err) =>
+    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename).catch((err) =>
       console.error(`campaign ${campaignId} retry recipient ${r.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
   }
 }
 
-async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment) {
+async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
   for (const customer of audience) {
-    await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment).catch((err) =>
+    await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat).catch((err) =>
       console.error(`campaign ${campaignId} recipient ${customer.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
@@ -396,7 +399,7 @@ async function resolveTemplate(templateName, templateLanguage) {
   if (!template) return { error: 'La plantilla no existe o cambió' };
   if (template.status !== 'APPROVED') return { error: 'La plantilla no está activa en este momento' };
   const headerFormat = getHeaderFormat(template);
-  if (headerFormat && headerFormat !== 'IMAGE') {
+  if (headerFormat && !SUPPORTED_HEADER_FORMATS.includes(headerFormat)) {
     return { error: `Las plantillas con encabezado de tipo ${headerFormat} todavía no están soportadas` };
   }
   return {
@@ -423,14 +426,19 @@ router.post('/', async (req, res, next) => {
     const resolved = await resolveTemplate(templateName, templateLanguage);
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { paramCount, headerFormat, bodyTemplate } = resolved;
-    if (headerFormat === 'IMAGE' && !headerMediaId) {
-      return res.status(400).json({ error: 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar' });
+    const headerNeedsMedia = SUPPORTED_HEADER_FORMATS.includes(headerFormat);
+    if (headerNeedsMedia && !headerMediaId) {
+      return res.status(400).json({
+        error: headerFormat === 'DOCUMENT'
+          ? 'Esta plantilla necesita un documento de encabezado — súbelo antes de enviar'
+          : 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar',
+      });
     }
     // The token only ever resolves to a file this backend itself wrote — see the
     // headerUploads comment above for why a client-supplied path is never trusted here.
     const headerAttachment = headerImageToken ? headerUploads.get(headerImageToken) : null;
-    if (headerFormat === 'IMAGE' && !headerAttachment) {
-      return res.status(400).json({ error: 'La imagen subida ya no está disponible — vuelve a subirla e intenta de nuevo' });
+    if (headerNeedsMedia && !headerAttachment) {
+      return res.status(400).json({ error: 'El archivo subido ya no está disponible — vuelve a subirlo e intenta de nuevo' });
     }
 
     const cooldown = await getCooldownMap();
@@ -511,7 +519,7 @@ router.post('/', async (req, res, next) => {
     // Same pattern as every other outbound send in this app: respond once the audience
     // is locked in and stored, then let the actual WhatsApp calls happen in the
     // background instead of holding the request open for what could be minutes.
-    runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment).catch((err) =>
+    runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat).catch((err) =>
       console.error(`campaign ${campaignId} failed`, err)
     );
 

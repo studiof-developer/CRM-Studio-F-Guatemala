@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText } from 'lucide-react';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
@@ -198,6 +198,7 @@ function NewCampaignModal({ onClose, onSent }) {
   const [headerMediaId, setHeaderMediaId] = useState(null);
   const [headerImageToken, setHeaderImageToken] = useState(null);
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState(null);
+  const [headerFilename, setHeaderFilename] = useState(null);
   const [headerUploading, setHeaderUploading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -224,19 +225,25 @@ function NewCampaignModal({ onClose, onSent }) {
 
   const template = templates?.find((t) => `${t.name}__${t.language}` === templateKey);
   const pickedIds = new Set(manualPicked.map((p) => p.id));
-  const headerUnsupported = template?.headerFormat && template.headerFormat !== 'IMAGE';
-  const headerNeedsImage = template?.headerFormat === 'IMAGE';
+  const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT'];
+  const headerUnsupported = template?.headerFormat && !SUPPORTED_HEADER_FORMATS.includes(template.headerFormat);
+  const headerIsDocument = template?.headerFormat === 'DOCUMENT';
+  const headerNeedsMedia = template?.headerFormat === 'IMAGE' || headerIsDocument;
 
   function selectTemplate(key) {
     setTemplateKey(key);
     setHeaderMediaId(null);
     setHeaderImageToken(null);
     setHeaderPreviewUrl(null);
+    setHeaderFilename(null);
   }
 
   async function handleHeaderFile(file) {
     if (!file) return;
-    setHeaderPreviewUrl(URL.createObjectURL(file));
+    setHeaderFilename(file.name);
+    // A document doesn't get a thumbnail preview — just its filename (below) — so
+    // there's no point creating a throwaway blob URL for it.
+    if (!headerIsDocument) setHeaderPreviewUrl(URL.createObjectURL(file));
     setHeaderUploading(true);
     try {
       const { mediaId, headerImageToken: token } = await uploadCampaignHeaderMedia(file);
@@ -245,6 +252,7 @@ function NewCampaignModal({ onClose, onSent }) {
     } catch (err) {
       showError(err.message);
       setHeaderPreviewUrl(null);
+      setHeaderFilename(null);
     } finally {
       setHeaderUploading(false);
     }
@@ -311,7 +319,7 @@ function NewCampaignModal({ onClose, onSent }) {
   }
 
   const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
-  const canSend = !!template && !headerUnsupported && (!headerNeedsImage || (headerMediaId && !headerUploading))
+  const canSend = !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
     && (temperature || manualPicked.length > 0) && totalRecipients > 0;
 
   async function handleSend() {
@@ -376,30 +384,45 @@ function NewCampaignModal({ onClose, onSent }) {
             )}
             {headerUnsupported && (
               <p className="mt-2 text-xs font-medium text-danger">
-                Esta plantilla tiene un encabezado de tipo {template.headerFormat} — todavía no está soportado, solo imágenes.
+                Esta plantilla tiene un encabezado de tipo {template.headerFormat} — todavía no está soportado, solo imágenes y documentos.
               </p>
             )}
-            {headerNeedsImage && (
+            {headerNeedsMedia && (
               <div className="mt-2">
-                <label className="mb-1 block text-xs font-medium text-greige-ink">Imagen del encabezado (obligatoria)</label>
+                <label className="mb-1 block text-xs font-medium text-greige-ink">
+                  {headerIsDocument ? 'Documento del encabezado (obligatorio)' : 'Imagen del encabezado (obligatoria)'}
+                </label>
                 <div className="flex items-center gap-3">
-                  {headerPreviewUrl ? (
+                  {headerIsDocument ? (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-greige">
+                      <FileText size={18} />
+                    </span>
+                  ) : headerPreviewUrl ? (
                     <img src={headerPreviewUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
                   ) : (
                     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-greige">
                       <ImageIcon size={18} />
                     </span>
                   )}
-                  <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                    {headerUploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-                    {headerUploading ? 'Subiendo…' : headerMediaId ? 'Cambiar imagen' : 'Subir imagen'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleHeaderFile(e.target.files?.[0])}
-                    />
-                  </label>
+                  <div className="flex flex-col gap-1">
+                    <label className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                      {headerUploading ? <Loader2 size={13} className="animate-spin" /> : headerIsDocument ? <FileText size={13} /> : <ImageIcon size={13} />}
+                      {headerUploading
+                        ? 'Subiendo…'
+                        : headerMediaId
+                          ? (headerIsDocument ? 'Cambiar documento' : 'Cambiar imagen')
+                          : (headerIsDocument ? 'Subir documento (PDF)' : 'Subir imagen')}
+                      <input
+                        type="file"
+                        accept={headerIsDocument ? '.pdf,application/pdf' : 'image/*'}
+                        className="hidden"
+                        onChange={(e) => handleHeaderFile(e.target.files?.[0])}
+                      />
+                    </label>
+                    {headerIsDocument && headerFilename && (
+                      <span className="truncate text-[11px] text-greige-ink">{headerFilename}</span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -42,7 +42,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => cb(null, isAllowedAttachmentMime(file.mimetype)),
 });
 
-const MIME_KIND = (mime) => {
+export const MIME_KIND = (mime) => {
   if (mime.startsWith('image/')) return 'image';
   if (mime.startsWith('audio/')) return 'audio';
   return 'document';
