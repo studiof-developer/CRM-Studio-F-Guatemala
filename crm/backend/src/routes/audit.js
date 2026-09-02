@@ -109,4 +109,64 @@ router.get('/ai-decisions', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Per-message, not just "is this customer currently awaiting a reply" — a customer who
+// got answered for an earlier message but then sent another that sat unanswered until
+// the range closed (even if picked up later, after `to`) still counts. Guatemala never
+// observes DST, so a fixed -06 offset for the day boundaries is always correct — same
+// assumption the dashboard snapshot's 7am refresh already relies on.
+router.get('/unanswered', async (req, res, next) => {
+  try {
+    const { from, to } = req.query;
+    if (!DATE_RE.test(from ?? '') || !DATE_RE.test(to ?? '')) {
+      return res.status(400).json({ error: 'from and to (YYYY-MM-DD) required' });
+    }
+    const fromTs = new Date(`${from}T00:00:00-06:00`);
+    const toTs = new Date(`${to}T00:00:00-06:00`);
+    toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
+    if (Number.isNaN(fromTs) || Number.isNaN(toTs) || fromTs >= toTs) {
+      return res.status(400).json({ error: 'invalid date range' });
+    }
+
+    const { rows } = await pool.query(
+      `WITH customer_msgs AS (
+         SELECT session_id, id, created_at
+         FROM n8n_chat_histories
+         WHERE message->>'type' = 'human'
+           AND created_at >= $1::timestamptz AND created_at < $2::timestamptz
+       ),
+       sin_responder AS (
+         SELECT cm.session_id, cm.created_at
+         FROM customer_msgs cm
+         WHERE NOT EXISTS (
+           SELECT 1 FROM n8n_chat_histories h2
+           WHERE h2.session_id = cm.session_id
+             AND h2.message->>'type' = 'ai'
+             AND h2.created_at > cm.created_at
+             AND h2.created_at < $2::timestamptz
+         )
+       )
+       SELECT
+         split_part(s.session_id, '__', 1) AS phone,
+         c.id AS customer_id,
+         c.full_name,
+         min(s.created_at) AS first_unanswered_at,
+         count(*) AS unanswered_count
+       FROM sin_responder s
+       LEFT JOIN customers c ON c.whatsapp_number = split_part(s.session_id, '__', 1)
+       GROUP BY split_part(s.session_id, '__', 1), c.id, c.full_name
+       ORDER BY first_unanswered_at ASC`,
+      [fromTs.toISOString(), toTs.toISOString()]
+    );
+    res.json(rows.map((r) => ({
+      phone: r.phone,
+      customerId: r.customer_id,
+      fullName: r.full_name,
+      firstUnansweredAt: r.first_unanswered_at,
+      unansweredCount: Number(r.unanswered_count),
+    })));
+  } catch (err) { next(err); }
+});
+
 export default router;

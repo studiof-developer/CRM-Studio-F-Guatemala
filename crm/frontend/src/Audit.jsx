@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff } from 'lucide-react';
-import { fetchAccessAudit, fetchAiDecisions } from './api.js';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning } from 'lucide-react';
+import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
 import Select from './components/Select.jsx';
 
@@ -38,7 +38,7 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export default function Audit() {
+export default function Audit({ onOpenConversation }) {
   const [tab, setTab] = useState('access');
 
   return (
@@ -49,10 +49,11 @@ export default function Audit() {
           <p className="mt-1 text-sm text-greige-ink">Trazabilidad de accesos a datos y de las decisiones que toma la IA.</p>
         </div>
 
-        <div className="inline-flex rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
+        <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
           {[
             { key: 'access', label: 'Accesos a datos', icon: Eye },
             { key: 'ai', label: 'Decisiones de la IA', icon: Bot },
+            { key: 'unanswered', label: 'Sin responder', icon: MailWarning },
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -68,7 +69,9 @@ export default function Audit() {
       </div>
 
       <div className="px-4 pb-8 md:px-8">
-        {tab === 'access' ? <AccessTab /> : <AiTab />}
+        {tab === 'access' && <AccessTab />}
+        {tab === 'ai' && <AiTab />}
+        {tab === 'unanswered' && <UnansweredTab onOpenConversation={onOpenConversation} />}
       </div>
     </div>
   );
@@ -197,6 +200,103 @@ function AiTab() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+// Per-message, not "still waiting right now" — a customer who got answered once but
+// then sent another message that sat unanswered until the range closed shows up too,
+// even if it's since been picked up. See GET /api/audit/unanswered for the exact rule.
+function UnansweredTab({ onOpenConversation }) {
+  const [from, setFrom] = useState(() => isoDate(new Date(Date.now() - 2 * 86400000)));
+  const [to, setTo] = useState(() => isoDate(new Date()));
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetchUnanswered(from, to)
+      .then(setRows)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [from, to]);
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-1.5 text-xs text-greige-ink">
+          Desde
+          <input
+            type="date"
+            value={from}
+            max={to}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-greige-ink">
+          Hasta
+          <input
+            type="date"
+            value={to}
+            min={from}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <span className="text-xs text-greige-ink">{rows.length} clientes</span>
+      </div>
+
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+      {!error && !loading && rows.length === 0 && (
+        <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-greige-ink">
+          Nadie se quedó sin respuesta en ese rango de fechas.
+        </p>
+      )}
+
+      {(loading || rows.length > 0) && (
+        <div className="overflow-hidden rounded-2xl border border-line bg-paper">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Teléfono</th>
+                  <th className="px-4 py-3 font-medium">Primer mensaje sin responder</th>
+                  <th className="px-4 py-3 font-medium">Mensajes sin responder</th>
+                  <th className="px-4 py-3 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && <tr><td colSpan={5} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
+                {!loading && rows.map((r) => (
+                  <tr key={r.phone} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
+                    <td className="px-4 py-3 text-ink">{r.fullName ?? '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-greige-ink">{r.phone}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.firstUnansweredAt)}</td>
+                    <td className="px-4 py-3 text-ink">{r.unansweredCount}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onOpenConversation?.(r.phone)}
+                        className="text-xs font-semibold text-accent hover:underline"
+                      >
+                        Ir al chat
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
