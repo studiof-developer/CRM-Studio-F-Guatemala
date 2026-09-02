@@ -183,7 +183,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const matches = (c) => !q || (c.fullName || '').toLowerCase().includes(q) || (c.whatsappNumber || '').includes(q);
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-3xl">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden md:rounded-3xl">
       <div className="border-b border-border p-4">
         <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>

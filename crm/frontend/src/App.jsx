@@ -396,13 +396,17 @@ export default function App() {
           </div>
         </div>
 
-        <main className="h-full w-full min-w-0 flex-1 overflow-hidden px-4 pb-8 md:p-5 md:py-8 md:pl-2 md:pr-8">
+        {/* No padding/rounded card on mobile — that "floating window" look (a card with
+            visible background gutter around it) only makes sense once there's room to
+            spare, on tablet/desktop. On a phone the page should fill the screen like a
+            normal app, edge to edge. */}
+        <main className="h-full w-full min-w-0 flex-1 overflow-hidden md:p-5 md:py-8 md:pl-2 md:pr-8">
           <motion.div
             key={tab}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden rounded-3xl border border-line bg-paper shadow-sm"
+            className="h-[calc(100vh-4rem)] w-full overflow-y-auto overflow-x-hidden bg-paper md:rounded-3xl md:border md:border-line md:shadow-sm"
           >
             <ChunkErrorBoundary key={tab}>
               <Suspense fallback={<TabLoading />}>

@@ -67,6 +67,14 @@ function highlightMatch(text, query) {
   );
 }
 
+// Same breakpoint Tailwind's `md:` uses everywhere else in this file — the info panel
+// is a real third column on desktop (fine to default open) but a full-screen overlay on
+// mobile (must stay closed until the advisor actually asks for it, or it buries the chat
+// they just opened).
+function isDesktopViewport() {
+  return typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+}
+
 export function describeAttachment(attachment) {
   if (!attachment) return '';
   const icon = attachment.kind === 'image' ? '📷' : attachment.kind === 'audio' ? '🎵' : '📄';
@@ -200,7 +208,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
   const [actionBusy, setActionBusy] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(true);
+  const [infoOpen, setInfoOpen] = useState(isDesktopViewport);
   // Attach several files, then send them together — instead of each one going out the
   // instant it's picked. { file, id, previewUrl (images only) }.
   const [stagedFiles, setStagedFiles] = useState([]);
@@ -441,9 +449,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     } else {
       setThreadLimit(THREAD_PAGE_SIZE);
     }
-    // Stays open across chats now — closing it every switch meant re-opening it by hand
-    // on almost every chat, since checking the customer's info is normal, not exceptional.
-    setInfoOpen(true);
+    // Stays open across chats on desktop — closing it every switch meant re-opening it by
+    // hand on almost every chat, since checking the customer's info is normal, not
+    // exceptional. On mobile it's a full-screen overlay, not a side column, so opening it
+    // automatically would bury the chat the advisor just tapped into — stays opt-in there.
+    setInfoOpen(isDesktopViewport());
     setReplyingTo(null);
     setThreadError(null);
     // Left uncleared before, this was a real mis-send risk: an advisor types for
@@ -866,7 +876,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const dayGroups = groupByDay(visibleMessages);
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden rounded-3xl">
+    <div className="flex h-full min-w-0 overflow-hidden md:rounded-3xl">
       {/* Conversation list — mirrors WhatsApp's left rail. On mobile there's no room for
           this next to the thread at the same time, so it's the whole screen until a chat
           is opened, then it hides entirely (selecting a chat is the "navigate" action) —
@@ -1426,13 +1436,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               </div>
 
               {infoOpen && (
-                <>
-                  {/* Mobile-only backdrop — on desktop the panel is just a third column, no overlay needed */}
-                  <div
-                    onClick={() => setInfoOpen(false)}
-                    className="fixed inset-0 z-40 bg-black/30 md:hidden"
-                  />
-                  <div className="fixed inset-y-0 right-0 z-40 w-[85vw] max-w-sm overflow-y-auto border-l border-line bg-paper p-5 shadow-xl md:static md:z-auto md:w-72 md:max-w-none md:shrink-0 md:shadow-none">
+                // Full screen on mobile — a partial-width panel with a backdrop reads as a
+                // "floating window" rather than a real screen of the app, and clips its own
+                // content against the edge. On desktop it's just the third column, as before.
+                <div className="fixed inset-0 z-40 overflow-y-auto bg-paper p-5 md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-line">
                   <div className="mb-5 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
                     <div className="flex items-center gap-1">
@@ -1558,7 +1565,6 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     </div>
                   )}
                 </div>
-                </>
               )}
             </div>
 
