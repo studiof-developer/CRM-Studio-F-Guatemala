@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
@@ -256,8 +257,9 @@ function UnansweredTab({ onOpenConversation }) {
       .catch(() => showError('No se pudo copiar — tu navegador puede estar bloqueando el portapapeles'));
   }
 
-  // A .csv opens straight in Excel (double-click, no import dialog) without needing an
-  // xlsx-writing library in the bundle for what's otherwise a plain flat table.
+  // Only ever writes a workbook built from our own query results — never reads/parses
+  // a file, so the known xlsx-package CVEs (both in file *parsing*) don't apply to how
+  // this is used.
   function downloadExcel() {
     const headers = ['Cliente', 'Teléfono', 'Hora de entrada', 'Descuento', 'Último mensaje', 'Esperando desde', 'Mensajes en el chat'];
     const lines = rows.map((r) => {
@@ -272,17 +274,11 @@ function UnansweredTab({ onOpenConversation }) {
         r.messageCount,
       ];
     });
-    const csv = [headers, ...lines]
-      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-      .join('\r\n');
-    // Leading BOM so Excel reads the UTF-8 accents/ñ correctly instead of guessing wrong.
-    const blob = new Blob([String.fromCharCode(0xfeff) + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sin_responder_${from}_a_${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
+    ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sin responder');
+    XLSX.writeFile(wb, `sin_responder_${from}_a_${to}.xlsx`);
   }
 
   return (
