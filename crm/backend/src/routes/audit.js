@@ -163,7 +163,7 @@ router.get('/unanswered', async (req, res, next) => {
            t.status IS NULL OR t.status = 'esperando_asesor'
            OR (t.status = 'en_atencion' AND (${EFFECTIVE_STATUS_SQL}) = 'frio')
          )
-       ORDER BY c.last_customer_message_at ASC`,
+       ORDER BY first_message_at ASC`,
       [fromTs.toISOString(), toTs.toISOString()]
     );
     res.json(rows.map((r) => ({
