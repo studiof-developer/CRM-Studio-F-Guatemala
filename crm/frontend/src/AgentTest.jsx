@@ -45,8 +45,8 @@ export default function AgentTest() {
   }
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col px-8 py-8">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="mx-auto flex h-full max-w-3xl flex-col px-4 py-8 md:px-8">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <TestTube size={22} className="text-cyan" /> Pruebas del agente
@@ -75,7 +75,7 @@ export default function AgentTest() {
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words ${
                   m.role === 'user'
                     ? 'bg-accent text-white'
                     : m.role === 'error'

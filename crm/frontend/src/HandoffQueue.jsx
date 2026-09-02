@@ -138,10 +138,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  async function handleDrop(e, targetColumn) {
-    e.preventDefault();
-    const drag = dragDataRef.current;
-    dragDataRef.current = null;
+  // Shared by the desktop drag-and-drop drop handler and the mobile "Mover a" select
+  // below — native HTML5 drag events never fire on touchscreens, so phones need a
+  // second, tap-based way to do the exact same move.
+  async function moveCard(drag, targetColumn) {
     if (!drag || drag.sourceColumn === targetColumn) return;
 
     // Moves the card in front of the advisor immediately — waiting on the round trip
@@ -170,6 +170,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       reloadAll();
     }
+  }
+
+  async function handleDrop(e, targetColumn) {
+    e.preventDefault();
+    const drag = dragDataRef.current;
+    dragDataRef.current = null;
+    await moveCard(drag, targetColumn);
   }
 
   const q = search.trim().toLowerCase();
@@ -206,8 +213,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
               onDrop={isDropTarget ? (e) => handleDrop(e, key) : undefined}
               className="flex w-72 shrink-0 flex-col rounded-2xl border border-border bg-muted/40"
             >
-              <div className="flex items-center gap-2 border-b border-border p-3">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}>
+              <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}>
                   <Icon size={13} />
                 </span>
                 <span className="text-sm font-semibold">{meta.label}</span>
@@ -215,7 +222,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                   type="button"
                   onClick={() => toggleSort(key)}
                   title={col.sort === 'asc' ? 'Más antiguo primero' : 'Más reciente primero'}
-                  className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <ArrowUpDown size={10} />
                   {col.sort === 'asc' ? 'Antiguo' : 'Reciente'}
@@ -279,6 +286,24 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           </button>
                         )}
                       </div>
+                      {DRAG_SOURCES.has(key) && (
+                        // Touch devices never fire HTML5 drag events — a tablet in
+                        // landscape can be wider than any viewport breakpoint and still
+                        // be touch-only, so this stays available at every width rather
+                        // than being hidden above md.
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) moveCard({ ticketId: card.ticketId, customerId: card.customerId, sourceColumn: key }, e.target.value);
+                          }}
+                          className="mt-2 w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground outline-none"
+                        >
+                          <option value="">Mover a…</option>
+                          {[...DROP_TARGETS].filter((t) => t !== key).map((t) => (
+                            <option key={t} value={t}>{COLUMN_META[t].label}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   );
                 })}

@@ -10,8 +10,8 @@ export default function Pagination({
   const to = Math.min(page * pageSize, totalItems);
 
   return (
-    <div className="flex items-center justify-between border-t border-border px-4 py-3">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
         <p className="text-xs text-muted-foreground">
           {from}–{to} de {totalItems}
         </p>

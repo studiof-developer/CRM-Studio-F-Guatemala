@@ -103,7 +103,7 @@ export default function WhatsappNumbers() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 mb-6 flex items-center justify-between bg-paper px-8 pb-4 pt-8">
+      <div className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 bg-paper px-4 pb-4 pt-8 md:px-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
           <p className="mt-1 text-sm text-greige-ink">
@@ -115,8 +115,8 @@ export default function WhatsappNumbers() {
         </Button>
       </div>
 
-      <div className="px-8 pb-8">
-      <div className="grid grid-cols-[360px_1fr] gap-6">
+      <div className="px-4 pb-8 md:px-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
         <ul className="flex flex-col gap-2">
           {numbers.length === 0 && (
             <li className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-greige-ink">
@@ -134,8 +134,8 @@ export default function WhatsappNumbers() {
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-sm font-medium text-ink">
-                  <Smartphone size={14} className="shrink-0 text-greige" /> {n.label}
+                <p className="flex min-w-0 items-center gap-2 truncate text-sm font-medium text-ink">
+                  <Smartphone size={14} className="shrink-0 text-greige" /> <span className="truncate">{n.label}</span>
                 </p>
                 <Badge variant={n.isActive ? 'success' : 'neutral'}>{n.isActive ? 'Activa' : 'Inactiva'}</Badge>
               </div>
@@ -145,7 +145,7 @@ export default function WhatsappNumbers() {
           ))}
         </ul>
 
-        <section className="rounded-2xl border border-line bg-paper p-8">
+        <section className="rounded-2xl border border-line bg-paper p-4 md:p-8">
           <form onSubmit={handleSubmit} className="max-w-md">
             <h2 className="text-lg font-semibold text-ink">
               {selectedId === 'new' ? 'Conectar número de WhatsApp' : 'Editar número'}

@@ -76,8 +76,8 @@ export default function Campaigns() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
-        <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Difusión</h1>
             <p className="mt-1 text-sm text-greige-ink">Enviar una plantilla aprobada a varios clientes a la vez.</p>
@@ -91,7 +91,7 @@ export default function Campaigns() {
         </div>
       </div>
 
-      <div className="px-8 pb-8">
+      <div className="px-4 pb-8 md:px-8">
         {error && <p className="mb-4 text-sm text-danger">{error}</p>}
         {loading && <p className="text-sm text-greige-ink">Cargando…</p>}
         {!loading && campaigns.length === 0 && (
@@ -104,7 +104,7 @@ export default function Campaigns() {
             <button
               key={c.id}
               onClick={() => setOpenId(c.id)}
-              className="flex items-center justify-between gap-4 rounded-xl border border-line bg-paper p-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-paper p-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -137,8 +137,8 @@ export default function Campaigns() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-ink">{detail.templateName}</h3>
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-ink" title={detail.templateName}>{detail.templateName}</h3>
                 <p className="mt-0.5 text-xs text-greige-ink">{detail.recipientCount} destinatarios · {formatDateTime(detail.createdAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -462,7 +462,7 @@ function NewCampaignModal({ onClose, onSent }) {
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-between border-t border-line-soft pt-4">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">
           <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
             <Users size={14} className="text-greige" /> {totalRecipients} destinatario{totalRecipients === 1 ? '' : 's'}
           </p>

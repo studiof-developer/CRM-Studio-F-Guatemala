@@ -57,7 +57,7 @@ export default function EditCustomerModal({ open, customer, onCancel, onSaved })
       onConfirm={handleSave}
       onCancel={onCancel}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {FIELDS.map((f) => (
           <label key={f.key} className="flex flex-col gap-1 text-xs font-medium text-greige-ink">
             {f.label}

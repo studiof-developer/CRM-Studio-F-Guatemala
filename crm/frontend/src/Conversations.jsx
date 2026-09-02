@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
-  Megaphone, Mail, Loader2,
+  Megaphone, Mail, Loader2, ArrowLeft,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
@@ -867,8 +867,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
   return (
     <div className="flex h-full min-w-0 overflow-hidden rounded-3xl">
-      {/* Conversation list — mirrors WhatsApp's left rail */}
-      <div className="flex w-[380px] max-w-[45vw] shrink-0 flex-col border-r border-line">
+      {/* Conversation list — mirrors WhatsApp's left rail. On mobile there's no room for
+          this next to the thread at the same time, so it's the whole screen until a chat
+          is opened, then it hides entirely (selecting a chat is the "navigate" action) —
+          same one-pane-at-a-time pattern WhatsApp's own mobile app uses. */}
+      <div className={`w-full md:w-[380px] md:max-w-[45vw] shrink-0 flex-col border-r border-line ${selectedId ? 'hidden md:flex' : 'flex'}`}>
         <div className="border-b border-line p-4">
           <div className="mb-3 flex items-center justify-between px-1">
             <h1 className="text-lg font-semibold text-ink">Conversaciones</h1>
@@ -1033,8 +1036,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         </div>
       </div>
 
-      {/* Thread */}
-      <div className="flex min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02]">
+      {/* Thread — the mirror of the list's rule above: full screen once a chat is open,
+          hidden on mobile otherwise (the empty state has nothing useful to say twice). */}
+      <div className={`min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02] ${selectedId ? 'flex' : 'hidden md:flex'}`}>
         {!thread && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
             {threadError ? (
@@ -1061,55 +1065,42 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           <>
             <button
               onClick={() => setInfoOpen((v) => !v)}
-              className="flex items-center gap-3 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+              className="flex w-full flex-col gap-2 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
             >
-              <Avatar name={thread.customerName || thread.phone} size={36} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-ink">
-                  {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
-                </p>
-                <p className="text-xs text-greige-ink">{thread.phone}</p>
-              </div>
-
-              {thread.ticketStatus === 'esperando_asesor' && (
+              {/* Row 1: identity + always-available actions — never wraps, so it never
+                  competes for space with the status pills below. */}
+              <div className="flex items-center gap-3">
+                {/* Mobile-only: WhatsApp-style back arrow to return to the chat list */}
                 <span
                   role="button"
-                  onClick={(e) => { e.stopPropagation(); handleTake(); }}
-                  className="flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-accent/20 transition-opacity hover:opacity-90"
+                  onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
+                  className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
                 >
-                  <Headset size={12} /> {actionBusy ? '...' : 'Tomar conversación'}
+                  <ArrowLeft size={18} />
                 </span>
-              )}
-              {thread.ticketStatus === 'en_atencion' && (
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                    <Headset size={12} /> Asesor en control
-                  </span>
-                  <span
-                    role="button"
-                    onClick={(e) => { e.stopPropagation(); setConfirmResolveOpen(true); }}
-                    className="flex items-center gap-1.5 rounded-full bg-ok/10 px-3 py-1.5 text-xs font-semibold text-ok transition-colors hover:bg-ok hover:text-white"
-                  >
-                    <CheckCircle2 size={12} /> Resolver
-                  </span>
+                <Avatar name={thread.customerName || thread.phone} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
+                  </p>
+                  <p className="text-xs text-greige-ink">{thread.phone}</p>
                 </div>
-              )}
-              {thread.ticketStatus === 'resuelto' && (
-                <span className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
-                  <CheckCircle2 size={12} /> Resuelto — puedes seguir escribiendo
+                <span
+                  role="button"
+                  title="Buscar en la conversación"
+                  onClick={(e) => { e.stopPropagation(); setSearchOpen((v) => !v); }}
+                  className="flex shrink-0 items-center rounded-full p-1.5 text-greige transition-colors hover:bg-black/[0.04] hover:text-ink dark:hover:bg-white/[0.06]"
+                >
+                  <Search size={15} />
                 </span>
-              )}
-              {!thread.ticketStatus && (
-                <div className="flex items-center gap-2">
-                  {isUnansweredBroadcast(thread.messages[thread.messages.length - 1]) ? (
-                    <span className="flex items-center gap-1.5 rounded-full bg-cyan-bg px-2.5 py-1 text-xs font-medium text-cyan">
-                      <Megaphone size={12} /> Difusión enviada — sin respuesta
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
-                      <Bot size={12} /> Agente activo
-                    </span>
-                  )}
+                <Info size={16} className="shrink-0 text-greige" />
+              </div>
+
+              {/* Row 2: ticket-status pill + advisor actions — wraps freely, so a long
+                  label (e.g. "Difusión enviada — sin respuesta") next to "Tomar
+                  conversación" never overflows a narrow phone screen. */}
+              <div className="flex flex-wrap items-center gap-2 pl-0 md:pl-[52px]">
+                {thread.ticketStatus === 'esperando_asesor' && (
                   <span
                     role="button"
                     onClick={(e) => { e.stopPropagation(); handleTake(); }}
@@ -1117,27 +1108,57 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   >
                     <Headset size={12} /> {actionBusy ? '...' : 'Tomar conversación'}
                   </span>
-                </div>
-              )}
-              {thread.messages[thread.messages.length - 1]?.type === 'human' && (
-                <span
-                  role="button"
-                  title="Marcar como no leído"
-                  onClick={(e) => { e.stopPropagation(); handleMarkUnread(); }}
-                  className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white"
-                >
-                  <Mail size={12} /> Marcar como no leído
-                </span>
-              )}
-              <span
-                role="button"
-                title="Buscar en la conversación"
-                onClick={(e) => { e.stopPropagation(); setSearchOpen((v) => !v); }}
-                className="flex shrink-0 items-center rounded-full p-1.5 text-greige transition-colors hover:bg-black/[0.04] hover:text-ink dark:hover:bg-white/[0.06]"
-              >
-                <Search size={15} />
-              </span>
-              <Info size={16} className="shrink-0 text-greige" />
+                )}
+                {thread.ticketStatus === 'en_atencion' && (
+                  <>
+                    <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                      <Headset size={12} /> Asesor en control
+                    </span>
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmResolveOpen(true); }}
+                      className="flex items-center gap-1.5 rounded-full bg-ok/10 px-3 py-1.5 text-xs font-semibold text-ok transition-colors hover:bg-ok hover:text-white"
+                    >
+                      <CheckCircle2 size={12} /> Resolver
+                    </span>
+                  </>
+                )}
+                {thread.ticketStatus === 'resuelto' && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
+                    <CheckCircle2 size={12} /> Resuelto — puedes seguir escribiendo
+                  </span>
+                )}
+                {!thread.ticketStatus && (
+                  <>
+                    {isUnansweredBroadcast(thread.messages[thread.messages.length - 1]) ? (
+                      <span className="flex items-center gap-1.5 rounded-full bg-cyan-bg px-2.5 py-1 text-xs font-medium text-cyan">
+                        <Megaphone size={12} /> Difusión enviada — sin respuesta
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-greige-ink">
+                        <Bot size={12} /> Agente activo
+                      </span>
+                    )}
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); handleTake(); }}
+                      className="flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-accent/20 transition-opacity hover:opacity-90"
+                    >
+                      <Headset size={12} /> {actionBusy ? '...' : 'Tomar conversación'}
+                    </span>
+                  </>
+                )}
+                {thread.messages[thread.messages.length - 1]?.type === 'human' && (
+                  <span
+                    role="button"
+                    title="Marcar como no leído"
+                    onClick={(e) => { e.stopPropagation(); handleMarkUnread(); }}
+                    className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white"
+                  >
+                    <Mail size={12} /> Marcar como no leído
+                  </span>
+                )}
+              </div>
             </button>
 
             {searchOpen && (
@@ -1337,7 +1358,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                               {m.attachment && (
                                 <AttachmentContent attachment={m.attachment} outgoing={outgoing} onImageClick={setLightboxUrl} />
                               )}
-                              {m.content?.trim() && <p className="whitespace-pre-wrap">{m.content}</p>}
+                              {m.content?.trim() && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
                               <span
                                 className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${
                                   outgoing ? 'text-white/85' : 'text-greige'
@@ -1372,7 +1393,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                           <span className="truncate">{entry.file.name}</span>
                         </p>
                       ) : (
-                        <p className="whitespace-pre-wrap">{entry.content}</p>
+                        <p className="whitespace-pre-wrap break-words">{entry.content}</p>
                       )}
                       <span className="mt-0.5 flex items-center justify-end gap-1.5 text-[10px] text-white/90">
                         {entry.status === 'sending' ? (
@@ -1405,7 +1426,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               </div>
 
               {infoOpen && (
-                <div className="w-72 shrink-0 overflow-y-auto border-l border-line bg-paper p-5">
+                <>
+                  {/* Mobile-only backdrop — on desktop the panel is just a third column, no overlay needed */}
+                  <div
+                    onClick={() => setInfoOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/30 md:hidden"
+                  />
+                  <div className="fixed inset-y-0 right-0 z-40 w-[85vw] max-w-sm overflow-y-auto border-l border-line bg-paper p-5 shadow-xl md:static md:z-auto md:w-72 md:max-w-none md:shrink-0 md:shadow-none">
                   <div className="mb-5 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
                     <div className="flex items-center gap-1">
@@ -1531,6 +1558,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     </div>
                   )}
                 </div>
+                </>
               )}
             </div>
 

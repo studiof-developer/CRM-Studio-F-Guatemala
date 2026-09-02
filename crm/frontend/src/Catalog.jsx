@@ -87,8 +87,8 @@ export default function Catalog() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Catálogo</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -103,8 +103,8 @@ export default function Catalog() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full flex-1 max-w-xs">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
@@ -125,7 +125,7 @@ export default function Catalog() {
         </div>
       </div>
 
-      <div className="px-8 pb-8">
+      <div className="px-4 pb-8 md:px-8">
         <div className="mb-4 rounded-xl border border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
           Columnas esperadas: <code className="rounded bg-paper px-1.5 py-0.5">sku, name, category, line, size, color, price, discount_pct, stock_quantity, active</code>.
           Un <code className="rounded bg-paper px-1.5 py-0.5">sku</code> que ya existe se actualiza; uno nuevo se crea.
@@ -140,7 +140,8 @@ export default function Catalog() {
         {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="overflow-hidden rounded-2xl border border-border bg-paper">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-border bg-muted text-xs text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Foto</th>
@@ -200,6 +201,7 @@ export default function Catalog() {
             ))}
           </tbody>
         </table>
+        </div>
         <Pagination
           page={safePage}
           pageCount={pageCount}

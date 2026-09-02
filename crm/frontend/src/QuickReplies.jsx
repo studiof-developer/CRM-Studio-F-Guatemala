@@ -83,8 +83,8 @@ export default function QuickReplies() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Respuestas rápidas</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -118,7 +118,7 @@ export default function QuickReplies() {
         </div>
       </div>
 
-      <div className="px-8 pb-8">
+      <div className="px-4 pb-8 md:px-8">
         {error && <p className="mb-4 text-sm text-danger">{error}</p>}
         {loading && <p className="text-sm text-muted-foreground">Cargando…</p>}
         {!loading && visible.length === 0 && (
@@ -134,7 +134,7 @@ export default function QuickReplies() {
                   <Badge variant="info">/{item.shortcut}</Badge>
                   {item.scope === 'global' && <span className="text-xs text-muted-foreground">por {item.ownerName}</span>}
                 </div>
-                <p className="mt-1.5 whitespace-pre-wrap text-sm text-foreground">{item.content}</p>
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-foreground">{item.content}</p>
               </div>
               {item.canManage && (
                 <div className="flex shrink-0 items-center gap-1">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil, Clock } from 'lucide-react';
+import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil, Clock, ArrowLeft } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
@@ -106,8 +106,9 @@ export default function Customers() {
 
   return (
     <div className="flex h-full min-w-0 overflow-hidden rounded-3xl">
-      {/* List column scrolls on its own — header/search/filter stay put. */}
-      <div className="flex w-[360px] max-w-[45vw] shrink-0 flex-col border-r border-line">
+      {/* List column scrolls on its own — header/search/filter stay put. Below md, list
+          and detail are mutually exclusive full-width panes (same pattern as Conversations). */}
+      <div className={`w-full md:w-[360px] md:max-w-[45vw] shrink-0 flex-col border-r border-line ${selectedId ? 'hidden md:flex' : 'flex'}`}>
         <div className="border-b border-line p-4">
           <h1 className="mb-3 text-lg font-semibold text-ink">Clientes</h1>
           <div className="relative mb-2">
@@ -181,7 +182,7 @@ export default function Customers() {
       </div>
 
       {/* Detail column scrolls independently. */}
-      <section className="flex-1 overflow-y-auto p-8">
+      <section className={`flex-1 overflow-y-auto p-4 md:p-8 ${selectedId ? 'block' : 'hidden md:block'}`}>
         {!detail && (
           <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center text-sm text-greige-ink">
             Selecciona un cliente para ver su perfil.
@@ -189,7 +190,13 @@ export default function Customers() {
         )}
         {detail && (
           <>
-            <div className="flex items-start justify-between">
+            <button
+              onClick={() => setSelectedId(null)}
+              className="mb-4 flex items-center gap-1.5 text-sm font-medium text-greige-ink hover:text-ink md:hidden"
+            >
+              <ArrowLeft size={16} /> Clientes
+            </button>
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Avatar name={detail.full_name || detail.whatsapp_number} size={44} />
                 <div>
@@ -222,7 +229,7 @@ export default function Customers() {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center gap-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-3">
               <label className="shrink-0 text-xs font-medium text-greige-ink">Estado (control del asesor):</label>
               <Select value={detail.manual_status ?? ''} onChange={handleSetStatus} options={MANUAL_STATUS_OPTIONS} className="w-48" />
               {!detail.paid_locked && (
@@ -235,7 +242,7 @@ export default function Customers() {
               )}
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-5 border-y border-line py-6">
+            <div className="mt-6 grid grid-cols-1 gap-5 border-y border-line py-6 sm:grid-cols-2">
               <InfoRow icon={Mail} label="Correo" value={detail.email || '—'} />
               <InfoRow icon={CreditCard} label="DPI" value={detail.dpi || '—'} />
               <InfoRow icon={MapPin} label="Departamento" value={detail.department || '—'} />
@@ -260,7 +267,7 @@ export default function Customers() {
                   </span>
                   <p className="truncate text-xs text-greige-ink">{detail.erp.nombre}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <InfoRow icon={CircleDollarSign} label="Venta total histórica" value={detail.erp.ventaNetaTotal != null ? `Q${Number(detail.erp.ventaNetaTotal).toLocaleString('es-GT')}` : '—'} />
                   <InfoRow icon={ShoppingBag} label="Facturas / unidades" value={`${detail.erp.facturasTotales ?? 0} facturas · ${detail.erp.unidadesTotales ?? 0} unidades`} />
                   <InfoRow icon={Clock} label="Última compra" value={detail.erp.fechaUltimaCompra ? `${new Date(detail.erp.fechaUltimaCompra).toLocaleDateString('es-GT', { timeZone: 'UTC' })} (${detail.erp.diasSinCompra} días)` : '—'} />
@@ -308,7 +315,7 @@ export default function Customers() {
               )}
               <ul className="mt-2 flex flex-col gap-2">
                 {detail.orders.map((o) => (
-                  <li key={o.id} className="flex items-center justify-between rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3.5 py-2.5 text-sm">
+                  <li key={o.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3.5 py-2.5 text-sm">
                     <span className="font-medium text-ink">{o.ticket_code ?? `Carrito #${o.id}`}</span>
                     <span className="text-greige-ink">{o.status}</span>
                     <span className="font-medium text-ink">{o.total ? `Q${o.total}` : '—'}</span>

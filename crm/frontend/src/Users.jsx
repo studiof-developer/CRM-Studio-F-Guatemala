@@ -113,7 +113,7 @@ export default function Users() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 mb-6 flex items-center justify-between bg-paper px-8 pb-4 pt-8">
+      <div className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 bg-paper px-4 pb-4 pt-8 md:px-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="mt-1 text-sm text-muted-foreground">Administradores, supervisores y asesores con acceso al CRM.</p>
@@ -123,8 +123,8 @@ export default function Users() {
         </Button>
       </div>
 
-      <div className="px-8 pb-8">
-      <div className="grid grid-cols-[360px_1fr] gap-6">
+      <div className="px-4 pb-8 md:px-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
         <ul className="flex flex-col gap-2">
           {users.map((u) => (
             <li
@@ -136,8 +136,8 @@ export default function Users() {
                   : 'border-border bg-paper hover:border-foreground/20 hover:shadow-sm'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">{u.full_name}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-sm font-medium">{u.full_name}</p>
                 <Badge variant={ROLE_BADGE_VARIANT[u.role]}>{ROLE_LABELS[u.role]}</Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">@{u.username}</p>
@@ -146,7 +146,7 @@ export default function Users() {
           ))}
         </ul>
 
-        <section className="rounded-2xl border border-border bg-paper p-8">
+        <section className="rounded-2xl border border-border bg-paper p-4 md:p-8">
           <form onSubmit={handleSubmit} className="max-w-md">
             <h2 className="text-lg font-semibold">
               {selectedId === 'new' ? 'Crear usuario' : 'Editar usuario'}

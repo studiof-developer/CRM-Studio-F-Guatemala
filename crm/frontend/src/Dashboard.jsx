@@ -230,14 +230,14 @@ export default function Dashboard() {
     };
   }, [data]);
 
-  if (error) return <div className="mx-auto max-w-6xl px-8 py-8 text-sm text-danger">{error}</div>;
-  if (!data) return <div className="mx-auto max-w-6xl px-8 py-8 text-sm text-muted-foreground">Cargando…</div>;
+  if (error) return <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-danger md:px-8">{error}</div>;
+  if (!data) return <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground md:px-8">Cargando…</div>;
 
   const { kpis } = data;
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Panorama general de Studio F.
@@ -250,20 +250,20 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="px-8 pb-8">
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="px-4 pb-8 md:px-8">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} featured />
         <MetricCard icon={UserPlus} label="Registros esta semana" value={kpis.registrosSemana} />
         <MetricCard icon={CircleDollarSign} label="Clientes marcados como Pagado" value={kpis.clientesPagados} />
         <MetricCard icon={LifeBuoy} label="Tickets pendientes" value={kpis.ticketsPendientes} accent={kpis.ticketsPendientes > 0} />
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <MetricCard icon={Timer} label="Tiempo de primera respuesta (30d)" value={formatMinutes(kpis.tiempoRespuestaMin)} />
         <MetricCard icon={CheckCircle2} label="Tiempo de resolución (30d)" value={formatMinutes(kpis.tiempoResolucionMin)} />
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-6">
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="Clientes por etapa">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
@@ -285,7 +285,7 @@ export default function Dashboard() {
         </ChartCard>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-6">
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="Conversaciones nuevas, últimos 14 días">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
@@ -329,7 +329,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-6">
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="Medio de pago (clientes marcados como Pagado)">
           {data.paidMethods.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay clientes marcados como Pagado con medio registrado.</p>

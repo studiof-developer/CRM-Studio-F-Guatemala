@@ -43,7 +43,7 @@ export default function Audit() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 bg-paper px-8 pb-4 pt-8">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Auditoría</h1>
           <p className="mt-1 text-sm text-greige-ink">Trazabilidad de accesos a datos y de las decisiones que toma la IA.</p>
@@ -67,7 +67,7 @@ export default function Audit() {
         </div>
       </div>
 
-      <div className="px-8 pb-8">
+      <div className="px-4 pb-8 md:px-8">
         {tab === 'access' ? <AccessTab /> : <AiTab />}
       </div>
     </div>
@@ -90,7 +90,7 @@ function AccessTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <Select value={action} onChange={setAction} className="w-56" options={ACTION_FILTER_OPTIONS} />
         <span className="text-xs text-greige-ink">{rows.length} registros</span>
       </div>
@@ -98,7 +98,8 @@ function AccessTab() {
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="overflow-hidden rounded-2xl border border-line bg-paper">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
             <tr>
               <th className="px-4 py-3 font-medium">Fecha</th>
@@ -132,6 +133,7 @@ function AccessTab() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -153,7 +155,7 @@ function AiTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <Select
           value={handedOff}
           onChange={setHandedOff}
@@ -178,7 +180,7 @@ function AiTab() {
         {loading && <p className="text-sm text-greige-ink">Cargando…</p>}
         {rows.map((r) => (
           <div key={r.id} className="rounded-2xl border border-line bg-paper p-5">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-greige-ink">{formatDateTime(r.created_at)}</span>
               <div className="flex items-center gap-2">
                 {r.customerName && <Badge variant="neutral">{r.customerName}</Badge>}

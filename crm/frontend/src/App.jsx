@@ -271,7 +271,7 @@ export default function App() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setTab('pruebas')}
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/30 transition-colors ${
+          className={`fixed bottom-20 right-4 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/30 transition-colors md:bottom-6 md:right-6 ${
             tab === 'pruebas' ? 'bg-accent text-white' : 'border border-line bg-paper text-ink hover:bg-black/5 dark:hover:bg-white/5'
           }`}
         >
