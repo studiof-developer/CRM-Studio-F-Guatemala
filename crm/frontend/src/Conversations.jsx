@@ -1093,15 +1093,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                       );
                     })()}
                     {c.ticketStatus === 'en_atencion' && (
-                      presence ? (
-                        // Whoever's actually looking at it right now, by name and in
-                        // their own color — same idea as the row tint, just here too.
-                        // Falls back to the generic "asesor" the moment nobody's in it.
+                      c.assignedAdvisor ? (
+                        // Whoever actually took the ticket, by name and in their own
+                        // color — permanent (from the ticket record), unlike the row
+                        // tint above which is only live "someone's looking at it now".
                         <span
                           className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={{ backgroundColor: hexToRgba(colorFor(presence.fullName), 0.16), color: colorFor(presence.fullName) }}
+                          style={{ backgroundColor: hexToRgba(colorFor(c.assignedAdvisor), 0.16), color: colorFor(c.assignedAdvisor) }}
                         >
-                          <Headset size={10} /> {presence.fullName?.split(' ')[0] || 'asesor'}
+                          <Headset size={10} /> {c.assignedAdvisor.split(' ')[0]}
                         </span>
                       ) : (
                         <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
