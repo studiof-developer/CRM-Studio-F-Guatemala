@@ -78,6 +78,12 @@ export async function fetchConversations(q, temperature, ticketStatus, limit, un
   return res.json();
 }
 
+export async function fetchAdvisors() {
+  const res = await apiFetch('/api/conversations/advisors');
+  if (!res.ok) throw new Error('Error al cargar la lista de asesores');
+  return res.json();
+}
+
 export async function fetchUnreadCount() {
   const res = await apiFetch('/api/conversations/unread-count');
   if (!res.ok) throw new Error('Error al cargar el conteo de no leídos');

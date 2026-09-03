@@ -9,7 +9,7 @@ import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
-  fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence,
+  fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -24,20 +24,31 @@ import { showSuccess, showError } from './components/Toast.jsx';
 
 // Same icon/color pairing as the ticket-status pills in the list and header below —
 // kept here once so the filter dropdown matches them instead of drifting apart.
+// en_atencion isn't in here — a generic "someone's on it" filter stopped being useful
+// once every chat already shows exactly who; it's replaced by one option per real
+// advisor (see the `advisors` state and buildTicketStatusOptions below), fetched from
+// who's actually taken a ticket rather than hardcoded.
 const TICKET_STATUS_META = {
   bot: { label: 'Agente', icon: Bot, iconClassName: 'text-greige-ink' },
   esperando_asesor: { label: 'Pendiente', icon: AlertTriangle, iconClassName: 'text-warn' },
-  en_atencion: { label: 'Asesor', icon: Headset, iconClassName: 'text-accent' },
   resuelto: { label: 'Resuelto', icon: CheckCircle2, iconClassName: 'text-ok' },
 };
 // Not a real ticket status — unreadCount is a client-side flag already on every row,
 // so this option never reaches the backend as a ticketStatus (see load() below).
 const UNREAD_FILTER = 'no_leido';
-const TICKET_STATUS_FILTER_OPTIONS = [
-  { value: '', label: 'Todos los estados' },
-  { value: UNREAD_FILTER, label: 'No leído', icon: Mail, iconClassName: 'text-accent' },
-  ...Object.entries(TICKET_STATUS_META).map(([value, meta]) => ({ value, ...meta })),
-];
+// Prefix distinguishing "filter by this advisor's name" from a real ticket status in
+// the single dropdown value/query param — see conversations.js's GET / handler.
+const ADVISOR_FILTER_PREFIX = 'advisor:';
+function buildTicketStatusOptions(advisors) {
+  return [
+    { value: '', label: 'Todos los estados' },
+    { value: UNREAD_FILTER, label: 'No leído', icon: Mail, iconClassName: 'text-accent' },
+    { value: 'bot', ...TICKET_STATUS_META.bot },
+    { value: 'esperando_asesor', ...TICKET_STATUS_META.esperando_asesor },
+    ...advisors.map((name) => ({ value: `${ADVISOR_FILTER_PREFIX}${name}`, label: name, icon: Headset, iconClassName: 'text-accent' })),
+    { value: 'resuelto', ...TICKET_STATUS_META.resuelto },
+  ];
+}
 const TEMP_FILTER_OPTIONS = [
   { value: '', label: 'Todas las temperaturas' },
   ...BUCKET_ORDER.map((k) => ({ value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText })),
@@ -173,6 +184,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [globalSearching, setGlobalSearching] = useState(false);
   const [temperature, setTemperature] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState('');
+  // Real advisors who've taken at least one ticket — powers the per-advisor filter
+  // options in place of the old generic "Asesor" one. New name shows up on its own the
+  // first time someone takes a ticket, nothing hardcoded.
+  const [advisors, setAdvisors] = useState([]);
+  useEffect(() => { fetchAdvisors().then(setAdvisors).catch(() => {}); }, []);
   const [selectedId, setSelectedId] = useState(null);
   // Who (if anyone) currently has each chat open — { sessionId: { userId, fullName } }.
   // Populated once from a snapshot on mount, kept current from live presence_changes
@@ -963,13 +979,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
           </div>
-          <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} />
-          <Select
-            value={ticketStatusFilter}
-            onChange={setTicketStatusFilter}
-            options={TICKET_STATUS_FILTER_OPTIONS}
-            className="mt-2"
-          />
+          <div className="flex flex-col gap-2 md:flex-row">
+            <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} className="md:flex-1" />
+            <Select
+              value={ticketStatusFilter}
+              onChange={setTicketStatusFilter}
+              options={buildTicketStatusOptions(advisors)}
+              className="md:flex-1"
+            />
+          </div>
         </div>
 
         <div
@@ -1167,41 +1185,43 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           <>
             <button
               onClick={() => setInfoOpen((v) => !v)}
-              className="flex w-full flex-col gap-2 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+              // A single flex-wrap row, not a fixed two-row stack — on desktop there's
+              // always room for the identity block, the status pills, and the search/
+              // info icons to sit on one line together (how this looked before mobile
+              // support existed). The status-pills group below is the only thing that
+              // ever wraps to its own line, and only when there isn't room for it next
+              // to everything else — guaranteed on mobile (w-full there), graceful
+              // wherever else it might not fit.
+              className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
             >
-              {/* Row 1: identity + always-available actions — never wraps, so it never
-                  competes for space with the status pills below. */}
-              <div className="flex items-center gap-3">
-                {/* Mobile-only: WhatsApp-style back arrow to return to the chat list */}
-                <span
-                  role="button"
-                  onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
-                  className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
-                >
-                  <ArrowLeft size={18} />
-                </span>
-                <Avatar name={thread.customerName || thread.phone} size={36} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
-                  </p>
-                  <p className="text-xs text-greige-ink">{thread.phone}</p>
-                </div>
-                <span
-                  role="button"
-                  title="Buscar en la conversación"
-                  onClick={(e) => { e.stopPropagation(); setSearchOpen((v) => !v); }}
-                  className="flex shrink-0 items-center rounded-full p-1.5 text-greige transition-colors hover:bg-black/[0.04] hover:text-ink dark:hover:bg-white/[0.06]"
-                >
-                  <Search size={15} />
-                </span>
-                <Info size={16} className="shrink-0 text-greige" />
+              {/* Mobile-only: WhatsApp-style back arrow to return to the chat list */}
+              <span
+                role="button"
+                onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
+                className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
+              >
+                <ArrowLeft size={18} />
+              </span>
+              <Avatar name={thread.customerName || thread.phone} size={36} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
+                </p>
+                <p className="text-xs text-greige-ink">{thread.phone}</p>
               </div>
+              <span
+                role="button"
+                title="Buscar en la conversación"
+                onClick={(e) => { e.stopPropagation(); setSearchOpen((v) => !v); }}
+                className="flex shrink-0 items-center rounded-full p-1.5 text-greige transition-colors hover:bg-black/[0.04] hover:text-ink dark:hover:bg-white/[0.06]"
+              >
+                <Search size={15} />
+              </span>
+              <Info size={16} className="shrink-0 text-greige" />
 
-              {/* Row 2: ticket-status pill + advisor actions — wraps freely, so a long
-                  label (e.g. "Difusión enviada — sin respuesta") next to "Tomar
-                  conversación" never overflows a narrow phone screen. */}
-              <div className="flex flex-wrap items-center gap-2 pl-0 md:pl-[52px]">
+              {/* Status pill + advisor actions — own line on mobile (w-full forces
+                  it), inline with everything above wherever there's room for it. */}
+              <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
                 {thread.ticketStatus === 'esperando_asesor' && (
                   <span
                     role="button"

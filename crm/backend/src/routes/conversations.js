@@ -460,10 +460,18 @@ router.get('/', async (req, res, next) => {
     }
 
     // "bot" isn't a real ticket status — it means no active ticket exists at all.
-    const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'en_atencion', 'resuelto'];
+    const VALID_TICKET_FILTERS = ['bot', 'esperando_asesor', 'resuelto'];
     if (ticketStatus) {
-      if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
-      visible = visible.filter((r) => (ticketStatus === 'bot' ? !r.ticket_status : r.ticket_status === ticketStatus));
+      // A generic "en_atencion = someone's on it" filter wasn't useful once every chat
+      // shows who specifically — this replaces it with an exact name, still read off
+      // the same assigned_advisor already selected above (r.assigned_advisor).
+      if (ticketStatus.startsWith('advisor:')) {
+        const advisor = ticketStatus.slice('advisor:'.length);
+        visible = visible.filter((r) => r.assigned_advisor === advisor);
+      } else {
+        if (!VALID_TICKET_FILTERS.includes(ticketStatus)) return res.status(400).json({ error: 'invalid ticketStatus' });
+        visible = visible.filter((r) => (ticketStatus === 'bot' ? !r.ticket_status : r.ticket_status === ticketStatus));
+      }
     }
 
     if (unreadOnly) {
@@ -536,6 +544,19 @@ router.get('/unread-count', async (req, res, next) => {
       ) unread
     `));
     res.json({ count: rows[0].count });
+  } catch (err) { next(err); }
+});
+
+// Feeds the conversation-list filter dropdown — real advisors who've actually taken at
+// least one ticket, not the full user list (which would include admins/supervisors who
+// never personally answer a chat). Registered before /:sessionId for the same reason as
+// /search-all and /unread-count above.
+router.get('/advisors', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT assigned_advisor FROM tickets WHERE assigned_advisor IS NOT NULL ORDER BY assigned_advisor`
+    );
+    res.json(rows.map((r) => r.assigned_advisor));
   } catch (err) { next(err); }
 });
 
