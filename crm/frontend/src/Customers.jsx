@@ -105,7 +105,7 @@ export default function Customers() {
   const detailTemp = detail ? TEMP_META[detail.temperature] : null;
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden md:rounded-3xl">
+    <div className="flex h-full min-w-0 overflow-hidden">
       {/* List column scrolls on its own — header/search/filter stay put. Below md, list
           and detail are mutually exclusive full-width panes (same pattern as Conversations). */}
       <div className={`w-full md:w-[360px] md:max-w-[45vw] shrink-0 flex-col border-r border-line ${selectedId ? 'hidden md:flex' : 'flex'}`}>

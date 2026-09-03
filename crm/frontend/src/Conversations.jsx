@@ -936,7 +936,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const dayGroups = groupByDay(visibleMessages);
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden md:rounded-3xl">
+    <div className="flex h-full min-w-0 overflow-hidden">
       {/* Conversation list — mirrors WhatsApp's left rail. On mobile there's no room for
           this next to the thread at the same time, so it's the whole screen until a chat
           is opened, then it hides entirely (selecting a chat is the "navigate" action) —

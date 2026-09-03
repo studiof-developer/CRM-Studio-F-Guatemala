@@ -405,17 +405,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* No padding/rounded card on mobile — that "floating window" look (a card with
-            visible background gutter around it) only makes sense once there's room to
-            spare, on tablet/desktop. On a phone the page should fill the screen like a
-            normal app, edge to edge. */}
-        <main className="w-full min-w-0 min-h-0 flex-1 overflow-hidden md:p-5 md:py-8 md:pl-2 md:pr-8">
+        {/* No padding/rounded card at any size — that "floating window" look (a card
+            with a visible background gutter around it) never quite made sense once the
+            sidebar itself became a fixed panel instead of a floating one (see above):
+            content should sit flush next to it, not float in its own separate bubble.
+            Each page already carries its own internal padding, so this isn't leaving
+            anything glued to the edge with no breathing room. */}
+        <main className="w-full min-w-0 min-h-0 flex-1 overflow-hidden">
           <motion.div
             key={tab}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="h-full w-full overflow-y-auto overflow-x-hidden bg-paper md:rounded-3xl md:border md:border-line md:shadow-sm"
+            className="h-full w-full overflow-y-auto overflow-x-hidden bg-paper"
           >
             <ChunkErrorBoundary key={tab}>
               <Suspense fallback={<TabLoading />}>
