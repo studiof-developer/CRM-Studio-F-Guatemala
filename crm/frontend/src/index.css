@@ -129,7 +129,10 @@
   --color-purple-bg: var(--purple-bg);
   --color-cyan-bg: var(--cyan-bg);
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  /* Inter first and actually loaded (index.html) — it was already named further down
+     this stack, but -apple-system/BlinkMacSystemFont are always "available" as special
+     browser keywords, so it never actually won on any platform until it led the list. */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
 }
 
 body {
@@ -138,6 +141,10 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Digits keep a fixed width instead of each glyph's natural (variable) one — prices,
+     stats, and dashboard counters line up in a column instead of jittering as the
+     numbers themselves change. Costs nothing for non-numeric text. */
+  font-variant-numeric: tabular-nums;
 }
 
 ::selection {
@@ -177,6 +184,15 @@ body {
     @apply bg-paper-soft backdrop-blur-xl border border-line-soft;
   }
   .glass-card {
-    @apply bg-paper/80 backdrop-blur-xl border border-line shadow-sm;
+    @apply bg-paper/80 backdrop-blur-xl border border-line;
+    /* A slightly tinted, softer shadow than Tailwind's default gray shadow-sm — reads
+       as considered/crafted rather than a generic drop-shadow, without being loud
+       enough to fight the accent color anywhere it shows up. Dark mode gets its own
+       version below — a dark shadow on an already-dark background barely reads as
+       elevation at all. */
+    box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04), 0 4px 16px -4px rgba(67, 56, 202, 0.08);
+  }
+  .dark .glass-card {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px -4px rgba(79, 70, 229, 0.15);
   }
 }
