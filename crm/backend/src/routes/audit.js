@@ -20,8 +20,8 @@ router.get('/access', async (req, res, next) => {
     const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
 
     const { rows } = await pool.query(
-      `SELECT a.id, a.action, a.accessed_at, a.actor,
-              c.id AS customer_id, c.full_name AS customer_name,
+      `SELECT a.id, a.action, a.accessed_at, a.actor, a.details,
+              c.id AS customer_id, c.full_name AS customer_name, c.whatsapp_number,
               u.id AS actor_user_id, u.full_name AS actor_name, u.role AS actor_role
        FROM access_audit a
        LEFT JOIN customers c ON c.id = a.customer_id

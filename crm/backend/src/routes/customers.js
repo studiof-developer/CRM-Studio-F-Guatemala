@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
-import { logAccess } from '../auditLog.js';
+import { logAccess, logBusinessAction } from '../auditLog.js';
 
 const router = Router();
+
+const TEMP_LABELS = { frio: 'Frío', tibio: 'Tibio', caliente: 'Caliente', pagado: 'Pagado', pqrs: 'PQRS' };
 
 // Every registered customer gets a handoff ticket now (not just complaints), so ticket
 // existence alone no longer implies PQRS — that badge would've swallowed almost every
@@ -188,8 +190,9 @@ router.patch('/:id', async (req, res, next) => {
 // rejects any attempt to send it back to false, since a paid customer stays paid.
 router.patch('/:id/tags', async (req, res, next) => {
   try {
-    const { rows: existing } = await pool.query(`SELECT id FROM customers WHERE id = $1`, [req.params.id]);
+    const { rows: existing } = await pool.query(`SELECT id, manual_status, paid_locked FROM customers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
+    const before = existing[0];
 
     const { manualStatus, paidLocked, paidMethod, dismissPaymentSuggestion } = req.body ?? {};
     if (manualStatus !== undefined && manualStatus !== null && !VALID_TEMPERATURES.includes(manualStatus)) {
@@ -223,6 +226,16 @@ router.patch('/:id/tags', async (req, res, next) => {
                  ${EFFECTIVE_STATUS_SQL} AS temperature`,
       [manualStatus !== undefined, manualStatus ?? null, paidLocked, req.params.id, paidMethod ?? null, clearSuggestion]
     );
+
+    if (manualStatus !== undefined && (before.manual_status ?? null) !== (manualStatus ?? null)) {
+      const fromLabel = before.manual_status ? (TEMP_LABELS[before.manual_status] ?? before.manual_status) : 'Automático';
+      const toLabel = manualStatus ? (TEMP_LABELS[manualStatus] ?? manualStatus) : 'Automático';
+      logBusinessAction(req.user, Number(req.params.id), 'customer_status_changed', `${fromLabel} → ${toLabel}`);
+    }
+    if (paidLocked === true && !before.paid_locked) {
+      logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
+    }
+
     res.json(rows[0]);
   } catch (err) { next(err); }
 });

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
-import { logAccess } from '../auditLog.js';
+import { logAccess, logBusinessAction } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
+
+const TICKET_STATUS_LABELS = { esperando_asesor: 'Pendiente', en_atencion: 'En atención', resuelto: 'Resuelto' };
 
 // The advisor team handles every zone for Studio F Guatemala (not zone-assigned
 // individually), so this is a no-op — kept as a hook in case that ever changes.
@@ -171,8 +173,9 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const existing = await pool.query(`SELECT id FROM tickets WHERE id = $1`, [req.params.id]);
+    const existing = await pool.query(`SELECT id, status, customer_id FROM tickets WHERE id = $1`, [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'not found' });
+    const before = existing.rows[0];
 
     const { status, assigned_advisor } = req.body ?? {};
     if (status && !isValidStatus(status)) {
@@ -189,6 +192,9 @@ router.patch('/:id', async (req, res, next) => {
        RETURNING id, status, assigned_advisor, updated_at, first_response_at, resolved_at`,
       [status ?? null, assigned_advisor ?? null, req.params.id]
     );
+    if (status && status !== before.status) {
+      logBusinessAction(req.user, before.customer_id, 'ticket_status_changed', `${TICKET_STATUS_LABELS[before.status] ?? before.status} → ${TICKET_STATUS_LABELS[status] ?? status}`);
+    }
     res.json(rows[0]);
   } catch (err) { next(err); }
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download, ArrowRightLeft, CircleDollarSign } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
 import Select from './components/Select.jsx';
@@ -14,6 +14,9 @@ const ACTION_META = {
   view_customer: { label: 'Vio perfil de cliente', variant: 'info', icon: Eye },
   view_ticket: { label: 'Vio ticket', variant: 'info', icon: Eye },
   view_conversation: { label: 'Vio conversación', variant: 'info', icon: Eye },
+  ticket_status_changed: { label: 'Cambió estado del ticket', variant: 'purple', icon: ArrowRightLeft },
+  customer_status_changed: { label: 'Movió de etapa (Pipeline)', variant: 'purple', icon: ArrowRightLeft },
+  customer_marked_paid: { label: 'Marcó como Pagado', variant: 'success', icon: CircleDollarSign },
   login: { label: 'Inició sesión', variant: 'success', icon: LogIn },
   user_created: { label: 'Creó un usuario', variant: 'purple', icon: UserPlus },
   user_updated: { label: 'Editó un usuario', variant: 'warning', icon: UserCog },
@@ -28,6 +31,9 @@ const ACTION_FILTER_OPTIONS = [
   { value: '', label: 'Todas las acciones' },
   ...['view_customer', 'view_ticket', 'view_conversation'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Acceso a datos',
+  })),
+  ...['ticket_status_changed', 'customer_status_changed', 'customer_marked_paid'].map((k) => ({
+    value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Cambios',
   })),
   ...['login', 'user_created', 'user_updated', 'user_deleted'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Cuentas',
@@ -124,19 +130,20 @@ function AccessTab() {
 
       <div className="overflow-hidden rounded-2xl border border-line bg-paper">
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] text-left text-sm">
+        <table className="w-full min-w-[680px] text-left text-sm">
           <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
             <tr>
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 font-medium">Quién</th>
               <th className="px-4 py-3 font-medium">Acción</th>
               <th className="px-4 py-3 font-medium">Cliente</th>
+              <th className="px-4 py-3 font-medium">Detalle</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={4} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
+            {loading && <tr><td colSpan={5} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-greige-ink">Sin registros.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-greige-ink">Sin registros.</td></tr>
             )}
             {rows.map((r) => {
               const meta = ACTION_META[r.action];
@@ -152,7 +159,10 @@ function AccessTab() {
                       {meta?.icon && <meta.icon size={11} />} {meta?.label ?? r.action}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-ink">{r.customer_name ?? '—'}</td>
+                  <td className="px-4 py-3 text-ink">
+                    {r.customer_name || (r.whatsapp_number ? <span className="font-mono text-xs">{r.whatsapp_number}</span> : '—')}
+                  </td>
+                  <td className="px-4 py-3 text-greige-ink">{r.details ?? '—'}</td>
                 </tr>
               );
             })}
