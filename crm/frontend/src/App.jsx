@@ -295,7 +295,12 @@ export default function App() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className={`glass-card fixed inset-y-0 left-0 z-50 m-4 flex h-[calc(100dvh-2rem)] w-64 shrink-0 flex-col justify-between rounded-3xl transition-transform duration-300 md:sticky md:top-4 md:translate-x-0 ${
+        // On mobile this is a genuine overlay drawer sliding in on top of the page, so
+        // the floating-card look (margin, rounded corners, blur, shadow) still makes
+        // sense there. On desktop it's a permanent part of the layout, not a popup, so
+        // from md: up it becomes a flush panel — full height, no margin, no rounding —
+        // separated from the content next to it by a plain border instead of a shadow.
+        className={`fixed inset-y-0 left-0 z-50 m-4 flex h-[calc(100dvh-2rem)] w-64 shrink-0 flex-col justify-between rounded-3xl border border-line bg-paper/80 shadow-xl backdrop-blur-xl transition-transform duration-300 md:sticky md:top-0 md:m-0 md:h-dvh md:translate-x-0 md:rounded-none md:border-y-0 md:border-l-0 md:border-r md:bg-paper md:shadow-none md:backdrop-blur-none ${
           mobileNavOpen ? 'translate-x-0' : '-translate-x-[calc(100%+2rem)] md:translate-x-0'
         }`}
       >
