@@ -101,14 +101,31 @@ inboundRouter.post('/', async (req, res, next) => {
     // auto-mark" flag the text-keyword trigger sets (db/init/032), just raised from here
     // instead of a trigger since inbound media already passes through this route (n8n
     // writes plain text straight into Postgres with no Node hook, but forwards media
-    // here for us to download/store). Only while the customer is already in Medio de
-    // pago, though — a photo at any earlier stage is much more likely to be a product
-    // reference ("quiero esta blusa") than a receipt, and flagging those as a possible
-    // payment would just be noise the advisor has to keep dismissing.
+    // here for us to download/store). Being in Medio de pago (caliente) alone wasn't
+    // narrow enough (2026-09-03 report): once there, EVERY photo got flagged — a picture
+    // of a different garment, a size chart, anything — not just the actual receipt. Now
+    // also requires recent (3h) payment context on either side of the chat: an advisor
+    // sharing a payment link (Neolink etc. — matched generically as "any URL", since the
+    // gateway varies) or asking for the payment/comprobante, OR the customer themselves
+    // having just mentioned transferencia/depósito/comprobante (the deposit-slip flow:
+    // customer says "te envío el depósito", THEN sends the photo, with no matching
+    // advisor message right before it).
     if (kind === 'image') {
       await pool.query(
         `UPDATE customers AS c SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
-         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
+         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
+           AND EXISTS (
+             SELECT 1 FROM n8n_chat_histories h
+             WHERE h.session_id LIKE $1 || '%'
+               AND h.created_at >= now() - interval '3 hours'
+               AND (
+                 (h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+                   AND h.message->>'content' ~* '(m[eé]todo\\s+de\\s+pago|medio\\s+de\\s+pago|(link|enlace)\\s+(de|para)\\s+(el\\s+)?pago|https?://|env[ií]a(nos)?\\s+(tu|el)\\s+comprobante|comprobante\\s+de\\s+(pago|transferencia|dep[oó]sito)|completar\\s+tu\\s+env[ií]o|nit\\s+o\\s+dpi)')
+                 OR
+                 (h.message->>'type' = 'human'
+                   AND h.message->>'content' ~* '(transferencia|dep[oó]sito|comprobante)')
+               )
+           )`,
         [phone, 'El cliente envió una imagen (posible comprobante de pago)']
       );
     }
