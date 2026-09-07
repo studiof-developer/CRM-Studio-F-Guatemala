@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2 } from 'lucide-react';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset } from 'lucide-react';
 import { fetchPipelineColumn, updateTicket, updateCustomerTags } from './api.js';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
 import { useLiveEvent } from './lib/liveEvents.js';
+import { colorFor, hexToRgba } from './lib/avatarColor.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
 // name — see the 2026-08-31 conversation that settled this. "No atendidos" comes from
@@ -240,25 +241,42 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                     ? isOverdue(card.stageSince)
                     : AWAITING_REPLY_COLUMNS.has(key) && card.awaitingReply && card.lastMessageAt
                       && minutesSince(card.lastMessageAt) > AWAITING_REPLY_OVERDUE_MINUTES;
+                  const unreadCount = card.unreadCount ?? 0;
+                  const hasUnread = unreadCount > 0;
                   return (
                     <div
                       key={card.ticketId}
                       draggable={DRAG_SOURCES.has(key)}
                       onDragStart={(e) => handleDragStart(e, card, key)}
                       className={`rounded-xl border p-3 shadow-sm transition-shadow hover:shadow-md ${
-                        overdue ? 'border-danger/40 bg-danger/5' : 'border-border bg-paper'
+                        overdue ? 'border-danger/40 bg-danger/5' : hasUnread ? 'border-warning/40 bg-warning/5' : 'border-border bg-paper'
                       } ${DRAG_SOURCES.has(key) ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium">{card.fullName || card.whatsappNumber}</p>
-                        {overdue && (
-                          <span className="flex shrink-0 animate-pulse items-center gap-1 rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold text-white">
-                            <AlertTriangle size={10} /> atrasado
-                          </span>
-                        )}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {hasUnread && (
+                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-warning px-1.5 text-[10px] font-bold text-white">
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                          )}
+                          {overdue && (
+                            <span className="flex animate-pulse items-center gap-1 rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold text-white">
+                              <AlertTriangle size={10} /> atrasado
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {card.lastMessage && (
                         <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{card.lastMessage}</p>
+                      )}
+                      {card.assignedAdvisor && (
+                        <span
+                          className="mt-1.5 flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ backgroundColor: hexToRgba(colorFor(card.assignedAdvisor), 0.16), color: colorFor(card.assignedAdvisor) }}
+                        >
+                          <Headset size={10} /> {card.assignedAdvisor.split(' ')[0]}
+                        </span>
                       )}
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`flex items-center gap-1 text-[11px] ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>

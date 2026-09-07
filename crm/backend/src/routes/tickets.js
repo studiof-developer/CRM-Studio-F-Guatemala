@@ -82,7 +82,7 @@ router.get('/pipeline', async (req, res, next) => {
 
     const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}`, () => pool.query(`
       WITH temped AS (
-        SELECT t.id AS ticket_id, t.status AS ticket_status,
+        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
@@ -96,10 +96,24 @@ router.get('/pipeline', async (req, res, next) => {
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
         FROM temped
+      ),
+      paged AS (
+        SELECT * FROM totaled WHERE bucket = $1
+        ORDER BY ${orderExpr} ${sort}
+        OFFSET $2 LIMIT $3
       )
-      SELECT * FROM totaled WHERE bucket = $1
+      -- unread_count only computed for this one page (up to 200 rows), same reasoning
+      -- as MAX_PAGE_SIZE above and audit.js's message_count — a per-row subquery over
+      -- n8n_chat_histories is fine bounded to a page, not fine over a whole 2733-row
+      -- bucket, which is why it's kept out of temped/totaled entirely.
+      SELECT paged.*,
+             (SELECT count(*) FROM n8n_chat_histories h
+              WHERE h.session_id LIKE paged.whatsapp_number || '%'
+                AND h.message->>'type' = 'human'
+                AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = paged.whatsapp_number), 0)
+             ) AS unread_count
+      FROM paged
       ORDER BY ${orderExpr} ${sort}
-      OFFSET $2 LIMIT $3
     `, [bucket, offset, limit]));
 
     res.json({
@@ -111,8 +125,10 @@ router.get('/pipeline', async (req, res, next) => {
         whatsappNumber: r.whatsapp_number,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
+        assignedAdvisor: r.assigned_advisor,
         lastMessage: r.last_customer_message,
         awaitingReply: r.awaiting_reply === true,
+        unreadCount: Number(r.unread_count),
         stageSince: r.stage_since,
         lastMessageAt: r.last_customer_message_at,
       })),
