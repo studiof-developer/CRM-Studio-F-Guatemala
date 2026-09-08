@@ -219,7 +219,14 @@ router.patch('/:id/tags', async (req, res, next) => {
 
     const { rows } = await pool.query(
       `UPDATE customers AS c SET
-         manual_status = CASE WHEN $1 THEN $2 ELSE manual_status END,
+         -- Reads the row's OWN current paid_locked (not just $3, this one request's
+         -- flag) — once a customer is paid_locked, EVERY future PATCH keeps
+         -- manual_status pinned to 'pagado', even a routine Estado-dropdown change that
+         -- only meant to touch temperature. paid_locked is one-way by design (see the
+         -- check below); manual_status silently drifting away from 'pagado' afterward
+         -- was reopening the exact "Pipeline card sitting in the wrong column" bug this
+         -- fix closes — permanently, not just for the request that set paid_locked.
+         manual_status = CASE WHEN c.paid_locked OR COALESCE($3, false) THEN 'pagado' WHEN $1 THEN $2 ELSE manual_status END,
          paid_locked = paid_locked OR COALESCE($3, false),
          paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END,
          payment_suggested_at = CASE WHEN $6 THEN NULL ELSE payment_suggested_at END,

@@ -6,6 +6,8 @@ import { compressImageBuffer } from '../imageCompression.js';
 import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
+import { logBusinessAction } from '../auditLog.js';
+import { extractText, receiptContainsAmount, guessPaidMethod } from '../ocrPayment.js';
 
 const router = Router();
 
@@ -111,8 +113,9 @@ inboundRouter.post('/', async (req, res, next) => {
     // customer says "te envío el depósito", THEN sends the photo, with no matching
     // advisor message right before it).
     if (kind === 'image') {
-      await pool.query(
-        `UPDATE customers AS c SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
+      const { rows: gated } = await pool.query(
+        `SELECT c.id AS customer_id
+         FROM customers c
          WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
            AND EXISTS (
              SELECT 1 FROM n8n_chat_histories h
@@ -126,8 +129,91 @@ inboundRouter.post('/', async (req, res, next) => {
                    AND h.message->>'content' ~* '(transferencia|dep[oó]sito|comprobante)')
                )
            )`,
-        [phone, 'El cliente envió una imagen (posible comprobante de pago)']
+        [phone]
       );
+
+      if (gated.length) {
+        const customerId = gated[0].customer_id;
+        let autoConfirmed = false;
+
+        // The only "expected amount" this CRM has anywhere to check a receipt against:
+        // whatever Q-price the advisor most recently typed in the chat (same pattern
+        // db/init/033's pipeline trigger already reads) — moving a customer through the
+        // Pipeline never creates a real orders row with a total to compare against instead.
+        // Pulls the raw message text (not a single pre-extracted number) so the LAST
+        // Q-amount in the message wins, not the first — a message quoting an original
+        // price and then a discounted one ("Antes Q1200, con descuento Q950") must
+        // compare against the 950 the customer will actually pay, not the 1200.
+        const { rows: priced } = await pool.query(
+          `SELECT h.message->>'content' AS content
+           FROM n8n_chat_histories h
+           WHERE h.session_id LIKE $1 || '%'
+             AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+             AND h.message->>'content' ~ 'Q\\s?\\d{1,5}'
+             AND h.created_at >= now() - interval '3 hours'
+           ORDER BY h.id DESC LIMIT 1`,
+          [phone]
+        );
+        const priceMatches = priced[0]?.content?.match(/Q\s?\d{1,5}/g);
+        const expectedAmount = priceMatches?.length
+          ? Number(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
+          : null;
+
+        // ponytail: runs inline (Tesseract can take a second or two) rather than a
+        // background job — fine at this business's message volume, revisit if it ever
+        // measurably delays the inbound webhook.
+        if (expectedAmount) {
+          const ocrText = await extractText(buffer).catch((err) => {
+            console.error('receipt OCR failed', err);
+            return '';
+          });
+          if (receiptContainsAmount(ocrText, expectedAmount)) {
+            const paidMethod = guessPaidMethod(ocrText);
+            // Re-checks paid_locked/caliente at write time instead of trusting the
+            // `gated` SELECT from a few seconds ago — OCR takes long enough that an
+            // advisor's own "Marcar como Pagado" click, or the customer moving out of
+            // caliente, can land in between. If 0 rows come back here, someone else
+            // already resolved this customer while OCR was running, so this result is
+            // stale and must NOT overwrite whatever they just set.
+            // Also sets manual_status='pagado' — unlike the manual "Marcar como Pagado"
+            // button (customers.js), which only sets paid_locked and was leaving the
+            // Pipeline card sitting in whatever column it was already in.
+            const { rows: updated } = await pool.query(
+              `UPDATE customers AS c SET paid_locked = true, paid_method = $2, manual_status = 'pagado',
+                 payment_suggested_at = NULL, payment_suggestion_reason = NULL, payment_suggestion_method = NULL,
+                 updated_at = now()
+               WHERE c.id = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
+               RETURNING c.id`,
+              [customerId, paidMethod]
+            );
+            if (updated.length) {
+              logBusinessAction(
+                { fullName: 'Sistema (OCR)', id: null },
+                customerId,
+                'customer_marked_paid',
+                `${paidMethod} — Q${expectedAmount} detectado por OCR en el comprobante (automático)`
+              );
+              autoConfirmed = true;
+            } else {
+              // Stale — don't fall through to the "possible payment" suggestion either;
+              // whatever the customer's current state is, it was just set by someone/
+              // something else a moment ago and this request has nothing useful to add.
+              autoConfirmed = true;
+            }
+          }
+        }
+
+        if (!autoConfirmed) {
+          // paid_locked = false here too, for the same reason as above: a customer who
+          // got marked Paid (by this same request's race, or by an advisor) in the time
+          // it took to reach this line must not have the suggestion banner resurrected.
+          await pool.query(
+            `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
+             WHERE id = $1 AND paid_locked = false`,
+            [customerId, 'El cliente envió una imagen (posible comprobante de pago)']
+          );
+        }
+      }
     }
 
     res.status(201).json({ attachmentId, sessionId: cleanSessionId(sessionId) });
