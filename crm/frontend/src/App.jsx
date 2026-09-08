@@ -104,6 +104,27 @@ const NAV_GROUPS = [
   { key: 'admin', title: 'Administración', keys: ['audit', 'users'] },
 ];
 
+// Every tab reachable at its own bookmarkable URL — an explicit map rather than
+// deriving one from each tab's camelCase key, since a URL should read like a page name
+// ("/pipeline"), not a variable name ("/handoff"). Role-gating still happens where
+// `tabs` itself is built below (tabs[tab] ?? tabs.dashboard) — a role without a given
+// tab just falls back to Dashboard if it types/bookmarks that URL directly, same as
+// this already worked for /pruebas before every tab had a path.
+const TAB_PATHS = {
+  dashboard: '/',
+  handoff: '/pipeline',
+  conversations: '/conversaciones',
+  customers: '/clientes',
+  catalog: '/catalogo',
+  quickReplies: '/respuestas-rapidas',
+  campaigns: '/difusion',
+  audit: '/auditoria',
+  users: '/usuarios',
+  whatsappNumbers: '/configuracion',
+  pruebas: '/pruebas',
+};
+const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([key, path]) => [path, key]));
+
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
 
 // Remembers a per-user UI preference (a group's expanded/collapsed state) across
@@ -174,14 +195,21 @@ function NavButton({ tabKey, label, Icon, active, badge, onClick }) {
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
-  // The app has no real router — every other tab lives at "/" regardless. "pruebas" is
-  // the one exception, reachable as its own bookmarkable URL, so its initial value (and
-  // only its value) is read from the actual path instead of always starting at dashboard.
-  const [tab, setTab] = useState(() => (window.location.pathname === '/pruebas' ? 'pruebas' : 'dashboard'));
+  const [tab, setTab] = useState(() => TAB_BY_PATH[window.location.pathname] ?? 'dashboard');
+  // Keeps the URL in sync with whichever tab is open — a click, handleOpenConversation,
+  // or the floating Pruebas button all just call setTab, same as before this existed.
   useEffect(() => {
-    const path = tab === 'pruebas' ? '/pruebas' : '/';
+    const path = TAB_PATHS[tab] ?? '/';
     if (window.location.pathname !== path) window.history.pushState(null, '', path);
   }, [tab]);
+  // The other half of being real navigation: the Back/Forward buttons. Without this,
+  // they changed the address bar but the app never noticed and kept showing whatever
+  // tab was already open.
+  useEffect(() => {
+    const onPopState = () => setTab(TAB_BY_PATH[window.location.pathname] ?? 'dashboard');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
