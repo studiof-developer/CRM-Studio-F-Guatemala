@@ -6,7 +6,18 @@ export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'
 // message — scattered and confusing, with nothing telling the advisor to log back
 // in. App.jsx listens for this and drops straight to the Login screen instead.
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+  } catch (err) {
+    // A tab left idle for a few minutes can have its connection silently closed by
+    // Dokploy's proxy or Node's own keep-alive timeout right as a new request lands on
+    // it — fetch() throws a bare network TypeError ("Failed to fetch") for that, not a
+    // real outage. A fresh connection on one retry succeeds immediately; if the network
+    // is genuinely down, this second attempt fails too and the error still surfaces.
+    if (!(err instanceof TypeError)) throw err;
+    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+  }
   if (res.status === 401 && path !== '/api/auth/login') {
     window.dispatchEvent(new Event('studio-f-session-expired'));
   }

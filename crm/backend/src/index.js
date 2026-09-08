@@ -147,4 +147,15 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`CRM backend listening on ${port}`));
+const server = app.listen(port, () => console.log(`CRM backend listening on ${port}`));
+
+// Node's own default (5s) closes an idle keep-alive connection long before Dokploy's
+// Traefik proxy in front of it gives up on the same connection (minutes, not seconds).
+// A request that lands on the gap — proxy still thinks the socket is good, Node already
+// closed it — resets mid-flight and surfaces to the browser as a bare "Failed to fetch",
+// which is exactly what showed up after a few idle minutes on the Pipeline board.
+// Setting this above any reasonable proxy idle timeout is the standard fix for a Node
+// server sitting behind any reverse proxy (nginx/Traefik/ALB all have this same gotcha).
+// headersTimeout must stay above keepAliveTimeout or Node warns/misbehaves.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
