@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset } from 'lucide-react';
-import { fetchPipelineColumn, updateTicket, updateCustomerTags } from './api.js';
+import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot } from './api.js';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
-import { useLiveEvent } from './lib/liveEvents.js';
+import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
@@ -57,6 +57,31 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
+  // Same live-presence map Conversations.jsx keeps — keyed by phone (cleanSessionId
+  // strips everything after "__", which for a real WhatsApp session IS the phone), so
+  // card.whatsappNumber matches these keys with no extra lookup needed.
+  const [presenceByPhone, setPresenceByPhone] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    fetchPresenceSnapshot().then((rows) => {
+      if (cancelled) return;
+      const map = {};
+      for (const r of rows) map[r.sessionId] = { userId: r.userId, fullName: r.fullName };
+      setPresenceByPhone(map);
+    }).catch(() => {});
+    const unsubscribe = onLiveEvent('presence_changes', (data) => {
+      let payload;
+      try { payload = JSON.parse(data); } catch { return; }
+      const { sessionId, userId, fullName } = payload;
+      setPresenceByPhone((prev) => {
+        const next = { ...prev };
+        if (userId) next[sessionId] = { userId, fullName };
+        else delete next[sessionId];
+        return next;
+      });
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
   // Read fresh column state (offset/sort/loading) from inside callbacks without having
   // to recreate them on every column update — same pattern Conversations.jsx uses for
   // selectedId.
@@ -100,10 +125,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   }, [loadColumn]);
 
   useEffect(() => { reloadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // ticket_changes also now fires on a plain customer temperature change (drag-and-drop,
+  // the OCR auto-Pagado, "Marcar como Pagado" — see db/init/037), not just a real ticket
+  // row — reused instead of a new channel since this board already listens to it.
   useLiveEvent('ticket_changes', reloadAll);
-  // No live channel exists for a plain temperature change (only tickets broadcast) —
-  // this catches those within a minute instead of never, same fallback role polling
-  // already played in the old queue view.
+  // A new message is what moves the unread badge and "atrasado" clock — without this,
+  // those only updated on the next drag/take action or the 60s fallback below.
+  useLiveEvent('message_changes', reloadAll);
+  // Safety net for anything that still slips through (e.g. this tab losing its SSE
+  // connection briefly) — same fallback role polling already played in the old queue view.
   useEffect(() => {
     const id = setInterval(reloadAll, 60000);
     return () => clearInterval(id);
@@ -243,11 +273,17 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                       && minutesSince(card.lastMessageAt) > AWAITING_REPLY_OVERDUE_MINUTES;
                   const unreadCount = card.unreadCount ?? 0;
                   const hasUnread = unreadCount > 0;
+                  // Someone (possibly me, elsewhere) currently has this chat open in
+                  // Conversaciones — same live map that page keeps, just consumed here
+                  // read-only (Pipeline itself never "holds" a chat open).
+                  const presence = presenceByPhone[card.whatsappNumber];
                   return (
                     <div
                       key={card.ticketId}
                       draggable={DRAG_SOURCES.has(key)}
                       onDragStart={(e) => handleDragStart(e, card, key)}
+                      title={presence ? `${presence.fullName || 'Alguien'} tiene este chat abierto` : undefined}
+                      style={presence ? { backgroundColor: hexToRgba(colorFor(presence.fullName), 0.14) } : undefined}
                       className={`rounded-xl border p-3 shadow-sm transition-shadow hover:shadow-md ${
                         overdue ? 'border-danger/40 bg-danger/5' : hasUnread ? 'border-warning/40 bg-warning/5' : 'border-border bg-paper'
                       } ${DRAG_SOURCES.has(key) ? 'cursor-grab active:cursor-grabbing' : ''}`}
