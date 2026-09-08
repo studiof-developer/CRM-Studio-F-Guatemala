@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil, Clock, ArrowLeft } from 'lucide-react';
+import { Search, CircleDollarSign, MessageSquareWarning, MapPin, ShoppingBag, Phone, Mail, CreditCard, Calendar, Package, Pencil, Clock, ArrowLeft, Copy } from 'lucide-react';
 import { fetchCustomerCounts, fetchCustomers, fetchCustomer, updateCustomerTags } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
@@ -100,6 +100,12 @@ export default function Customers() {
       setConfirmPaidOpen(false);
       setPaidMethod('');
     }
+  }
+
+  function copyPhone(phone) {
+    navigator.clipboard.writeText(phone)
+      .then(() => showSuccess('Número copiado'))
+      .catch(() => showError('No se pudo copiar — tu navegador puede estar bloqueando el portapapeles'));
   }
 
   const detailTemp = detail ? TEMP_META[detail.temperature] : null;
@@ -213,6 +219,14 @@ export default function Customers() {
                   </h2>
                   <p className="flex items-center gap-1.5 text-sm text-greige-ink">
                     <Phone size={13} /> {detail.whatsapp_number}
+                    <button
+                      onClick={() => copyPhone(detail.whatsapp_number)}
+                      className="rounded p-0.5 text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+                      aria-label="Copiar número"
+                      title="Copiar número"
+                    >
+                      <Copy size={12} />
+                    </button>
                   </p>
                 </div>
               </div>

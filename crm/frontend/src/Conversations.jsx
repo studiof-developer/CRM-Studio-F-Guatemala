@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
-  Megaphone, Mail, Loader2, ArrowLeft,
+  Megaphone, Mail, Loader2, ArrowLeft, Copy,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
@@ -895,6 +895,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
 
+  function copyPhone(phone) {
+    navigator.clipboard.writeText(phone)
+      .then(() => showSuccess('Número copiado'))
+      .catch(() => showError('No se pudo copiar — tu navegador puede estar bloqueando el portapapeles'));
+  }
+
   async function handleMarkPaid() {
     if (!thread?.customerId || !paidMethod) return;
     setActionBusy(true);
@@ -1207,7 +1213,19 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 <p className="truncate text-sm font-semibold text-ink">
                   {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
                 </p>
-                <p className="text-xs text-greige-ink">{thread.phone}</p>
+                <p className="flex items-center gap-1 text-xs text-greige-ink">
+                  {thread.phone}
+                  {thread.phone && (
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); copyPhone(thread.phone); }}
+                      className="rounded p-0.5 transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+                      title="Copiar número"
+                    >
+                      <Copy size={11} />
+                    </span>
+                  )}
+                </p>
               </div>
               <span
                 role="button"
@@ -1601,7 +1619,19 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   <div className="flex flex-col items-center text-center">
                     <Avatar name={thread.customerName || thread.phone} size={64} />
                     <p className="mt-3 text-sm font-semibold text-ink">{thread.customerName || 'Sin nombre'}</p>
-                    <p className="text-xs text-greige-ink">{thread.phone}</p>
+                    <p className="flex items-center gap-1 text-xs text-greige-ink">
+                      {thread.phone}
+                      {thread.phone && (
+                        <button
+                          onClick={() => copyPhone(thread.phone)}
+                          className="rounded p-0.5 text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+                          aria-label="Copiar número"
+                          title="Copiar número"
+                        >
+                          <Copy size={11} />
+                        </button>
+                      )}
+                    </p>
                     <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                       {thread.temperature && (() => {
                         const { label, icon: Icon, iconBg, iconText } = TEMP_META[thread.temperature];
