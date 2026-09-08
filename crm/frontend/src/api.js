@@ -266,10 +266,11 @@ export async function fetchCustomerCounts() {
   return res.json();
 }
 
-export async function fetchCustomers(q, status) {
+export async function fetchCustomers(q, status, limit) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (status) params.set('status', status);
+  if (limit) params.set('limit', limit);
   const qs = params.toString();
   const res = await apiFetch(`/api/customers${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar clientes');

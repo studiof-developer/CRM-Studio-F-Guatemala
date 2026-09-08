@@ -35,6 +35,14 @@ export default function Customers() {
   const [paidMethod, setPaidMethod] = useState('');
   const [editOpen, setEditOpen] = useState(false);
 
+  // Same growing-limit pattern Conversations.jsx's list already uses — starts at the
+  // most recent PAGE_SIZE and grows as the advisor scrolls, instead of the whole
+  // customers table loading (and being re-sent) on every visit.
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [hasMore, setHasMore] = useState(true);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature]);
+
   const loadCounts = useCallback(() => {
     fetchCustomerCounts().then(setCounts).catch(() => {});
   }, []);
@@ -45,13 +53,15 @@ export default function Customers() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      setCustomers(await fetchCustomers(search, temperature));
+      const data = await fetchCustomers(search, temperature, visibleCount);
+      setCustomers(data);
+      setHasMore(data.length >= visibleCount);
     } catch (err) {
       setError(err.message);
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature]);
+  }, [search, temperature, visibleCount]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -138,7 +148,16 @@ export default function Customers() {
           />
         </div>
 
-        <div className="relative flex-1 overflow-y-auto">
+        <div
+          className="relative flex-1 overflow-y-auto"
+          onScroll={(e) => {
+            if (!hasMore || loading) return;
+            const el = e.currentTarget;
+            if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+              setVisibleCount((n) => n + PAGE_SIZE);
+            }
+          }}
+        >
           <AnimatePresence>
             {loading && (
               <motion.span

@@ -63,25 +63,31 @@ router.get('/', async (req, res, next) => {
     }
     const params = [];
     const zClause = zoneClause(req.user, params);
+
+    // temperature/search used to be filtered in JS after fetching every row — harmless
+    // when the whole table came back anyway, but that's exactly what made LIMIT below
+    // meaningless (a JS filter after a SQL LIMIT can silently return fewer than a page).
+    // Same growing-limit pattern conversations.js's GET / already uses, not a new one.
+    const clauses = [];
+    if (status) { params.push(status); clauses.push(`(${EFFECTIVE_STATUS_SQL}) = $${params.length}`); }
+    const needle = q?.trim();
+    if (needle) { params.push(`%${needle}%`); clauses.push(`(c.full_name ILIKE $${params.length} OR c.whatsapp_number ILIKE $${params.length})`); }
+    const filterClause = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 0, 0), 500) || null;
+    if (limit) params.push(limit);
+
     const { rows } = await pool.query(
       `SELECT c.id, c.full_name, c.whatsapp_number, c.department, c.zone,
               c.preferred_line, c.purchase_frequency, c.paid_locked,
               ${EFFECTIVE_STATUS_SQL} AS temperature
        FROM customers c
-       WHERE true ${zClause}
-       ORDER BY id DESC`,
+       WHERE true ${zClause} ${filterClause}
+       ORDER BY id DESC
+       ${limit ? `LIMIT $${params.length}` : ''}`,
       params
     );
-
-    let visible = rows;
-    if (status) visible = visible.filter((r) => r.temperature === status);
-    const needle = q?.trim().toLowerCase();
-    if (needle) {
-      visible = visible.filter((r) =>
-        (r.full_name ?? '').toLowerCase().includes(needle) || (r.whatsapp_number ?? '').includes(needle)
-      );
-    }
-    res.json(visible);
+    res.json(rows);
   } catch (err) { next(err); }
 });
 
