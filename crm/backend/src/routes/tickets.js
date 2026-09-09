@@ -86,7 +86,7 @@ router.get('/pipeline', async (req, res, next) => {
     // needed). Applied inside `totaled`, before bucket_total is computed, so the
     // column's own count reflects the filtered set instead of the whole bucket.
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    const { from, to, since, until } = req.query;
+    const { from, to, since, until, q } = req.query;
     if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
       return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
     }
@@ -96,33 +96,42 @@ router.get('/pipeline', async (req, res, next) => {
     if (until && !Number.isFinite(Date.parse(until))) {
       return res.status(400).json({ error: 'until must be a valid timestamp' });
     }
+    const trimmedQ = (q ?? '').trim();
     const params = [bucket];
     let dateClause = '';
-    // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
-    // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
-    // so since/until take over from from/to instead of combining with them.
-    if (since) {
+    if (trimmedQ) {
+      // A search match has to show up no matter what period is selected — a customer
+      // who wrote a week ago is still a real result, not something Hoy/Ayer should be
+      // able to hide. Name/phone only (temped never carries message text to search).
+      params.push(`%${trimmedQ}%`);
+      dateClause += ` AND (full_name ILIKE $${params.length} OR whatsapp_number ILIKE $${params.length})`;
+    } else if (since) {
+      // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
+      // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
+      // so since/until take over from from/to instead of combining with them.
       params.push(new Date(since).toISOString());
       dateClause += ` AND ${orderExpr} >= $${params.length}`;
     } else if (from) {
       params.push(`${from}T00:00:00-06:00`);
       dateClause += ` AND ${orderExpr} >= $${params.length}`;
     }
-    if (until) {
-      params.push(new Date(until).toISOString());
-      dateClause += ` AND ${orderExpr} < $${params.length}`;
-    } else if (to) {
-      const toTs = new Date(`${to}T00:00:00-06:00`);
-      toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
-      params.push(toTs.toISOString());
-      dateClause += ` AND ${orderExpr} < $${params.length}`;
+    if (!trimmedQ) {
+      if (until) {
+        params.push(new Date(until).toISOString());
+        dateClause += ` AND ${orderExpr} < $${params.length}`;
+      } else if (to) {
+        const toTs = new Date(`${to}T00:00:00-06:00`);
+        toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
+        params.push(toTs.toISOString());
+        dateClause += ` AND ${orderExpr} < $${params.length}`;
+      }
     }
     const offsetParam = params.length + 1;
     params.push(offset);
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}`, () => pool.query(`
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,

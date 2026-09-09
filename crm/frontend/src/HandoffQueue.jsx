@@ -71,6 +71,15 @@ function emptyColumns() {
 export default function HandoffQueue({ user, onOpenConversation }) {
   const [columns, setColumns] = useState(emptyColumns);
   const [search, setSearch] = useState('');
+  // Debounced separately from `search` itself — the input needs to feel instant, but a
+  // search re-fetches every column server-side (see `searching` below), so typing
+  // shouldn't fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+  const searching = debouncedSearch.length > 0;
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
@@ -102,7 +111,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // from/to, filtered server-side on the same field the column already sorts by).
   // "onlyColumn" is purely a render-time filter, not a fetch param — every column keeps
   // loading in the background so its count stays right if you switch back to it.
-  const [periodPreset, setPeriodPreset] = useState('todo');
+  // Defaults to "Hoy" — opening the board should show what actually needs attention
+  // right now, not every contact ever, with the full history one click away in "Todo".
+  const [periodPreset, setPeriodPreset] = useState('hoy');
   const todayStr = guatemalaToday();
   const [monthCursor, setMonthCursor] = useState(() => {
     const [y, m] = todayStr.split('-').map(Number);
@@ -181,13 +192,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -197,7 +208,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -206,7 +217,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
@@ -306,9 +317,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // The single number the period filter is actually for — "cuántos entraron hoy",
   // not "go add up the 7 column headers yourself". Sums whatever's currently visible:
   // every column, or just the one onlyColumn has narrowed to.
-  const visibleColumnKeys = COLUMN_ORDER.filter((key) => !onlyColumn || key === onlyColumn);
+  const visibleColumnKeys = COLUMN_ORDER.filter((key) => searching || !onlyColumn || key === onlyColumn);
   const grandTotal = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.total ?? 0), 0);
-  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? '';
+  const periodLabel = searching ? 'Búsqueda' : PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? '';
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
@@ -372,7 +383,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
           <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
 
-          {(periodPreset === 'hoy' || periodPreset === 'ayer') && (
+          {!searching && (periodPreset === 'hoy' || periodPreset === 'ayer') && (
             <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">
               <Clock size={12} className="text-accent" />
               {periodPreset === 'hoy'
@@ -385,7 +396,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
       {error && <p className="p-4 text-sm text-danger">{error}</p>}
       <div className="flex flex-1 gap-3 overflow-x-auto p-4">
-        {displayOrder.filter((key) => !onlyColumn || key === onlyColumn).map((key) => {
+        {displayOrder.filter((key) => searching || !onlyColumn || key === onlyColumn).map((key) => {
           const meta = metaFor(key);
           const Icon = meta.icon;
           const col = columns[key];
