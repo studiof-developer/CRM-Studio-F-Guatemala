@@ -60,6 +60,84 @@ function cachedRead(key, run) {
   return promise;
 }
 
+// "No atendidos" sorts/displays by stage_since (ticket wait time — that's what its SLA
+// is actually about). Every other column sorts/displays by last_customer_message_at
+// instead, falling back to stage_since only for the rare contact with a temperature set
+// but no message history at all. Sorting and displaying by two DIFFERENT timestamps was
+// exactly the bug reported 2026-08-31 — the board's order (by stage_since) and the
+// "hace X" next to each message (by a separately-fetched last-message time) didn't
+// correspond to each other at all. Both now come from customers.last_customer_message_at
+// — kept current by a trigger on n8n_chat_histories (db/init/031) instead of a
+// per-request LATERAL lookup, so this stays a plain indexed sort no matter how deep a
+// column gets paged.
+function orderExprFor(bucket) {
+  return bucket === 'pendiente' ? 'stage_since' : 'COALESCE(last_customer_message_at, stage_since)';
+}
+
+// Shared by the paged board view and the unpaginated export below — same period/search/
+// unread filters, same -06 Guatemala convention as the "Sin responder" report (this
+// business never observes DST, so a plain offset is always correct). Returns the WHERE
+// fragments and params ($2 onward — $1 is always the bucket) to splice into `totaled`.
+function buildPipelineFilters(bucket, query, paramsSoFar) {
+  const orderExpr = orderExprFor(bucket);
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const { from, to, since, until, q, unreadOnly } = query;
+  if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
+    throw Object.assign(new Error('from/to must be YYYY-MM-DD'), { status: 400 });
+  }
+  if (since && !Number.isFinite(Date.parse(since))) {
+    throw Object.assign(new Error('since must be a valid timestamp'), { status: 400 });
+  }
+  if (until && !Number.isFinite(Date.parse(until))) {
+    throw Object.assign(new Error('until must be a valid timestamp'), { status: 400 });
+  }
+  const trimmedQ = (q ?? '').trim();
+  const params = paramsSoFar;
+  let dateClause = '';
+  if (trimmedQ) {
+    // A search match has to show up no matter what period is selected — a customer
+    // who wrote a week ago is still a real result, not something Hoy/Ayer should be
+    // able to hide. Name/phone only (temped never carries message text to search).
+    params.push(`%${trimmedQ}%`);
+    dateClause += ` AND (full_name ILIKE $${params.length} OR whatsapp_number ILIKE $${params.length})`;
+  } else if (since) {
+    // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
+    // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
+    // so since/until take over from from/to instead of combining with them.
+    params.push(new Date(since).toISOString());
+    dateClause += ` AND ${orderExpr} >= $${params.length}`;
+  } else if (from) {
+    params.push(`${from}T00:00:00-06:00`);
+    dateClause += ` AND ${orderExpr} >= $${params.length}`;
+  }
+  if (!trimmedQ) {
+    if (until) {
+      params.push(new Date(until).toISOString());
+      dateClause += ` AND ${orderExpr} < $${params.length}`;
+    } else if (to) {
+      const toTs = new Date(`${to}T00:00:00-06:00`);
+      toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
+      params.push(toTs.toISOString());
+      dateClause += ` AND ${orderExpr} < $${params.length}`;
+    }
+  }
+  // Independent of the period/search filters above (stacks with either) — "solo no
+  // leídos" narrows whatever's already selected instead of replacing it. EXISTS short-
+  // circuits on the first unread row and reuses the same session_id prefix index the
+  // per-page unread_count below already relies on, so this stays reasonably cheap
+  // even applied across a whole bucket (thousands of rows) before pagination, unlike
+  // a full unread COUNT per row would be.
+  const unreadOnlyClause = unreadOnly === 'true'
+    ? ` AND EXISTS (
+          SELECT 1 FROM n8n_chat_histories h
+          WHERE h.session_id LIKE whatsapp_number || '%'
+            AND h.message->>'type' = 'human'
+            AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
+        )`
+    : '';
+  return { orderExpr, dateClause, unreadOnlyClause, trimmedQ };
+}
+
 router.get('/pipeline', async (req, res, next) => {
   try {
     const bucket = req.query.bucket;
@@ -68,78 +146,9 @@ router.get('/pipeline', async (req, res, next) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const sort = req.query.sort === 'asc' ? 'ASC' : 'DESC';
 
-    // "No atendidos" sorts/displays by stage_since (ticket wait time — that's what its
-    // SLA is actually about). Every other column sorts/displays by
-    // last_customer_message_at instead, falling back to stage_since only for the rare
-    // contact with a temperature set but no message history at all. Sorting and
-    // displaying by two DIFFERENT timestamps was exactly the bug reported 2026-08-31 —
-    // the board's order (by stage_since) and the "hace X" next to each message (by a
-    // separately-fetched last-message time) didn't correspond to each other at all.
-    // Both now come from customers.last_customer_message_at — kept current by a trigger
-    // on n8n_chat_histories (db/init/031) instead of a per-request LATERAL lookup, so
-    // this stays a plain indexed sort no matter how deep a column gets paged.
-    const orderExpr = bucket === 'pendiente' ? 'stage_since' : 'COALESCE(last_customer_message_at, stage_since)';
-
-    // Filters on the exact same field the column already sorts/displays by — matches
-    // the "Sin responder" report's fixed -06 Guatemala convention (this business never
-    // observes DST, so a plain offset is always correct, no timezone-name lookup
-    // needed). Applied inside `totaled`, before bucket_total is computed, so the
-    // column's own count reflects the filtered set instead of the whole bucket.
-    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    const { from, to, since, until, q, unreadOnly } = req.query;
-    if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
-      return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
-    }
-    if (since && !Number.isFinite(Date.parse(since))) {
-      return res.status(400).json({ error: 'since must be a valid timestamp' });
-    }
-    if (until && !Number.isFinite(Date.parse(until))) {
-      return res.status(400).json({ error: 'until must be a valid timestamp' });
-    }
-    const trimmedQ = (q ?? '').trim();
     const params = [bucket];
-    let dateClause = '';
-    if (trimmedQ) {
-      // A search match has to show up no matter what period is selected — a customer
-      // who wrote a week ago is still a real result, not something Hoy/Ayer should be
-      // able to hide. Name/phone only (temped never carries message text to search).
-      params.push(`%${trimmedQ}%`);
-      dateClause += ` AND (full_name ILIKE $${params.length} OR whatsapp_number ILIKE $${params.length})`;
-    } else if (since) {
-      // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
-      // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
-      // so since/until take over from from/to instead of combining with them.
-      params.push(new Date(since).toISOString());
-      dateClause += ` AND ${orderExpr} >= $${params.length}`;
-    } else if (from) {
-      params.push(`${from}T00:00:00-06:00`);
-      dateClause += ` AND ${orderExpr} >= $${params.length}`;
-    }
-    if (!trimmedQ) {
-      if (until) {
-        params.push(new Date(until).toISOString());
-        dateClause += ` AND ${orderExpr} < $${params.length}`;
-      } else if (to) {
-        const toTs = new Date(`${to}T00:00:00-06:00`);
-        toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
-        params.push(toTs.toISOString());
-        dateClause += ` AND ${orderExpr} < $${params.length}`;
-      }
-    }
-    // Independent of the period/search filters above (stacks with either) — "solo no
-    // leídos" narrows whatever's already selected instead of replacing it. EXISTS short-
-    // circuits on the first unread row and reuses the same session_id prefix index the
-    // per-page unread_count below already relies on, so this stays reasonably cheap
-    // even applied across a whole bucket (thousands of rows) before pagination, unlike
-    // a full unread COUNT per row would be.
-    const unreadOnlyClause = unreadOnly === 'true'
-      ? ` AND EXISTS (
-            SELECT 1 FROM n8n_chat_histories h
-            WHERE h.session_id LIKE whatsapp_number || '%'
-              AND h.message->>'type' = 'human'
-              AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
-          )`
-      : '';
+    const { orderExpr, dateClause, unreadOnlyClause, trimmedQ } = buildPipelineFilters(bucket, req.query, params);
+    const { from, to, since, until, unreadOnly } = req.query;
     const offsetParam = params.length + 1;
     params.push(offset);
     const limitParam = params.length + 1;
@@ -199,7 +208,57 @@ router.get('/pipeline', async (req, res, next) => {
         lastMessageAt: r.last_customer_message_at,
       })),
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Whole-bucket, unpaginated — "download everyone in this column" instead of the paged
+// board view above (same filters: period, search, unreadOnly). No unread_count (that
+// per-row subquery is only cheap bounded to one page, see the comment above) and a hard
+// cap so a runaway bucket can't try to hand back an unbounded Excel file.
+const EXPORT_ROW_CAP = 10000;
+router.get('/pipeline/export', async (req, res, next) => {
+  try {
+    const bucket = req.query.bucket;
+    if (!PIPELINE_COLUMNS.includes(bucket)) return res.status(400).json({ error: 'invalid bucket' });
+
+    const params = [bucket];
+    const { orderExpr, dateClause, unreadOnlyClause } = buildPipelineFilters(bucket, req.query, params);
+
+    const { rows } = await pool.query(`
+      WITH temped AS (
+        SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
+               c.full_name, c.whatsapp_number,
+               GREATEST(t.updated_at, c.updated_at) AS stage_since,
+               c.last_customer_message_at, c.last_customer_message
+        FROM tickets t
+        JOIN customers c ON c.id = t.customer_id
+        WHERE t.status != 'bot'
+      ),
+      totaled AS (
+        SELECT *, ${BUCKET_CASE_SQL} AS bucket
+        FROM temped
+        WHERE true ${dateClause} ${unreadOnlyClause}
+      )
+      SELECT full_name, whatsapp_number, stage_since, last_customer_message_at, last_customer_message
+      FROM totaled WHERE bucket = $1
+      ORDER BY ${orderExpr} ASC
+      LIMIT ${EXPORT_ROW_CAP}
+    `, params);
+
+    res.json(rows.map((r) => ({
+      fullName: r.full_name,
+      whatsappNumber: r.whatsapp_number,
+      stageSince: r.stage_since,
+      lastMessageAt: r.last_customer_message_at,
+      lastMessage: r.last_customer_message,
+    })));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 });
 
 // The boundary the Pipeline's "Hoy"/"Ayer" filters actually use: not calendar midnight,

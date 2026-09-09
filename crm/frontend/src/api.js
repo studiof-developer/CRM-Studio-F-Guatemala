@@ -44,8 +44,10 @@ export async function fetchMe() {
   return res.json();
 }
 
-export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', from, to, since, until, q, unreadOnly } = {}) {
-  const params = new URLSearchParams({ bucket, offset, limit, sort });
+// Shared by the paged column fetch and the whole-bucket export below — same period/
+// search/unreadOnly filters either way.
+function pipelineFilterParams({ from, to, since, until, q, unreadOnly } = {}) {
+  const params = new URLSearchParams();
   if (q) {
     // A search match has to show up regardless of the active period — the backend
     // ignores from/to/since/until whenever q is present, so there's no point sending them.
@@ -59,8 +61,25 @@ export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort
   // Independent of the period/search filters above — narrows whatever's already
   // selected instead of replacing it, so it stacks with either.
   if (unreadOnly) params.set('unreadOnly', 'true');
+  return params;
+}
+
+export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', ...filters } = {}) {
+  const params = pipelineFilterParams(filters);
+  params.set('bucket', bucket);
+  params.set('offset', offset);
+  params.set('limit', limit);
+  params.set('sort', sort);
   const res = await apiFetch(`/api/tickets/pipeline?${params}`);
   if (!res.ok) throw new Error('Error al cargar el pipeline');
+  return res.json();
+}
+
+export async function fetchPipelineExport(bucket, filters = {}) {
+  const params = pipelineFilterParams(filters);
+  params.set('bucket', bucket);
+  const res = await apiFetch(`/api/tickets/pipeline/export?${params}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al exportar la columna');
   return res.json();
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail } from 'lucide-react';
-import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity, fetchSettings } from './api.js';
+import * as XLSX from 'xlsx';
+import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download } from 'lucide-react';
+import { fetchPipelineColumn, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -94,6 +95,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // instead of replacing it (Hoy + solo no leídos, una búsqueda + solo no leídos, etc.
   // all compose).
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [exportingKey, setExportingKey] = useState(null);
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
@@ -168,6 +170,30 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   else if (periodPreset === 'semana') { dateFrom = addDays(todayStr, -6); dateTo = todayStr; }
   else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
   else if (periodPreset === 'personalizado') { dateFrom = customFrom; dateTo = customTo; }
+
+  // Whole column, not just the loaded page — same period/search/unread filters already
+  // active on the board, sent straight to the unpaginated /pipeline/export endpoint
+  // instead of trying to page through everything client-side.
+  async function exportColumn(key) {
+    setExportingKey(key);
+    try {
+      const rows = await fetchPipelineExport(key, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      if (!rows.length) { showError('No hay nada que exportar en esta columna con los filtros actuales'); return; }
+      const meta = metaFor(key);
+      const headers = ['Cliente', 'Teléfono', 'Esperando desde', 'Último mensaje'];
+      const lines = rows.map((r) => [r.fullName ?? '', r.whatsappNumber, formatWait(r.lastMessageAt ?? r.stageSince), r.lastMessage ?? '']);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
+      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 40 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, meta.label.slice(0, 31));
+      XLSX.writeFile(wb, `pipeline_${key}_${guatemalaToday()}.xlsx`);
+      showSuccess(`${rows.length} cliente(s) exportado(s)`);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setExportingKey(null);
+    }
+  }
 
   function shiftMonth(delta) {
     setMonthCursor((prev) => {
@@ -454,6 +480,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground shadow-sm">
                   {q ? cards.length : col.total}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => exportColumn(key)}
+                  disabled={exportingKey === key}
+                  title="Descargar Excel con todos los de esta columna (con los filtros actuales)"
+                  className="flex shrink-0 items-center justify-center rounded-full border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  {exportingKey === key ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                </button>
                 <button
                   type="button"
                   onClick={() => toggleSort(key)}
