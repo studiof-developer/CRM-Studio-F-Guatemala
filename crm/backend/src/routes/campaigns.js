@@ -391,6 +391,22 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   // like nothing happened at all when someone checked the logs instead of the tooltip.
   if (error) console.error(`campaign ${campaignId} send to ${customer.whatsapp_number} failed:`, error);
 
+  // A "No atendidos" contact who just got a broadcast HAS been reached, even though no
+  // advisor personally claimed it — leaving the ticket at esperando_asesor would mean
+  // this same list resurfaces in the next broadcast/export forever. Only on an actual
+  // successful send (not a failed one — that customer genuinely wasn't reached) and
+  // only from esperando_asesor — never touches a ticket already claimed, en route
+  // through the pipeline, or resolved. Unassigned (no assigned_advisor) since this
+  // wasn't any one advisor's action — the card lands in "En conversación" for whoever
+  // picks up the reply.
+  if (sentWamid) {
+    await pool.query(
+      `UPDATE tickets SET status = 'en_atencion', first_response_at = COALESCE(first_response_at, now()), updated_at = now()
+       WHERE customer_id = $1 AND status = 'esperando_asesor'`,
+      [customer.id]
+    );
+  }
+
   const { sessionIds } = await findConversationThread(customer.whatsapp_number);
   const sessionId = sessionIds?.[0] ?? customer.whatsapp_number;
   const message = {
@@ -440,6 +456,16 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
     error = err.message;
   }
   if (error) console.error(`campaign retry message ${messageId} to ${phone} failed:`, error);
+
+  // Same "reached, so leave No atendidos" reasoning as sendToRecipient above — a retry
+  // is just the send finally landing, so it earns the same ticket flip on success.
+  if (sentWamid) {
+    await pool.query(
+      `UPDATE tickets SET status = 'en_atencion', first_response_at = COALESCE(first_response_at, now()), updated_at = now()
+       WHERE status = 'esperando_asesor' AND customer_id = (SELECT id FROM customers WHERE whatsapp_number = $1)`,
+      [phone]
+    );
+  }
 
   const { rows } = await pool.query(`SELECT message FROM n8n_chat_histories WHERE id = $1`, [messageId]);
   const prev = rows[0]?.message;
