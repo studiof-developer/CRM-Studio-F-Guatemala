@@ -104,34 +104,20 @@ inboundRouter.post('/', async (req, res, next) => {
     // auto-mark" flag the text-keyword trigger sets (db/init/032), just raised from here
     // instead of a trigger since inbound media already passes through this route (n8n
     // writes plain text straight into Postgres with no Node hook, but forwards media
-    // here for us to download/store). Being in Medio de pago (caliente) alone wasn't
-    // narrow enough (2026-09-03 report): once there, EVERY photo got flagged — a picture
-    // of a different garment, a size chart, anything — not just the actual receipt. Now
-    // also requires recent (3h) payment context on either side of the chat: an advisor
-    // sharing a payment link (Neolink etc. — matched generically as "any URL", since the
-    // gateway varies) or asking for the payment/comprobante, OR the customer themselves
-    // having just mentioned transferencia/depósito/comprobante (the deposit-slip flow:
-    // customer says "te envío el depósito", THEN sends the photo, with no matching
-    // advisor message right before it).
+    // here for us to download/store). Used to also require a specific advisor/customer
+    // trigger phrase nearby (2026-09-08) — dropped (2026-09-09 report) because real chats
+    // routinely send the receipt without ever typing one of those exact phrases (e.g. an
+    // advisor who only said "lo puedes cancelar..." never says "comprobante" or shares a
+    // link). Safe to scope down to just "caliente y sin pagar" now that receiptContainsAmount
+    // (ocrPayment.js) itself requires real receipt vocabulary AND a matching amount before
+    // anything gets auto-confirmed — a photo of a garment or size chart still won't match.
     if (kind === 'image') {
       const contextHours = await getSetting('ocr_context_hours', 3);
       const { rows: gated } = await pool.query(
         `SELECT c.id AS customer_id
          FROM customers c
-         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
-           AND EXISTS (
-             SELECT 1 FROM n8n_chat_histories h
-             WHERE h.session_id LIKE $1 || '%'
-               AND h.created_at >= now() - make_interval(hours => $2::int)
-               AND (
-                 (h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
-                   AND h.message->>'content' ~* '(m[eé]todo\\s+de\\s+pago|medio\\s+de\\s+pago|(link|enlace)\\s+(de|para)\\s+(el\\s+)?pago|https?://|env[ií]a(nos)?\\s+(tu|el)\\s+comprobante|comprobante\\s+de\\s+(pago|transferencia|dep[oó]sito)|completar\\s+tu\\s+env[ií]o|nit\\s+o\\s+dpi)')
-                 OR
-                 (h.message->>'type' = 'human'
-                   AND h.message->>'content' ~* '(transferencia|dep[oó]sito|comprobante)')
-               )
-           )`,
-        [phone, contextHours]
+         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
+        [phone]
       );
 
       if (gated.length) {
@@ -139,26 +125,31 @@ inboundRouter.post('/', async (req, res, next) => {
         let autoConfirmed = false;
 
         // The only "expected amount" this CRM has anywhere to check a receipt against:
-        // whatever Q-price the advisor most recently typed in the chat (same pattern
+        // whatever price the advisor most recently typed in the chat (same pattern
         // db/init/033's pipeline trigger already reads) — moving a customer through the
         // Pipeline never creates a real orders row with a total to compare against instead.
-        // Pulls the raw message text (not a single pre-extracted number) so the LAST
-        // Q-amount in the message wins, not the first — a message quoting an original
-        // price and then a discounted one ("Antes Q1200, con descuento Q950") must
-        // compare against the 950 the customer will actually pay, not the 1200.
+        // Matches a "Qxx" price OR a bare decimal (xx.xx) — an advisor quoting the final
+        // total often drops the "Q" ("Sería total de 205.50" instead of "Q205.50"), and
+        // that later total message must win over an earlier "Q56.50" (e.g. shipping-only)
+        // one, which is why this takes the MOST RECENT matching message (ORDER BY id DESC),
+        // not just any message that happens to contain a "Q" price.
         const { rows: priced } = await pool.query(
           `SELECT h.message->>'content' AS content
            FROM n8n_chat_histories h
            WHERE h.session_id LIKE $1 || '%'
              AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
-             AND h.message->>'content' ~ 'Q\\s?\\d{1,5}'
+             AND h.message->>'content' ~ 'Q\\s?\\d{1,5}|\\d{1,5}[.,]\\d{2}'
              AND h.created_at >= now() - make_interval(hours => $2::int)
            ORDER BY h.id DESC LIMIT 1`,
           [phone, contextHours]
         );
-        const priceMatches = priced[0]?.content?.match(/Q\s?\d{1,5}/g);
+        // Pulls the raw message text (not a single pre-extracted number) so the LAST
+        // amount in the message wins, not the first — a message quoting an original
+        // price and then a discounted one ("Antes Q1200, con descuento Q950") must
+        // compare against the 950 the customer will actually pay, not the 1200.
+        const priceMatches = priced[0]?.content?.match(/Q\s?\d{1,5}(?:[.,]\d{2})?|\d{1,5}[.,]\d{2}/g);
         const expectedAmount = priceMatches?.length
-          ? Number(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
+          ? Number(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, '').replace(',', '.'))
           : null;
 
         // ponytail: runs inline (Tesseract can take a second or two) rather than a
