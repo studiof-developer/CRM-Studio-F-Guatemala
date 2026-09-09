@@ -289,11 +289,22 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const q = search.trim().toLowerCase();
   const matches = (c) => !q || (c.fullName || '').toLowerCase().includes(q) || (c.whatsappNumber || '').includes(q);
 
+  // The single number the period filter is actually for — "cuántos entraron hoy",
+  // not "go add up the 7 column headers yourself". Sums whatever's currently visible:
+  // every column, or just the one onlyColumn has narrowed to.
+  const visibleColumnKeys = COLUMN_ORDER.filter((key) => !onlyColumn || key === onlyColumn);
+  const grandTotal = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.total ?? 0), 0);
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? '';
+
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <div className="border-b border-border p-4">
         <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
+        <p className="mt-1 text-sm font-semibold text-ink">
+          {grandTotal} {grandTotal === 1 ? 'conversación' : 'conversaciones'}
+          <span className="font-normal text-greige-ink"> · {periodLabel}</span>
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
