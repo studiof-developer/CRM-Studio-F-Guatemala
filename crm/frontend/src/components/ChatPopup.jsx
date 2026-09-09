@@ -52,7 +52,7 @@ export default function ChatPopup({ phone, user, onClose }) {
                 instead of filling the box — exactly the large empty gap reported
                 (2026-09-10). Dropped `flex` above so it goes back to filling 100% width,
                 same as the real page. */}
-            <Conversations key={phone} user={user} openSessionId={phone} onOpenedConversation={() => {}} singleThreadMode />
+            <Conversations key={phone} user={user} openSessionId={phone} onOpenedConversation={() => {}} singleThreadMode onClose={onClose} />
           </motion.div>
         </motion.div>
       )}

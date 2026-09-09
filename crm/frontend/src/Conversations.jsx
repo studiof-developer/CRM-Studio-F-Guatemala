@@ -180,7 +180,7 @@ function MessageTicks({ status, statusError, onRetry, retrying }) {
 // presence, payment banner) inside a modal from the Pipeline, without duplicating any
 // of this component. Nothing else about Conversations changes; it's purely which of
 // the two panes below stays visible.
-export default function Conversations({ user, openSessionId, onOpenedConversation, singleThreadMode = false }) {
+export default function Conversations({ user, openSessionId, onOpenedConversation, singleThreadMode = false, onClose }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
   // "Buscar en todos los chats" — matches WhatsApp's own global search, distinct from
@@ -835,9 +835,14 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     setActionBusy(true);
     try {
       await markConversationUnread(selectedId);
-      // Close the thread — staying on it would poll GET /:sessionId again within
-      // seconds and immediately re-mark it read, undoing this.
-      setSelectedId(null);
+      // Leave the thread — staying on it would poll GET /:sessionId again within
+      // seconds and immediately re-mark it read, undoing this. In singleThreadMode
+      // (ChatPopup) there's no list to fall back to — clearing selectedId there just
+      // leaves the popup showing an empty "selecciona una conversación" placeholder
+      // with no way back to this thread short of closing it — so close the whole
+      // popup instead, same net effect (nothing left polling this thread).
+      if (singleThreadMode) onClose?.();
+      else setSelectedId(null);
       load(false);
       showSuccess('Marcado como no leído');
     } catch (err) {
@@ -1401,6 +1406,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             )}
 
             <div className="flex min-h-0 flex-1">
+              {/* Messages + composer share this column so the info panel alongside it
+                  (a sibling below, spanning the full column's height) reads as one
+                  uninterrupted strip instead of the composer cutting across underneath
+                  it too — the "espacio raro" reported once the popup filled its full
+                  width (2026-09-10) made this much more visible than it was before. */}
+              <div className="flex min-w-0 flex-1 flex-col">
               <div ref={scrollContainerRef} onScroll={handleThreadScroll} className="flex-1 space-y-1 overflow-y-auto px-6 py-4">
                 {loadingOlder && (
                   <p className="py-2 text-center text-xs text-greige-ink">Cargando mensajes anteriores…</p>
@@ -1628,6 +1639,143 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 <div ref={bottomRef} />
               </div>
 
+              {thread.enAtencion ? (
+                <>
+                {windowClosed && templateAlreadySent && (
+                  <div className="flex items-start gap-2.5 border-t border-cyan/30 bg-cyan-bg px-4 py-2.5">
+                    <Megaphone size={15} className="mt-0.5 shrink-0 text-cyan" />
+                    <p className="text-xs leading-relaxed text-ink">
+                      <span className="font-semibold">Ya se envió una plantilla de WhatsApp a este cliente</span>{' '}
+                      (difusión o reactivación) y sigue sin responder — no hace falta mandar otra.{' '}
+                      <span className="font-semibold">Tu mensaje sale solo en cuanto responda.</span>
+                    </p>
+                  </div>
+                )}
+                {windowClosed && !templateAlreadySent && (
+                  <div className="flex items-start gap-2.5 border-t border-warn/30 bg-warn/10 px-4 py-2.5">
+                    <Clock size={15} className="mt-0.5 shrink-0 text-warn" />
+                    <p className="text-xs leading-relaxed text-ink">
+                      <span className="font-semibold">Pasaron más de 24 h desde el último mensaje del cliente.</span>{' '}
+                      WhatsApp no deja escribirle directo, así que al enviar se le manda primero
+                      una plantilla para reactivar el chat y{' '}
+                      <span className="font-semibold">tu mensaje sale solo en cuanto responda</span>.
+                      No se pierde nada, pero puede tardar.
+                    </p>
+                  </div>
+                )}
+                {replyingTo && (
+                  <div className="flex items-center gap-3 border-t border-line bg-accent-soft px-4 py-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-accent shadow-sm">
+                      <Reply size={14} />
+                    </span>
+                    <div className="min-w-0 flex-1 border-l-2 border-accent/40 pl-2.5">
+                      <p className="truncate text-xs font-semibold text-accent">{replyingTo.from}</p>
+                      <p className="truncate text-xs text-greige-ink">{replyingTo.content || '📎 Adjunto'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-ink"
+                      aria-label="Cancelar respuesta"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                {stagedFiles.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto border-t border-line bg-paper px-4 py-2.5">
+                    {stagedFiles.map((f) => (
+                      <div key={f.id} className="group relative shrink-0">
+                        {f.previewUrl ? (
+                          <img src={f.previewUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                        ) : (
+                          <div className="flex h-14 w-28 flex-col items-center justify-center gap-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] px-2">
+                            <span className="text-base">{f.file.type.startsWith('audio/') ? '🎵' : '📄'}</span>
+                            <span className="w-full truncate text-center text-[10px] text-greige-ink">{f.file.name}</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeStagedFile(f.id)}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-paper shadow-sm transition-opacity hover:opacity-80"
+                          aria-label="Quitar adjunto"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-line bg-paper p-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,audio/*,.pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={handleFileSelected}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
+                    aria-label="Adjuntar archivo"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                  <div className="relative flex-1">
+                    {slashResults.length > 0 && (
+                      <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-paper shadow-lg">
+                        {slashResults.map((item, i) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            onMouseDown={(e) => { e.preventDefault(); applyQuickReply(item); }}
+                            onMouseEnter={() => setSlashIndex(i)}
+                            className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors ${
+                              i === slashIndex ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <span className="font-semibold text-accent">/{item.shortcut}</span>
+                            <span className="truncate text-greige-ink">{item.content}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onPaste={handlePaste}
+                      onKeyDown={handleDraftKeyDown}
+                      placeholder={
+                        stagedFiles.length
+                          ? 'Agrega un mensaje (opcional)… Enter para enviar'
+                          : 'Escribe tu respuesta como asesor… ( / para plantillas )'
+                      }
+                      className="max-h-[120px] w-full resize-none overflow-y-auto rounded-2xl border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() && !stagedFiles.length}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                    aria-label="Enviar"
+                  >
+                    <Send size={16} />
+                  </button>
+                </form>
+                </>
+              ) : (
+                <div className="border-t border-line bg-paper px-5 py-3 text-center text-xs text-greige-ink">
+                  {thread.ticketStatus === 'esperando_asesor'
+                    ? 'Este cliente está esperando un asesor — tómalo desde el botón de arriba para poder responder.'
+                    : 'El agente está atendiendo esta conversación con normalidad.'}
+                </div>
+              )}
+              </div>
+
               {infoOpen && (
                 // Full screen on mobile — a partial-width panel with a backdrop reads as a
                 // "floating window" rather than a real screen of the app, and clips its own
@@ -1772,142 +1920,6 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 </div>
               )}
             </div>
-
-            {thread.enAtencion ? (
-              <>
-              {windowClosed && templateAlreadySent && (
-                <div className="flex items-start gap-2.5 border-t border-cyan/30 bg-cyan-bg px-4 py-2.5">
-                  <Megaphone size={15} className="mt-0.5 shrink-0 text-cyan" />
-                  <p className="text-xs leading-relaxed text-ink">
-                    <span className="font-semibold">Ya se envió una plantilla de WhatsApp a este cliente</span>{' '}
-                    (difusión o reactivación) y sigue sin responder — no hace falta mandar otra.{' '}
-                    <span className="font-semibold">Tu mensaje sale solo en cuanto responda.</span>
-                  </p>
-                </div>
-              )}
-              {windowClosed && !templateAlreadySent && (
-                <div className="flex items-start gap-2.5 border-t border-warn/30 bg-warn/10 px-4 py-2.5">
-                  <Clock size={15} className="mt-0.5 shrink-0 text-warn" />
-                  <p className="text-xs leading-relaxed text-ink">
-                    <span className="font-semibold">Pasaron más de 24 h desde el último mensaje del cliente.</span>{' '}
-                    WhatsApp no deja escribirle directo, así que al enviar se le manda primero
-                    una plantilla para reactivar el chat y{' '}
-                    <span className="font-semibold">tu mensaje sale solo en cuanto responda</span>.
-                    No se pierde nada, pero puede tardar.
-                  </p>
-                </div>
-              )}
-              {replyingTo && (
-                <div className="flex items-center gap-3 border-t border-line bg-accent-soft px-4 py-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-accent shadow-sm">
-                    <Reply size={14} />
-                  </span>
-                  <div className="min-w-0 flex-1 border-l-2 border-accent/40 pl-2.5">
-                    <p className="truncate text-xs font-semibold text-accent">{replyingTo.from}</p>
-                    <p className="truncate text-xs text-greige-ink">{replyingTo.content || '📎 Adjunto'}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setReplyingTo(null)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.1] hover:text-ink"
-                    aria-label="Cancelar respuesta"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-              {stagedFiles.length > 0 && (
-                <div className="flex items-center gap-2 overflow-x-auto border-t border-line bg-paper px-4 py-2.5">
-                  {stagedFiles.map((f) => (
-                    <div key={f.id} className="group relative shrink-0">
-                      {f.previewUrl ? (
-                        <img src={f.previewUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
-                      ) : (
-                        <div className="flex h-14 w-28 flex-col items-center justify-center gap-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] px-2">
-                          <span className="text-base">{f.file.type.startsWith('audio/') ? '🎵' : '📄'}</span>
-                          <span className="w-full truncate text-center text-[10px] text-greige-ink">{f.file.name}</span>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeStagedFile(f.id)}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-paper shadow-sm transition-opacity hover:opacity-80"
-                        aria-label="Quitar adjunto"
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-line bg-paper p-3">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,audio/*,.pdf,.doc,.docx"
-                  className="hidden"
-                  onChange={handleFileSelected}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
-                  aria-label="Adjuntar archivo"
-                >
-                  <Paperclip size={18} />
-                </button>
-                <div className="relative flex-1">
-                  {slashResults.length > 0 && (
-                    <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-paper shadow-lg">
-                      {slashResults.map((item, i) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          onMouseDown={(e) => { e.preventDefault(); applyQuickReply(item); }}
-                          onMouseEnter={() => setSlashIndex(i)}
-                          className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors ${
-                            i === slashIndex ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <span className="font-semibold text-accent">/{item.shortcut}</span>
-                          <span className="truncate text-greige-ink">{item.content}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onPaste={handlePaste}
-                    onKeyDown={handleDraftKeyDown}
-                    placeholder={
-                      stagedFiles.length
-                        ? 'Agrega un mensaje (opcional)… Enter para enviar'
-                        : 'Escribe tu respuesta como asesor… ( / para plantillas )'
-                    }
-                    className="max-h-[120px] w-full resize-none overflow-y-auto rounded-2xl border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper disabled:opacity-50"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={!draft.trim() && !stagedFiles.length}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-                  aria-label="Enviar"
-                >
-                  <Send size={16} />
-                </button>
-              </form>
-              </>
-            ) : (
-              <div className="border-t border-line bg-paper px-5 py-3 text-center text-xs text-greige-ink">
-                {thread.ticketStatus === 'esperando_asesor'
-                  ? 'Este cliente está esperando un asesor — tómalo desde el botón de arriba para poder responder.'
-                  : 'El agente está atendiendo esta conversación con normalidad.'}
-              </div>
-            )}
           </>
         )}
       </div>
