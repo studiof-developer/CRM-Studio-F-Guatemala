@@ -49,9 +49,10 @@ app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin'), whatsappNumb
 app.use('/api/campaigns', requireAuth, requireRole('admin', 'supervisor'), campaignsRouter);
 // Admin only — a sandbox to talk to the AI agent before it ever reaches a real customer.
 app.use('/api/agent-test', requireAuth, requireRole('admin'), agentTestRouter);
-// Admin-editable numbers/flags that used to be hardcoded — same restriction as
-// WhatsApp number configuration, since these change how the whole team's bot/CRM behaves.
-app.use('/api/settings', requireAuth, requireRole('admin'), settingsRouter);
+// Readable by any logged-in role (the Pipeline board needs pipeline_columns to render
+// for every role, not just admins) — writing a setting is gated per-route inside the
+// router itself instead, admin-only there.
+app.use('/api/settings', requireAuth, settingsRouter);
 // No requireAuth: n8n calls this directly (no advisor session), protected by its own
 // shared-secret header check inside the router instead.
 app.use('/api/whatsapp-inbound', inboundRouter);

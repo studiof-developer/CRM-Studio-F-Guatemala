@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2 } from 'lucide-react';
+import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
   fetchSettings, updateSetting,
 } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
+import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
+import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_ICON_NAMES, PIPELINE_COLOR_CLASSES, PIPELINE_COLOR_NAMES } from './lib/pipelineColumns.js';
 
 const EMPTY_FORM = { label: '', wabaId: '', phoneNumberId: '', accessToken: '', isActive: true };
 
@@ -30,6 +32,7 @@ export default function Configuracion() {
         <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
           {[
             { key: 'numbers', label: 'Números de WhatsApp', icon: Smartphone },
+            { key: 'pipeline', label: 'Pipeline', icon: LayoutGrid },
             { key: 'general', label: 'General', icon: Settings2 },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -47,11 +50,16 @@ export default function Configuracion() {
 
       <div className="px-4 pb-8 md:px-8">
         {tab === 'numbers' && <NumbersTab />}
+        {tab === 'pipeline' && <PipelineTab />}
         {tab === 'general' && <GeneralTab />}
       </div>
     </div>
   );
 }
+
+// Plain number-input settings only — pipeline_columns has its own tab/editor since an
+// array of {key,label,icon,color} doesn't fit a single <input type="number">.
+const GENERAL_SETTING_KEYS = ['ocr_context_hours'];
 
 function GeneralTab() {
   const [settings, setSettings] = useState([]);
@@ -60,8 +68,9 @@ function GeneralTab() {
 
   const load = useCallback(() => {
     fetchSettings().then((rows) => {
-      setSettings(rows);
-      setValues(Object.fromEntries(rows.map((r) => [r.key, r.value ?? ''])));
+      const numeric = rows.filter((r) => GENERAL_SETTING_KEYS.includes(r.key));
+      setSettings(numeric);
+      setValues(Object.fromEntries(numeric.map((r) => [r.key, r.value ?? ''])));
     }).catch((err) => showError(err.message));
   }, []);
 
@@ -101,6 +110,129 @@ function GeneralTab() {
           {s.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(s.updatedAt)}</p>}
         </div>
       ))}
+    </section>
+  );
+}
+
+function PipelineTab() {
+  const [rows, setRows] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    fetchSettings().then((all) => {
+      const s = all.find((r) => r.key === 'pipeline_columns');
+      // Falls back to today's real board (db/init/042 seeds this same shape) rather
+      // than an empty editor if the setting was somehow never saved.
+      setRows(s?.value ?? COLUMN_ORDER.map((key) => ({ key, ...DEFAULT_COLUMN_META[key] })));
+      setUpdatedAt(s?.updatedAt ?? null);
+    }).catch((err) => showError(err.message));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  function move(index, delta) {
+    setRows((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+  function updateRow(index, patch) {
+    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const result = await updateSetting('pipeline_columns', rows);
+      setUpdatedAt(result.updatedAt);
+      showSuccess('Columnas del pipeline actualizadas');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!rows) return null;
+
+  return (
+    <section className="max-w-2xl rounded-2xl border border-line bg-paper p-4 md:p-8">
+      <p className="mb-4 text-sm text-greige-ink">
+        Nombre, ícono, color y orden de las 7 columnas del tablero — las columnas en sí no se pueden agregar ni quitar desde aquí.
+      </p>
+
+      <div className="flex flex-col gap-2">
+        {rows.map((row, i) => {
+          const Icon = PIPELINE_ICON_MAP[row.icon] ?? CheckCircle2;
+          const colorClasses = PIPELINE_COLOR_CLASSES[row.color] ?? PIPELINE_COLOR_CLASSES.info;
+          return (
+            <div key={row.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3">
+              <div className="flex shrink-0 flex-col gap-0.5">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                  aria-label="Subir"
+                  className="rounded p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] disabled:opacity-30 dark:hover:bg-white/[0.08]"
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === rows.length - 1}
+                  onClick={() => move(i, 1)}
+                  aria-label="Bajar"
+                  className="rounded p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] disabled:opacity-30 dark:hover:bg-white/[0.08]"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${colorClasses.iconBg}`}>
+                <Icon size={16} className={colorClasses.iconText} />
+              </div>
+
+              <input
+                value={row.label}
+                onChange={(e) => updateRow(i, { label: e.target.value })}
+                maxLength={40}
+                className="min-w-[140px] flex-1 rounded-lg border border-line px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent"
+              />
+
+              <Select
+                value={row.icon}
+                onChange={(icon) => updateRow(i, { icon })}
+                options={PIPELINE_ICON_NAMES.map((name) => ({ value: name, label: name, icon: PIPELINE_ICON_MAP[name] }))}
+                className="w-36 shrink-0"
+              />
+
+              <div className="flex shrink-0 items-center gap-1.5 px-1">
+                {PIPELINE_COLOR_NAMES.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => updateRow(i, { color: name })}
+                    aria-label={name}
+                    className={`h-5 w-5 rounded-full ${PIPELINE_COLOR_CLASSES[name].dot} ${
+                      row.color === name ? 'ring-2 ring-accent ring-offset-2 ring-offset-paper' : ''
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 flex items-center gap-3">
+        <Button type="button" onClick={handleSave} disabled={saving}>
+          {saving ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+        {updatedAt && <p className="text-xs text-greige">Última edición: {formatDate(updatedAt)}</p>}
+      </div>
     </section>
   );
 }

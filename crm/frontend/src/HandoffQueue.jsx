@@ -1,28 +1,19 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
-import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity } from './api.js';
+import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
+import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
+import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
 // name — see the 2026-08-31 conversation that settled this. "No atendidos" comes from
 // the ticket having no advisor yet; "Resuelto" and "Pagado" are terminal states with
 // their own dedicated, deliberate actions elsewhere (paid needs a payment method
 // captured too, and is one-way once set — not something to flip with a casual drag).
-const COLUMN_META = {
-  pendiente: { label: 'No atendidos', icon: Clock, iconBg: 'bg-warning-bg', iconText: 'text-warning' },
-  en_atencion: { label: 'En conversación', icon: Snowflake, iconBg: 'bg-info-bg', iconText: 'text-info' },
-  cotizacion: { label: 'Cotización', icon: Thermometer, iconBg: 'bg-warning-bg', iconText: 'text-warning' },
-  medio_pago: { label: 'Medio de pago', icon: Flame, iconBg: 'bg-danger-bg', iconText: 'text-danger' },
-  pagado: { label: 'Pagado', icon: CircleDollarSign, iconBg: 'bg-success-bg', iconText: 'text-success' },
-  pqrs: { label: 'PQRS', icon: MessageSquareWarning, iconBg: 'bg-purple-bg', iconText: 'text-purple' },
-  resuelto: { label: 'Resuelto', icon: CheckCircle2, iconBg: 'bg-success-bg', iconText: 'text-success' },
-};
-const COLUMN_ORDER = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
 // Every column defaults most-recently-active-first and can be flipped — real pagination
 // means flipping a column never hides anything, it's purely a display preference now.
 const DEFAULT_SORT = {};
@@ -70,13 +61,6 @@ const PERIOD_OPTIONS = [
   { value: 'mes', label: 'Mes', icon: Calendar, iconClassName: 'text-accent' },
   { value: 'personalizado', label: 'Periodo personalizado', icon: Calendar, iconClassName: 'text-accent' },
 ];
-// Same icon/color each column already uses for its own header, reused here so the
-// filter's options read as an obvious match to the board itself.
-const COLUMN_FILTER_OPTIONS = [
-  { value: '', label: 'Todas las columnas', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
-  ...COLUMN_ORDER.map((key) => ({ value: key, label: COLUMN_META[key].label, icon: COLUMN_META[key].icon, iconClassName: COLUMN_META[key].iconText })),
-];
-
 function emptyColumn(key) {
   return { cards: [], total: 0, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
 }
@@ -90,6 +74,29 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
+
+  // Admin-editable label/icon/color/order (Configuración > Pipeline) — null until
+  // loaded, everything falls back to DEFAULT_COLUMN_META/COLUMN_ORDER until then.
+  const [pipelineColumns, setPipelineColumns] = useState(null);
+  useEffect(() => {
+    fetchSettings().then((rows) => {
+      const value = rows.find((r) => r.key === 'pipeline_columns')?.value;
+      if (Array.isArray(value)) setPipelineColumns(value);
+    }).catch(() => {});
+  }, []);
+  const displayOrder = pipelineColumns ? pipelineColumns.map((c) => c.key) : COLUMN_ORDER;
+  function metaFor(key) {
+    const cfg = pipelineColumns?.find((c) => c.key === key) ?? DEFAULT_COLUMN_META[key];
+    return {
+      label: cfg.label,
+      icon: PIPELINE_ICON_MAP[cfg.icon] ?? CheckCircle2,
+      ...(PIPELINE_COLOR_CLASSES[cfg.color] ?? PIPELINE_COLOR_CLASSES.info),
+    };
+  }
+  const columnFilterOptions = [
+    { value: '', label: 'Todas las columnas', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
+    ...displayOrder.map((key) => ({ value: key, label: metaFor(key).label, icon: metaFor(key).icon, iconClassName: metaFor(key).iconText })),
+  ];
 
   // Date filter: which period each column's cards/count are scoped to (see api.js's
   // from/to, filtered server-side on the same field the column already sorts by).
@@ -363,7 +370,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
             </div>
           )}
 
-          <Select value={onlyColumn} onChange={setOnlyColumn} options={COLUMN_FILTER_OPTIONS} className="w-48 shrink-0" />
+          <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
 
           {(periodPreset === 'hoy' || periodPreset === 'ayer') && (
             <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">
@@ -378,8 +385,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
       {error && <p className="p-4 text-sm text-danger">{error}</p>}
       <div className="flex flex-1 gap-3 overflow-x-auto p-4">
-        {COLUMN_ORDER.filter((key) => !onlyColumn || key === onlyColumn).map((key) => {
-          const meta = COLUMN_META[key];
+        {displayOrder.filter((key) => !onlyColumn || key === onlyColumn).map((key) => {
+          const meta = metaFor(key);
           const Icon = meta.icon;
           const col = columns[key];
           const cards = col.cards.filter(matches);
@@ -500,7 +507,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         >
                           <option value="">Mover a…</option>
                           {[...DROP_TARGETS].filter((t) => t !== key).map((t) => (
-                            <option key={t} value={t}>{COLUMN_META[t].label}</option>
+                            <option key={t} value={t}>{metaFor(t).label}</option>
                           ))}
                         </select>
                       )}
