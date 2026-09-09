@@ -391,17 +391,17 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   // like nothing happened at all when someone checked the logs instead of the tooltip.
   if (error) console.error(`campaign ${campaignId} send to ${customer.whatsapp_number} failed:`, error);
 
-  // A "No atendidos" contact who just got a broadcast HAS been reached, even though no
-  // advisor personally claimed it — leaving the ticket at esperando_asesor would mean
-  // this same list resurfaces in the next broadcast/export forever. Only on an actual
-  // successful send (not a failed one — that customer genuinely wasn't reached) and
-  // only from esperando_asesor — never touches a ticket already claimed, en route
-  // through the pipeline, or resolved. Unassigned (no assigned_advisor) since this
-  // wasn't any one advisor's action — the card lands in "En conversación" for whoever
-  // picks up the reply.
+  // A "No atendidos" contact who just got a broadcast HAS been reached — but not by an
+  // advisor, so it's wrong to show them as "En atención" (nobody's actually attending).
+  // 'difusion_enviada' takes them off the board entirely (same as 'bot', see
+  // HIDDEN_TICKET_STATUSES_SQL in tickets.js) until they actually reply, at which point
+  // db/init/045's trigger flips them straight back to esperando_asesor with a fresh
+  // stage_since — reappearing as a normal, recently-arrived "No atendido", not a stale
+  // one. Only on an actual successful send (a failed one didn't really reach them) and
+  // only from esperando_asesor — never touches a ticket already claimed or further along.
   if (sentWamid) {
     await pool.query(
-      `UPDATE tickets SET status = 'en_atencion', first_response_at = COALESCE(first_response_at, now()), updated_at = now()
+      `UPDATE tickets SET status = 'difusion_enviada', updated_at = now()
        WHERE customer_id = $1 AND status = 'esperando_asesor'`,
       [customer.id]
     );
@@ -457,11 +457,12 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   }
   if (error) console.error(`campaign retry message ${messageId} to ${phone} failed:`, error);
 
-  // Same "reached, so leave No atendidos" reasoning as sendToRecipient above — a retry
-  // is just the send finally landing, so it earns the same ticket flip on success.
+  // Same "reached, so leave No atendidos (without faking En atención)" reasoning as
+  // sendToRecipient above — a retry is just the send finally landing, so it earns the
+  // same ticket flip on success.
   if (sentWamid) {
     await pool.query(
-      `UPDATE tickets SET status = 'en_atencion', first_response_at = COALESCE(first_response_at, now()), updated_at = now()
+      `UPDATE tickets SET status = 'difusion_enviada', updated_at = now()
        WHERE status = 'esperando_asesor' AND customer_id = (SELECT id FROM customers WHERE whatsapp_number = $1)`,
       [phone]
     );

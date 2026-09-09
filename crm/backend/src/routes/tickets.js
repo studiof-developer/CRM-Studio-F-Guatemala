@@ -24,6 +24,14 @@ function zoneClause() {
 // shows as resuelto no matter what temperature is sitting on the customer underneath.
 export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
 
+// Both temped CTEs below exclude 'bot' (never handed off to a human yet) AND
+// 'difusion_enviada' — a No atendidos contact who just got a broadcast (campaigns.js)
+// lands here: reached, but not by an advisor, so it doesn't belong in En atención
+// either. Invisible on the board the same way 'bot' already is, until the customer's
+// own reply flips it straight back to esperando_asesor with a fresh stage_since (see
+// update_customer_last_message() in db/init/031, extended by 045).
+const HIDDEN_TICKET_STATUSES_SQL = `('bot', 'difusion_enviada')`;
+
 // Called by both GET /pipeline below and (indirectly, by staying in sync with it)
 // anywhere else that needs to know "which column does this row belong to" — kept in
 // one place so the board and the SQL CASE that mirrors it can't drift apart silently.
@@ -160,10 +168,11 @@ router.get('/pipeline', async (req, res, next) => {
                c.id AS customer_id, c.full_name, c.whatsapp_number,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
-               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply
+               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
+               c.last_message_at, c.last_message
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
-        WHERE t.status != 'bot'
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
       -- bucket_total counted here, over the whole (small — tickets/customers, not
       -- messages) date-filtered set, before narrowing to just this one column.
@@ -206,6 +215,13 @@ router.get('/pipeline', async (req, res, next) => {
         unreadCount: Number(r.unread_count),
         stageSince: r.stage_since,
         lastMessageAt: r.last_customer_message_at,
+        // Whichever side wrote last, for the card preview — lastMessage/lastMessageAt
+        // above stay customer-only (the overdue/SLA calc needs specifically that), so
+        // this is separate rather than repointing them. awaitingReply already says
+        // whose it is: true means this preview IS the customer's message (same event
+        // as lastMessage above); false means it's our own most recent reply.
+        previewMessage: r.last_message,
+        previewMessageAt: r.last_message_at,
       })),
     });
   } catch (err) {
@@ -235,7 +251,7 @@ router.get('/pipeline/export', async (req, res, next) => {
                c.last_customer_message_at, c.last_customer_message
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
-        WHERE t.status != 'bot'
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket

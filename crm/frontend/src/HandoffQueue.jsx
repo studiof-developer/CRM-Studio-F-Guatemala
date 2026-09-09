@@ -539,8 +539,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           )}
                         </div>
                       </div>
-                      {card.lastMessage && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{card.lastMessage}</p>
+                      {(card.previewMessage ?? card.lastMessage) && (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                          {/* awaitingReply false means the preview is OUR most recent message, not the
+                              customer's — without this prefix it reads as if the customer said it. */}
+                          {!card.awaitingReply && <span className="font-medium text-ink">Tú: </span>}
+                          {card.previewMessage ?? card.lastMessage}
+                        </p>
                       )}
                       {card.assignedAdvisor && (
                         <span
@@ -556,7 +561,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                             ? key === 'pendiente'
                               ? `Esperando hace ${formatWait(card.stageSince)} (más de ${slaMinutes} min)`
                               : `Sin responder hace ${formatWait(card.lastMessageAt)} (más de ${formatMinutes(awaitingReplyOverdueMinutes)})`
-                            : `hace ${formatWait(card.lastMessageAt ?? card.stageSince)}`}
+                            : `hace ${formatWait(card.previewMessageAt ?? card.lastMessageAt ?? card.stageSince)}`}
                         </span>
                         {key === 'pendiente' ? (
                           <Button
