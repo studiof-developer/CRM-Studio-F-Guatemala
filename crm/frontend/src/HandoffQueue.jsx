@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
-import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot } from './api.js';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Sparkles } from 'lucide-react';
+import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -64,6 +64,7 @@ function monthBounds(year, month) {
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const PERIOD_OPTIONS = [
   { value: 'todo', label: 'Todo', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
+  { value: 'novedades', label: 'Novedades', icon: Sparkles, iconClassName: 'text-accent' },
   { value: 'hoy', label: 'Hoy', icon: Calendar, iconClassName: 'text-accent' },
   { value: 'ayer', label: 'Ayer', icon: Calendar, iconClassName: 'text-accent' },
   { value: 'semana', label: 'Última semana', icon: Calendar, iconClassName: 'text-accent' },
@@ -105,8 +106,17 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [customTo, setCustomTo] = useState(todayStr);
   const [onlyColumn, setOnlyColumn] = useState('');
 
-  let dateFrom, dateTo;
-  if (periodPreset === 'hoy') { dateFrom = dateTo = todayStr; }
+  // "Novedades": everything that arrived after the last message any advisor sent,
+  // anywhere in the CRM — a snapshot taken once per page load/selection, not a moving
+  // target that keeps shrinking while this page is open.
+  const [lastAdvisorActivityAt, setLastAdvisorActivityAt] = useState(null);
+  useEffect(() => {
+    fetchLastAdvisorActivity().then(({ timestamp }) => setLastAdvisorActivityAt(timestamp)).catch(() => {});
+  }, []);
+
+  let dateFrom, dateTo, sinceTs;
+  if (periodPreset === 'novedades') { sinceTs = lastAdvisorActivityAt; }
+  else if (periodPreset === 'hoy') { dateFrom = dateTo = todayStr; }
   else if (periodPreset === 'ayer') { dateFrom = dateTo = addDays(todayStr, -1); }
   else if (periodPreset === 'semana') { dateFrom = addDays(todayStr, -6); dateTo = todayStr; }
   else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
@@ -157,13 +167,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, sinceTs]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -173,7 +183,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -182,7 +192,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, sinceTs]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
@@ -330,6 +340,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           )}
 
           <Select value={onlyColumn} onChange={setOnlyColumn} options={COLUMN_FILTER_OPTIONS} className="w-48 shrink-0" />
+
+          {periodPreset === 'novedades' && (
+            <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">
+              <Sparkles size={12} className="text-accent" />
+              {lastAdvisorActivityAt
+                ? <>Desde el último mensaje de un asesor — {new Date(lastAdvisorActivityAt).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</>
+                : 'Cargando última actividad…'}
+            </span>
+          )}
         </div>
       </div>
 

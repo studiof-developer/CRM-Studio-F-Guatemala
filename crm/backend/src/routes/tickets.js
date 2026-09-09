@@ -86,13 +86,22 @@ router.get('/pipeline', async (req, res, next) => {
     // needed). Applied inside `totaled`, before bucket_total is computed, so the
     // column's own count reflects the filtered set instead of the whole bucket.
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    const { from, to } = req.query;
+    const { from, to, since } = req.query;
     if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
       return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
     }
+    if (since && !Number.isFinite(Date.parse(since))) {
+      return res.status(400).json({ error: 'since must be a valid timestamp' });
+    }
     const params = [bucket];
     let dateClause = '';
-    if (from) {
+    // "Novedades" (the period option built for last-advisor-activity) needs a precise
+    // moment, not a calendar day — takes over from `from` instead of combining with it,
+    // same "up to now" open end as leaving `to` unset.
+    if (since) {
+      params.push(new Date(since).toISOString());
+      dateClause += ` AND ${orderExpr} >= $${params.length}`;
+    } else if (from) {
       params.push(`${from}T00:00:00-06:00`);
       dateClause += ` AND ${orderExpr} >= $${params.length}`;
     }
@@ -107,7 +116,7 @@ router.get('/pipeline', async (req, res, next) => {
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}`, () => pool.query(`
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
@@ -161,6 +170,21 @@ router.get('/pipeline', async (req, res, next) => {
         lastMessageAt: r.last_customer_message_at,
       })),
     });
+  } catch (err) { next(err); }
+});
+
+// The boundary the Pipeline's "Novedades" period option filters from: the most recent
+// message any advisor has sent, anywhere in the CRM — everything that arrived after it
+// is what nobody has looked at since the team last touched a conversation. Backed by a
+// partial index (db/init/041) so this stays a single backward index-scan no matter how
+// large n8n_chat_histories grows, instead of a full scan over every advisor message ever sent.
+router.get('/last-advisor-activity', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT MAX(created_at) AS ts FROM n8n_chat_histories
+       WHERE message->>'type' = 'ai' AND message->'additional_kwargs'->>'sentBy' = 'advisor'`
+    );
+    res.json({ timestamp: rows[0]?.ts ?? null });
   } catch (err) { next(err); }
 });
 

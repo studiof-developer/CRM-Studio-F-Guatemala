@@ -44,12 +44,21 @@ export async function fetchMe() {
   return res.json();
 }
 
-export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', from, to } = {}) {
+export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', from, to, since } = {}) {
   const params = new URLSearchParams({ bucket, offset, limit, sort });
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
+  if (since) params.set('since', since);
+  else {
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+  }
   const res = await apiFetch(`/api/tickets/pipeline?${params}`);
   if (!res.ok) throw new Error('Error al cargar el pipeline');
+  return res.json();
+}
+
+export async function fetchLastAdvisorActivity() {
+  const res = await apiFetch('/api/tickets/last-advisor-activity');
+  if (!res.ok) throw new Error('Error al cargar la última actividad');
   return res.json();
 }
 
