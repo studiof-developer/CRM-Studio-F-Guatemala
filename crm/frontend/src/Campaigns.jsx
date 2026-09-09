@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info } from 'lucide-react';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
+  fetchTemplatesManage, createWhatsappTemplate, deleteWhatsappTemplate,
 } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Select from './components/Select.jsx';
+import Badge from './components/Badge.jsx';
+import { Button } from './components/ui.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
@@ -35,7 +38,47 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function Campaigns() {
+export default function Campaigns({ user }) {
+  const [tab, setTab] = useState('difusion');
+  const isAdmin = user?.role === 'admin';
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Marketing</h1>
+            <p className="mt-1 text-sm text-greige-ink">Difusiones y plantillas de WhatsApp.</p>
+          </div>
+        </div>
+
+        <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
+          {[
+            { key: 'difusion', label: 'Difusión', icon: Megaphone },
+            ...(isAdmin ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
+                tab === key ? 'bg-paper text-ink shadow-sm' : 'text-greige-ink hover:text-ink'
+              }`}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pb-8 md:px-8">
+        {tab === 'difusion' && <DifusionTab />}
+        {tab === 'templates' && isAdmin && <TemplatesTab />}
+      </div>
+    </div>
+  );
+}
+
+function DifusionTab() {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,59 +121,52 @@ export default function Campaigns() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Difusión</h1>
-            <p className="mt-1 text-sm text-greige-ink">Enviar una plantilla aprobada a varios clientes a la vez.</p>
-          </div>
-          <button
-            onClick={() => setNewOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
-            <Plus size={15} /> Nueva difusión
-          </button>
-        </div>
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-greige-ink">Enviar una plantilla aprobada a varios clientes a la vez.</p>
+        <button
+          onClick={() => setNewOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:opacity-90"
+        >
+          <Plus size={15} /> Nueva difusión
+        </button>
       </div>
 
-      <div className="px-4 pb-8 md:px-8">
-        {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-        {loading && <p className="text-sm text-greige-ink">Cargando…</p>}
-        {!loading && campaigns.length === 0 && (
-          <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-greige-ink">
-            Todavía no se ha enviado ninguna difusión.
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          {campaigns.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setOpenId(c.id)}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-paper p-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
-                    <Megaphone size={13} />
-                  </span>
-                  <p className="truncate text-sm font-semibold text-ink">{c.templateName}</p>
-                  {c.status === 'sending' && (
-                    <span className="flex items-center gap-1 text-xs font-medium text-warn"><Loader2 size={11} className="animate-spin" /> enviando</span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-greige-ink">
-                  {c.temperature ? TEMP_META[c.temperature]?.label : 'Sin filtro de temperatura'} · {c.recipientCount} destinatarios · {formatDateTime(c.createdAt)} · {c.createdBy}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-3 text-xs">
-                <span className="text-ink">{c.sentCount} enviados</span>
-                <span className="text-accent">{c.readCount} leídos</span>
-                {c.failedCount > 0 && <span className="text-danger">{c.failedCount} fallidos</span>}
-              </div>
-            </button>
-          ))}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+      {loading && <p className="text-sm text-greige-ink">Cargando…</p>}
+      {!loading && campaigns.length === 0 && (
+        <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-greige-ink">
+          Todavía no se ha enviado ninguna difusión.
         </div>
+      )}
+      <div className="flex flex-col gap-2">
+        {campaigns.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setOpenId(c.id)}
+            className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-paper p-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                  <Megaphone size={13} />
+                </span>
+                <p className="truncate text-sm font-semibold text-ink">{c.templateName}</p>
+                {c.status === 'sending' && (
+                  <span className="flex items-center gap-1 text-xs font-medium text-warn"><Loader2 size={11} className="animate-spin" /> enviando</span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-greige-ink">
+                {c.temperature ? TEMP_META[c.temperature]?.label : 'Sin filtro de temperatura'} · {c.recipientCount} destinatarios · {formatDateTime(c.createdAt)} · {c.createdBy}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3 text-xs">
+              <span className="text-ink">{c.sentCount} enviados</span>
+              <span className="text-accent">{c.readCount} leídos</span>
+              {c.failedCount > 0 && <span className="text-danger">{c.failedCount} fallidos</span>}
+            </div>
+          </button>
+        ))}
       </div>
 
       {detail && (
@@ -179,7 +215,7 @@ export default function Campaigns() {
           onSent={() => { setNewOpen(false); load(); }}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -631,6 +667,199 @@ function NewCampaignModal({ onClose, onSent }) {
         danger
         onConfirm={handleSend}
         onCancel={() => setConfirmOpen(false)}
+      />
+    </div>
+  );
+}
+
+const TEMPLATE_STATUS_META = {
+  APPROVED: { variant: 'success', label: 'Aprobada' },
+  PENDING: { variant: 'warning', label: 'En revisión' },
+  REJECTED: { variant: 'danger', label: 'Rechazada' },
+};
+const TEMPLATE_CATEGORIES = [
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'UTILITY', label: 'Utilidad' },
+];
+const EMPTY_TEMPLATE_FORM = { name: '', category: 'MARKETING', bodyText: '', examples: {} };
+
+// How many {{n}} variables the body currently has — the highest number used, not just a
+// count, so a template mid-edit (e.g. only {{1}} and {{3}} typed so far) still shows a
+// box for {{2}} rather than silently skipping it. The backend enforces the real
+// no-gaps rule (1, 2, 3… in order) on submit.
+function detectParamCount(bodyText) {
+  const matches = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  return matches.length ? Math.max(...matches) : 0;
+}
+
+function TemplatesTab() {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState(null);
+  const [form, setForm] = useState(EMPTY_TEMPLATE_FORM);
+  const [formError, setFormError] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [confirmDeleteName, setConfirmDeleteName] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchTemplatesManage().then(setTemplates).catch((err) => setListError(err.message)).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const paramCount = detectParamCount(form.bodyText);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setCreating(true);
+    setFormError(null);
+    try {
+      const bodyExamples = Array.from({ length: paramCount }, (_, i) => form.examples[i + 1] ?? '');
+      await createWhatsappTemplate({ name: form.name, category: form.category, bodyText: form.bodyText, bodyExamples });
+      setForm(EMPTY_TEMPLATE_FORM);
+      load();
+      showSuccess('Plantilla enviada a revisión de Meta');
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteWhatsappTemplate(confirmDeleteName);
+      load();
+      showSuccess('Plantilla eliminada');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteName(null);
+    }
+  }
+
+  const previewBody = form.bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => form.examples[n] || `{{${n}}}`);
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+      <section className="rounded-2xl border border-line bg-paper p-4 md:p-8">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-line-soft bg-black/[0.02] p-3 text-xs text-greige-ink dark:bg-white/[0.03]">
+          <Info size={14} className="mt-0.5 shrink-0 text-accent" />
+          <span>
+            Una vez que Meta aprueba una plantilla, su texto ya no se puede editar — solo eliminarla y crear una nueva.
+            Una plantilla nueva queda "En revisión" hasta que Meta la aprueba (minutos a ~1 día).
+          </span>
+        </div>
+
+        {listError && <p className="text-sm text-danger">{listError}</p>}
+        {!loading && !listError && templates.length === 0 && (
+          <p className="py-6 text-center text-sm text-greige-ink">Sin plantillas todavía.</p>
+        )}
+
+        <ul className="flex flex-col gap-2">
+          {templates.map((t) => {
+            const statusMeta = TEMPLATE_STATUS_META[t.status] ?? { variant: 'neutral', label: t.status };
+            return (
+              <li key={t.name} className="rounded-xl border border-line p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                      <span className="truncate">{t.name}</span>
+                      <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-greige-ink">{t.body}</p>
+                    {t.status === 'REJECTED' && t.rejectedReason && (
+                      <p className="mt-1.5 text-xs text-danger">Motivo de Meta: {t.rejectedReason}</p>
+                    )}
+                  </div>
+                  <Button type="button" variant="danger" onClick={() => setConfirmDeleteName(t.name)}>
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="h-fit rounded-2xl border border-line bg-paper p-4 md:p-6">
+        <h2 className="text-lg font-semibold text-ink">Nueva plantilla</h2>
+        <p className="mt-1 text-xs text-greige-ink">Solo texto por ahora (sin encabezado, botones ni pie).</p>
+
+        <form onSubmit={handleCreate} className="mt-4">
+          <label className="mb-1.5 block text-sm font-medium text-ink">Nombre</label>
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+            placeholder="promo_septiembre"
+            required
+            className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <p className="mt-1 text-xs text-greige">Solo minúsculas, números y guion bajo — sin espacios.</p>
+
+          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Categoría</label>
+          <Select value={form.category} onChange={(category) => setForm({ ...form, category })} options={TEMPLATE_CATEGORIES} />
+
+          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Mensaje</label>
+          <textarea
+            value={form.bodyText}
+            onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
+            placeholder={'Hola {{1}}, tu guía es {{2}}…'}
+            required
+            rows={5}
+            maxLength={1024}
+            className="w-full resize-none rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <p className="mt-1 text-xs text-greige">
+            <code>{'{{1}}'}</code> es siempre el nombre del cliente. <code>{'{{2}}'}</code>, <code>{'{{3}}'}</code>… son valores distintos por cliente
+            (ej. un número de guía) que se piden al armar la difusión — deben ir en orden, sin saltarse ninguno.
+          </p>
+
+          {paramCount > 0 && (
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-xs font-medium text-ink">Meta pide un valor de ejemplo por variable, para revisarla:</p>
+              {Array.from({ length: paramCount }, (_, i) => i + 1).map((n) => (
+                <div key={n} className="flex items-center gap-2">
+                  <span className="w-9 shrink-0 text-xs font-medium text-greige-ink">{`{{${n}}}`}</span>
+                  <input
+                    value={form.examples[n] ?? ''}
+                    onChange={(e) => setForm({ ...form, examples: { ...form.examples, [n]: e.target.value } })}
+                    placeholder={n === 1 ? 'María' : 'GUIA-00123'}
+                    required
+                    className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {form.bodyText && (
+            <div className="mt-3 rounded-lg border border-dashed border-line-soft p-3 text-sm text-ink">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-greige">Vista previa</p>
+              {previewBody}
+            </div>
+          )}
+
+          {formError && <p className="mt-3 text-sm text-danger">{formError}</p>}
+
+          <Button type="submit" disabled={creating} className="mt-4">
+            {creating ? 'Enviando…' : 'Enviar a revisión'}
+          </Button>
+        </form>
+      </section>
+
+      <ConfirmDialog
+        open={confirmDeleteName !== null}
+        title="Eliminar plantilla"
+        message={`Esta acción no se puede deshacer. "${confirmDeleteName}" dejará de estar disponible para nuevos envíos (los mensajes ya enviados no se ven afectados).`}
+        confirmLabel="Eliminar"
+        danger
+        busy={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDeleteName(null)}
       />
     </div>
   );

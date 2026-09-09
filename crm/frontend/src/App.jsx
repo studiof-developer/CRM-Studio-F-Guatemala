@@ -69,7 +69,7 @@ const AUDIT_TABS = {
 // every asesor. Matches the backend's own requireRole('admin', 'supervisor') on
 // /api/campaigns.
 const CAMPAIGN_TABS = {
-  campaigns: { label: 'Difusión', icon: Megaphone, Component: Campaigns },
+  campaigns: { label: 'Marketing', icon: Megaphone, Component: Campaigns },
 };
 
 // Admin only.
