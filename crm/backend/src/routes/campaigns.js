@@ -120,13 +120,25 @@ router.get('/templates/manage', requireRole('admin'), async (req, res, next) => 
 const TEMPLATE_NAME_RE = /^[a-z0-9_]{1,512}$/;
 const TEMPLATE_CATEGORIES = ['MARKETING', 'UTILITY'];
 
-// Body-only (no header/footer/buttons) — matches whatsapp.js's createTemplate scope,
-// which matches the only thing this CRM's own send path fills in: one {{1}} for the
-// customer's name. Lands as PENDING; Meta reviews it (minutes to ~1 day) before it's
-// usable — this endpoint only submits the request, it can't make Meta approve it faster.
+// {{1}}, {{2}}, {{3}}... in order, no gaps and no repeats — Meta itself requires this
+// shape (a placeholder numbered out of sequence is rejected at review). {{1}} is always
+// the customer's name on send (campaigns.js's sendToRecipient); {{2}} and beyond need a
+// per-recipient value supplied at send time — see "envío de guías" in the broadcast
+// composer (Campaigns.jsx) for how those get filled in.
+function sequentialParamCount(text) {
+  const matches = [...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  if (!matches.length) return 0;
+  const uniqueSorted = [...new Set(matches)].sort((a, b) => a - b);
+  const isSequential = uniqueSorted.every((n, i) => n === i + 1);
+  return isSequential ? uniqueSorted.length : -1;
+}
+
+// Body-only (no header/footer/buttons) — matches whatsapp.js's createTemplate scope.
+// Lands as PENDING; Meta reviews it (minutes to ~1 day) before it's usable — this
+// endpoint only submits the request, it can't make Meta approve it faster.
 router.post('/templates', requireRole('admin'), async (req, res, next) => {
   try {
-    const { name, category, bodyText } = req.body ?? {};
+    const { name, category, bodyText, bodyExamples } = req.body ?? {};
     if (!TEMPLATE_NAME_RE.test(name ?? '')) {
       return res.status(400).json({ error: 'El nombre solo puede tener minúsculas, números y guion bajo (_), sin espacios.' });
     }
@@ -137,15 +149,19 @@ router.post('/templates', requireRole('admin'), async (req, res, next) => {
     if (!text || text.length > 1024) {
       return res.status(400).json({ error: 'El texto es obligatorio y debe tener 1024 caracteres o menos.' });
     }
-    const paramCount = new Set(text.match(/\{\{\d+\}\}/g) ?? []).size;
-    if (paramCount > 1 || (paramCount === 1 && !text.includes('{{1}}'))) {
-      return res.status(400).json({ error: 'Solo se admite una variable, {{1}}, para el nombre del cliente — es lo único que este CRM rellena al enviar.' });
+    const paramCount = sequentialParamCount(text);
+    if (paramCount < 0) {
+      return res.status(400).json({ error: 'Las variables deben ser {{1}}, {{2}}, {{3}}... en orden, sin saltos ni repetidas.' });
+    }
+    const examples = Array.isArray(bodyExamples) ? bodyExamples.map((v) => String(v ?? '').trim()) : [];
+    if (paramCount > 0 && (examples.length !== paramCount || examples.some((v) => !v))) {
+      return res.status(400).json({ error: `Esta plantilla tiene ${paramCount} variable(s) — completa un valor de ejemplo para cada una.` });
     }
     const result = await whatsapp.createTemplate({
       name, category, language: 'es', bodyText: text,
-      bodyExample: paramCount ? ['María'] : undefined,
+      bodyExample: paramCount ? examples : undefined,
     });
-    logBusinessAction(req.user, null, 'whatsapp_template_created', `${name} (${category})`);
+    logBusinessAction(req.user, null, 'whatsapp_template_created', `${name} (${category}, ${paramCount} variable${paramCount === 1 ? '' : 's'})`);
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -297,7 +313,8 @@ router.post('/:id/retry-failed', async (req, res, next) => {
 
     const { rows: failed } = await pool.query(
       `SELECT h.id, h.session_id, c.full_name,
-              coalesce(c.whatsapp_number, split_part(h.session_id, '__', 1)) AS phone
+              coalesce(c.whatsapp_number, split_part(h.session_id, '__', 1)) AS phone,
+              h.message->'additional_kwargs'->'extraParams' AS extra_params
        FROM n8n_chat_histories h
        LEFT JOIN customers c ON c.whatsapp_number = split_part(h.session_id, '__', 1)
        WHERE h.message->'additional_kwargs'->>'campaignId' = $1
@@ -343,16 +360,19 @@ router.post('/:id/retry-failed', async (req, res, next) => {
 const SEND_DELAY_MS = 350;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Renders the literal text sent — {{1}}, {{2}}... all filled with the same name, same
-// as the params array built for the actual API call — so the thread shows what the
-// customer really received instead of the bare template name.
-function renderBody(bodyTemplate, name) {
-  return bodyTemplate.replace(/\{\{\d+\}\}/g, name);
+// Renders the literal text sent — {{1}} is always the customer's name; {{2}} and up (the
+// "guías" case — a tracking number, an order code, anything per-recipient) come from
+// extraParams, in order. A template with no extraParams supplied for a {{2}}+ falls back
+// to the name too, same as before this existed, rather than leaving a raw "{{2}}" in the
+// thread if something upstream forgot to pass one.
+function renderBody(bodyTemplate, name, extraParams = []) {
+  return bodyTemplate.replace(/\{\{(\d+)\}\}/g, (_, n) => (n === '1' ? name : extraParams[Number(n) - 2] ?? name));
 }
 
 async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
-  const params = Array(paramCount).fill(name);
+  const extraParams = customer.extraParams ?? [];
+  const params = [name, ...extraParams];
   let sentWamid = null;
   let error = null;
   try {
@@ -372,10 +392,14 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   const sessionId = sessionIds?.[0] ?? customer.whatsapp_number;
   const message = {
     type: 'ai',
-    content: renderBody(bodyTemplate, name),
+    content: renderBody(bodyTemplate, name, extraParams),
     additional_kwargs: {
       sentBy: 'campaign',
       campaignId: String(campaignId),
+      // Persisted so a later retry (which only has the message row, not the original
+      // request) re-sends with the SAME per-recipient value instead of falling back to
+      // repeating the name for {{2}}+.
+      ...(extraParams.length ? { extraParams } : {}),
       ...(sentWamid ? { wamid: sentWamid } : { status: 'failed', statusError: error }),
     },
     response_metadata: {},
@@ -400,9 +424,9 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
 
 // Updates the recipient's existing row in place instead of inserting a new one — see the
 // retry-failed route for why (avoids double-counting the recipient in campaign stats).
-async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename) {
+async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, extraParams = []) {
   const name = firstName(fullName) || FALLBACK_TEMPLATE_NAME;
-  const params = Array(paramCount).fill(name);
+  const params = [name, ...extraParams];
   let sentWamid = null;
   let error = null;
   try {
@@ -419,10 +443,11 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   if (!prev) return false;
   const message = {
     ...prev,
-    content: renderBody(bodyTemplate, name),
+    content: renderBody(bodyTemplate, name, extraParams),
     additional_kwargs: {
       sentBy: 'campaign',
       campaignId: prev.additional_kwargs?.campaignId,
+      ...(extraParams.length ? { extraParams } : {}),
       ...(sentWamid ? { wamid: sentWamid } : { status: 'failed', statusError: error }),
     },
   };
@@ -435,7 +460,7 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
 
 async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename) {
   for (const r of failed) {
-    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename).catch((err) =>
+    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, r.extra_params ?? []).catch((err) =>
       console.error(`campaign ${campaignId} retry recipient ${r.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
@@ -493,6 +518,23 @@ router.post('/', async (req, res, next) => {
     const resolved = await resolveTemplate(templateName, templateLanguage);
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { paramCount, headerFormat, bodyTemplate } = resolved;
+
+    // {{2}} and beyond need a real per-recipient value (a tracking number, an order
+    // code — "envío de guías") — there's no sensible one for a bulk temperature/
+    // customerIds audience, only for a pasted list where each row brings its own.
+    if (paramCount > 1) {
+      if (temperature || (Array.isArray(customerIds) && customerIds.length)) {
+        return res.status(400).json({ error: `Esta plantilla necesita ${paramCount - 1} valor(es) extra por cliente — solo se puede enviar pegando la lista de destinatarios con sus valores, no por segmento ni cliente existente.` });
+      }
+      if (!Array.isArray(newRecipients) || !newRecipients.length) {
+        return res.status(400).json({ error: 'Esta plantilla necesita una lista de destinatarios con sus valores extra.' });
+      }
+      const badParams = newRecipients.filter((r) => !Array.isArray(r.params) || r.params.length !== paramCount - 1 || r.params.some((p) => !String(p ?? '').trim()));
+      if (badParams.length) {
+        return res.status(400).json({ error: `Faltan valores para: ${badParams.map((r) => r.phone).join(', ')}` });
+      }
+    }
+
     const headerNeedsMedia = SUPPORTED_HEADER_FORMATS.includes(headerFormat);
     if (headerNeedsMedia && !headerMediaId) {
       return res.status(400).json({
@@ -554,7 +596,7 @@ router.post('/', async (req, res, next) => {
     // full_name is never overwritten — only filled in if it was empty.
     if (Array.isArray(newRecipients) && newRecipients.length) {
       const seen = new Set(audience.map((c) => c.id));
-      for (const { phone, fullName } of newRecipients) {
+      for (const { phone, fullName, params } of newRecipients) {
         const trimmedPhone = String(phone).trim();
         if (cooldown.has(trimmedPhone)) { skippedCooldown.push({ phone: trimmedPhone, fullName: fullName?.trim() || null }); continue; }
         const { rows } = await pool.query(
@@ -564,7 +606,9 @@ router.post('/', async (req, res, next) => {
           [trimmedPhone, fullName?.trim() || null]
         );
         const c = rows[0];
-        if (!seen.has(c.id)) { audience.push(c); seen.add(c.id); }
+        // {{1}} still comes from c.full_name (an existing customer keeps their real
+        // name via the COALESCE above) — params here only ever fills {{2}} and beyond.
+        if (!seen.has(c.id)) { audience.push({ ...c, extraParams: Array.isArray(params) ? params : [] }); seen.add(c.id); }
       }
     }
 

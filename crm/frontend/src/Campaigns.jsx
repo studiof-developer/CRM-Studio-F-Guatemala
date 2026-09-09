@@ -229,6 +229,12 @@ function NewCampaignModal({ onClose, onSent }) {
   const headerUnsupported = template?.headerFormat && !SUPPORTED_HEADER_FORMATS.includes(template.headerFormat);
   const headerIsDocument = template?.headerFormat === 'DOCUMENT';
   const headerNeedsMedia = template?.headerFormat === 'IMAGE' || headerIsDocument;
+  // {{2}} and beyond — a tracking number, an order code — need a real value per
+  // recipient (backend rejects a segment/existing-customer audience for these), so this
+  // mode only offers the paste-a-list flow below, not "audiencia por temperatura" or
+  // searching an existing customer.
+  const extraParamCount = (template?.paramCount ?? 1) - 1;
+  const needsExtraParams = extraParamCount > 0;
 
   function selectTemplate(key) {
     setTemplateKey(key);
@@ -236,6 +242,11 @@ function NewCampaignModal({ onClose, onSent }) {
     setHeaderImageToken(null);
     setHeaderPreviewUrl(null);
     setHeaderFilename(null);
+    // Audience modes aren't compatible across a 1-variable vs. multi-variable template
+    // (a segment/existing-customer pick has no {{2}}+ value to send) — start fresh.
+    setTemperature('');
+    setManualPicked([]);
+    setManualQuery('');
   }
 
   async function handleHeaderFile(file) {
@@ -318,6 +329,37 @@ function NewCampaignModal({ onClose, onSent }) {
     setManualResults([]);
   }
 
+  // "Envío de guías": each line brings its own extra value(s) — a tracking number, an
+  // order code — beyond just the phone. Tab-separated matches a straight copy-paste of
+  // multiple columns out of Excel; comma-separated covers a manually-typed list. An
+  // already-known phone still resolves to that real customer server-side (their real
+  // name fills {{1}}) — this only ever supplies {{2}} and up.
+  function handleManualPasteWithParams(e) {
+    const text = e.clipboardData?.getData('text');
+    if (!text) return;
+    e.preventDefault();
+    const lines = text.split(/\r\n|\r|\n/).map((s) => s.trim()).filter(Boolean);
+    const known = new Set(manualPicked.map((p) => p.phone));
+    const toAdd = [];
+    const invalid = [];
+    for (const raw of lines) {
+      const cols = (raw.includes('\t') ? raw.split('\t') : raw.split(',')).map((s) => s.trim());
+      const digits = (cols[0] ?? '').replace(/\D/g, '');
+      const phone = digits.length === 8 ? `502${digits}` : digits;
+      const params = cols.slice(1, 1 + extraParamCount);
+      if (!PHONE_RE.test(phone) || params.length !== extraParamCount || params.some((v) => !v)) { invalid.push(raw); continue; }
+      if (known.has(phone)) continue;
+      known.add(phone);
+      toAdd.push({ id: `new:${phone}`, phone, fullName: null, isNew: true, params });
+    }
+    if (toAdd.length) setManualPicked((prev) => [...prev, ...toAdd]);
+    const parts = [];
+    if (toAdd.length) parts.push(`${toAdd.length} agregado(s)`);
+    if (invalid.length) parts.push(`${invalid.length} línea(s) con formato incorrecto (se esperaban ${1 + extraParamCount} columnas)`);
+    if (invalid.length) showError(parts.join(' · '));
+    else if (toAdd.length) showSuccess(parts.join(' · '));
+  }
+
   const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
   const canSend = !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
     && (temperature || manualPicked.length > 0) && totalRecipients > 0;
@@ -332,7 +374,7 @@ function NewCampaignModal({ onClose, onSent }) {
         count: temperature ? count : undefined,
         order,
         customerIds: manualPicked.filter((p) => !p.isNew).map((p) => p.id),
-        newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName })),
+        newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName, params: p.params })),
         headerMediaId: headerMediaId || undefined,
         headerImageToken: headerImageToken || undefined,
       });
@@ -428,106 +470,142 @@ function NewCampaignModal({ onClose, onSent }) {
             )}
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Audiencia masiva por temperatura</label>
-            <Select value={temperature} onChange={setTemperature} options={TEMP_OPTIONS} />
-            {temperature && (
-              <div className="mt-2.5 flex items-center gap-2.5">
-                <input
-                  type="number"
-                  min={1}
-                  value={count}
-                  onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-24 rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
-                />
-                <span className="text-xs text-greige-ink">
-                  de {audienceCount ?? '…'} disponibles con esa temperatura
+          {needsExtraParams ? (
+            <div>
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-line-soft bg-black/[0.02] p-3 text-xs text-greige-ink dark:bg-white/[0.03]">
+                <FileText size={14} className="mt-0.5 shrink-0 text-accent" />
+                <span>
+                  Esta plantilla necesita {extraParamCount} valor{extraParamCount === 1 ? '' : 'es'} extra por cliente ({Array.from({ length: extraParamCount }, (_, i) => `{{${i + 2}}}`).join(', ')}) —
+                  solo se puede enviar pegando la lista de destinatarios, no por segmento ni buscando un cliente existente.
                 </span>
               </div>
-            )}
-            {temperature && (
-              <div className="mt-2 inline-flex rounded-lg border border-line p-0.5 text-xs">
-                <button
-                  onClick={() => setOrder('recent')}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'recent' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
-                >
-                  <ArrowDownWideNarrow size={12} /> Más recientes primero
-                </button>
-                <button
-                  onClick={() => setOrder('oldest')}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'oldest' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
-                >
-                  <Clock size={12} /> Más antiguos primero
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-greige-ink">
-              Agregar clientes puntuales (por nombre o teléfono) — o pega una columna de números copiada de Excel
-            </label>
-            <div className="relative">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-greige" />
-              <input
-                value={manualQuery}
-                onChange={(e) => setManualQuery(e.target.value)}
-                onPaste={handleManualPaste}
-                placeholder="ej. 50255529660, Erika, o pega una columna de números"
-                className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+              <label className="mb-1.5 block text-xs font-medium text-greige-ink">
+                Pega tu lista (una por línea): teléfono{Array.from({ length: extraParamCount }, (_, i) => `, valor para {{${i + 2}}}`).join('')}
+              </label>
+              <textarea
+                onPaste={handleManualPasteWithParams}
+                placeholder={`50255529660${Array.from({ length: extraParamCount }, (_, i) => `, valor${i + 1}`).join('')}\n50255529661${Array.from({ length: extraParamCount }, (_, i) => `, valor${i + 1}`).join('')}`}
+                rows={4}
+                className="w-full resize-none rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3.5 py-2.5 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
               />
+              <p className="mt-1 text-xs text-greige">Copiado directo de Excel (varias columnas) también funciona.</p>
+              {manualPicked.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {manualPicked.map((c) => (
+                    <span key={c.id} className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                      {c.phone}{c.params?.length ? ` — ${c.params.join(', ')}` : ''}
+                      <button onClick={() => setManualPicked((prev) => prev.filter((p) => p.id !== c.id))} className="hover:opacity-70">
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            {manualResults.length > 0 && (
-              <div className="mt-1.5 flex flex-col gap-1 rounded-lg border border-line bg-paper p-1.5 shadow-sm">
-                {manualResults.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => addManual(c)}
-                    disabled={pickedIds.has(c.id) || !!c.cooldownUntil}
-                    title={c.cooldownUntil ? `Ya recibió una difusión — disponible de nuevo el ${formatDateTime(c.cooldownUntil)}` : undefined}
-                    className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:opacity-40"
-                  >
-                    <span className="truncate text-ink">{c.fullName || c.phone}</span>
-                    {c.cooldownUntil ? (
-                      <span className="shrink-0 text-xs font-medium text-amber-600">En cooldown</span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* No customer with this number exists yet — offer to add it fresh instead
-                of only ever searching who's already in the system. */}
-            {queryIsPhone && !queryAlreadyPicked && (
-              <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-dashed border-line p-2">
-                <input
-                  value={newRecipientName}
-                  onChange={(e) => setNewRecipientName(e.target.value)}
-                  placeholder="Nombre (opcional)"
-                  className="min-w-0 flex-1 rounded-md border border-line bg-black/[0.03] dark:bg-white/[0.05] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:bg-paper"
-                />
-                <button
-                  onClick={() => addNewPhone(trimmedQuery, newRecipientName)}
-                  className="flex shrink-0 items-center gap-1 rounded-md bg-accent-soft px-2.5 py-1.5 text-xs font-medium text-accent hover:opacity-80"
-                >
-                  <Plus size={12} /> Agregar {trimmedQuery} como nuevo
-                </button>
-              </div>
-            )}
-            {manualPicked.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {manualPicked.map((c) => (
-                  <span key={c.id} className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                    {c.fullName || c.phone}
-                    <button onClick={() => setManualPicked((prev) => prev.filter((p) => p.id !== c.id))} className="hover:opacity-70">
-                      <X size={11} />
+          ) : (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-greige-ink">Audiencia masiva por temperatura</label>
+                <Select value={temperature} onChange={setTemperature} options={TEMP_OPTIONS} />
+                {temperature && (
+                  <div className="mt-2.5 flex items-center gap-2.5">
+                    <input
+                      type="number"
+                      min={1}
+                      value={count}
+                      onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-24 rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                    />
+                    <span className="text-xs text-greige-ink">
+                      de {audienceCount ?? '…'} disponibles con esa temperatura
+                    </span>
+                  </div>
+                )}
+                {temperature && (
+                  <div className="mt-2 inline-flex rounded-lg border border-line p-0.5 text-xs">
+                    <button
+                      onClick={() => setOrder('recent')}
+                      className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'recent' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                    >
+                      <ArrowDownWideNarrow size={12} /> Más recientes primero
                     </button>
-                  </span>
-                ))}
+                    <button
+                      onClick={() => setOrder('oldest')}
+                      className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-colors ${order === 'oldest' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                    >
+                      <Clock size={12} /> Más antiguos primero
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-greige-ink">
+                  Agregar clientes puntuales (por nombre o teléfono) — o pega una columna de números copiada de Excel
+                </label>
+                <div className="relative">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-greige" />
+                  <input
+                    value={manualQuery}
+                    onChange={(e) => setManualQuery(e.target.value)}
+                    onPaste={handleManualPaste}
+                    placeholder="ej. 50255529660, Erika, o pega una columna de números"
+                    className="w-full rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                  />
+                </div>
+                {manualResults.length > 0 && (
+                  <div className="mt-1.5 flex flex-col gap-1 rounded-lg border border-line bg-paper p-1.5 shadow-sm">
+                    {manualResults.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => addManual(c)}
+                        disabled={pickedIds.has(c.id) || !!c.cooldownUntil}
+                        title={c.cooldownUntil ? `Ya recibió una difusión — disponible de nuevo el ${formatDateTime(c.cooldownUntil)}` : undefined}
+                        className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:opacity-40"
+                      >
+                        <span className="truncate text-ink">{c.fullName || c.phone}</span>
+                        {c.cooldownUntil ? (
+                          <span className="shrink-0 text-xs font-medium text-amber-600">En cooldown</span>
+                        ) : (
+                          <span className="shrink-0 text-xs text-greige-ink">{c.phone}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* No customer with this number exists yet — offer to add it fresh instead
+                    of only ever searching who's already in the system. */}
+                {queryIsPhone && !queryAlreadyPicked && (
+                  <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-dashed border-line p-2">
+                    <input
+                      value={newRecipientName}
+                      onChange={(e) => setNewRecipientName(e.target.value)}
+                      placeholder="Nombre (opcional)"
+                      className="min-w-0 flex-1 rounded-md border border-line bg-black/[0.03] dark:bg-white/[0.05] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:bg-paper"
+                    />
+                    <button
+                      onClick={() => addNewPhone(trimmedQuery, newRecipientName)}
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent-soft px-2.5 py-1.5 text-xs font-medium text-accent hover:opacity-80"
+                    >
+                      <Plus size={12} /> Agregar {trimmedQuery} como nuevo
+                    </button>
+                  </div>
+                )}
+                {manualPicked.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {manualPicked.map((c) => (
+                      <span key={c.id} className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                        {c.fullName || c.phone}
+                        <button onClick={() => setManualPicked((prev) => prev.filter((p) => p.id !== c.id))} className="hover:opacity-70">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">

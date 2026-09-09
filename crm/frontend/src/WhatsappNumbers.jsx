@@ -248,7 +248,16 @@ const TEMPLATE_CATEGORIES = [
   { value: 'MARKETING', label: 'Marketing' },
   { value: 'UTILITY', label: 'Utilidad' },
 ];
-const EMPTY_TEMPLATE_FORM = { name: '', category: 'MARKETING', bodyText: '' };
+const EMPTY_TEMPLATE_FORM = { name: '', category: 'MARKETING', bodyText: '', examples: {} };
+
+// How many {{n}} variables the body currently has — the highest number used, not just a
+// count, so a template mid-edit (e.g. only {{1}} and {{3}} typed so far) still shows a
+// box for {{2}} rather than silently skipping it. The backend enforces the real
+// no-gaps rule (1, 2, 3… in order) on submit.
+function detectParamCount(bodyText) {
+  const matches = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  return matches.length ? Math.max(...matches) : 0;
+}
 
 function TemplatesTab() {
   const [templates, setTemplates] = useState([]);
@@ -266,12 +275,15 @@ function TemplatesTab() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const paramCount = detectParamCount(form.bodyText);
+
   async function handleCreate(e) {
     e.preventDefault();
     setCreating(true);
     setFormError(null);
     try {
-      await createWhatsappTemplate(form);
+      const bodyExamples = Array.from({ length: paramCount }, (_, i) => form.examples[i + 1] ?? '');
+      await createWhatsappTemplate({ name: form.name, category: form.category, bodyText: form.bodyText, bodyExamples });
       setForm(EMPTY_TEMPLATE_FORM);
       load();
       showSuccess('Plantilla enviada a revisión de Meta');
@@ -296,7 +308,7 @@ function TemplatesTab() {
     }
   }
 
-  const previewBody = form.bodyText.replace(/\{\{1\}\}/g, 'María');
+  const previewBody = form.bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => form.examples[n] || `{{${n}}}`);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
@@ -342,7 +354,7 @@ function TemplatesTab() {
 
       <section className="h-fit rounded-2xl border border-line bg-paper p-4 md:p-6">
         <h2 className="text-lg font-semibold text-ink">Nueva plantilla</h2>
-        <p className="mt-1 text-xs text-greige-ink">Solo texto por ahora (sin encabezado, botones ni pie) — es lo único que el CRM puede rellenar al enviarla.</p>
+        <p className="mt-1 text-xs text-greige-ink">Solo texto por ahora (sin encabezado, botones ni pie).</p>
 
         <form onSubmit={handleCreate} className="mt-4">
           <label className="mb-1.5 block text-sm font-medium text-ink">Nombre</label>
@@ -362,13 +374,34 @@ function TemplatesTab() {
           <textarea
             value={form.bodyText}
             onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
-            placeholder={'Hola {{1}}, tenemos una promoción especial para ti…'}
+            placeholder={'Hola {{1}}, tu guía es {{2}}…'}
             required
             rows={5}
             maxLength={1024}
             className="w-full resize-none rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
           />
-          <p className="mt-1 text-xs text-greige">Usa <code>{'{{1}}'}</code> para el nombre del cliente — es la única variable que el CRM rellena.</p>
+          <p className="mt-1 text-xs text-greige">
+            <code>{'{{1}}'}</code> es siempre el nombre del cliente. <code>{'{{2}}'}</code>, <code>{'{{3}}'}</code>… son valores distintos por cliente
+            (ej. un número de guía) que se piden al armar la difusión — deben ir en orden, sin saltarse ninguno.
+          </p>
+
+          {paramCount > 0 && (
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-xs font-medium text-ink">Meta pide un valor de ejemplo por variable, para revisarla:</p>
+              {Array.from({ length: paramCount }, (_, i) => i + 1).map((n) => (
+                <div key={n} className="flex items-center gap-2">
+                  <span className="w-9 shrink-0 text-xs font-medium text-greige-ink">{`{{${n}}}`}</span>
+                  <input
+                    value={form.examples[n] ?? ''}
+                    onChange={(e) => setForm({ ...form, examples: { ...form.examples, [n]: e.target.value } })}
+                    placeholder={n === 1 ? 'María' : 'GUIA-00123'}
+                    required
+                    className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {form.bodyText && (
             <div className="mt-3 rounded-lg border border-dashed border-line-soft p-3 text-sm text-ink">
