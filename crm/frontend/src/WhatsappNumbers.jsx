@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown } from 'lucide-react';
+import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
   fetchSettings, updateSetting,
@@ -33,6 +33,7 @@ export default function Configuracion() {
           {[
             { key: 'numbers', label: 'Números de WhatsApp', icon: Smartphone },
             { key: 'pipeline', label: 'Pipeline', icon: LayoutGrid },
+            { key: 'deteccion', label: 'Detección', icon: Radar },
             { key: 'general', label: 'General', icon: Settings2 },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -51,6 +52,7 @@ export default function Configuracion() {
       <div className="px-4 pb-8 md:px-8">
         {tab === 'numbers' && <NumbersTab />}
         {tab === 'pipeline' && <PipelineTab />}
+        {tab === 'deteccion' && <DeteccionTab />}
         {tab === 'general' && <GeneralTab />}
       </div>
     </div>
@@ -59,7 +61,7 @@ export default function Configuracion() {
 
 // Plain number-input settings only — pipeline_columns has its own tab/editor since an
 // array of {key,label,icon,color} doesn't fit a single <input type="number">.
-const GENERAL_SETTING_KEYS = ['ocr_context_hours'];
+const GENERAL_SETTING_KEYS = ['ocr_context_hours', 'sla_minutes', 'awaiting_reply_overdue_minutes', 'broadcast_cooldown_hours'];
 
 function GeneralTab() {
   const [settings, setSettings] = useState([]);
@@ -91,8 +93,8 @@ function GeneralTab() {
 
   return (
     <section className="max-w-md rounded-2xl border border-line bg-paper p-4 md:p-8">
-      {settings.map((s) => (
-        <div key={s.key}>
+      {settings.map((s, i) => (
+        <div key={s.key} className={i > 0 ? 'mt-6 border-t border-line-soft pt-6' : ''}>
           <label className="mb-1.5 block text-sm font-medium text-ink">{s.label}</label>
           <p className="mb-2 text-xs text-greige-ink">{s.description}</p>
           <div className="flex items-center gap-3">
@@ -233,6 +235,124 @@ function PipelineTab() {
         </Button>
         {updatedAt && <p className="text-xs text-greige">Última edición: {formatDate(updatedAt)}</p>}
       </div>
+    </section>
+  );
+}
+
+function DeteccionTab() {
+  return (
+    <div className="flex max-w-2xl flex-col gap-6">
+      <div className="flex items-start gap-2 rounded-lg border border-line-soft bg-black/[0.02] p-3 text-xs text-greige-ink dark:bg-white/[0.03]">
+        <Info size={14} className="mt-0.5 shrink-0 text-accent" />
+        <span>
+          Estas listas <strong>se suman</strong> a la detección que ya trae el sistema — nunca la reemplazan ni la desactivan.
+          Cada frase se busca tal cual (no es una fórmula ni un código), así que no hay forma de "romper" la detección
+          existente agregando o quitando una de aquí.
+        </span>
+      </div>
+      <PhraseListEditor
+        settingKey="extra_caliente_phrases"
+        title='Frases que mueven a un cliente a "Medio de pago" (Caliente)'
+        helpText='Si un asesor pregunta el medio de pago de una forma que el sistema no reconoce todavía, agrégala aquí tal cual se escribe — ej. "cómo me harías el pago". No hace falta que sea una frase exacta completa; con que aparezca dentro del mensaje del asesor es suficiente.'
+        placeholder="ej. cómo me harías el pago"
+      />
+      <PhraseListEditor
+        settingKey="extra_receipt_keywords"
+        title="Palabras que confirman que una foto es un comprobante real (OCR)"
+        helpText='Útil cuando aparece un banco o pasarela de pago nueva cuya captura de pantalla no contiene ninguna de las palabras que el sistema ya reconoce (monto, cuenta, referencia, comprobante, depósito, etc.) — ej. el nombre del banco.'
+        placeholder="ej. bac credomatic"
+      />
+    </div>
+  );
+}
+
+function PhraseListEditor({ settingKey, title, helpText, placeholder }) {
+  const [phrases, setPhrases] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    fetchSettings().then((rows) => {
+      const s = rows.find((r) => r.key === settingKey);
+      setPhrases(Array.isArray(s?.value) ? s.value : []);
+      setUpdatedAt(s?.updatedAt ?? null);
+    }).catch((err) => showError(err.message));
+  }, [settingKey]);
+  useEffect(() => { load(); }, [load]);
+
+  async function persist(nextPhrases) {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await updateSetting(settingKey, nextPhrases);
+      setPhrases(result.value);
+      setUpdatedAt(result.updatedAt);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleAdd(e) {
+    e.preventDefault();
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    if (trimmed.length < 3) {
+      setError('La frase debe tener al menos 3 caracteres.');
+      return;
+    }
+    if (phrases.some((p) => p.toLowerCase() === trimmed.toLowerCase())) {
+      setError('Esa frase ya está en la lista.');
+      return;
+    }
+    setDraft('');
+    persist([...phrases, trimmed]);
+  }
+
+  function handleRemove(phrase) {
+    persist(phrases.filter((p) => p !== phrase));
+  }
+
+  if (!phrases) return null;
+
+  return (
+    <section className="rounded-2xl border border-line bg-paper p-4 md:p-6">
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+      <p className="mt-1 text-xs text-greige-ink">{helpText}</p>
+
+      <form onSubmit={handleAdd} className="mt-4 flex items-center gap-2">
+        <input
+          value={draft}
+          onChange={(e) => { setDraft(e.target.value); setError(null); }}
+          placeholder={placeholder}
+          maxLength={80}
+          className="min-w-0 flex-1 rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+        />
+        <Button type="submit" disabled={saving || phrases.length >= 20}>
+          <Plus size={14} /> Agregar
+        </Button>
+      </form>
+      {phrases.length >= 20 && <p className="mt-1.5 text-xs text-warn">Máximo 20 frases — elimina una para agregar otra.</p>}
+      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+
+      {phrases.length === 0 ? (
+        <p className="mt-4 text-xs text-greige-ink">Ninguna todavía — la detección incorporada sigue funcionando igual.</p>
+      ) : (
+        <ul className="mt-4 flex flex-wrap gap-2">
+          {phrases.map((phrase) => (
+            <li key={phrase} className="flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent">
+              {phrase}
+              <button type="button" onClick={() => handleRemove(phrase)} disabled={saving} aria-label={`Quitar "${phrase}"`} className="hover:opacity-70 disabled:opacity-50">
+                <X size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {updatedAt && <p className="mt-3 text-xs text-greige">Última edición: {formatDate(updatedAt)}</p>}
     </section>
   );
 }

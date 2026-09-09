@@ -139,6 +139,9 @@ inboundRouter.post('/', async (req, res, next) => {
     // anything gets auto-confirmed — a photo of a garment or size chart still won't match.
     if (kind === 'image') {
       const contextHours = await getSetting('ocr_context_hours', 3);
+      // Admin-added receipt vocabulary (Configuración > Detección) — a bank/gateway
+      // whose confirmation text doesn't match anything in ocrPayment.js's built-in list.
+      const extraReceiptKeywords = await getSetting('extra_receipt_keywords', []);
       const { rows: gated } = await pool.query(
         `SELECT c.id AS customer_id
          FROM customers c
@@ -191,7 +194,7 @@ inboundRouter.post('/', async (req, res, next) => {
           // system thought this photo matched, not just that it did.
           const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
 
-          if (receiptContainsAmount(ocrText, expectedAmount)) {
+          if (receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
             const paidMethod = guessPaidMethod(ocrText);
             await confirmAutoPayment(customerId, paidMethod, `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`);
             autoConfirmed = true;
@@ -201,7 +204,7 @@ inboundRouter.post('/', async (req, res, next) => {
             // each receipt showing only its own partial amount. Persist whatever THIS
             // receipt says it's for (regardless of match) so a sibling receipt — sent
             // before or after this one — can be summed together with it below.
-            const ocrAmount = extractReceiptAmount(ocrText);
+            const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
             if (ocrAmount != null) {
               await pool.query(
                 `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,

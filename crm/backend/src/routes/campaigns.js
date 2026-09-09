@@ -9,6 +9,7 @@ import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './convers
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
 import { logBusinessAction } from '../auditLog.js';
+import { getSetting } from './settings.js';
 
 const router = Router();
 // Was capped at a flat 5MB back when a header could only ever be an IMAGE (WhatsApp's own
@@ -40,21 +41,23 @@ function firstName(fullName) {
 // the same pauta ends up repeated on the same person. Only broadcast sends count here
 // (regular conversation stays open); campaign sends are already tagged with campaignId,
 // so this only ever scans that (small, indexed) subset of the table, not all of it.
-const COOLDOWN_HOURS = 42;
+// Admin-editable (Configuración > General) — 42h is just the fallback default.
 async function getCooldownMap() {
+  const cooldownHours = await getSetting('broadcast_cooldown_hours', 42);
   const { rows } = await pool.query(
     `SELECT split_part(session_id, '__', 1) AS phone, max(created_at) AS last_sent
      FROM n8n_chat_histories
      WHERE message->'additional_kwargs'->>'campaignId' IS NOT NULL
        -- A send that failed (at dispatch, or later via the delivery-status webhook)
-       -- never reached the customer, so it shouldn't block a retry for 42h.
+       -- never reached the customer, so it shouldn't block a retry for the cooldown.
        AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
-       AND created_at > now() - interval '${COOLDOWN_HOURS} hours'
-     GROUP BY phone`
+       AND created_at > now() - make_interval(hours => $1::int)
+     GROUP BY phone`,
+    [cooldownHours]
   );
   const map = new Map();
   for (const r of rows) {
-    map.set(r.phone, new Date(new Date(r.last_sent).getTime() + COOLDOWN_HOURS * 3600 * 1000));
+    map.set(r.phone, new Date(new Date(r.last_sent).getTime() + cooldownHours * 3600 * 1000));
   }
   return map;
 }

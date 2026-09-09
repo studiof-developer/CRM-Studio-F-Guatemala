@@ -31,6 +31,15 @@ function isValidPipelineColumns(v) {
   return true;
 }
 
+// A list of plain phrases, not a regex — capped so the OR-list this ends up compiled
+// into (SQL trigger or JS regex) stays small and each phrase stays skimmable in the
+// editor. Each phrase itself is bounded so it reads as a real phrase, not an attempt to
+// paste a whole paragraph or a regex pattern in disguise.
+function isValidPhraseList(v) {
+  if (!Array.isArray(v) || v.length > 20) return false;
+  return v.every((p) => typeof p === 'string' && p.trim().length >= 3 && p.length <= 80);
+}
+
 // Every setting this app currently exposes as admin-editable. Keeps the API from
 // reading/writing an arbitrary key, and gives each one a shape check before it's
 // trusted.
@@ -44,6 +53,31 @@ const SETTINGS = {
     label: 'Columnas del Pipeline',
     description: 'Nombre, ícono, color y orden de las columnas del tablero. Las 7 columnas en sí no se pueden agregar ni quitar desde aquí.',
     validate: isValidPipelineColumns,
+  },
+  sla_minutes: {
+    label: 'Minutos para marcar "No atendidos" como atrasado',
+    description: 'Cuánto puede esperar un ticket sin asesor asignado antes de marcarse en rojo como atrasado en el Pipeline.',
+    validate: (v) => Number.isFinite(v) && v > 0 && v <= 1440,
+  },
+  awaiting_reply_overdue_minutes: {
+    label: 'Minutos para marcar una conversación activa como atrasada',
+    description: 'En las columnas donde ya hay un asesor asignado, cuánto puede esperar un cliente una respuesta antes de marcarse en rojo como atrasado.',
+    validate: (v) => Number.isFinite(v) && v > 0 && v <= 1440,
+  },
+  broadcast_cooldown_hours: {
+    label: 'Horas de espera entre difusiones al mismo cliente',
+    description: 'Cuánto debe pasar desde la última difusión que recibió un cliente antes de que se le pueda enviar otra.',
+    validate: (v) => Number.isFinite(v) && v > 0 && v <= 720,
+  },
+  extra_caliente_phrases: {
+    label: 'Frases extra que mueven a un cliente a "Medio de pago" (Caliente)',
+    description: 'Se suman (no reemplazan) a las frases ya incorporadas — úsalas si el equipo usa una manera de preguntar el medio de pago que el sistema no reconoce todavía.',
+    validate: isValidPhraseList,
+  },
+  extra_receipt_keywords: {
+    label: 'Palabras extra que confirman que una foto es un comprobante (OCR)',
+    description: 'Se suman (no reemplazan) a las palabras ya incorporadas — útil para un banco o pasarela de pago nueva cuyo comprobante no trae ninguna de esas palabras.',
+    validate: isValidPhraseList,
   },
 };
 

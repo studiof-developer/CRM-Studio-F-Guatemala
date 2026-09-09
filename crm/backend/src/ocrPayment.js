@@ -30,6 +30,17 @@ export async function extractText(buffer) {
 // not every case.
 const RECEIPT_KEYWORDS = /(monto|cuenta|referencia|autorizaci[oó]n|recib[oí]|comprobante|dep[oó]sito|conforme|banrural|neolink)/i;
 
+// Admin-added extra receipt vocabulary (Configuración > Detección) — a new bank/gateway
+// showing up in receipts that don't match anything above (its name, a phrase its
+// confirmation screen uses). Plain substring match, not regex — an admin typing a phrase
+// here can't accidentally write a broken or overly-broad pattern the way editing the
+// fixed regex above could.
+function matchesReceiptKeywords(ocrText, extraKeywords = []) {
+  if (RECEIPT_KEYWORDS.test(ocrText)) return true;
+  const lower = ocrText.toLowerCase();
+  return extraKeywords.some((kw) => kw && lower.includes(kw.toLowerCase()));
+}
+
 // Parses a number as printed on a receipt, which is formatted either the US way
 // (1,390.00 — comma thousands, dot decimal) or the way some Guatemalan bank apps print
 // it (1.390,00 — dot thousands, comma decimal). Whichever separator appears LAST is the
@@ -47,9 +58,9 @@ function parseAmount(raw) {
 // OCR text. Loose on formatting (commas, dots, a trailing ".00" — a bank slip prints
 // cents, the advisor's "Q899" in chat never does) but strict on the number itself: this
 // gates an irreversible "mark as Paid", so a near-miss must not count as a match.
-export function receiptContainsAmount(ocrText, expectedAmount) {
+export function receiptContainsAmount(ocrText, expectedAmount, extraKeywords = []) {
   if (!ocrText || !Number.isFinite(expectedAmount)) return false;
-  if (!RECEIPT_KEYWORDS.test(ocrText)) return false;
+  if (!matchesReceiptKeywords(ocrText, extraKeywords)) return false;
   const numbers = ocrText.match(/\d[\d.,]*/g) ?? [];
   return numbers.some((n) => parseAmount(n) === Math.round(expectedAmount));
 }
@@ -63,8 +74,8 @@ export function receiptContainsAmount(ocrText, expectedAmount) {
 // doesn't match on its own — a customer who split one payment across two transactions
 // (attachments.js sums recent receipts by phone before giving up on that order).
 const MONTO_AMOUNT_RE = /monto[^\d]{0,25}(\d[\d.,]*\d|\d)/i;
-export function extractReceiptAmount(ocrText) {
-  if (!ocrText || !RECEIPT_KEYWORDS.test(ocrText)) return null;
+export function extractReceiptAmount(ocrText, extraKeywords = []) {
+  if (!ocrText || !matchesReceiptKeywords(ocrText, extraKeywords)) return null;
   const labeled = ocrText.match(MONTO_AMOUNT_RE);
   if (labeled) return parseAmount(labeled[1]);
   // No explicit "Monto" label — prefer a number that looks like a currency amount (has

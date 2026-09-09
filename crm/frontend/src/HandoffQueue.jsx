@@ -4,7 +4,7 @@ import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSna
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
-import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
+import { formatWait, minutesSince } from './lib/sla.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
@@ -25,16 +25,26 @@ const DEFAULT_SORT = {};
 const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
 const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto']);
 
-// "No atendidos" is overdue on raw wait time (nobody's even looked yet, SLA_MINUTES=15
-// is meant to be aggressive there). These 4 are already claimed/active — what actually
-// matters is whether the CUSTOMER is the one waiting: if the advisor already replied,
-// the clock is on the customer, not us, no matter how long it's been. A longer window
-// (an hour, not 15 minutes) since this is a real back-and-forth, not an unclaimed queue.
+// "No atendidos" is overdue on raw wait time (nobody's even looked yet — the default
+// 15 min is meant to be aggressive there, see slaMinutes below). These 4 are already
+// claimed/active — what actually matters is whether the CUSTOMER is the one waiting: if
+// the advisor already replied, the clock is on the customer, not us, no matter how long
+// it's been. A longer default window (an hour, not 15 minutes) since this is a real
+// back-and-forth, not an unclaimed queue. Both thresholds are admin-editable
+// (Configuración > General) — the constants below are just the fallback defaults.
 const AWAITING_REPLY_COLUMNS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
-const AWAITING_REPLY_OVERDUE_MINUTES = 60;
+const DEFAULT_SLA_MINUTES = 15;
+const DEFAULT_AWAITING_REPLY_OVERDUE_MINUTES = 60;
 const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio_pago: 'caliente', pqrs: 'pqrs' };
 
 const PAGE_SIZE = 50;
+
+// "60" reads better as "1h" than "60 min" in the overdue tooltip — matches the
+// implicit assumption the old hardcoded "(más de 1h)" text baked in, now that the
+// threshold itself can be any number an admin picks.
+function formatMinutes(m) {
+  return m % 60 === 0 ? `${m / 60}h` : `${m} min`;
+}
 
 // Guatemala never observes DST — a fixed -06 offset always gives today's real local
 // calendar date regardless of the browser's own timezone, matching the same
@@ -87,10 +97,18 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // Admin-editable label/icon/color/order (Configuración > Pipeline) — null until
   // loaded, everything falls back to DEFAULT_COLUMN_META/COLUMN_ORDER until then.
   const [pipelineColumns, setPipelineColumns] = useState(null);
+  // Admin-editable overdue thresholds (Configuración > General) — start at the same
+  // defaults the code used to hardcode, updated once the real setting loads.
+  const [slaMinutes, setSlaMinutes] = useState(DEFAULT_SLA_MINUTES);
+  const [awaitingReplyOverdueMinutes, setAwaitingReplyOverdueMinutes] = useState(DEFAULT_AWAITING_REPLY_OVERDUE_MINUTES);
   useEffect(() => {
     fetchSettings().then((rows) => {
-      const value = rows.find((r) => r.key === 'pipeline_columns')?.value;
-      if (Array.isArray(value)) setPipelineColumns(value);
+      const pipelineValue = rows.find((r) => r.key === 'pipeline_columns')?.value;
+      if (Array.isArray(pipelineValue)) setPipelineColumns(pipelineValue);
+      const slaValue = rows.find((r) => r.key === 'sla_minutes')?.value;
+      if (Number.isFinite(slaValue)) setSlaMinutes(slaValue);
+      const awaitingValue = rows.find((r) => r.key === 'awaiting_reply_overdue_minutes')?.value;
+      if (Number.isFinite(awaitingValue)) setAwaitingReplyOverdueMinutes(awaitingValue);
     }).catch(() => {});
   }, []);
   const displayOrder = pipelineColumns ? pipelineColumns.map((c) => c.key) : COLUMN_ORDER;
@@ -432,9 +450,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 )}
                 {cards.map((card) => {
                   const overdue = key === 'pendiente'
-                    ? isOverdue(card.stageSince)
+                    ? minutesSince(card.stageSince) > slaMinutes
                     : AWAITING_REPLY_COLUMNS.has(key) && card.awaitingReply && card.lastMessageAt
-                      && minutesSince(card.lastMessageAt) > AWAITING_REPLY_OVERDUE_MINUTES;
+                      && minutesSince(card.lastMessageAt) > awaitingReplyOverdueMinutes;
                   const unreadCount = card.unreadCount ?? 0;
                   const hasUnread = unreadCount > 0;
                   // Someone (possibly me, elsewhere) currently has this chat open in
@@ -482,8 +500,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         <span className={`flex items-center gap-1 text-[11px] ${overdue ? 'font-semibold text-danger' : 'text-muted-foreground'}`}>
                           {overdue
                             ? key === 'pendiente'
-                              ? `Esperando hace ${formatWait(card.stageSince)} (más de ${SLA_MINUTES} min)`
-                              : `Sin responder hace ${formatWait(card.lastMessageAt)} (más de 1h)`
+                              ? `Esperando hace ${formatWait(card.stageSince)} (más de ${slaMinutes} min)`
+                              : `Sin responder hace ${formatWait(card.lastMessageAt)} (más de ${formatMinutes(awaitingReplyOverdueMinutes)})`
                             : `hace ${formatWait(card.lastMessageAt ?? card.stageSince)}`}
                         </span>
                         {key === 'pendiente' ? (

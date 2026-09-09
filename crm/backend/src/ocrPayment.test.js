@@ -86,3 +86,23 @@ test('extractReceiptAmount fallback handles Latin-American dot-thousands formatt
 test('guesses tarjeta from a Neolink card receipt', () => {
   assert.equal(guessPaidMethod(NEOLINK_RECEIPT_1), 'tarjeta');
 });
+
+// Configuración > Detección — an admin-added keyword for a gateway/bank not in the
+// built-in list, matched as a plain substring rather than compiled into the regex.
+test('admin-added extra keywords widen the receipt gate without touching the built-in list', () => {
+  // Deliberately avoids every built-in keyword (monto/cuenta/referencia/autorización/
+  // recibí/comprobante/depósito/conforme/banrural/neolink) so this only passes via the
+  // extra keyword, not by accident.
+  const bacText = 'BAC Credomatic - Pago Aprobado. Total Q450.00';
+  assert.equal(receiptContainsAmount(bacText, 450), false); // no built-in keyword, no extra keyword yet
+  assert.equal(receiptContainsAmount(bacText, 450, ['bac credomatic']), true);
+  assert.equal(extractReceiptAmount(bacText), null);
+  assert.equal(extractReceiptAmount(bacText, ['bac credomatic']), 450);
+});
+
+test('extra keywords are case-insensitive and empty/missing entries are ignored safely', () => {
+  const text = 'Pago confirmado via PagueYa. Total Q100.00';
+  assert.equal(receiptContainsAmount(text, 100, ['PAGUEYA']), true);
+  assert.equal(receiptContainsAmount(text, 100, ['', null, undefined]), false);
+  assert.equal(receiptContainsAmount(text, 100), false);
+});
