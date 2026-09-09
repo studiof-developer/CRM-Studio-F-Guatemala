@@ -151,8 +151,21 @@ function AccessTab() {
                 <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
                   <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatDateTime(r.accessed_at)}</td>
                   <td className="px-4 py-3">
-                    <span className="font-medium text-ink">{r.actor_name ?? r.actor}</span>
-                    {r.actor_role && <span className="ml-1.5 text-xs text-greige">({r.actor_role})</span>}
+                    {/* No actor_user_id means this row came from a DB trigger or the
+                        OCR path, not a logged-in advisor — actor is a plain string like
+                        "Sistema (OCR)"/"Luisa (auto)" in that case. Visually distinct
+                        (bot icon, purple) so an automatic entry never reads as if some
+                        advisor personally clicked something. */}
+                    {!r.actor_name && /sistema|\(auto\)/i.test(r.actor ?? '') ? (
+                      <span className="flex items-center gap-1 text-xs font-semibold text-purple">
+                        <Bot size={12} /> {r.actor}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="font-medium text-ink">{r.actor_name ?? r.actor}</span>
+                        {r.actor_role && <span className="ml-1.5 text-xs text-greige">({r.actor_role})</span>}
+                      </>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={meta?.variant ?? 'neutral'}>

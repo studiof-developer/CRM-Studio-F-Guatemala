@@ -187,11 +187,15 @@ inboundRouter.post('/', async (req, res, next) => {
               [customerId, paidMethod]
             );
             if (updated.length) {
+              // Includes a snippet of what Tesseract actually read, not just the
+              // conclusion — so a later audit of a wrong auto-mark can see WHY the
+              // system thought this photo matched, not just that it did.
+              const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
               logBusinessAction(
                 { fullName: 'Sistema (OCR)', id: null },
                 customerId,
                 'customer_marked_paid',
-                `${paidMethod} — Q${expectedAmount} detectado por OCR en el comprobante (automático)`
+                `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`
               );
               autoConfirmed = true;
             } else {

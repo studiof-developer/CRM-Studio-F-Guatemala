@@ -80,7 +80,34 @@ router.get('/pipeline', async (req, res, next) => {
     // this stays a plain indexed sort no matter how deep a column gets paged.
     const orderExpr = bucket === 'pendiente' ? 'stage_since' : 'COALESCE(last_customer_message_at, stage_since)';
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}`, () => pool.query(`
+    // Filters on the exact same field the column already sorts/displays by — matches
+    // the "Sin responder" report's fixed -06 Guatemala convention (this business never
+    // observes DST, so a plain offset is always correct, no timezone-name lookup
+    // needed). Applied inside `totaled`, before bucket_total is computed, so the
+    // column's own count reflects the filtered set instead of the whole bucket.
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const { from, to } = req.query;
+    if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
+      return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
+    }
+    const params = [bucket];
+    let dateClause = '';
+    if (from) {
+      params.push(`${from}T00:00:00-06:00`);
+      dateClause += ` AND ${orderExpr} >= $${params.length}`;
+    }
+    if (to) {
+      const toTs = new Date(`${to}T00:00:00-06:00`);
+      toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
+      params.push(toTs.toISOString());
+      dateClause += ` AND ${orderExpr} < $${params.length}`;
+    }
+    const offsetParam = params.length + 1;
+    params.push(offset);
+    const limitParam = params.length + 1;
+    params.push(limit);
+
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
@@ -92,15 +119,16 @@ router.get('/pipeline', async (req, res, next) => {
         WHERE t.status != 'bot'
       ),
       -- bucket_total counted here, over the whole (small — tickets/customers, not
-      -- messages) set, before narrowing to just this one column.
+      -- messages) date-filtered set, before narrowing to just this one column.
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
         FROM temped
+        WHERE true ${dateClause}
       ),
       paged AS (
         SELECT * FROM totaled WHERE bucket = $1
         ORDER BY ${orderExpr} ${sort}
-        OFFSET $2 LIMIT $3
+        OFFSET $${offsetParam} LIMIT $${limitParam}
       )
       -- unread_count only computed for this one page (up to 200 rows), same reasoning
       -- as MAX_PAGE_SIZE above and audit.js's message_count — a per-row subquery over
@@ -114,7 +142,7 @@ router.get('/pipeline', async (req, res, next) => {
              ) AS unread_count
       FROM paged
       ORDER BY ${orderExpr} ${sort}
-    `, [bucket, offset, limit]));
+    `, params));
 
     res.json({
       total: rows[0] ? Number(rows[0].bucket_total) : 0,

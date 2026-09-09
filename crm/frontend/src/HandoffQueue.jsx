@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset } from 'lucide-react';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot } from './api.js';
 import { Button } from './components/ui.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -44,6 +44,32 @@ const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio
 
 const PAGE_SIZE = 50;
 
+// Guatemala never observes DST — a fixed -06 offset always gives today's real local
+// calendar date regardless of the browser's own timezone, matching the same
+// convention the "Sin responder" report and the backend's own pipeline date filter use.
+function guatemalaToday() {
+  return new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
+}
+function addDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function monthBounds(year, month) {
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from, to: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` };
+}
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const PERIOD_OPTIONS = [
+  { value: 'todo', label: 'Todo' },
+  { value: 'hoy', label: 'Hoy' },
+  { value: 'ayer', label: 'Ayer' },
+  { value: 'semana', label: 'Última semana' },
+  { value: 'mes', label: 'Mes' },
+  { value: 'personalizado', label: 'Periodo personalizado' },
+];
+
 function emptyColumn(key) {
   return { cards: [], total: 0, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
 }
@@ -57,6 +83,37 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
+
+  // Date filter: which period each column's cards/count are scoped to (see api.js's
+  // from/to, filtered server-side on the same field the column already sorts by).
+  // "onlyColumn" is purely a render-time filter, not a fetch param — every column keeps
+  // loading in the background so its count stays right if you switch back to it.
+  const [periodPreset, setPeriodPreset] = useState('todo');
+  const todayStr = guatemalaToday();
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const [y, m] = todayStr.split('-').map(Number);
+    return { year: y, month: m };
+  });
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
+  const [onlyColumn, setOnlyColumn] = useState('');
+
+  let dateFrom, dateTo;
+  if (periodPreset === 'hoy') { dateFrom = dateTo = todayStr; }
+  else if (periodPreset === 'ayer') { dateFrom = dateTo = addDays(todayStr, -1); }
+  else if (periodPreset === 'semana') { dateFrom = addDays(todayStr, -6); dateTo = todayStr; }
+  else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
+  else if (periodPreset === 'personalizado') { dateFrom = customFrom; dateTo = customTo; }
+
+  function shiftMonth(delta) {
+    setMonthCursor((prev) => {
+      let month = prev.month + delta;
+      let year = prev.year;
+      if (month < 1) { month = 12; year -= 1; }
+      if (month > 12) { month = 1; year += 1; }
+      return { year, month };
+    });
+  }
   // Same live-presence map Conversations.jsx keeps — keyed by phone (cleanSessionId
   // strips everything after "__", which for a real WhatsApp session IS the phone), so
   // card.whatsappNumber matches these keys with no extra lookup needed.
@@ -93,13 +150,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -109,7 +166,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -118,13 +175,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
   }, [loadColumn]);
 
-  useEffect(() => { reloadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Also re-fires on mount (dateFrom/dateTo are already set on first render) — one
+  // effect covers both the initial load and any period/month/custom-range change.
+  useEffect(() => { reloadAll(); }, [reloadAll]); // eslint-disable-line react-hooks/exhaustive-deps
   // ticket_changes also now fires on a plain customer temperature change (drag-and-drop,
   // the OCR auto-Pagado, "Marcar como Pagado" — see db/init/037), not just a real ticket
   // row — reused instead of a new channel since this board already listens to it.
@@ -227,11 +286,61 @@ export default function HandoffQueue({ user, onOpenConversation }) {
             className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
           />
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={periodPreset}
+            onChange={(e) => setPeriodPreset(e.target.value)}
+            className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+          >
+            {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          {periodPreset === 'mes' && (
+            <div className="flex items-center gap-1 rounded-full border border-border bg-muted px-1.5 py-1">
+              <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground" aria-label="Mes anterior">
+                <ChevronLeft size={14} />
+              </button>
+              <span className="min-w-[108px] text-center text-xs font-medium">{MONTH_NAMES[monthCursor.month - 1]} {monthCursor.year}</span>
+              <button type="button" onClick={() => shiftMonth(1)} className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground" aria-label="Mes siguiente">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+
+          {periodPreset === 'personalizado' && (
+            <>
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+              />
+              <span className="text-xs text-muted-foreground">a</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+              />
+            </>
+          )}
+
+          <select
+            value={onlyColumn}
+            onChange={(e) => setOnlyColumn(e.target.value)}
+            className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+          >
+            <option value="">Todas las columnas</option>
+            {COLUMN_ORDER.map((key) => <option key={key} value={key}>{COLUMN_META[key].label}</option>)}
+          </select>
+        </div>
       </div>
 
       {error && <p className="p-4 text-sm text-danger">{error}</p>}
       <div className="flex flex-1 gap-3 overflow-x-auto p-4">
-        {COLUMN_ORDER.map((key) => {
+        {COLUMN_ORDER.filter((key) => !onlyColumn || key === onlyColumn).map((key) => {
           const meta = COLUMN_META[key];
           const Icon = meta.icon;
           const col = columns[key];
