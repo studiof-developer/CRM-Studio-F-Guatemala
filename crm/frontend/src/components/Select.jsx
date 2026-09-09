@@ -38,7 +38,10 @@ export default function Select({ value, onChange, options, placeholder = 'Selecc
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); toggle(); }
       return;
     }
-    if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+    // stopPropagation, not just preventDefault — otherwise this Escape keeps bubbling
+    // to whatever's listening on the page (ChatPopup's own Escape-to-close, most
+    // notably), closing that too instead of just this dropdown.
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, options.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); if (options[highlight]) selectOption(options[highlight]); }

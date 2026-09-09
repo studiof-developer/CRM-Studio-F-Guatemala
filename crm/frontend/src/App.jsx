@@ -19,6 +19,10 @@ const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
 const Campaigns = lazy(() => import('./Campaigns.jsx'));
 const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
 const AgentTest = lazy(() => import('./AgentTest.jsx'));
+// Pulls in Conversations.jsx (which ChatPopup renders directly, not lazily) the first
+// time anything actually opens the popup — kept lazy for the same reason every other
+// tab here is: nothing pays for the chat UI's bundle weight until it's actually used.
+const ChatPopup = lazy(() => import('./components/ChatPopup.jsx'));
 import { Logo } from './components/Logo.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
@@ -216,12 +220,11 @@ export default function App() {
   const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', false);
   const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
   const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
-  const [openConversationId, setOpenConversationId] = useState(null);
-  const handleOpenConversation = useCallback((phone) => {
-    setOpenConversationId(phone);
-    setTab('conversations');
-  }, []);
-  const handleOpenedConversation = useCallback(() => setOpenConversationId(null), []);
+  // "Ir al chat" (Pipeline, Auditoría's Sin responder) opens this overlay in place —
+  // whatever tab you're on stays open underneath, instead of navigating away to
+  // Conversaciones and losing your spot in the list/board you were just looking at.
+  const [popupPhone, setPopupPhone] = useState(null);
+  const handleOpenConversation = useCallback((phone) => setPopupPhone(phone), []);
 
   useEffect(() => { fetchMe().then(setUser); }, []);
 
@@ -449,17 +452,16 @@ export default function App() {
           >
             <ChunkErrorBoundary key={tab}>
               <Suspense fallback={<TabLoading />}>
-                <Component
-                  user={user}
-                  onOpenConversation={handleOpenConversation}
-                  openSessionId={openConversationId}
-                  onOpenedConversation={handleOpenedConversation}
-                />
+                <Component user={user} onOpenConversation={handleOpenConversation} />
               </Suspense>
             </ChunkErrorBoundary>
           </motion.div>
         </main>
       </div>
+
+      <Suspense fallback={null}>
+        <ChatPopup phone={popupPhone} user={user} onClose={() => setPopupPhone(null)} />
+      </Suspense>
     </div>
   );
 }

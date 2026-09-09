@@ -175,7 +175,12 @@ function MessageTicks({ status, statusError, onRetry, retrying }) {
   );
 }
 
-export default function Conversations({ user, openSessionId, onOpenedConversation }) {
+// singleThreadMode: renders just the open thread, no chat list — used by ChatPopup.jsx
+// to show one conversation (with every "toy" it already has: composer, attachments,
+// presence, payment banner) inside a modal from the Pipeline, without duplicating any
+// of this component. Nothing else about Conversations changes; it's purely which of
+// the two panes below stays visible.
+export default function Conversations({ user, openSessionId, onOpenedConversation, singleThreadMode = false }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
   // "Buscar en todos los chats" — matches WhatsApp's own global search, distinct from
@@ -292,6 +297,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         e.preventDefault();
         applyQuickReply(slashResults[slashIndex] ?? slashResults[0]);
       } else if (e.key === 'Escape') {
+        // stopPropagation — otherwise this bubbles to ChatPopup's own window-level
+        // Escape-to-close, closing the whole chat instead of just the "/" menu.
+        e.stopPropagation();
         setDraft('');
       }
       return;
@@ -342,6 +350,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [hasMore, setHasMore] = useState(true);
 
+  // In singleThreadMode the list is fetched (unconditionally, same as always — see the
+  // mount effect below) but never clicked into, so unlike the normal flow — where the
+  // list is necessarily already loaded by the time there's a row to click — the thread
+  // this popup opens straight to can finish loading before this does. `listLoaded` lets
+  // the first-open scroll-to-unread effect below wait for it instead of racing it.
+  const [listLoaded, setListLoaded] = useState(false);
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
@@ -355,6 +369,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount);
       setConversations(data);
       setHasMore(isUnreadFilter ? false : data.length >= visibleCount);
+      setListLoaded(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -673,6 +688,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
     if (lastId === lastMessageIdRef.current) return;
     const isFirstLoadForThread = lastMessageIdRef.current === null;
+    // The unread-jump decision just below reads `selected.unreadCount`, from the
+    // conversations list — already loaded by definition in the normal click-to-open
+    // flow, but not guaranteed yet when a thread opens straight from `openSessionId`
+    // (ChatPopup) before that list's own fetch has resolved. Wait for it rather than
+    // guessing 0 and defaulting to "scroll to bottom" — this re-runs the moment
+    // `listLoaded` flips, so it's a one-time wait, not a lost jump.
+    if (isFirstLoadForThread && !listLoaded) return;
     const nearBottom = !container || container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     lastMessageIdRef.current = lastId;
 
@@ -703,7 +725,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       requestAnimationFrame(scrollToBottom);
       setTimeout(scrollToBottom, 300);
     }
-  }, [thread]);
+  }, [thread, listLoaded]);
 
   // Fires the actual network request for one optimistic entry, entirely in the
   // background — nothing in the compose box is waiting on this. Success removes the
@@ -963,7 +985,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
           this next to the thread at the same time, so it's the whole screen until a chat
           is opened, then it hides entirely (selecting a chat is the "navigate" action) —
           same one-pane-at-a-time pattern WhatsApp's own mobile app uses. */}
-      <div className={`w-full md:w-[380px] md:max-w-[45vw] shrink-0 flex-col border-r border-line ${selectedId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full md:w-[380px] md:max-w-[45vw] shrink-0 flex-col border-r border-line ${
+        singleThreadMode ? 'hidden' : selectedId ? 'hidden md:flex' : 'flex'
+      }`}>
         <div className="border-b border-line p-4">
           <div className="mb-3 flex items-center justify-between px-1">
             <h1 className="text-lg font-semibold text-ink">Conversaciones</h1>
@@ -1164,7 +1188,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
       {/* Thread — the mirror of the list's rule above: full screen once a chat is open,
           hidden on mobile otherwise (the empty state has nothing useful to say twice). */}
-      <div className={`min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02] ${selectedId ? 'flex' : 'hidden md:flex'}`}>
+      <div className={`min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02] ${
+        singleThreadMode ? 'flex' : selectedId ? 'flex' : 'hidden md:flex'
+      }`}>
         {!thread && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
             {threadError ? (
@@ -1198,16 +1224,25 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               // ever wraps to its own line, and only when there isn't room for it next
               // to everything else — guaranteed on mobile (w-full there), graceful
               // wherever else it might not fit.
-              className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+              className={`flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-paper px-5 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03] ${
+                // Reserves room for ChatPopup's own close button, which sits absolutely
+                // positioned over this same top-right corner — without this, "Resolver"
+                // (the right-most pill) rendered right underneath it.
+                singleThreadMode ? 'pr-12' : ''
+              }`}
             >
-              {/* Mobile-only: WhatsApp-style back arrow to return to the chat list */}
-              <span
-                role="button"
-                onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
-                className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
-              >
-                <ArrowLeft size={18} />
-              </span>
+              {/* Mobile-only: WhatsApp-style back arrow to return to the chat list — hidden
+                  in singleThreadMode, since there's no list here to go back to (the popup's
+                  own X/backdrop-click is how it closes on any screen size). */}
+              {!singleThreadMode && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
+                  className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
+                >
+                  <ArrowLeft size={18} />
+                </span>
+              )}
               <Avatar name={thread.customerName || thread.phone} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-ink">
