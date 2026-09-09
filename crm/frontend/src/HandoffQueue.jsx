@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Sparkles } from 'lucide-react';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
 import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
@@ -64,7 +64,6 @@ function monthBounds(year, month) {
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const PERIOD_OPTIONS = [
   { value: 'todo', label: 'Todo', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
-  { value: 'novedades', label: 'Novedades', icon: Sparkles, iconClassName: 'text-accent' },
   { value: 'hoy', label: 'Hoy', icon: Calendar, iconClassName: 'text-accent' },
   { value: 'ayer', label: 'Ayer', icon: Calendar, iconClassName: 'text-accent' },
   { value: 'semana', label: 'Última semana', icon: Calendar, iconClassName: 'text-accent' },
@@ -106,18 +105,26 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [customTo, setCustomTo] = useState(todayStr);
   const [onlyColumn, setOnlyColumn] = useState('');
 
-  // "Novedades": everything that arrived after the last message any advisor sent,
-  // anywhere in the CRM — a snapshot taken once per page load/selection, not a moving
-  // target that keeps shrinking while this page is open.
-  const [lastAdvisorActivityAt, setLastAdvisorActivityAt] = useState(null);
+  // "Hoy"/"Ayer" don't cut at calendar midnight — they cut at the last moment staff
+  // (advisor/supervisor/admin, all tagged sentBy:'advisor') wrote before that day
+  // started, since a shift's leftover backlog from 11pm is "today's" work, not
+  // yesterday's. Fetched once on mount, not kept live — a fixed snapshot for the
+  // session, same reasoning as the old "Novedades" idea this replaces.
+  const guatemalaMidnight = (dateStr) => `${dateStr}T00:00:00-06:00`;
+  const [todayCutoff, setTodayCutoff] = useState(null);
+  const [yesterdayCutoff, setYesterdayCutoff] = useState(null);
   useEffect(() => {
-    fetchLastAdvisorActivity().then(({ timestamp }) => setLastAdvisorActivityAt(timestamp)).catch(() => {});
+    fetchLastAdvisorActivity(guatemalaMidnight(todayStr)).then(({ timestamp }) => setTodayCutoff(timestamp)).catch(() => {});
+    fetchLastAdvisorActivity(guatemalaMidnight(addDays(todayStr, -1))).then(({ timestamp }) => setYesterdayCutoff(timestamp)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  let dateFrom, dateTo, sinceTs;
-  if (periodPreset === 'novedades') { sinceTs = lastAdvisorActivityAt; }
-  else if (periodPreset === 'hoy') { dateFrom = dateTo = todayStr; }
-  else if (periodPreset === 'ayer') { dateFrom = dateTo = addDays(todayStr, -1); }
+  let dateFrom, dateTo, sinceTs, untilTs;
+  if (periodPreset === 'hoy') { sinceTs = todayCutoff ?? guatemalaMidnight(todayStr); }
+  else if (periodPreset === 'ayer') {
+    sinceTs = yesterdayCutoff ?? guatemalaMidnight(addDays(todayStr, -1));
+    untilTs = todayCutoff ?? guatemalaMidnight(todayStr);
+  }
   else if (periodPreset === 'semana') { dateFrom = addDays(todayStr, -6); dateTo = todayStr; }
   else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
   else if (periodPreset === 'personalizado') { dateFrom = customFrom; dateTo = customTo; }
@@ -167,13 +174,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs]);
+  }, [dateFrom, dateTo, sinceTs, untilTs]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -183,7 +190,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -192,7 +199,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs]);
+  }, [dateFrom, dateTo, sinceTs, untilTs]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
@@ -299,12 +306,18 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <div className="border-b border-border p-4">
-        <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
-        <p className="mt-1 text-sm font-semibold text-ink">
-          {grandTotal} {grandTotal === 1 ? 'conversación' : 'conversaciones'}
-          <span className="font-normal text-greige-ink"> · {periodLabel}</span>
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
+          </div>
+          <div className="shrink-0 rounded-xl border border-line bg-paper px-4 py-2 text-right shadow-sm">
+            <p className="text-xs font-medium text-greige-ink">{periodLabel}</p>
+            <p className="text-xl font-semibold leading-tight tracking-tight text-ink">
+              {grandTotal} <span className="text-xs font-normal text-greige-ink">{grandTotal === 1 ? 'conversación' : 'conversaciones'}</span>
+            </p>
+          </div>
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -352,12 +365,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
           <Select value={onlyColumn} onChange={setOnlyColumn} options={COLUMN_FILTER_OPTIONS} className="w-48 shrink-0" />
 
-          {periodPreset === 'novedades' && (
+          {(periodPreset === 'hoy' || periodPreset === 'ayer') && (
             <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">
-              <Sparkles size={12} className="text-accent" />
-              {lastAdvisorActivityAt
-                ? <>Desde el último mensaje de un asesor — {new Date(lastAdvisorActivityAt).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</>
-                : 'Cargando última actividad…'}
+              <Clock size={12} className="text-accent" />
+              {periodPreset === 'hoy'
+                ? <>Desde el último mensaje de un asesor ayer — {new Date(sinceTs).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</>
+                : <>De {new Date(sinceTs).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })} a {new Date(untilTs).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</>}
             </span>
           )}
         </div>

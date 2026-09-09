@@ -86,18 +86,21 @@ router.get('/pipeline', async (req, res, next) => {
     // needed). Applied inside `totaled`, before bucket_total is computed, so the
     // column's own count reflects the filtered set instead of the whole bucket.
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    const { from, to, since } = req.query;
+    const { from, to, since, until } = req.query;
     if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
       return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
     }
     if (since && !Number.isFinite(Date.parse(since))) {
       return res.status(400).json({ error: 'since must be a valid timestamp' });
     }
+    if (until && !Number.isFinite(Date.parse(until))) {
+      return res.status(400).json({ error: 'until must be a valid timestamp' });
+    }
     const params = [bucket];
     let dateClause = '';
-    // "Novedades" (the period option built for last-advisor-activity) needs a precise
-    // moment, not a calendar day — takes over from `from` instead of combining with it,
-    // same "up to now" open end as leaving `to` unset.
+    // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
+    // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
+    // so since/until take over from from/to instead of combining with them.
     if (since) {
       params.push(new Date(since).toISOString());
       dateClause += ` AND ${orderExpr} >= $${params.length}`;
@@ -105,7 +108,10 @@ router.get('/pipeline', async (req, res, next) => {
       params.push(`${from}T00:00:00-06:00`);
       dateClause += ` AND ${orderExpr} >= $${params.length}`;
     }
-    if (to) {
+    if (until) {
+      params.push(new Date(until).toISOString());
+      dateClause += ` AND ${orderExpr} < $${params.length}`;
+    } else if (to) {
       const toTs = new Date(`${to}T00:00:00-06:00`);
       toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
       params.push(toTs.toISOString());
@@ -116,7 +122,7 @@ router.get('/pipeline', async (req, res, next) => {
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}`, () => pool.query(`
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
@@ -173,16 +179,26 @@ router.get('/pipeline', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// The boundary the Pipeline's "Novedades" period option filters from: the most recent
-// message any advisor has sent, anywhere in the CRM — everything that arrived after it
-// is what nobody has looked at since the team last touched a conversation. Backed by a
+// The boundary the Pipeline's "Hoy"/"Ayer" filters actually use: not calendar midnight,
+// but the last moment any advisor/supervisor/admin sent a message before that day
+// started (Studio F runs shifts that end and resume overnight — a lead that comes in
+// at 11pm is "today's" backlog even though it's still yesterday by the wall clock).
+// `before` (optional) narrows to messages sent strictly before that timestamp, so the
+// frontend can ask for "the cutoff before today started" and "before yesterday started"
+// as two calls to the same endpoint — omit it for "the most recent ever". Backed by a
 // partial index (db/init/041) so this stays a single backward index-scan no matter how
 // large n8n_chat_histories grows, instead of a full scan over every advisor message ever sent.
 router.get('/last-advisor-activity', async (req, res, next) => {
   try {
+    const { before } = req.query;
+    if (before && !Number.isFinite(Date.parse(before))) {
+      return res.status(400).json({ error: 'before must be a valid timestamp' });
+    }
     const { rows } = await pool.query(
       `SELECT MAX(created_at) AS ts FROM n8n_chat_histories
-       WHERE message->>'type' = 'ai' AND message->'additional_kwargs'->>'sentBy' = 'advisor'`
+       WHERE message->>'type' = 'ai' AND message->'additional_kwargs'->>'sentBy' = 'advisor'
+         ${before ? 'AND created_at < $1::timestamptz' : ''}`,
+      before ? [new Date(before).toISOString()] : []
     );
     res.json({ timestamp: rows[0]?.ts ?? null });
   } catch (err) { next(err); }
