@@ -8,6 +8,7 @@ import { cleanSessionId, findConversationThread } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
 import { extractText, receiptContainsAmount, guessPaidMethod } from '../ocrPayment.js';
+import { getSetting } from './settings.js';
 
 const router = Router();
 
@@ -113,6 +114,7 @@ inboundRouter.post('/', async (req, res, next) => {
     // customer says "te envío el depósito", THEN sends the photo, with no matching
     // advisor message right before it).
     if (kind === 'image') {
+      const contextHours = await getSetting('ocr_context_hours', 3);
       const { rows: gated } = await pool.query(
         `SELECT c.id AS customer_id
          FROM customers c
@@ -120,7 +122,7 @@ inboundRouter.post('/', async (req, res, next) => {
            AND EXISTS (
              SELECT 1 FROM n8n_chat_histories h
              WHERE h.session_id LIKE $1 || '%'
-               AND h.created_at >= now() - interval '3 hours'
+               AND h.created_at >= now() - make_interval(hours => $2::int)
                AND (
                  (h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
                    AND h.message->>'content' ~* '(m[eé]todo\\s+de\\s+pago|medio\\s+de\\s+pago|(link|enlace)\\s+(de|para)\\s+(el\\s+)?pago|https?://|env[ií]a(nos)?\\s+(tu|el)\\s+comprobante|comprobante\\s+de\\s+(pago|transferencia|dep[oó]sito)|completar\\s+tu\\s+env[ií]o|nit\\s+o\\s+dpi)')
@@ -129,7 +131,7 @@ inboundRouter.post('/', async (req, res, next) => {
                    AND h.message->>'content' ~* '(transferencia|dep[oó]sito|comprobante)')
                )
            )`,
-        [phone]
+        [phone, contextHours]
       );
 
       if (gated.length) {
@@ -150,9 +152,9 @@ inboundRouter.post('/', async (req, res, next) => {
            WHERE h.session_id LIKE $1 || '%'
              AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
              AND h.message->>'content' ~ 'Q\\s?\\d{1,5}'
-             AND h.created_at >= now() - interval '3 hours'
+             AND h.created_at >= now() - make_interval(hours => $2::int)
            ORDER BY h.id DESC LIMIT 1`,
-          [phone]
+          [phone, contextHours]
         );
         const priceMatches = priced[0]?.content?.match(/Q\s?\d{1,5}/g);
         const expectedAmount = priceMatches?.length

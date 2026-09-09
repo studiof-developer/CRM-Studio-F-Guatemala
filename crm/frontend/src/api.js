@@ -425,6 +425,22 @@ export async function deleteWhatsappNumber(id) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar el número');
 }
 
+export async function fetchSettings() {
+  const res = await apiFetch('/api/settings');
+  if (!res.ok) throw new Error('Error al cargar la configuración');
+  return res.json();
+}
+
+export async function updateSetting(key, value) {
+  const res = await apiFetch(`/api/settings/${key}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al guardar el ajuste');
+  return res.json();
+}
+
 export async function fetchDashboard() {
   const res = await apiFetch('/api/dashboard');
   if (!res.ok) throw new Error('Error al cargar el dashboard');

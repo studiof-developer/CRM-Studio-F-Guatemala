@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2 } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
+  fetchSettings, updateSetting,
 } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
@@ -15,7 +16,96 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export default function WhatsappNumbers() {
+export default function Configuracion() {
+  const [tab, setTab] = useState('numbers');
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
+          <p className="mt-1 text-sm text-greige-ink">Ajustes del CRM y del bot que un administrador puede cambiar sin necesitar un despliegue.</p>
+        </div>
+
+        <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
+          {[
+            { key: 'numbers', label: 'Números de WhatsApp', icon: Smartphone },
+            { key: 'general', label: 'General', icon: Settings2 },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
+                tab === key ? 'bg-paper text-ink shadow-sm' : 'text-greige-ink hover:text-ink'
+              }`}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pb-8 md:px-8">
+        {tab === 'numbers' && <NumbersTab />}
+        {tab === 'general' && <GeneralTab />}
+      </div>
+    </div>
+  );
+}
+
+function GeneralTab() {
+  const [settings, setSettings] = useState([]);
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(null);
+
+  const load = useCallback(() => {
+    fetchSettings().then((rows) => {
+      setSettings(rows);
+      setValues(Object.fromEntries(rows.map((r) => [r.key, r.value ?? ''])));
+    }).catch((err) => showError(err.message));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSave(key) {
+    setSaving(key);
+    try {
+      await updateSetting(key, Number(values[key]));
+      load();
+      showSuccess('Ajuste guardado');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <section className="max-w-md rounded-2xl border border-line bg-paper p-4 md:p-8">
+      {settings.map((s) => (
+        <div key={s.key}>
+          <label className="mb-1.5 block text-sm font-medium text-ink">{s.label}</label>
+          <p className="mb-2 text-xs text-greige-ink">{s.description}</p>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min="1"
+              value={values[s.key] ?? ''}
+              onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
+              className="w-32 rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+            />
+            <Button type="button" onClick={() => handleSave(s.key)} disabled={saving === s.key}>
+              {saving === s.key ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
+          {s.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(s.updatedAt)}</p>}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function NumbersTab() {
   const [numbers, setNumbers] = useState([]);
   const [selectedId, setSelectedId] = useState('new');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -102,20 +192,16 @@ export default function WhatsappNumbers() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 bg-paper px-4 pb-4 pt-8 md:px-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
-          <p className="mt-1 text-sm text-greige-ink">
-            Números de WhatsApp conectados al CRM. Cambiar un token o número aquí no requiere redeploy.
-          </p>
-        </div>
+    <>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-greige-ink">
+          Números de WhatsApp conectados al CRM. Cambiar un token o número aquí no requiere redeploy.
+        </p>
         <Button onClick={selectNew}>
           <Plus size={16} /> Conectar número
         </Button>
       </div>
 
-      <div className="px-4 pb-8 md:px-8">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
         <ul className="flex flex-col gap-2">
           {numbers.length === 0 && (
@@ -231,7 +317,6 @@ export default function WhatsappNumbers() {
           </form>
         </section>
       </div>
-      </div>
 
       <ConfirmDialog
         open={confirmDeleteId !== null}
@@ -243,6 +328,6 @@ export default function WhatsappNumbers() {
         onConfirm={handleDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />
-    </div>
+    </>
   );
 }
