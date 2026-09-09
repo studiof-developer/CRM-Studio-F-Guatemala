@@ -35,7 +35,7 @@ export default function ChatPopup({ phone, user, onClose }) {
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.15 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative flex h-[88vh] w-[92vw] max-w-6xl overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl"
+            className="relative h-[88vh] w-[92vw] max-w-6xl overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl"
           >
             <button
               type="button"
@@ -45,6 +45,13 @@ export default function ChatPopup({ phone, user, onClose }) {
             >
               <X size={16} />
             </button>
+            {/* Conversations.jsx's own root has no explicit width (it doesn't need one on
+                the real Conversaciones page — its parent there is a plain block div, not
+                a flex container). This wrapper's parent USED to be `flex`, which turns a
+                plain block child into a flex item that shrinks to its content width
+                instead of filling the box — exactly the large empty gap reported
+                (2026-09-10). Dropped `flex` above so it goes back to filling 100% width,
+                same as the real page. */}
             <Conversations key={phone} user={user} openSessionId={phone} onOpenedConversation={() => {}} singleThreadMode />
           </motion.div>
         </motion.div>
