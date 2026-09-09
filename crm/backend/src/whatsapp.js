@@ -135,11 +135,42 @@ export async function listTemplates() {
     throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
   }
   const { data } = await graphFetch(
-    `${creds.wabaId}/message_templates?fields=name,status,category,language,components&limit=100`,
+    `${creds.wabaId}/message_templates?fields=name,status,category,language,components,rejected_reason&limit=100`,
     { method: 'GET' },
     creds.token
   );
   return data ?? [];
+}
+
+// Body-only for now (no header/footer/buttons) — matches the only thing this CRM's own
+// send path (sendTemplate above, campaigns.js) actually fills in: the customer's name as
+// a single {{1}}. A template needing more than that isn't creatable here yet.
+// New templates land as PENDING and Meta reviews them (minutes to ~1 day) before they're
+// usable — this call only submits it, listTemplates() above is how the real status shows up.
+// Meta REQUIRES an example value for every {{n}} placeholder or the request is rejected
+// outright, not just flagged — bodyExample supplies that.
+export async function createTemplate({ name, category, language, bodyText, bodyExample }) {
+  const creds = await getActiveCredentials();
+  if (!creds.wabaId) {
+    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
+  }
+  const component = { type: 'BODY', text: bodyText };
+  if (bodyExample?.length) component.example = { body_text: [bodyExample] };
+  return graphFetch(`${creds.wabaId}/message_templates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, language, category, components: [component] }),
+  }, creds.token);
+}
+
+// Meta deletes by name across every language variant of that template, not one row —
+// there's no per-language delete in this API.
+export async function deleteTemplate(name) {
+  const creds = await getActiveCredentials();
+  if (!creds.wabaId) {
+    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
+  }
+  return graphFetch(`${creds.wabaId}/message_templates?name=${encodeURIComponent(name)}`, { method: 'DELETE' }, creds.token);
 }
 
 export async function uploadMedia(buffer, mimeType) {

@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown } from 'lucide-react';
+import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, FileText, Info } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
-  fetchSettings, updateSetting,
+  fetchSettings, updateSetting, fetchTemplatesManage, createWhatsappTemplate, deleteWhatsappTemplate,
 } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
@@ -33,6 +33,7 @@ export default function Configuracion() {
           {[
             { key: 'numbers', label: 'Números de WhatsApp', icon: Smartphone },
             { key: 'pipeline', label: 'Pipeline', icon: LayoutGrid },
+            { key: 'templates', label: 'Plantillas', icon: FileText },
             { key: 'general', label: 'General', icon: Settings2 },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -51,6 +52,7 @@ export default function Configuracion() {
       <div className="px-4 pb-8 md:px-8">
         {tab === 'numbers' && <NumbersTab />}
         {tab === 'pipeline' && <PipelineTab />}
+        {tab === 'templates' && <TemplatesTab />}
         {tab === 'general' && <GeneralTab />}
       </div>
     </div>
@@ -234,6 +236,166 @@ function PipelineTab() {
         {updatedAt && <p className="text-xs text-greige">Última edición: {formatDate(updatedAt)}</p>}
       </div>
     </section>
+  );
+}
+
+const TEMPLATE_STATUS_META = {
+  APPROVED: { variant: 'success', label: 'Aprobada' },
+  PENDING: { variant: 'warning', label: 'En revisión' },
+  REJECTED: { variant: 'danger', label: 'Rechazada' },
+};
+const TEMPLATE_CATEGORIES = [
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'UTILITY', label: 'Utilidad' },
+];
+const EMPTY_TEMPLATE_FORM = { name: '', category: 'MARKETING', bodyText: '' };
+
+function TemplatesTab() {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState(null);
+  const [form, setForm] = useState(EMPTY_TEMPLATE_FORM);
+  const [formError, setFormError] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [confirmDeleteName, setConfirmDeleteName] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchTemplatesManage().then(setTemplates).catch((err) => setListError(err.message)).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setCreating(true);
+    setFormError(null);
+    try {
+      await createWhatsappTemplate(form);
+      setForm(EMPTY_TEMPLATE_FORM);
+      load();
+      showSuccess('Plantilla enviada a revisión de Meta');
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteWhatsappTemplate(confirmDeleteName);
+      load();
+      showSuccess('Plantilla eliminada');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteName(null);
+    }
+  }
+
+  const previewBody = form.bodyText.replace(/\{\{1\}\}/g, 'María');
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+      <section className="rounded-2xl border border-line bg-paper p-4 md:p-8">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-line-soft bg-black/[0.02] p-3 text-xs text-greige-ink dark:bg-white/[0.03]">
+          <Info size={14} className="mt-0.5 shrink-0 text-accent" />
+          <span>
+            Una vez que Meta aprueba una plantilla, su texto ya no se puede editar — solo eliminarla y crear una nueva.
+            Una plantilla nueva queda "En revisión" hasta que Meta la aprueba (minutos a ~1 día).
+          </span>
+        </div>
+
+        {listError && <p className="text-sm text-danger">{listError}</p>}
+        {!loading && !listError && templates.length === 0 && (
+          <p className="py-6 text-center text-sm text-greige-ink">Sin plantillas todavía.</p>
+        )}
+
+        <ul className="flex flex-col gap-2">
+          {templates.map((t) => {
+            const statusMeta = TEMPLATE_STATUS_META[t.status] ?? { variant: 'neutral', label: t.status };
+            return (
+              <li key={t.name} className="rounded-xl border border-line p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                      <span className="truncate">{t.name}</span>
+                      <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-greige-ink">{t.body}</p>
+                    {t.status === 'REJECTED' && t.rejectedReason && (
+                      <p className="mt-1.5 text-xs text-danger">Motivo de Meta: {t.rejectedReason}</p>
+                    )}
+                  </div>
+                  <Button type="button" variant="danger" onClick={() => setConfirmDeleteName(t.name)}>
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="h-fit rounded-2xl border border-line bg-paper p-4 md:p-6">
+        <h2 className="text-lg font-semibold text-ink">Nueva plantilla</h2>
+        <p className="mt-1 text-xs text-greige-ink">Solo texto por ahora (sin encabezado, botones ni pie) — es lo único que el CRM puede rellenar al enviarla.</p>
+
+        <form onSubmit={handleCreate} className="mt-4">
+          <label className="mb-1.5 block text-sm font-medium text-ink">Nombre</label>
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+            placeholder="promo_septiembre"
+            required
+            className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <p className="mt-1 text-xs text-greige">Solo minúsculas, números y guion bajo — sin espacios.</p>
+
+          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Categoría</label>
+          <Select value={form.category} onChange={(category) => setForm({ ...form, category })} options={TEMPLATE_CATEGORIES} />
+
+          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Mensaje</label>
+          <textarea
+            value={form.bodyText}
+            onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
+            placeholder={'Hola {{1}}, tenemos una promoción especial para ti…'}
+            required
+            rows={5}
+            maxLength={1024}
+            className="w-full resize-none rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <p className="mt-1 text-xs text-greige">Usa <code>{'{{1}}'}</code> para el nombre del cliente — es la única variable que el CRM rellena.</p>
+
+          {form.bodyText && (
+            <div className="mt-3 rounded-lg border border-dashed border-line-soft p-3 text-sm text-ink">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-greige">Vista previa</p>
+              {previewBody}
+            </div>
+          )}
+
+          {formError && <p className="mt-3 text-sm text-danger">{formError}</p>}
+
+          <Button type="submit" disabled={creating} className="mt-4">
+            {creating ? 'Enviando…' : 'Enviar a revisión'}
+          </Button>
+        </form>
+      </section>
+
+      <ConfirmDialog
+        open={confirmDeleteName !== null}
+        title="Eliminar plantilla"
+        message={`Esta acción no se puede deshacer. "${confirmDeleteName}" dejará de estar disponible para nuevos envíos (los mensajes ya enviados no se ven afectados).`}
+        confirmLabel="Eliminar"
+        danger
+        busy={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDeleteName(null)}
+      />
+    </div>
   );
 }
 

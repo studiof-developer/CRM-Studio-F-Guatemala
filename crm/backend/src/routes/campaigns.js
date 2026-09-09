@@ -7,6 +7,8 @@ import * as whatsapp from '../whatsapp.js';
 import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
+import { requireRole } from '../auth.js';
+import { logBusinessAction } from '../auditLog.js';
 
 const router = Router();
 // Was capped at a flat 5MB back when a header could only ever be an IMAGE (WhatsApp's own
@@ -92,6 +94,67 @@ router.get('/templates', async (req, res, next) => {
           headerFormat: getHeaderFormat(t),
         }))
     );
+  } catch (err) { next(err); }
+});
+
+// Every status (PENDING/APPROVED/REJECTED), not just APPROVED — this is the
+// Configuración > Plantillas management view, not the campaign composer's picker
+// above, so a template still in review or bounced back needs to show up too.
+// Admin-only: creating/deleting a Meta template is account-wide, not a single send.
+router.get('/templates/manage', requireRole('admin'), async (req, res, next) => {
+  try {
+    const templates = await whatsapp.listTemplates();
+    res.json(templates.map((t) => ({
+      name: t.name,
+      language: t.language,
+      category: t.category,
+      status: t.status,
+      rejectedReason: t.rejected_reason ?? null,
+      body: t.components?.find((c) => c.type === 'BODY')?.text ?? '',
+      headerFormat: getHeaderFormat(t),
+    })));
+  } catch (err) { next(err); }
+});
+
+// Meta's own naming rule — lowercase letters/digits/underscores only, no spaces.
+const TEMPLATE_NAME_RE = /^[a-z0-9_]{1,512}$/;
+const TEMPLATE_CATEGORIES = ['MARKETING', 'UTILITY'];
+
+// Body-only (no header/footer/buttons) — matches whatsapp.js's createTemplate scope,
+// which matches the only thing this CRM's own send path fills in: one {{1}} for the
+// customer's name. Lands as PENDING; Meta reviews it (minutes to ~1 day) before it's
+// usable — this endpoint only submits the request, it can't make Meta approve it faster.
+router.post('/templates', requireRole('admin'), async (req, res, next) => {
+  try {
+    const { name, category, bodyText } = req.body ?? {};
+    if (!TEMPLATE_NAME_RE.test(name ?? '')) {
+      return res.status(400).json({ error: 'El nombre solo puede tener minúsculas, números y guion bajo (_), sin espacios.' });
+    }
+    if (!TEMPLATE_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: 'Categoría inválida.' });
+    }
+    const text = (bodyText ?? '').trim();
+    if (!text || text.length > 1024) {
+      return res.status(400).json({ error: 'El texto es obligatorio y debe tener 1024 caracteres o menos.' });
+    }
+    const paramCount = new Set(text.match(/\{\{\d+\}\}/g) ?? []).size;
+    if (paramCount > 1 || (paramCount === 1 && !text.includes('{{1}}'))) {
+      return res.status(400).json({ error: 'Solo se admite una variable, {{1}}, para el nombre del cliente — es lo único que este CRM rellena al enviar.' });
+    }
+    const result = await whatsapp.createTemplate({
+      name, category, language: 'es', bodyText: text,
+      bodyExample: paramCount ? ['María'] : undefined,
+    });
+    logBusinessAction(req.user, null, 'whatsapp_template_created', `${name} (${category})`);
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+});
+
+router.delete('/templates/:name', requireRole('admin'), async (req, res, next) => {
+  try {
+    await whatsapp.deleteTemplate(req.params.name);
+    logBusinessAction(req.user, null, 'whatsapp_template_deleted', req.params.name);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

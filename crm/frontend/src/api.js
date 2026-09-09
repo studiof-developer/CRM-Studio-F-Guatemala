@@ -237,6 +237,27 @@ export async function fetchCampaignTemplates() {
   return res.json();
 }
 
+export async function fetchTemplatesManage() {
+  const res = await apiFetch('/api/campaigns/templates/manage');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las plantillas');
+  return res.json();
+}
+
+export async function createWhatsappTemplate(data) {
+  const res = await apiFetch('/api/campaigns/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la plantilla');
+  return res.json();
+}
+
+export async function deleteWhatsappTemplate(name) {
+  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
+}
+
 export async function uploadCampaignHeaderMedia(file) {
   const formData = new FormData();
   formData.append('file', file);
