@@ -54,6 +54,29 @@ export function receiptContainsAmount(ocrText, expectedAmount) {
   return numbers.some((n) => parseAmount(n) === Math.round(expectedAmount));
 }
 
+// The one number a receipt itself calls out as the amount — not "any number on the
+// page" (a receipt is full of dates, masked card digits, reference/audit numbers that
+// would collide with that approach). Prefers the value printed right after "Monto"
+// (Neolink, most bank apps); falls back to the largest number on the page for a format
+// that doesn't label it, since an amount is more often the biggest figure than a
+// reference/card/date fragment is. Used for the case a single receipt's total quote
+// doesn't match on its own — a customer who split one payment across two transactions
+// (attachments.js sums recent receipts by phone before giving up on that order).
+const MONTO_AMOUNT_RE = /monto[^\d]{0,25}(\d[\d.,]*\d|\d)/i;
+export function extractReceiptAmount(ocrText) {
+  if (!ocrText || !RECEIPT_KEYWORDS.test(ocrText)) return null;
+  const labeled = ocrText.match(MONTO_AMOUNT_RE);
+  if (labeled) return parseAmount(labeled[1]);
+  // No explicit "Monto" label — prefer a number that looks like a currency amount (has
+  // cents, e.g. "899.00" or "2,668.00") over a bare integer. Reference/audit/
+  // authorization codes on a real receipt are usually long bare integers that would
+  // otherwise swamp the actual total under a plain "biggest number wins" heuristic.
+  const decimals = (ocrText.match(/\d[\d.,]*[.,]\d{2}\b/g) ?? []).map(parseAmount).filter((n) => Number.isFinite(n) && n > 0);
+  if (decimals.length) return Math.max(...decimals);
+  const numbers = (ocrText.match(/\d[\d.,]*/g) ?? []).map(parseAmount).filter((n) => Number.isFinite(n) && n > 0);
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
 // Same bare keyword match db/init/032's SQL trigger already uses for the same
 // question — kept consistent rather than inventing a second way to guess this.
 // dep[oó]sito (not a plain "deposit") matches Guatemalan receipts that print the

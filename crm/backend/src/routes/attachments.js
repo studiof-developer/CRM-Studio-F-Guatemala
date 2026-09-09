@@ -7,8 +7,33 @@ import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
-import { extractText, receiptContainsAmount, guessPaidMethod } from '../ocrPayment.js';
+import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount } from '../ocrPayment.js';
 import { getSetting } from './settings.js';
+
+// Shared by both the single-receipt match and the multi-receipt-sum match below —
+// re-checks paid_locked/caliente at write time instead of trusting an earlier SELECT,
+// since OCR takes long enough that an advisor's own "Marcar como Pagado" click, or the
+// customer moving out of caliente, can land in between. If 0 rows come back, someone
+// else already resolved this customer while OCR was running, so this result is stale
+// and must NOT overwrite whatever they just set — the caller still treats that as
+// "handled" (skip the suggestion banner), just without logging a confirmation that
+// didn't actually happen.
+async function confirmAutoPayment(customerId, paidMethod, detailNote) {
+  const { rows: updated } = await pool.query(
+    `UPDATE customers AS c SET paid_locked = true, paid_method = $2, manual_status = 'pagado',
+       payment_suggested_at = NULL, payment_suggestion_reason = NULL, payment_suggestion_method = NULL,
+       updated_at = now()
+     WHERE c.id = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
+     RETURNING c.id`,
+    [customerId, paidMethod]
+  );
+  if (updated.length) {
+    // Also sets manual_status='pagado' — unlike the manual "Marcar como Pagado" button
+    // (customers.js), which only sets paid_locked and was leaving the Pipeline card
+    // sitting in whatever column it was already in.
+    logBusinessAction({ fullName: 'Sistema (OCR)', id: null }, customerId, 'customer_marked_paid', detailNote);
+  }
+}
 
 const router = Router();
 
@@ -70,6 +95,7 @@ inboundRouter.post('/', async (req, res, next) => {
       `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
       [sessionId, JSON.stringify(message)]
     );
+    const inboundMessageId = inserted[0].id;
 
     // Never re-sent anywhere by us — this copy only ever gets read back for the CRM's
     // own display, so it's always safe to compress it before it even hits disk. Most
@@ -160,42 +186,44 @@ inboundRouter.post('/', async (req, res, next) => {
             console.error('receipt OCR failed', err);
             return '';
           });
+          // Includes a snippet of what Tesseract actually read, not just the
+          // conclusion — so a later audit of a wrong auto-mark can see WHY the
+          // system thought this photo matched, not just that it did.
+          const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
+
           if (receiptContainsAmount(ocrText, expectedAmount)) {
             const paidMethod = guessPaidMethod(ocrText);
-            // Re-checks paid_locked/caliente at write time instead of trusting the
-            // `gated` SELECT from a few seconds ago — OCR takes long enough that an
-            // advisor's own "Marcar como Pagado" click, or the customer moving out of
-            // caliente, can land in between. If 0 rows come back here, someone else
-            // already resolved this customer while OCR was running, so this result is
-            // stale and must NOT overwrite whatever they just set.
-            // Also sets manual_status='pagado' — unlike the manual "Marcar como Pagado"
-            // button (customers.js), which only sets paid_locked and was leaving the
-            // Pipeline card sitting in whatever column it was already in.
-            const { rows: updated } = await pool.query(
-              `UPDATE customers AS c SET paid_locked = true, paid_method = $2, manual_status = 'pagado',
-                 payment_suggested_at = NULL, payment_suggestion_reason = NULL, payment_suggestion_method = NULL,
-                 updated_at = now()
-               WHERE c.id = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
-               RETURNING c.id`,
-              [customerId, paidMethod]
-            );
-            if (updated.length) {
-              // Includes a snippet of what Tesseract actually read, not just the
-              // conclusion — so a later audit of a wrong auto-mark can see WHY the
-              // system thought this photo matched, not just that it did.
-              const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
-              logBusinessAction(
-                { fullName: 'Sistema (OCR)', id: null },
-                customerId,
-                'customer_marked_paid',
-                `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`
+            await confirmAutoPayment(customerId, paidMethod, `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`);
+            autoConfirmed = true;
+          } else {
+            // Doesn't match on its own — real report (2026-09-05): a customer split one
+            // order into two separate card payments (Q35 + Q2,668 for one Q2,703 total),
+            // each receipt showing only its own partial amount. Persist whatever THIS
+            // receipt says it's for (regardless of match) so a sibling receipt — sent
+            // before or after this one — can be summed together with it below.
+            const ocrAmount = extractReceiptAmount(ocrText);
+            if (ocrAmount != null) {
+              await pool.query(
+                `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
+                [inboundMessageId, ocrAmount]
               );
-              autoConfirmed = true;
-            } else {
-              // Stale — don't fall through to the "possible payment" suggestion either;
-              // whatever the customer's current state is, it was just set by someone/
-              // something else a moment ago and this request has nothing useful to add.
-              autoConfirmed = true;
+              const { rows: summed } = await pool.query(
+                `SELECT COALESCE(SUM((h.message->'additional_kwargs'->>'ocrAmount')::numeric), 0) AS total
+                 FROM n8n_chat_histories h
+                 WHERE h.session_id LIKE $1 || '%'
+                   AND h.message->>'type' = 'human'
+                   AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
+                   AND h.created_at >= now() - make_interval(hours => $2::int)`,
+                [phone, contextHours]
+              );
+              if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
+                const paidMethod = guessPaidMethod(ocrText);
+                await confirmAutoPayment(
+                  customerId, paidMethod,
+                  `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`
+                );
+                autoConfirmed = true;
+              }
             }
           }
         }
