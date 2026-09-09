@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Clock, CheckCircle2, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
 import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot } from './api.js';
 import { Button } from './components/ui.jsx';
+import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { isOverdue, formatWait, minutesSince, SLA_MINUTES } from './lib/sla.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
@@ -62,12 +63,18 @@ function monthBounds(year, month) {
 }
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const PERIOD_OPTIONS = [
-  { value: 'todo', label: 'Todo' },
-  { value: 'hoy', label: 'Hoy' },
-  { value: 'ayer', label: 'Ayer' },
-  { value: 'semana', label: 'Última semana' },
-  { value: 'mes', label: 'Mes' },
-  { value: 'personalizado', label: 'Periodo personalizado' },
+  { value: 'todo', label: 'Todo', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
+  { value: 'hoy', label: 'Hoy', icon: Calendar, iconClassName: 'text-accent' },
+  { value: 'ayer', label: 'Ayer', icon: Calendar, iconClassName: 'text-accent' },
+  { value: 'semana', label: 'Última semana', icon: Calendar, iconClassName: 'text-accent' },
+  { value: 'mes', label: 'Mes', icon: Calendar, iconClassName: 'text-accent' },
+  { value: 'personalizado', label: 'Periodo personalizado', icon: Calendar, iconClassName: 'text-accent' },
+];
+// Same icon/color each column already uses for its own header, reused here so the
+// filter's options read as an obvious match to the board itself.
+const COLUMN_FILTER_OPTIONS = [
+  { value: '', label: 'Todas las columnas', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
+  ...COLUMN_ORDER.map((key) => ({ value: key, label: COLUMN_META[key].label, icon: COLUMN_META[key].icon, iconClassName: COLUMN_META[key].iconText })),
 ];
 
 function emptyColumn(key) {
@@ -277,64 +284,52 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       <div className="border-b border-border p-4">
         <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
-        <div className="relative mt-3 max-w-sm">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o número"
-            className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
-          />
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            value={periodPreset}
-            onChange={(e) => setPeriodPreset(e.target.value)}
-            className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
-          >
-            {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o número"
+              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+            />
+          </div>
+
+          <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
 
           {periodPreset === 'mes' && (
-            <div className="flex items-center gap-1 rounded-full border border-border bg-muted px-1.5 py-1">
-              <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground" aria-label="Mes anterior">
+            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-line bg-paper px-1.5 py-1.5 shadow-sm">
+              <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes anterior">
                 <ChevronLeft size={14} />
               </button>
-              <span className="min-w-[108px] text-center text-xs font-medium">{MONTH_NAMES[monthCursor.month - 1]} {monthCursor.year}</span>
-              <button type="button" onClick={() => shiftMonth(1)} className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground" aria-label="Mes siguiente">
+              <span className="min-w-[108px] text-center text-xs font-medium text-ink">{MONTH_NAMES[monthCursor.month - 1]} {monthCursor.year}</span>
+              <button type="button" onClick={() => shiftMonth(1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes siguiente">
                 <ChevronRight size={14} />
               </button>
             </div>
           )}
 
           {periodPreset === 'personalizado' && (
-            <>
+            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 shadow-sm">
               <input
                 type="date"
                 value={customFrom}
                 max={customTo}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+                className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
               />
-              <span className="text-xs text-muted-foreground">a</span>
+              <span className="text-xs text-greige-ink">a</span>
               <input
                 type="date"
                 value={customTo}
                 min={customFrom}
                 onChange={(e) => setCustomTo(e.target.value)}
-                className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
+                className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
               />
-            </>
+            </div>
           )}
 
-          <select
-            value={onlyColumn}
-            onChange={(e) => setOnlyColumn(e.target.value)}
-            className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground outline-none"
-          >
-            <option value="">Todas las columnas</option>
-            {COLUMN_ORDER.map((key) => <option key={key} value={key}>{COLUMN_META[key].label}</option>)}
-          </select>
+          <Select value={onlyColumn} onChange={setOnlyColumn} options={COLUMN_FILTER_OPTIONS} className="w-48 shrink-0" />
         </div>
       </div>
 
@@ -353,23 +348,22 @@ export default function HandoffQueue({ user, onOpenConversation }) {
               onDrop={isDropTarget ? (e) => handleDrop(e, key) : undefined}
               className="flex w-72 shrink-0 flex-col rounded-2xl border border-border bg-muted/40"
             >
-              <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+              <div className="flex items-center gap-2 border-b border-border p-3">
                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}>
                   <Icon size={13} />
                 </span>
-                <span className="text-sm font-semibold">{meta.label}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{meta.label}</span>
+                <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground shadow-sm">
+                  {q ? cards.length : col.total}
+                </span>
                 <button
                   type="button"
                   onClick={() => toggleSort(key)}
-                  title={col.sort === 'asc' ? 'Más antiguo primero' : 'Más reciente primero'}
-                  className="flex shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  title={col.sort === 'asc' ? 'Más antiguo primero — clic para cambiar' : 'Más reciente primero — clic para cambiar'}
+                  className="flex shrink-0 items-center justify-center rounded-full border border-border p-1 text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <ArrowUpDown size={10} />
-                  {col.sort === 'asc' ? 'Antiguo' : 'Reciente'}
+                  <ArrowUpDown size={11} />
                 </button>
-                <span className="ml-auto rounded-full bg-paper px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
-                  {q ? cards.length : col.total}
-                </span>
               </div>
               <div onScroll={(e) => handleScroll(e, key)} className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5">
                 {cards.length === 0 && !col.loading && (
