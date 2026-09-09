@@ -137,6 +137,16 @@ router.get('/unanswered', async (req, res, next) => {
     if (Number.isNaN(fromTs) || Number.isNaN(toTs) || fromTs >= toTs) {
       return res.status(400).json({ error: 'invalid date range' });
     }
+    // Two different populations, independently toggleable — default both, same combined
+    // result this endpoint always returned before. "No atendidos" (no ticket at all —
+    // never escalated past the bot — or esperando_asesor — escalated, nobody claimed it),
+    // same bucket the Pipeline itself uses, no temperature check. "Fríos" (taken —
+    // en_atencion — but never developed past Frío) is the "se tomó pero no se le dio
+    // seguimiento" case; Cotización or further means the advisor DID make progress and
+    // doesn't belong here regardless of this flag.
+    const includeUnattended = req.query.unattended !== 'false';
+    const includeCold = req.query.cold !== 'false';
+    if (!includeUnattended && !includeCold) return res.json([]);
 
     const { rows } = await pool.query(
       `SELECT
@@ -145,26 +155,20 @@ router.get('/unanswered', async (req, res, next) => {
          (SELECT count(*) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%') AS message_count,
          -- For someone who came in through an ad click, this IS the pauta message —
          -- WhatsApp attaches the referral context to that very first inbound message.
-         (SELECT min(h.created_at) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'type' = 'human') AS first_message_at
+         (SELECT min(h.created_at) FROM n8n_chat_histories h WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'type' = 'human') AS first_message_at,
+         CASE WHEN t.status IS NULL OR t.status = 'esperando_asesor' THEN 'unattended' ELSE 'cold' END AS category
        FROM customers c
        LEFT JOIN LATERAL (
          SELECT status FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
        ) t ON true
        WHERE c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
          AND c.last_customer_message_at <= now() - interval '24 hours'
-         -- Two different populations, two different bars. "No atendidos" (no ticket at
-         -- all — never escalated past the bot — or esperando_asesor — escalated, nobody
-         -- claimed it) shows up on the 24h+date filter alone, same as the Pipeline's own
-         -- bucket for it, no extra condition. A ticket that WAS claimed (en_atencion)
-         -- only counts here if it never developed past Frío either — that's the "se
-         -- tomó pero no se le dio seguimiento" case; if it's Cotización or further the
-         -- advisor DID make real progress, just slowly, and doesn't belong in this list.
          AND (
-           t.status IS NULL OR t.status = 'esperando_asesor'
-           OR (t.status = 'en_atencion' AND (${EFFECTIVE_STATUS_SQL}) = 'frio')
+           ($3::boolean AND (t.status IS NULL OR t.status = 'esperando_asesor'))
+           OR ($4::boolean AND t.status = 'en_atencion' AND (${EFFECTIVE_STATUS_SQL}) = 'frio')
          )
        ORDER BY first_message_at ASC`,
-      [fromTs.toISOString(), toTs.toISOString()]
+      [fromTs.toISOString(), toTs.toISOString(), includeUnattended, includeCold]
     );
     res.json(rows.map((r) => ({
       phone: r.phone,
@@ -174,6 +178,7 @@ router.get('/unanswered', async (req, res, next) => {
       lastMessage: r.last_customer_message,
       firstMessageAt: r.first_message_at,
       messageCount: Number(r.message_count),
+      category: r.category,
     })));
   } catch (err) { next(err); }
 });

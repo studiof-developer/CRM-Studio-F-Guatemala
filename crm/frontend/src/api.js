@@ -500,8 +500,9 @@ export async function fetchAiDecisions(filters = {}) {
   return res.json();
 }
 
-export async function fetchUnanswered(from, to) {
-  const res = await apiFetch(`/api/audit/unanswered?${new URLSearchParams({ from, to })}`);
+export async function fetchUnanswered(from, to, { unattended = true, cold = true } = {}) {
+  const params = new URLSearchParams({ from, to, unattended: String(unattended), cold: String(cold) });
+  const res = await apiFetch(`/api/audit/unanswered?${params}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar los mensajes sin responder');
   return res.json();
 }

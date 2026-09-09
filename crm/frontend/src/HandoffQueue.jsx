@@ -255,6 +255,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // A new message is what moves the unread badge and "atrasado" clock — without this,
   // those only updated on the next drag/take action or the 60s fallback below.
   useLiveEvent('message_changes', reloadAll);
+  // Marking a thread read/unread from Conversations changes conversation_reads, which
+  // this board's own unread_count depends on — without this the badge only caught up
+  // on the next unrelated reload (message/ticket change or the 60s fallback).
+  useLiveEvent('read_changes', reloadAll);
   // Safety net for anything that still slips through (e.g. this tab losing its SSE
   // connection briefly) — same fallback role polling already played in the old queue view.
   useEffect(() => {

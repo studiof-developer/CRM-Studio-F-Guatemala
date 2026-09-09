@@ -263,18 +263,36 @@ function isoDate(d) {
 function UnansweredTab({ onOpenConversation }) {
   const [from, setFrom] = useState(() => isoDate(new Date(Date.now() - 2 * 86400000)));
   const [to, setTo] = useState(() => isoDate(new Date()));
+  const [unattended, setUnattended] = useState(true);
+  const [cold, setCold] = useState(true);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!unattended && !cold) { setRows([]); setLoading(false); setError(null); return; }
     setLoading(true);
     setError(null);
-    fetchUnanswered(from, to)
+    fetchUnanswered(from, to, { unattended, cold })
       .then(setRows)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [from, to, unattended, cold]);
+
+  const countLabel = unattended && cold
+    ? `${rows.length} clientes sin responder (no atendidos + fríos) · más de 24h`
+    : unattended
+    ? `${rows.length} clientes no atendidos · más de 24h`
+    : cold
+    ? `${rows.length} clientes fríos (tomados sin seguimiento) · más de 24h`
+    : 'Elegí al menos un filtro';
+  const emptyLabel = unattended && cold
+    ? 'Nadie sin responder lleva más de 24h en ese rango de fechas.'
+    : unattended
+    ? 'Nadie sin atender lleva más de 24h en ese rango de fechas.'
+    : cold
+    ? 'Nadie tomado y sin seguimiento lleva más de 24h en ese rango de fechas.'
+    : 'Activá "No atendidos", "Fríos" o ambos para ver resultados.';
 
   function copyPhones() {
     const phones = rows.map((r) => r.phone).join('\n');
@@ -287,11 +305,12 @@ function UnansweredTab({ onOpenConversation }) {
   // a file, so the known xlsx-package CVEs (both in file *parsing*) don't apply to how
   // this is used.
   function downloadExcel() {
-    const headers = ['Cliente', 'Teléfono', 'Hora de entrada', 'Descuento', 'Último mensaje', 'Esperando desde', 'Mensajes en el chat'];
+    const headers = ['Cliente', 'Categoría', 'Teléfono', 'Hora de entrada', 'Descuento', 'Último mensaje', 'Esperando desde', 'Mensajes en el chat'];
     const lines = rows.map((r) => {
       const pct = discountFor(r.firstMessageAt);
       return [
         r.fullName ?? '',
+        r.category === 'unattended' ? 'No atendido' : 'Frío',
         r.phone,
         formatTime(r.firstMessageAt),
         pct != null ? `${pct}%` : 'Por definir',
@@ -301,7 +320,7 @@ function UnansweredTab({ onOpenConversation }) {
       ];
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
-    ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 10 }];
+    ws['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 10 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sin responder');
     XLSX.writeFile(wb, `sin_responder_${from}_a_${to}.xlsx`);
@@ -330,7 +349,15 @@ function UnansweredTab({ onOpenConversation }) {
             className="rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
           />
         </label>
-        <span className="text-xs text-greige-ink">{rows.length} clientes en Frío · más de 24h sin respuesta</span>
+        <label className="flex items-center gap-1.5 text-xs text-ink">
+          <input type="checkbox" checked={unattended} onChange={(e) => setUnattended(e.target.checked)} className="accent-accent" />
+          No atendidos
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-ink">
+          <input type="checkbox" checked={cold} onChange={(e) => setCold(e.target.checked)} className="accent-accent" />
+          Fríos
+        </label>
+        <span className="text-xs text-greige-ink">{countLabel}</span>
         {rows.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -354,7 +381,7 @@ function UnansweredTab({ onOpenConversation }) {
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
       {!error && !loading && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-greige-ink">
-          Nadie en Frío lleva más de 24h sin respuesta en ese rango de fechas.
+          {emptyLabel}
         </p>
       )}
 
@@ -365,6 +392,7 @@ function UnansweredTab({ onOpenConversation }) {
               <thead className="border-b border-line bg-black/[0.02] dark:bg-white/[0.03] text-xs text-greige-ink">
                 <tr>
                   <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Categoría</th>
                   <th className="px-4 py-3 font-medium">Teléfono</th>
                   <th className="px-4 py-3 font-medium">Hora de entrada</th>
                   <th className="px-4 py-3 font-medium">Descuento</th>
@@ -375,12 +403,17 @@ function UnansweredTab({ onOpenConversation }) {
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
+                {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-greige-ink">Cargando…</td></tr>}
                 {!loading && rows.map((r) => {
                   const pct = discountFor(r.firstMessageAt);
                   return (
                   <tr key={r.phone} className="border-b border-line-soft last:border-0 hover:bg-black/[0.015] dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3 text-ink">{r.fullName ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {r.category === 'unattended'
+                        ? <Badge variant="info">No atendido</Badge>
+                        : <Badge variant="warning">Frío</Badge>}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-greige-ink">{r.phone}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-greige-ink">{formatTime(r.firstMessageAt)}</td>
                     <td className="px-4 py-3">
