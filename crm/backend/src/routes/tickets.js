@@ -86,7 +86,7 @@ router.get('/pipeline', async (req, res, next) => {
     // needed). Applied inside `totaled`, before bucket_total is computed, so the
     // column's own count reflects the filtered set instead of the whole bucket.
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    const { from, to, since, until, q } = req.query;
+    const { from, to, since, until, q, unreadOnly } = req.query;
     if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
       return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
     }
@@ -126,12 +126,26 @@ router.get('/pipeline', async (req, res, next) => {
         dateClause += ` AND ${orderExpr} < $${params.length}`;
       }
     }
+    // Independent of the period/search filters above (stacks with either) — "solo no
+    // leídos" narrows whatever's already selected instead of replacing it. EXISTS short-
+    // circuits on the first unread row and reuses the same session_id prefix index the
+    // per-page unread_count below already relies on, so this stays reasonably cheap
+    // even applied across a whole bucket (thousands of rows) before pagination, unlike
+    // a full unread COUNT per row would be.
+    const unreadOnlyClause = unreadOnly === 'true'
+      ? ` AND EXISTS (
+            SELECT 1 FROM n8n_chat_histories h
+            WHERE h.session_id LIKE whatsapp_number || '%'
+              AND h.message->>'type' = 'human'
+              AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
+          )`
+      : '';
     const offsetParam = params.length + 1;
     params.push(offset);
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}`, () => pool.query(`
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number,
@@ -147,7 +161,7 @@ router.get('/pipeline', async (req, res, next) => {
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
         FROM temped
-        WHERE true ${dateClause}
+        WHERE true ${dateClause} ${unreadOnlyClause}
       ),
       paged AS (
         SELECT * FROM totaled WHERE bucket = $1

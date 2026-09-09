@@ -68,12 +68,14 @@ export function receiptContainsAmount(ocrText, expectedAmount, extraKeywords = [
 // The one number a receipt itself calls out as the amount — not "any number on the
 // page" (a receipt is full of dates, masked card digits, reference/audit numbers that
 // would collide with that approach). Prefers the value printed right after "Monto"
-// (Neolink, most bank apps); falls back to the largest number on the page for a format
-// that doesn't label it, since an amount is more often the biggest figure than a
-// reference/card/date fragment is. Used for the case a single receipt's total quote
-// doesn't match on its own — a customer who split one payment across two transactions
-// (attachments.js sums recent receipts by phone before giving up on that order).
-const MONTO_AMOUNT_RE = /monto[^\d]{0,25}(\d[\d.,]*\d|\d)/i;
+// (Neolink, most bank apps) or "Por un valor de" (a Banrural teller deposit slip,
+// 2026-09-10 report — no "Monto" label at all, just this phrase); falls back to the
+// largest number on the page for a format that doesn't label it, since an amount is
+// more often the biggest figure than a reference/card/date fragment is. Used for the
+// case a single receipt's total quote doesn't match on its own — a customer who split
+// one payment across two transactions (attachments.js sums recent receipts by phone
+// before giving up on that order).
+const MONTO_AMOUNT_RE = /(?:monto|por\s+un\s+valor\s+de)[^\d]{0,25}(\d[\d.,]*\d|\d)/i;
 export function extractReceiptAmount(ocrText, extraKeywords = []) {
   if (!ocrText || !matchesReceiptKeywords(ocrText, extraKeywords)) return null;
   const labeled = ocrText.match(MONTO_AMOUNT_RE);

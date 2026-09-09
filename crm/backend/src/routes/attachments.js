@@ -152,6 +152,13 @@ inboundRouter.post('/', async (req, res, next) => {
       if (gated.length) {
         const customerId = gated[0].customer_id;
         let autoConfirmed = false;
+        // Refined below as the real reason becomes known, so the banner an advisor
+        // already looks at — and, for the cases OCR actually ran, a matching audit
+        // entry — says WHY this didn't confirm on its own instead of just that it
+        // didn't. Real report (2026-09-10): a Banrural deposit slip kept showing this
+        // generic text with no way to tell whether the price window had expired or the
+        // photo genuinely didn't match, without guessing.
+        let suggestionReason = 'El cliente envió una imagen (posible comprobante de pago)';
 
         // The only "expected amount" this CRM has anywhere to check a receipt against:
         // whatever price the advisor most recently typed in the chat (same pattern
@@ -162,15 +169,27 @@ inboundRouter.post('/', async (req, res, next) => {
         // that later total message must win over an earlier "Q56.50" (e.g. shipping-only)
         // one, which is why this takes the MOST RECENT matching message (ORDER BY id DESC),
         // not just any message that happens to contain a "Q" price.
+        //
+        // Deliberately NOT bounded by ocr_context_hours (2026-09-10 report: a customer
+        // deposited ~24h after the price was quoted — physically going to a bank branch
+        // routinely takes longer than any fixed window this CRM could pick, and "several
+        // days" is a real, not edge, case). Safe to leave unbounded: `gated` above already
+        // requires paid_locked = false, so this only ever runs within ONE still-open,
+        // not-yet-paid purchase — once paid_locked flips true, this whole path is closed
+        // to that customer until an admin manually reopens it (see customers.js), so a
+        // price quoted for a PAST, already-paid purchase can never leak into a new one.
+        // Within that single open purchase, "whatever was quoted most recently" is always
+        // the right number to check against no matter how long ago it was said — and if
+        // it's ever wrong, receiptContainsAmount's exact-match requirement just doesn't
+        // confirm (the same safe fallback as any other non-match), not a new risk.
         const { rows: priced } = await pool.query(
           `SELECT h.message->>'content' AS content
            FROM n8n_chat_histories h
            WHERE h.session_id LIKE $1 || '%'
              AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
              AND h.message->>'content' ~ 'Q\\s?\\d{1,5}|\\d{1,5}[.,]\\d{2}'
-             AND h.created_at >= now() - make_interval(hours => $2::int)
            ORDER BY h.id DESC LIMIT 1`,
-          [phone, contextHours]
+          [phone]
         );
         // Pulls the raw message text (not a single pre-extracted number) so the LAST
         // amount in the message wins, not the first — a message quoting an original
@@ -228,7 +247,30 @@ inboundRouter.post('/', async (req, res, next) => {
                 autoConfirmed = true;
               }
             }
+
+            if (!autoConfirmed) {
+              // OCR genuinely ran and still couldn't confirm — the one case actually
+              // worth a real diagnostic trail (not the routine "no price quoted yet"
+              // case below, which would fire on nearly every unrelated photo a caliente
+              // customer sends and drown this out). Shows in Auditoría with what
+              // Tesseract actually read, so a report like "sigue marcando Posible Pago"
+              // is answerable by looking, not by guessing at OCR quality or a keyword gap.
+              suggestionReason = ocrAmount != null
+                ? `El cliente envió una imagen (posible comprobante de pago) — leyó Q${ocrAmount}, pero se había cotizado Q${expectedAmount}`
+                : `El cliente envió una imagen (posible comprobante de pago) — no se reconoció como comprobante (sin monto ni palabras de recibo)`;
+              logBusinessAction(
+                { fullName: 'Sistema (OCR)', id: null },
+                customerId,
+                'payment_ocr_no_match',
+                `Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}"${ocrAmount != null ? ` (monto detectado: Q${ocrAmount})` : ''}`
+              );
+            }
           }
+        } else {
+          // The price lookup above is unbounded by time now, so reaching this means the
+          // advisor genuinely never typed a "Qxx" price anywhere in this open purchase —
+          // there's nothing at all to check the photo against, not "it's too old to count."
+          suggestionReason = 'El cliente envió una imagen (posible comprobante de pago) — no se ha cotizado ningún precio en esta conversación todavía';
         }
 
         if (!autoConfirmed) {
@@ -238,7 +280,7 @@ inboundRouter.post('/', async (req, res, next) => {
           await pool.query(
             `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
              WHERE id = $1 AND paid_locked = false`,
-            [customerId, 'El cliente envió una imagen (posible comprobante de pago)']
+            [customerId, suggestionReason]
           );
         }
       }

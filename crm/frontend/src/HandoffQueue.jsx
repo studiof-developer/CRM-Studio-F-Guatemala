@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react';
+import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail } from 'lucide-react';
 import { fetchPipelineColumn, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
@@ -90,6 +90,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     return () => clearTimeout(id);
   }, [search]);
   const searching = debouncedSearch.length > 0;
+  // Independent of the period/search filters — narrows whatever's already selected
+  // instead of replacing it (Hoy + solo no leídos, una búsqueda + solo no leídos, etc.
+  // all compose).
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
@@ -210,13 +214,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -226,7 +230,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -235,7 +239,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
@@ -400,6 +404,17 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           )}
 
           <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
+
+          <button
+            type="button"
+            onClick={() => setUnreadOnly((v) => !v)}
+            aria-pressed={unreadOnly}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+              unreadOnly ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-greige-ink hover:text-ink'
+            }`}
+          >
+            <Mail size={12} /> Solo no leídos
+          </button>
 
           {!searching && (periodPreset === 'hoy' || periodPreset === 'ayer') && (
             <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">

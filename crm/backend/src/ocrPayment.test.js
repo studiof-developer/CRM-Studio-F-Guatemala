@@ -106,3 +106,22 @@ test('extra keywords are case-insensitive and empty/missing entries are ignored 
   assert.equal(receiptContainsAmount(text, 100, ['', null, undefined]), false);
   assert.equal(receiptContainsAmount(text, 100), false);
 });
+
+// A Banrural teller deposit slip (2026-09-10 report) — labels the amount "POR UN VALOR
+// DE", never the word "Monto" this code originally only looked for.
+const BANRURAL_DEPOSIT_SLIP = `BANRURAL DEPOSITO MONETARIO
+  No. DE CUENTA: 3364072197
+  POR UN VALOR DE: Q705.00
+  NOMBRE DE CUENTA: BAGNERES,S.A.
+  NUMERO DE DEPOSITO: 1074730785
+  FECHA: 9/9/2026 1:38:59 PM
+  (Recibi Conforme)`;
+
+test('extracts the amount from a "Por un valor de" bank deposit slip, not the account/deposit number', () => {
+  assert.equal(extractReceiptAmount(BANRURAL_DEPOSIT_SLIP), 705);
+  assert.equal(receiptContainsAmount(BANRURAL_DEPOSIT_SLIP, 705), true);
+});
+
+test('guesses deposito from a Banrural teller slip', () => {
+  assert.equal(guessPaidMethod(BANRURAL_DEPOSIT_SLIP), 'deposito');
+});

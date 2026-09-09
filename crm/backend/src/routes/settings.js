@@ -45,8 +45,8 @@ function isValidPhraseList(v) {
 // trusted.
 const SETTINGS = {
   ocr_context_hours: {
-    label: 'Ventana de contexto para el OCR de pagos',
-    description: 'Cuántas horas hacia atrás revisa el chat en busca de un precio cotizado o una señal de pago antes de leer una foto de comprobante.',
+    label: 'Ventana para combinar comprobantes divididos en el OCR',
+    description: 'Si un cliente manda dos fotos de pago separadas para completar un mismo total (ej. pagó en dos partes), cuántas horas hacia atrás se suman entre sí. No afecta cuánto tarda un cliente en pagar después de que se le cotiza un precio — eso ya no tiene límite de tiempo.',
     validate: (v) => Number.isFinite(v) && v > 0 && v <= 24,
   },
   pipeline_columns: {

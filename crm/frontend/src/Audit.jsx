@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download, ArrowRightLeft, CircleDollarSign, FileText, FileX } from 'lucide-react';
+import { Eye, Bot, AlertTriangle, LogIn, UserPlus, UserCog, UserMinus, CheckCircle2, PlugZap, SmartphoneNfc, PhoneOff, MailWarning, Copy, Download, ArrowRightLeft, CircleDollarSign, FileText, FileX, ScanEye } from 'lucide-react';
 import { fetchAccessAudit, fetchAiDecisions, fetchUnanswered } from './api.js';
 import Badge from './components/Badge.jsx';
 import Select from './components/Select.jsx';
@@ -17,6 +17,7 @@ const ACTION_META = {
   ticket_status_changed: { label: 'Cambió estado del ticket', variant: 'purple', icon: ArrowRightLeft },
   customer_status_changed: { label: 'Movió de etapa (Pipeline)', variant: 'purple', icon: ArrowRightLeft },
   customer_marked_paid: { label: 'Marcó como Pagado', variant: 'success', icon: CircleDollarSign },
+  payment_ocr_no_match: { label: 'OCR no confirmó un comprobante', variant: 'warning', icon: ScanEye },
   login: { label: 'Inició sesión', variant: 'success', icon: LogIn },
   user_created: { label: 'Creó un usuario', variant: 'purple', icon: UserPlus },
   user_updated: { label: 'Editó un usuario', variant: 'warning', icon: UserCog },
@@ -34,7 +35,7 @@ const ACTION_FILTER_OPTIONS = [
   ...['view_customer', 'view_ticket', 'view_conversation'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Acceso a datos',
   })),
-  ...['ticket_status_changed', 'customer_status_changed', 'customer_marked_paid'].map((k) => ({
+  ...['ticket_status_changed', 'customer_status_changed', 'customer_marked_paid', 'payment_ocr_no_match'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Cambios',
   })),
   ...['login', 'user_created', 'user_updated', 'user_deleted'].map((k) => ({

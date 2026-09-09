@@ -44,7 +44,7 @@ export async function fetchMe() {
   return res.json();
 }
 
-export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', from, to, since, until, q } = {}) {
+export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort = 'desc', from, to, since, until, q, unreadOnly } = {}) {
   const params = new URLSearchParams({ bucket, offset, limit, sort });
   if (q) {
     // A search match has to show up regardless of the active period — the backend
@@ -56,6 +56,9 @@ export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort
     if (until) params.set('until', until);
     else if (to) params.set('to', to);
   }
+  // Independent of the period/search filters above — narrows whatever's already
+  // selected instead of replacing it, so it stacks with either.
+  if (unreadOnly) params.set('unreadOnly', 'true');
   const res = await apiFetch(`/api/tickets/pipeline?${params}`);
   if (!res.ok) throw new Error('Error al cargar el pipeline');
   return res.json();
