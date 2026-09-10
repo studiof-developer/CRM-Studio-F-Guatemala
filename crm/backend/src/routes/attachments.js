@@ -7,7 +7,7 @@ import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
-import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount } from '../ocrPayment.js';
+import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
 import { getSetting } from './settings.js';
 
 // Shared by both the single-receipt match and the multi-receipt-sum match below —
@@ -194,10 +194,16 @@ inboundRouter.post('/', async (req, res, next) => {
         // Pulls the raw message text (not a single pre-extracted number) so the LAST
         // amount in the message wins, not the first — a message quoting an original
         // price and then a discounted one ("Antes Q1200, con descuento Q950") must
-        // compare against the 950 the customer will actually pay, not the 1200.
-        const priceMatches = priced[0]?.content?.match(/Q\s?\d{1,5}(?:[.,]\d{2})?|\d{1,5}[.,]\d{2}/g);
+        // compare against the 950 the customer will actually pay, not the 1200. The "Q"
+        // branch captures the WHOLE digit/separator run (not just up to 2 trailing
+        // decimal digits) — real report (2026-09-10): "TOTAL Q4.034" (four thousand
+        // thirty-four, no cents) was truncating to "Q4.03", off by three orders of
+        // magnitude, so a real Q4,034 bank transfer could never match. parseAmount (same
+        // helper the receipt-reading side already uses) resolves whether that separator
+        // is a thousands group or a decimal point.
+        const priceMatches = priced[0]?.content?.match(/Q\s?\d[\d.,]*|\d{1,5}[.,]\d{2}/g);
         const expectedAmount = priceMatches?.length
-          ? Number(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, '').replace(',', '.'))
+          ? parseAmount(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
           : null;
 
         // ponytail: runs inline (Tesseract can take a second or two) rather than a

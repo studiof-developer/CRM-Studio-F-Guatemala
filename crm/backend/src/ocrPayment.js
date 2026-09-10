@@ -41,13 +41,23 @@ function matchesReceiptKeywords(ocrText, extraKeywords = []) {
   return extraKeywords.some((kw) => kw && lower.includes(kw.toLowerCase()));
 }
 
-// Parses a number as printed on a receipt, which is formatted either the US way
-// (1,390.00 — comma thousands, dot decimal) or the way some Guatemalan bank apps print
-// it (1.390,00 — dot thousands, comma decimal). Whichever separator appears LAST is the
-// decimal point; any earlier one is a thousands separator and gets dropped.
-function parseAmount(raw) {
+// Parses a number as printed on a receipt OR typed by an advisor in chat, formatted
+// either the US way (1,390.00 — comma thousands, dot decimal), the way some Guatemalan
+// bank apps print it (1.390,00 — dot thousands, comma decimal), or as a bare
+// thousands-grouped whole number with no cents at all (an advisor typing "Q4.034" or
+// "Q4,034" to mean four thousand thirty-four — 2026-09-10 report: this last case wasn't
+// handled at all and silently parsed as ~4.03). Exactly 3 digits after the LAST
+// separator is the tell for that case — real cents are always 2 digits — so it strips
+// every separator instead of treating the last one as a decimal point. Otherwise,
+// whichever separator appears LAST is the decimal point; any earlier one is a
+// thousands separator and gets dropped.
+export function parseAmount(raw) {
   const lastComma = raw.lastIndexOf(',');
   const lastDot = raw.lastIndexOf('.');
+  const lastSep = Math.max(lastComma, lastDot);
+  if (lastSep !== -1 && raw.length - lastSep - 1 === 3) {
+    return Math.round(parseFloat(raw.replace(/[.,]/g, '')));
+  }
   const normalized = lastComma > lastDot
     ? raw.replace(/\./g, '').replace(',', '.')
     : raw.replace(/,/g, '');

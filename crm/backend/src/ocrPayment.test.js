@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { receiptContainsAmount, guessPaidMethod, extractReceiptAmount } from './ocrPayment.js';
+import { receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from './ocrPayment.js';
 
 test('matches a bare integer against a receipt printing cents', () => {
   assert.equal(receiptContainsAmount('MONTO (Q) 1,390.00', 1390), true);
@@ -120,6 +120,28 @@ const BANRURAL_DEPOSIT_SLIP = `BANRURAL DEPOSITO MONETARIO
 test('extracts the amount from a "Por un valor de" bank deposit slip, not the account/deposit number', () => {
   assert.equal(extractReceiptAmount(BANRURAL_DEPOSIT_SLIP), 705);
   assert.equal(receiptContainsAmount(BANRURAL_DEPOSIT_SLIP, 705), true);
+});
+
+// A real quoted-price parse bug (2026-09-10 report): an advisor typed "TOTAL Q4.034"
+// (four thousand thirty-four, no cents) as the whole-number total, using a period as a
+// thousands separator the way Guatemalan chat text commonly does. The old logic treated
+// any single separator as a decimal point, silently producing 4.03 — off by three
+// orders of magnitude, so a real Q4,034 bank transfer could never match it. Exactly 3
+// digits after the last separator is the signal that it's a thousands group, not cents.
+test('parses a bare thousands-grouped whole number (no cents) in either separator style', () => {
+  assert.equal(parseAmount('4.034'), 4034);
+  assert.equal(parseAmount('4,034'), 4034);
+  assert.equal(parseAmount('1.234.567'), 1234567);
+});
+
+test('still parses real cents (2 digits after the separator) as a decimal point', () => {
+  assert.equal(parseAmount('4.034,00'), 4034);
+  assert.equal(parseAmount('4,034.00'), 4034);
+  assert.equal(parseAmount('705.00'), 705);
+});
+
+test('parses a plain integer with no separator at all', () => {
+  assert.equal(parseAmount('1200'), 1200);
 });
 
 test('guesses deposito from a Banrural teller slip', () => {
