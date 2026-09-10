@@ -375,7 +375,12 @@ function renderBody(bodyTemplate, name, extraParams = []) {
 async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
   const extraParams = customer.extraParams ?? [];
-  const params = [name, ...extraParams];
+  // A template with NO {{n}} placeholders at all (paramCount 0) still had the
+  // customer's name tacked on unconditionally — Meta error #132000, "number of
+  // localizable_params (1) does not match the expected number of params (0)", on every
+  // single recipient (2026-09-10 report: recuperacion_rebajas, 53/53 failed). Trim to
+  // what the template actually declares instead of always sending at least the name.
+  const params = [name, ...extraParams].slice(0, paramCount);
   let sentWamid = null;
   let error = null;
   try {
@@ -445,7 +450,9 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
 // retry-failed route for why (avoids double-counting the recipient in campaign stats).
 async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, extraParams = []) {
   const name = firstName(fullName) || FALLBACK_TEMPLATE_NAME;
-  const params = [name, ...extraParams];
+  // Same paramCount trim as sendToRecipient above — a retry must match the template
+  // exactly the same way the original send needs to.
+  const params = [name, ...extraParams].slice(0, paramCount);
   let sentWamid = null;
   let error = null;
   try {
