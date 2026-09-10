@@ -325,11 +325,27 @@ router.post('/', async (req, res, next) => {
     );
     const customerId = customerRows[0].id;
 
-    await pool.query(
-      `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
-       VALUES ($1, 'en_atencion', 'contacto_proactivo', $2, now())`,
-      [customerId, req.user.fullName]
+    // Same idempotency guard as /take below — this route upserts the customer, but an
+    // existing customer contacted here again (e.g. the number was mistyped as "new")
+    // could otherwise get a second, duplicate ticket alongside whatever's already open.
+    const { rows: existingTicket } = await pool.query(
+      `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+      [customerId]
     );
+    if (existingTicket.length) {
+      await pool.query(
+        `UPDATE tickets SET status = 'en_atencion', assigned_advisor = $2, updated_at = now(),
+                first_response_at = COALESCE(first_response_at, now())
+         WHERE id = $1`,
+        [existingTicket[0].id, req.user.fullName]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
+         VALUES ($1, 'en_atencion', 'contacto_proactivo', $2, now())`,
+        [customerId, req.user.fullName]
+      );
+    }
 
     const message = {
       type: 'ai',
@@ -868,12 +884,29 @@ router.post('/:sessionId/take', async (req, res, next) => {
     );
     const customerId = customerRows[0].id;
 
-    const { rows: ticketRows } = await pool.query(
-      `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
-       VALUES ($1, 'en_atencion', 'tomado_manualmente', $2, now())
-       RETURNING id, status`,
-      [customerId, req.user.fullName]
+    // Idempotent — a stale ticketId in the frontend (findConversationThread only re-runs
+    // on its own triggers, so a customer whose ticket appeared moments ago via a
+    // different tab/advisor can still read as "no ticket yet" here) could otherwise fire
+    // this on a customer who already has an open one, producing a second card for the
+    // same phone number on the Pipeline board (2026-09-10 report). Reuse whatever's
+    // already open (anything not resuelto) instead of inserting a duplicate.
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+      [customerId]
     );
+    const { rows: ticketRows } = existing.length
+      ? await pool.query(
+          `UPDATE tickets SET status = 'en_atencion', assigned_advisor = $2, updated_at = now(),
+                  first_response_at = COALESCE(first_response_at, now())
+           WHERE id = $1 RETURNING id, status`,
+          [existing[0].id, req.user.fullName]
+        )
+      : await pool.query(
+          `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
+           VALUES ($1, 'en_atencion', 'tomado_manualmente', $2, now())
+           RETURNING id, status`,
+          [customerId, req.user.fullName]
+        );
 
     res.json({ ticketId: ticketRows[0].id, ticketStatus: ticketRows[0].status });
   } catch (err) { next(err); }
