@@ -434,6 +434,22 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
     [sessionId, JSON.stringify(message)]
   );
 
+  // A broadcast reaching someone is us writing to THEM — there's nothing left for staff
+  // to "read" at that point, but conversation_reads never heard about this send, so an
+  // old, already-stale unread customer message from before the campaign kept showing
+  // the whole thread as unread indefinitely (2026-09-11 report). Same mark-as-read
+  // conversations.js already does when a thread is opened, just triggered by the send
+  // instead — catches the thread up through this very message.
+  if (sentWamid) {
+    pool.query(
+      `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+      [customer.whatsapp_number, rows[0].id]
+    )
+      .then(() => pool.query(`SELECT pg_notify('read_changes', $1)`, [customer.whatsapp_number]))
+      .catch((err) => console.error(`campaign ${campaignId} mark-read for ${customer.whatsapp_number} failed:`, err));
+  }
+
   if (headerAttachment) {
     await linkExistingFile({
       n8nMessageId: rows[0].id,
@@ -492,6 +508,19 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   // session_id (not the row id) is what listener.js reads to flush anything an advisor
   // had queued for this same customer, same as every other message-mutating route.
   await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionId]);
+
+  // Same mark-as-read reasoning as sendToRecipient above — a retry landing is the send
+  // finally reaching them.
+  if (sentWamid) {
+    pool.query(
+      `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+      [phone, messageId]
+    )
+      .then(() => pool.query(`SELECT pg_notify('read_changes', $1)`, [phone]))
+      .catch((err) => console.error(`campaign retry mark-read for ${phone} failed:`, err));
+  }
+
   return !!sentWamid;
 }
 
