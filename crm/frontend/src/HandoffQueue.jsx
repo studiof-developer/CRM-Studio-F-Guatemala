@@ -414,8 +414,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     ...COLUMN_ORDER.filter((key) => key !== 'pendiente' && (columns[key]?.unreadTotal ?? 0) > 0).map((key) => {
       const meta = metaFor(key);
       const count = columns[key].unreadTotal;
+      // Shorter, more familiar than the pipeline-stage name for these three — same
+      // temperature words the drag-and-drop/tag logic already uses internally
+      // (TEMPERATURE_FOR_COLUMN) — keeps each card narrow enough that more fit per row.
+      const shortLabel = { en_atencion: 'Frío', cotizacion: 'Tibio', medio_pago: 'Caliente' }[key] ?? meta.label;
       return {
-        key: `unread-${key}`, label: `${meta.label} · no leídos`, value: count, unit: count === 1 ? 'chat' : 'chats',
+        key: `unread-${key}`, label: `${shortLabel} · no leídos`, value: count, unit: count === 1 ? 'chat' : 'chats',
         iconBg: meta.iconBg, iconText: meta.iconText, icon: meta.icon, alert: true,
       };
     }),
