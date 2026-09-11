@@ -222,13 +222,22 @@ router.patch('/:id/tags', async (req, res, next) => {
     const { rows } = await pool.query(
       `UPDATE customers AS c SET
          -- Reads the row's OWN current paid_locked (not just $3, this one request's
-         -- flag) — once a customer is paid_locked, EVERY future PATCH keeps
-         -- manual_status pinned to 'pagado', even a routine Estado-dropdown change that
-         -- only meant to touch temperature. paid_locked is one-way by design (see the
-         -- check below); manual_status silently drifting away from 'pagado' afterward
-         -- was reopening the exact "Pipeline card sitting in the wrong column" bug this
-         -- fix closes — permanently, not just for the request that set paid_locked.
-         manual_status = CASE WHEN c.paid_locked OR COALESCE($3, false) THEN 'pagado' WHEN $1 THEN $2 ELSE manual_status END,
+         -- flag) — once a customer is paid_locked, an explicit attempt to drag them
+         -- backward into an earlier temperature (frio/tibio/caliente/pqrs) gets pinned
+         -- back to 'pagado' instead — manual_status silently drifting away from 'pagado'
+         -- was the exact "Pipeline card sitting in the wrong column" bug this originally
+         -- closed. "despacho" (2026-09-11) is the one deliberate forward exception once
+         -- paid — an advisor moving a paid order into it is real progress, not drift, so
+         -- it's let through instead of forced back. And when THIS request isn't touching
+         -- manual_status at all ($1 false — e.g. just dismissing a payment suggestion),
+         -- the current value is left alone rather than re-forced to 'pagado' — otherwise
+         -- an unrelated PATCH after being moved to despacho would silently revert it.
+         manual_status = CASE
+           WHEN $1 AND (c.paid_locked OR COALESCE($3, false)) THEN (CASE WHEN $2 = 'despacho' THEN 'despacho' ELSE 'pagado' END)
+           WHEN c.paid_locked OR COALESCE($3, false) THEN COALESCE(c.manual_status, 'pagado')
+           WHEN $1 THEN $2
+           ELSE manual_status
+         END,
          paid_locked = paid_locked OR COALESCE($3, false),
          paid_method = CASE WHEN $3 THEN $5 ELSE paid_method END,
          payment_suggested_at = CASE WHEN $6 THEN NULL ELSE payment_suggested_at END,
