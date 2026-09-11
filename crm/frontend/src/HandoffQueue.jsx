@@ -389,7 +389,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // own total already means that), every other column's own unreadTotal is the
   // "esperando respuesta" figure for it.
   const grandNewToday = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.newTodayTotal ?? 0), 0);
-  const grandUnreadTotal = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.unreadTotal ?? 0), 0);
+  // "pendiente" excluded here — everyone in it is already counted under "No atendidos"
+  // below, and it has no card of its own in unreadByColumn either, so including it here
+  // made the total not match the sum of the cards actually shown (2026-09-11 report).
+  const grandUnreadTotal = visibleColumnKeys.filter((key) => key !== 'pendiente').reduce((sum, key) => sum + (columns[key]?.unreadTotal ?? 0), 0);
   const pendingTotal = columns.pendiente?.total ?? 0;
   const pendienteMeta = metaFor('pendiente');
   // Each card here is "waiting on us" — gets the red alert dot whenever it's nonzero.
