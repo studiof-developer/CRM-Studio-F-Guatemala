@@ -81,6 +81,27 @@ function emptyColumns() {
   return Object.fromEntries(COLUMN_ORDER.map((key) => [key, emptyColumn(key)]));
 }
 
+// A key missing from a previously-saved custom order (a new column added after an admin
+// already customized theirs, like "despacho" — 2026-09-11) gets inserted right after its
+// nearest preceding neighbor in COLUMN_ORDER, instead of just tacked onto the end —
+// otherwise "despacho" (meant to sit right after "pagado") landed after "resuelto"
+// because that's wherever the custom order happened to end.
+function mergeDisplayOrder(customOrder) {
+  if (!customOrder) return COLUMN_ORDER;
+  const result = customOrder.map((c) => c.key);
+  for (const key of COLUMN_ORDER) {
+    if (result.includes(key)) continue;
+    const idx = COLUMN_ORDER.indexOf(key);
+    let insertAt = result.length;
+    for (let i = idx - 1; i >= 0; i--) {
+      const pos = result.indexOf(COLUMN_ORDER[i]);
+      if (pos !== -1) { insertAt = pos + 1; break; }
+    }
+    result.splice(insertAt, 0, key);
+  }
+  return result;
+}
+
 export default function HandoffQueue({ user, onOpenConversation }) {
   // 2026-09-11: search/period/column filters are admin+supervisor only — an asesor
   // gets the full board (defaults do the rest: "Todo" period, no column narrowing) plus
@@ -123,12 +144,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       if (Number.isFinite(awaitingValue)) setAwaitingReplyOverdueMinutes(awaitingValue);
     }).catch(() => {});
   }, []);
-  // Appends any COLUMN_ORDER key missing from a previously-saved custom order (e.g. a
-  // new column added after an admin already customized theirs, like "despacho" —
-  // 2026-09-11) instead of silently hiding it until someone re-saves the settings.
-  const displayOrder = pipelineColumns
-    ? [...pipelineColumns.map((c) => c.key), ...COLUMN_ORDER.filter((k) => !pipelineColumns.some((c) => c.key === k))]
-    : COLUMN_ORDER;
+  const displayOrder = mergeDisplayOrder(pipelineColumns);
   function metaFor(key) {
     const cfg = pipelineColumns?.find((c) => c.key === key) ?? DEFAULT_COLUMN_META[key];
     return {
