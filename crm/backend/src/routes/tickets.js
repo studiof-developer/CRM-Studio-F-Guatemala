@@ -192,17 +192,12 @@ router.get('/pipeline', async (req, res, next) => {
     // to track "today" as it rolls over, not a fixed caller-supplied instant).
     const newTodaySql = `count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
 
-    // EMERGENCY REVERT (2026-09-11 outage): this used to run the unreadOnly EXISTS
-    // subquery — correlated, one execution per row — over EVERY row in the date-
-    // filtered set, unconditionally, on every single /pipeline call (7 per board load,
-    // plus every ticket_changes/message_changes event, plus the 60s fallback poll,
-    // times however many advisors have the board open). Fine as an occasional cost when
-    // it only ran while "Solo no leídos" was toggled on by one person at a time; running
-    // it by default with "Todo" as the new default period (thousands of rows, no date
-    // bound) took the database down. Needs a real fix (a maintained unread count/flag
-    // on customers, kept current by a trigger like last_customer_message_at already is)
-    // before this comes back — not a per-request correlated subquery at this scale.
-    const unreadTotalSql = 'NULL::bigint';
+    // db/init/051: replaced the correlated EXISTS-per-row version (2026-09-11 outage —
+    // that ran across every row in the date-filtered set, unconditionally, on every
+    // single /pipeline call) with a plain read of customers.has_unread, a column now
+    // kept current by triggers instead of computed per request. Same window-partitioned
+    // shape as bucket_total/bucket_new_total, just cheap now.
+    const unreadTotalSql = `count(*) FILTER (WHERE customer_has_unread) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
 
     const offsetParam = params.length + 1;
     params.push(offset);
@@ -213,6 +208,7 @@ router.get('/pipeline', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
+               c.has_unread AS customer_has_unread,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
