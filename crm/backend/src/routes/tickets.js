@@ -192,16 +192,17 @@ router.get('/pipeline', async (req, res, next) => {
     // to track "today" as it rolls over, not a fixed caller-supplied instant).
     const newTodaySql = `count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
 
-    // How many in this bucket have an unread customer message — same EXISTS the
-    // unreadOnly filter already uses (cheap: short-circuits on the first unread row,
-    // reuses the session_id-prefix index), just counted instead of filtered on, and
-    // computed unconditionally rather than only when "Solo no leídos" is toggled on.
-    const unreadTotalSql = `count(*) FILTER (WHERE EXISTS (
-          SELECT 1 FROM n8n_chat_histories h
-          WHERE h.session_id LIKE whatsapp_number || '%'
-            AND h.message->>'type' = 'human'
-            AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
-        )) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
+    // EMERGENCY REVERT (2026-09-11 outage): this used to run the unreadOnly EXISTS
+    // subquery — correlated, one execution per row — over EVERY row in the date-
+    // filtered set, unconditionally, on every single /pipeline call (7 per board load,
+    // plus every ticket_changes/message_changes event, plus the 60s fallback poll,
+    // times however many advisors have the board open). Fine as an occasional cost when
+    // it only ran while "Solo no leídos" was toggled on by one person at a time; running
+    // it by default with "Todo" as the new default period (thousands of rows, no date
+    // bound) took the database down. Needs a real fix (a maintained unread count/flag
+    // on customers, kept current by a trigger like last_customer_message_at already is)
+    // before this comes back — not a per-request correlated subquery at this scale.
+    const unreadTotalSql = 'NULL::bigint';
 
     const offsetParam = params.length + 1;
     params.push(offset);
