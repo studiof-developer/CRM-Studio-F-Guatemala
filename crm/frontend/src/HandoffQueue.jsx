@@ -400,11 +400,6 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // instead of a separate pill row, per request — same card, not a smaller shape.
   const statCards = [
     {
-      key: 'total', label: periodLabel, value: grandTotal, unit: grandTotal === 1 ? 'conversación' : 'conversaciones',
-      iconBg: 'bg-black/[0.04] dark:bg-white/[0.06]', iconText: 'text-ink', icon: LayoutGrid, alert: false,
-      sub: hasNewBreakdown ? `${grandNewTotal} nuevas · ${grandContinuingTotal} continuas` : null,
-    },
-    {
       key: 'new-today', label: 'Nuevas hoy', value: grandNewToday, unit: grandNewToday === 1 ? 'conversación' : 'conversaciones',
       iconBg: 'bg-accent-soft', iconText: 'text-accent', icon: Calendar, alert: false,
     },
@@ -424,6 +419,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         iconBg: meta.iconBg, iconText: meta.iconText, icon: meta.icon, alert: true,
       };
     }),
+    // Total last, per request — the other cards are what actually needs attention.
+    {
+      key: 'total', label: periodLabel, value: grandTotal, unit: grandTotal === 1 ? 'conversación' : 'conversaciones',
+      iconBg: 'bg-black/[0.04] dark:bg-white/[0.06]', iconText: 'text-ink', icon: LayoutGrid, alert: false,
+      sub: hasNewBreakdown ? `${grandNewTotal} nuevas · ${grandContinuingTotal} continuas` : null,
+    },
   ];
 
   return (
