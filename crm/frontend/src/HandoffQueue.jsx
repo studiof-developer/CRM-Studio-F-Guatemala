@@ -28,6 +28,17 @@ const DEFAULT_SORT = {};
 const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'pagado', 'despacho']);
 const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto', 'despacho']);
 
+// Pagado and despacho only ever move FORWARD — pagado into despacho, despacho into
+// resuelto. A backward or sideways drag from either is pointless (customers.js's
+// paid_locked guard would just pin manual_status back to 'pagado' server-side anyway),
+// so both the drag handler and the "Mover a" dropdown share this restriction instead of
+// one silently rejecting a move the other still offers.
+function allowedTargetsFor(sourceKey) {
+  if (sourceKey === 'pagado') return new Set(['despacho']);
+  if (sourceKey === 'despacho') return new Set(['resuelto']);
+  return DROP_TARGETS;
+}
+
 // "No atendidos" is overdue on raw wait time (nobody's even looked yet — the default
 // 15 min is meant to be aggressive there, see slaMinutes below). These 4 are already
 // claimed/active — what actually matters is whether the CUSTOMER is the one waiting: if
@@ -354,9 +365,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // second, tap-based way to do the exact same move.
   async function moveCard(drag, targetColumn) {
     if (!drag || drag.sourceColumn === targetColumn) return;
-    // Pagado stays protected from casual dragging into an earlier temperature stage —
-    // this is the one deliberate exception, moving into despacho once shipping starts.
-    if (drag.sourceColumn === 'pagado' && targetColumn !== 'despacho') return;
+    if (!allowedTargetsFor(drag.sourceColumn).has(targetColumn)) return;
 
     // Moves the card in front of the advisor immediately — waiting on the round trip
     // before it visually lands would make the drag feel broken, and reloadAll() right
@@ -700,11 +709,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           className="mt-2 w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground outline-none"
                         >
                           <option value="">Mover a…</option>
-                          {/* Pagado only ever offers despacho here — matches the same
-                              restriction moveCard enforces for the drag-and-drop path,
-                              so the dropdown never offers a move it's just going to
-                              silently reject. */}
-                          {[...(key === 'pagado' ? new Set(['despacho']) : DROP_TARGETS)].filter((t) => t !== key).map((t) => (
+                          {[...allowedTargetsFor(key)].filter((t) => t !== key).map((t) => (
                             <option key={t} value={t}>{metaFor(t).label}</option>
                           ))}
                         </select>
