@@ -393,14 +393,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // below, and it has no card of its own in unreadByColumn either, so including it here
   // made the total not match the sum of the cards actually shown (2026-09-11 report).
   const grandUnreadTotal = visibleColumnKeys.filter((key) => key !== 'pendiente').reduce((sum, key) => sum + (columns[key]?.unreadTotal ?? 0), 0);
-  const pendingTotal = columns.pendiente?.total ?? 0;
-  const pendienteMeta = metaFor('pendiente');
   // Each card here is "waiting on us" — gets the red alert dot whenever it's nonzero.
   // "Total" and "Nuevas hoy" are neutral counts, not something waiting on a reply, so
-  // they never alert. Per-column unread cards (one per section that actually has any,
-  // "pendiente" itself excluded — it already has its own card above, and everyone in
-  // it is waiting by definition, not specifically "unread") tack onto the same grid
-  // instead of a separate pill row, per request — same card, not a smaller shape.
+  // they never alert. No standalone "No atendidos" card — that number is already the
+  // No atendidos column's own header count on the board right below, showing it twice
+  // was pure redundancy (2026-09-11 report). Per-column unread cards (one per section
+  // that actually has any, "pendiente" excluded — same reasoning) tack onto the same
+  // grid instead of a separate pill row, per request — same card, not a smaller shape.
   const statCards = [
     {
       key: 'new-today', label: 'Nuevas hoy', value: grandNewToday, unit: grandNewToday === 1 ? 'conversación' : 'conversaciones',
@@ -409,10 +408,6 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     {
       key: 'unread', label: 'No leídos', value: grandUnreadTotal, unit: grandUnreadTotal === 1 ? 'chat' : 'chats',
       iconBg: 'bg-warning/10', iconText: 'text-warning', icon: Mail, alert: grandUnreadTotal > 0,
-    },
-    {
-      key: 'pendientes', label: pendienteMeta.label, value: pendingTotal, unit: pendingTotal === 1 ? 'chat' : 'chats',
-      iconBg: pendienteMeta.iconBg, iconText: pendienteMeta.iconText, icon: pendienteMeta.icon, alert: pendingTotal > 0,
     },
     ...COLUMN_ORDER.filter((key) => key !== 'pendiente' && (columns[key]?.unreadTotal ?? 0) > 0).map((key) => {
       const meta = metaFor(key);
@@ -437,15 +432,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <div className="border-b border-border p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
-          </div>
-          {/* Right-aligned, same card look as before (border/shadow/icon badge, big
-              number) — wraps to a second row instead of scrolling if it doesn't fit,
-              no forced single line. */}
-          <div className="flex max-w-full flex-wrap items-stretch justify-end gap-1.5">
+        {/* No flex-wrap on this outer row — the title stays pinned top-left on its own
+            line no matter what; only the stat strip (flex-1, wraps internally within
+            whatever width is left) drops to a second line when it needs to. */}
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="shrink-0 text-lg font-semibold tracking-tight">Pipeline</h1>
+          <div className="flex min-w-0 flex-1 flex-wrap items-stretch justify-end gap-1.5">
             {statCards.map((c) => {
               const Icon = c.icon;
               return (
@@ -471,18 +463,20 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* Search is the one filter every role gets — an asesor just doesn't get
+              period/column narrowing or "Solo no leídos" alongside it. */}
+          <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o número"
+              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+            />
+          </div>
+
           {canFilter && (
             <>
-              <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
-                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por nombre o número"
-                  className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
-                />
-              </div>
-
               <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
 
               {periodPreset === 'mes' && (
@@ -518,19 +512,19 @@ export default function HandoffQueue({ user, onOpenConversation }) {
               )}
 
               <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
+
+              <button
+                type="button"
+                onClick={() => setUnreadOnly((v) => !v)}
+                aria-pressed={unreadOnly}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+                  unreadOnly ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-greige-ink hover:text-ink'
+                }`}
+              >
+                <Mail size={12} /> Solo no leídos
+              </button>
             </>
           )}
-
-          <button
-            type="button"
-            onClick={() => setUnreadOnly((v) => !v)}
-            aria-pressed={unreadOnly}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
-              unreadOnly ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-greige-ink hover:text-ink'
-            }`}
-          >
-            <Mail size={12} /> Solo no leídos
-          </button>
 
           {!searching && (periodPreset === 'hoy' || periodPreset === 'ayer') && (
             <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-greige-ink shadow-sm">
