@@ -22,7 +22,11 @@ function zoneClause() {
 // instead of a weather word). One ticket can only ever be in exactly one column, so
 // this is a strict priority order, not a set of independent flags: a resolved ticket
 // shows as resuelto no matter what temperature is sitting on the customer underneath.
-export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
+// "despacho" (2026-09-11) is manual-only — temperature never computes it automatically
+// (TEMPERATURE_SQL in customers.js only ever produces frio/tibio/caliente/pagado), an
+// advisor sets it themselves once a paid order starts shipping (drag, or the Estado
+// dropdown in the chat panel).
+export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'despacho', 'pqrs', 'resuelto'];
 
 // Both temped CTEs below exclude 'bot' (never handed off to a human yet) AND
 // 'difusion_enviada' — a No atendidos contact who just got a broadcast (campaigns.js)
@@ -40,6 +44,7 @@ const BUCKET_CASE_SQL = `
     WHEN ticket_status = 'resuelto' THEN 'resuelto'
     WHEN ticket_status = 'esperando_asesor' THEN 'pendiente'
     WHEN temperature = 'pqrs' THEN 'pqrs'
+    WHEN temperature = 'despacho' THEN 'despacho'
     WHEN temperature = 'pagado' THEN 'pagado'
     WHEN temperature = 'caliente' THEN 'medio_pago'
     WHEN temperature = 'tibio' THEN 'cotizacion'

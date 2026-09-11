@@ -32,9 +32,10 @@ const TEMP_COLORS = {
   tibio: '#b45309',
   frio: '#1d4ed8',
   pagado: '#15803d',
+  despacho: '#0e7490',
   pqrs: '#7e22ce',
 };
-const TEMP_LABELS = { caliente: 'Caliente', tibio: 'Tibio', frio: 'Frío', pagado: 'Pagado', pqrs: 'PQRS' };
+const TEMP_LABELS = { caliente: 'Caliente', tibio: 'Tibio', frio: 'Frío', pagado: 'Pagado', despacho: 'Por despacho', pqrs: 'PQRS' };
 
 const TICKET_STATUS_META = {
   esperando_asesor: { label: 'Pendiente', color: '#b45309', variant: 'warning', icon: AlertTriangle },

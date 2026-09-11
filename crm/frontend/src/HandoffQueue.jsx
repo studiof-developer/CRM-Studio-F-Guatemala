@@ -21,10 +21,12 @@ const DEFAULT_SORT = {};
 
 // Only these move by dragging — each is a plain, reversible manual_status write, no
 // extra info required. Dropping onto "resuelto" is also allowed (a natural way to
-// close out a card), just not dragging out of it. "pendiente" and "pagado" are display
-// only: taking a ticket and marking someone paid both stay deliberate button actions.
-const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
-const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto']);
+// close out a card), just not dragging out of it. "pendiente" is display only: taking a
+// ticket stays a deliberate button action. "pagado" is draggable ONLY into "despacho"
+// (enforced in moveCard below, not here) — marking someone paid otherwise stays
+// protected from casual dragging, this is the one deliberate exception (2026-09-11).
+const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'pagado', 'despacho']);
+const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto', 'despacho']);
 
 // "No atendidos" is overdue on raw wait time (nobody's even looked yet — the default
 // 15 min is meant to be aggressive there, see slaMinutes below). These 4 are already
@@ -36,7 +38,7 @@ const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs',
 const AWAITING_REPLY_COLUMNS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs']);
 const DEFAULT_SLA_MINUTES = 15;
 const DEFAULT_AWAITING_REPLY_OVERDUE_MINUTES = 60;
-const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio_pago: 'caliente', pqrs: 'pqrs' };
+const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio_pago: 'caliente', pqrs: 'pqrs', despacho: 'despacho' };
 
 const PAGE_SIZE = 50;
 
@@ -121,7 +123,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       if (Number.isFinite(awaitingValue)) setAwaitingReplyOverdueMinutes(awaitingValue);
     }).catch(() => {});
   }, []);
-  const displayOrder = pipelineColumns ? pipelineColumns.map((c) => c.key) : COLUMN_ORDER;
+  // Appends any COLUMN_ORDER key missing from a previously-saved custom order (e.g. a
+  // new column added after an admin already customized theirs, like "despacho" —
+  // 2026-09-11) instead of silently hiding it until someone re-saves the settings.
+  const displayOrder = pipelineColumns
+    ? [...pipelineColumns.map((c) => c.key), ...COLUMN_ORDER.filter((k) => !pipelineColumns.some((c) => c.key === k))]
+    : COLUMN_ORDER;
   function metaFor(key) {
     const cfg = pipelineColumns?.find((c) => c.key === key) ?? DEFAULT_COLUMN_META[key];
     return {
@@ -331,6 +338,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // second, tap-based way to do the exact same move.
   async function moveCard(drag, targetColumn) {
     if (!drag || drag.sourceColumn === targetColumn) return;
+    // Pagado stays protected from casual dragging into an earlier temperature stage —
+    // this is the one deliberate exception, moving into despacho once shipping starts.
+    if (drag.sourceColumn === 'pagado' && targetColumn !== 'despacho') return;
 
     // Moves the card in front of the advisor immediately — waiting on the round trip
     // before it visually lands would make the drag feel broken, and reloadAll() right
@@ -674,7 +684,11 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           className="mt-2 w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground outline-none"
                         >
                           <option value="">Mover a…</option>
-                          {[...DROP_TARGETS].filter((t) => t !== key).map((t) => (
+                          {/* Pagado only ever offers despacho here — matches the same
+                              restriction moveCard enforces for the drag-and-drop path,
+                              so the dropdown never offers a move it's just going to
+                              silently reject. */}
+                          {[...(key === 'pagado' ? new Set(['despacho']) : DROP_TARGETS)].filter((t) => t !== key).map((t) => (
                             <option key={t} value={t}>{metaFor(t).label}</option>
                           ))}
                         </select>

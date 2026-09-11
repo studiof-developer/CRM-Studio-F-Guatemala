@@ -4,7 +4,7 @@ import { logAccess, logBusinessAction } from '../auditLog.js';
 
 const router = Router();
 
-const TEMP_LABELS = { frio: 'Frío', tibio: 'Tibio', caliente: 'Caliente', pagado: 'Pagado', pqrs: 'PQRS' };
+const TEMP_LABELS = { frio: 'Frío', tibio: 'Tibio', caliente: 'Caliente', pagado: 'Pagado', despacho: 'Por despacho', pqrs: 'PQRS' };
 
 // Every registered customer gets a handoff ticket now (not just complaints), so ticket
 // existence alone no longer implies PQRS — that badge would've swallowed almost every
@@ -25,7 +25,9 @@ export const TEMPERATURE_SQL = `
   END
 `;
 
-export const VALID_TEMPERATURES = ['caliente', 'tibio', 'frio', 'pagado', 'pqrs'];
+// "despacho" is manual-only (see PIPELINE_COLUMNS in tickets.js) — TEMPERATURE_SQL below
+// never produces it on its own, only an advisor setting manual_status does.
+export const VALID_TEMPERATURES = ['caliente', 'tibio', 'frio', 'pagado', 'despacho', 'pqrs'];
 export const VALID_PAID_METHODS = ['tarjeta', 'efectivo', 'transferencia', 'deposito'];
 
 // Advisor override wins whenever set — the bot/n8n never writes manual_status,

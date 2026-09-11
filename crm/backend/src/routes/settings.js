@@ -51,7 +51,7 @@ const SETTINGS = {
   },
   pipeline_columns: {
     label: 'Columnas del Pipeline',
-    description: 'Nombre, ícono, color y orden de las columnas del tablero. Las 7 columnas en sí no se pueden agregar ni quitar desde aquí.',
+    description: 'Nombre, ícono, color y orden de las columnas del tablero. Las 8 columnas en sí no se pueden agregar ni quitar desde aquí.',
     validate: isValidPipelineColumns,
   },
   sla_minutes: {

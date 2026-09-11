@@ -1,9 +1,11 @@
 import { Clock, Snowflake, Thermometer, Flame, CircleDollarSign, MessageSquareWarning, CheckCircle2, Star, Zap, AlertTriangle, Tag, Package } from 'lucide-react';
 
-// The 7 fixed pipeline stages — temperature/ticket_status (tickets.js's BUCKET_CASE_SQL)
+// The 8 fixed pipeline stages — temperature/ticket_status (tickets.js's BUCKET_CASE_SQL)
 // decide which one a contact is actually in, so this order/list is NOT itself editable.
 // Configuración > Pipeline can only change label/icon/color/display-order per key.
-export const COLUMN_ORDER = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'pqrs', 'resuelto'];
+// "despacho" (2026-09-11) is manual-only — never set automatically, an advisor moves a
+// paid customer into it themselves (drag or the Estado dropdown) once shipping starts.
+export const COLUMN_ORDER = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'despacho', 'pqrs', 'resuelto'];
 
 // Shown until the admin-saved 'pipeline_columns' setting loads (or if it's never set).
 export const DEFAULT_COLUMN_META = {
@@ -12,6 +14,7 @@ export const DEFAULT_COLUMN_META = {
   cotizacion: { label: 'Cotización', icon: 'Thermometer', color: 'warning' },
   medio_pago: { label: 'Medio de pago', icon: 'Flame', color: 'danger' },
   pagado: { label: 'Pagado', icon: 'CircleDollarSign', color: 'success' },
+  despacho: { label: 'Por despacho', icon: 'Package', color: 'info' },
   pqrs: { label: 'PQRS', icon: 'MessageSquareWarning', color: 'purple' },
   resuelto: { label: 'Resuelto', icon: 'CheckCircle2', color: 'success' },
 };
