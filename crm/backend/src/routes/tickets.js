@@ -102,6 +102,12 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
   const trimmedQ = (q ?? '').trim();
   const params = paramsSoFar;
   let dateClause = '';
+  // Tracked separately from the params pushed into dateClause above (those are keyed to
+  // orderExpr, not to customer.created_at) — used only for the new-vs-continuing
+  // breakdown below. Left null for a search or the unbounded "Todo" period: with no
+  // period boundary, "arrived new within this window" has no meaning to compute.
+  let periodStartIso = null;
+  let periodEndIso = null;
   if (trimmedQ) {
     // A search match has to show up no matter what period is selected — a customer
     // who wrote a week ago is still a real result, not something Hoy/Ayer should be
@@ -112,20 +118,24 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
     // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
     // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
     // so since/until take over from from/to instead of combining with them.
-    params.push(new Date(since).toISOString());
+    periodStartIso = new Date(since).toISOString();
+    params.push(periodStartIso);
     dateClause += ` AND ${orderExpr} >= $${params.length}`;
   } else if (from) {
-    params.push(`${from}T00:00:00-06:00`);
+    periodStartIso = `${from}T00:00:00-06:00`;
+    params.push(periodStartIso);
     dateClause += ` AND ${orderExpr} >= $${params.length}`;
   }
   if (!trimmedQ) {
     if (until) {
-      params.push(new Date(until).toISOString());
+      periodEndIso = new Date(until).toISOString();
+      params.push(periodEndIso);
       dateClause += ` AND ${orderExpr} < $${params.length}`;
     } else if (to) {
       const toTs = new Date(`${to}T00:00:00-06:00`);
       toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
-      params.push(toTs.toISOString());
+      periodEndIso = toTs.toISOString();
+      params.push(periodEndIso);
       dateClause += ` AND ${orderExpr} < $${params.length}`;
     }
   }
@@ -143,7 +153,7 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
             AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
         )`
     : '';
-  return { orderExpr, dateClause, unreadOnlyClause, trimmedQ };
+  return { orderExpr, dateClause, unreadOnlyClause, trimmedQ, periodStartIso, periodEndIso };
 }
 
 router.get('/pipeline', async (req, res, next) => {
@@ -155,8 +165,26 @@ router.get('/pipeline', async (req, res, next) => {
     const sort = req.query.sort === 'asc' ? 'ASC' : 'DESC';
 
     const params = [bucket];
-    const { orderExpr, dateClause, unreadOnlyClause, trimmedQ } = buildPipelineFilters(bucket, req.query, params);
+    const { orderExpr, dateClause, unreadOnlyClause, trimmedQ, periodStartIso, periodEndIso } = buildPipelineFilters(bucket, req.query, params);
     const { from, to, since, until, unreadOnly } = req.query;
+
+    // "Nuevas" vs "continuas" — only computable when there's an actual period boundary
+    // to compare customer.created_at against (not for "Todo" or a search, neither of
+    // which have a meaningful start). New params, not reused from dateClause's above:
+    // those are keyed to orderExpr (stage_since/last_message), this is keyed to when
+    // the CUSTOMER first ever showed up, a different column entirely.
+    let newTotalSql = 'NULL::bigint';
+    if (periodStartIso) {
+      params.push(periodStartIso);
+      const startParam = params.length;
+      let cond = `customer_created_at >= $${startParam}`;
+      if (periodEndIso) {
+        params.push(periodEndIso);
+        cond += ` AND customer_created_at < $${params.length}`;
+      }
+      newTotalSql = `count(*) FILTER (WHERE ${cond}) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
+    }
+
     const offsetParam = params.length + 1;
     params.push(offset);
     const limitParam = params.length + 1;
@@ -165,7 +193,7 @@ router.get('/pipeline', async (req, res, next) => {
     const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
-               c.id AS customer_id, c.full_name, c.whatsapp_number,
+               c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
@@ -174,10 +202,13 @@ router.get('/pipeline', async (req, res, next) => {
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
-      -- bucket_total counted here, over the whole (small — tickets/customers, not
-      -- messages) date-filtered set, before narrowing to just this one column.
+      -- bucket_total/bucket_new_total counted here, over the whole (small — tickets/
+      -- customers, not messages) date-filtered set, before narrowing to just this one
+      -- column — same reasoning for both, just two different partitioned counts.
       totaled AS (
-        SELECT *, ${BUCKET_CASE_SQL} AS bucket, count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total
+        SELECT *, ${BUCKET_CASE_SQL} AS bucket,
+               count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total,
+               ${newTotalSql} AS bucket_new_total
         FROM temped
         WHERE true ${dateClause} ${unreadOnlyClause}
       ),
@@ -200,8 +231,14 @@ router.get('/pipeline', async (req, res, next) => {
       ORDER BY ${orderExpr} ${sort}
     `, params));
 
+    const bucketTotal = rows[0] ? Number(rows[0].bucket_total) : 0;
+    const bucketNewTotal = rows[0] && rows[0].bucket_new_total != null ? Number(rows[0].bucket_new_total) : null;
     res.json({
-      total: rows[0] ? Number(rows[0].bucket_total) : 0,
+      total: bucketTotal,
+      // null when there's no period boundary to compare against (Todo, or a search) —
+      // the frontend hides the breakdown rather than showing a meaningless split.
+      newTotal: bucketNewTotal,
+      continuingTotal: bucketNewTotal != null ? bucketTotal - bucketNewTotal : null,
       cards: rows.map((r) => ({
         ticketId: r.ticket_id,
         customerId: r.customer_id,

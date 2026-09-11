@@ -73,13 +73,17 @@ const PERIOD_OPTIONS = [
   { value: 'personalizado', label: 'Periodo personalizado', icon: Calendar, iconClassName: 'text-accent' },
 ];
 function emptyColumn(key) {
-  return { cards: [], total: 0, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
+  return { cards: [], total: 0, newTotal: null, continuingTotal: null, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
 }
 function emptyColumns() {
   return Object.fromEntries(COLUMN_ORDER.map((key) => [key, emptyColumn(key)]));
 }
 
 export default function HandoffQueue({ user, onOpenConversation }) {
+  // 2026-09-11: search/period/column filters are admin+supervisor only — an asesor
+  // gets the full board (defaults do the rest: "Todo" period, no column narrowing) plus
+  // just "Solo no leídos", which stays available to every role.
+  const canFilter = user.role === 'admin' || user.role === 'supervisor';
   const [columns, setColumns] = useState(emptyColumns);
   const [search, setSearch] = useState('');
   // Debounced separately from `search` itself — the input needs to feel instant, but a
@@ -135,9 +139,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // from/to, filtered server-side on the same field the column already sorts by).
   // "onlyColumn" is purely a render-time filter, not a fetch param — every column keeps
   // loading in the background so its count stays right if you switch back to it.
-  // Defaults to "Hoy" — opening the board should show what actually needs attention
-  // right now, not every contact ever, with the full history one click away in "Todo".
-  const [periodPreset, setPeriodPreset] = useState('hoy');
+  // Defaults to "Todo" (2026-09-11: reverted from "Hoy" per request) — opens showing
+  // the whole pipeline, not just today's slice.
+  const [periodPreset, setPeriodPreset] = useState('todo');
   const todayStr = guatemalaToday();
   const [monthCursor, setMonthCursor] = useState(() => {
     const [y, m] = todayStr.split('-').map(Number);
@@ -240,8 +244,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
-      setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false, sort } }));
+      const { cards, total, newTotal, continuingTotal } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
@@ -372,6 +376,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const visibleColumnKeys = COLUMN_ORDER.filter((key) => searching || !onlyColumn || key === onlyColumn);
   const grandTotal = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.total ?? 0), 0);
   const periodLabel = searching ? 'Búsqueda' : PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? '';
+  // Nuevas (el primer contacto de ese cliente cae dentro del periodo elegido) vs
+  // continuas (ya existían antes) — solo tiene sentido con un periodo acotado (no
+  // "Todo" ni una búsqueda), así que el backend manda null y aquí simplemente no se
+  // muestra en vez de mostrar un desglose sin significado.
+  const hasNewBreakdown = !searching && visibleColumnKeys.every((key) => (columns[key]?.newTotal ?? null) !== null);
+  const grandNewTotal = hasNewBreakdown ? visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.newTotal ?? 0), 0) : null;
+  const grandContinuingTotal = hasNewBreakdown ? visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.continuingTotal ?? 0), 0) : null;
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
@@ -386,54 +397,63 @@ export default function HandoffQueue({ user, onOpenConversation }) {
             <p className="text-xl font-semibold leading-tight tracking-tight text-ink">
               {grandTotal} <span className="text-xs font-normal text-greige-ink">{grandTotal === 1 ? 'conversación' : 'conversaciones'}</span>
             </p>
+            {hasNewBreakdown && (
+              <p className="mt-0.5 text-[11px] text-greige-ink">
+                <span className="font-semibold text-accent">{grandNewTotal}</span> nuevas · <span className="font-semibold text-ink">{grandContinuingTotal}</span> continuas
+              </p>
+            )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o número"
-              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
-            />
-          </div>
+          {canFilter && (
+            <>
+              <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar por nombre o número"
+                  className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+                />
+              </div>
 
-          <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
+              <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
 
-          {periodPreset === 'mes' && (
-            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-line bg-paper px-1.5 py-1.5 shadow-sm">
-              <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes anterior">
-                <ChevronLeft size={14} />
-              </button>
-              <span className="min-w-[108px] text-center text-xs font-medium text-ink">{MONTH_NAMES[monthCursor.month - 1]} {monthCursor.year}</span>
-              <button type="button" onClick={() => shiftMonth(1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes siguiente">
-                <ChevronRight size={14} />
-              </button>
-            </div>
+              {periodPreset === 'mes' && (
+                <div className="flex shrink-0 items-center gap-1 rounded-lg border border-line bg-paper px-1.5 py-1.5 shadow-sm">
+                  <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes anterior">
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="min-w-[108px] text-center text-xs font-medium text-ink">{MONTH_NAMES[monthCursor.month - 1]} {monthCursor.year}</span>
+                  <button type="button" onClick={() => shiftMonth(1)} className="rounded-full p-0.5 text-greige-ink transition-colors hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes siguiente">
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+
+              {periodPreset === 'personalizado' && (
+                <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 shadow-sm">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    max={customTo}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                  />
+                  <span className="text-xs text-greige-ink">a</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    min={customFrom}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                  />
+                </div>
+              )}
+
+              <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
+            </>
           )}
-
-          {periodPreset === 'personalizado' && (
-            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 shadow-sm">
-              <input
-                type="date"
-                value={customFrom}
-                max={customTo}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
-              />
-              <span className="text-xs text-greige-ink">a</span>
-              <input
-                type="date"
-                value={customTo}
-                min={customFrom}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="bg-transparent text-xs text-ink outline-none [color-scheme:light] dark:[color-scheme:dark]"
-              />
-            </div>
-          )}
-
-          <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
 
           <button
             type="button"
