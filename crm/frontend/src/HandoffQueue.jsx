@@ -73,7 +73,7 @@ const PERIOD_OPTIONS = [
   { value: 'personalizado', label: 'Periodo personalizado', icon: Calendar, iconClassName: 'text-accent' },
 ];
 function emptyColumn(key) {
-  return { cards: [], total: 0, newTotal: null, continuingTotal: null, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
+  return { cards: [], total: 0, newTotal: null, continuingTotal: null, newTodayTotal: 0, unreadTotal: 0, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
 }
 function emptyColumns() {
   return Object.fromEntries(COLUMN_ORDER.map((key) => [key, emptyColumn(key)]));
@@ -244,8 +244,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total, newTotal, continuingTotal } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
-      setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, offset: cards.length, loading: false, sort } }));
+      const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
@@ -383,6 +383,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const hasNewBreakdown = !searching && visibleColumnKeys.every((key) => (columns[key]?.newTotal ?? null) !== null);
   const grandNewTotal = hasNewBreakdown ? visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.newTotal ?? 0), 0) : null;
   const grandContinuingTotal = hasNewBreakdown ? visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.continuingTotal ?? 0), 0) : null;
+  // Fixed to today regardless of the period filter — "cuánta gente entró hoy", always
+  // shown, same reasoning as the period-relative breakdown above but anchored instead
+  // of relative. Per-column pendientes/no leídos: "pendiente" IS entirely waiting (its
+  // own total already means that), every other column's own unreadTotal is the
+  // "esperando respuesta" figure for it.
+  const grandNewToday = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.newTodayTotal ?? 0), 0);
+  const pendingByColumn = COLUMN_ORDER
+    .map((key) => ({ key, meta: metaFor(key), count: key === 'pendiente' ? (columns[key]?.total ?? 0) : (columns[key]?.unreadTotal ?? 0) }))
+    .filter((c) => c.count > 0);
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
@@ -402,8 +411,28 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 <span className="font-semibold text-accent">{grandNewTotal}</span> nuevas · <span className="font-semibold text-ink">{grandContinuingTotal}</span> continuas
               </p>
             )}
+            {/* Fixed to today, independent of periodPreset — shown even under "Todo". */}
+            <p className="mt-0.5 text-[11px] text-greige-ink">
+              <span className="font-semibold text-accent">{grandNewToday}</span> {grandNewToday === 1 ? 'conversación nueva hoy' : 'conversaciones nuevas hoy'}
+            </p>
           </div>
         </div>
+        {pendingByColumn.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-medium text-greige-ink">Pendientes de respuesta:</span>
+            {pendingByColumn.map(({ key, meta, count }) => {
+              const Icon = meta.icon;
+              return (
+                <span
+                  key={key}
+                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.iconBg} ${meta.iconText}`}
+                >
+                  <Icon size={10} /> {meta.label}: {count}
+                </span>
+              );
+            })}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {canFilter && (
             <>

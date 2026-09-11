@@ -185,6 +185,24 @@ router.get('/pipeline', async (req, res, next) => {
       newTotalSql = `count(*) FILTER (WHERE ${cond}) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
     }
 
+    // Fixed to today's Guatemala calendar day regardless of whatever period the columns
+    // themselves are filtered to (unlike bucket_new_total above) — "cuánta gente entró
+    // hoy" as a standing number, same day-boundary convention dashboard.js already uses
+    // (AT TIME ZONE 'America/Guatemala', not a manual -06 offset, since this one needs
+    // to track "today" as it rolls over, not a fixed caller-supplied instant).
+    const newTodaySql = `count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
+
+    // How many in this bucket have an unread customer message — same EXISTS the
+    // unreadOnly filter already uses (cheap: short-circuits on the first unread row,
+    // reuses the session_id-prefix index), just counted instead of filtered on, and
+    // computed unconditionally rather than only when "Solo no leídos" is toggled on.
+    const unreadTotalSql = `count(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM n8n_chat_histories h
+          WHERE h.session_id LIKE whatsapp_number || '%'
+            AND h.message->>'type' = 'human'
+            AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
+        )) OVER (PARTITION BY ${BUCKET_CASE_SQL})`;
+
     const offsetParam = params.length + 1;
     params.push(offset);
     const limitParam = params.length + 1;
@@ -202,13 +220,15 @@ router.get('/pipeline', async (req, res, next) => {
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
-      -- bucket_total/bucket_new_total counted here, over the whole (small — tickets/
+      -- bucket_total and friends counted here, over the whole (small — tickets/
       -- customers, not messages) date-filtered set, before narrowing to just this one
-      -- column — same reasoning for both, just two different partitioned counts.
+      -- column — same reasoning for all four, just different partitioned counts.
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket,
                count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total,
-               ${newTotalSql} AS bucket_new_total
+               ${newTotalSql} AS bucket_new_total,
+               ${newTodaySql} AS bucket_new_today_total,
+               ${unreadTotalSql} AS bucket_unread_total
         FROM temped
         WHERE true ${dateClause} ${unreadOnlyClause}
       ),
@@ -239,6 +259,10 @@ router.get('/pipeline', async (req, res, next) => {
       // the frontend hides the breakdown rather than showing a meaningless split.
       newTotal: bucketNewTotal,
       continuingTotal: bucketNewTotal != null ? bucketTotal - bucketNewTotal : null,
+      // Fixed to today regardless of period, and unread — independent of both filters
+      // above, always meaningful, so no null-when-unavailable case for either.
+      newTodayTotal: rows[0] ? Number(rows[0].bucket_new_today_total) : 0,
+      unreadTotal: rows[0] ? Number(rows[0].bucket_unread_total) : 0,
       cards: rows.map((r) => ({
         ticketId: r.ticket_id,
         customerId: r.customer_id,
