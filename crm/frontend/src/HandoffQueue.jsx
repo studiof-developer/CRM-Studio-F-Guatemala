@@ -435,30 +435,29 @@ export default function HandoffQueue({ user, onOpenConversation }) {
             <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">Cómo va cada contacto, de primer contacto a cerrado.</p>
           </div>
-          {/* One compact row, right-aligned — same card look (border/shadow/icon badge)
-              as before, just small enough that this whole strip never pushes the actual
-              board down. overflow-x-auto instead of wrapping: a second row here is
-              exactly the space cost this is trying to avoid. */}
-          <div className="flex max-w-full items-stretch gap-1.5 overflow-x-auto pb-1">
+          {/* Right-aligned, same card look as before (border/shadow/icon badge, big
+              number) — wraps to a second row instead of scrolling if it doesn't fit,
+              no forced single line. */}
+          <div className="flex max-w-full flex-wrap items-stretch justify-end gap-1.5">
             {statCards.map((c) => {
               const Icon = c.icon;
               return (
                 <div
                   key={c.key}
                   title={c.sub ?? undefined}
-                  className="relative flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2 py-1 shadow-sm"
+                  className="relative flex shrink-0 items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 shadow-sm"
                 >
                   {c.alert && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2 items-center justify-center">
+                    <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5 items-center justify-center">
                       <span className="absolute h-full w-full animate-ping rounded-full bg-danger opacity-60" />
-                      <span className="relative h-1.5 w-1.5 rounded-full bg-danger" />
+                      <span className="relative h-2 w-2 rounded-full bg-danger" />
                     </span>
                   )}
-                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${c.iconBg} ${c.iconText}`}>
-                    <Icon size={9} />
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${c.iconBg} ${c.iconText}`}>
+                    <Icon size={12} />
                   </span>
-                  <span className="whitespace-nowrap text-sm font-semibold leading-none text-ink">{c.value}</span>
-                  <span className="whitespace-nowrap text-[10px] leading-none text-greige-ink">{c.label}</span>
+                  <span className="whitespace-nowrap text-lg font-semibold leading-none tracking-tight text-ink">{c.value}</span>
+                  <span className="whitespace-nowrap text-xs leading-none text-greige-ink">{c.label}</span>
                 </div>
               );
             })}
