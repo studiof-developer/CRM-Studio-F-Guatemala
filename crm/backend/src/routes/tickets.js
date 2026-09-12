@@ -253,15 +253,29 @@ router.get('/pipeline', async (req, res, next) => {
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
-               c.last_message_at, c.last_message
+               c.last_message_at, c.last_message,
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
+      -- A duplicate open ticket for the same customer (n8n's handoff firing twice on
+      -- the same inbound message, 2026-09-14 report — two identical cards, same phone,
+      -- same message, same minute) is always a bug: the app's own ticket-creation code
+      -- (conversations.js's /take and its campaign-recipient twin) already treats "one
+      -- open ticket per customer" as an invariant and reuses whatever's open instead of
+      -- inserting a second one — this is the same rule applied on the read side, for
+      -- whatever slips through from outside this codebase (the n8n bot flow, which this
+      -- app doesn't control). Only ever collapses NON-resuelto duplicates to the most
+      -- recent one — every resuelto ticket stays, since a customer legitimately buying
+      -- more than once over time is real history, not a duplicate.
+      deduped AS (
+        SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+      ),
       -- bucket_total and friends counted here, over the whole (small — tickets/
       -- customers, not messages) date-filtered set, before narrowing to just this one
       -- column — same reasoning for all four, just different partitioned counts.
-      -- dormancyClause references temped's OWN output columns (temperature,
+      -- dormancyClause references deduped's OWN output columns (temperature,
       -- last_customer_message_at), so it has to live here rather than in temped's own
       -- WHERE — a CTE can't reference its own SELECT-list aliases in its WHERE clause.
       totaled AS (
@@ -270,7 +284,7 @@ router.get('/pipeline', async (req, res, next) => {
                ${newTotalSql} AS bucket_new_total,
                ${newTodaySql} AS bucket_new_today_total,
                ${unreadTotalSql} AS bucket_unread_total
-        FROM temped
+        FROM deduped
         WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       ),
       paged AS (
@@ -352,14 +366,19 @@ router.get('/pipeline/export', async (req, res, next) => {
                c.full_name, c.whatsapp_number,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message,
-               c.last_message_at, c.last_message
+               c.last_message_at, c.last_message,
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
+      -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
+      deduped AS (
+        SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+      ),
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket
-        FROM temped
+        FROM deduped
         WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       )
       SELECT full_name, whatsapp_number, stage_since,
@@ -449,9 +468,16 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                  GREATEST(t.updated_at, c.updated_at) AS stage_since,
                  c.has_unread AS customer_has_unread,
-                 c.last_customer_message_at, c.last_message_at
+                 c.last_customer_message_at, c.last_message_at,
+                 ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
           WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+        ),
+        -- Same duplicate-open-ticket collapse as /pipeline — see its comment. Has to
+        -- happen before bucket_total/unread_total are counted, or a duplicate would
+        -- inflate those the same way it inflates the board itself.
+        deduped AS (
+          SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
         ),
         -- Same dormancy exclusion the advisor board itself applies (dormant absent —
         -- this popup is scoped to the advisor Pipeline, never Marketing's dormant view)
@@ -460,7 +486,7 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
         -- 3759 "En conversación" while the actual board, post-dormancy, showed ~20).
         bucketed AS (
           SELECT ${BUCKET_CASE_SQL} AS bucket, customer_has_unread
-          FROM temped WHERE true ${bucketDateClause} ${dormancyClauseSql()}
+          FROM deduped WHERE true ${bucketDateClause} ${dormancyClauseSql()}
         )
         SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total
         FROM bucketed GROUP BY bucket
