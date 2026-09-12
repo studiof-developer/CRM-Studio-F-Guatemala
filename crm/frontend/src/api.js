@@ -86,6 +86,16 @@ export async function fetchPipelineExport(bucket, filters = {}) {
   return res.json();
 }
 
+// The "expandir estadísticas" popup — every bucket's total+unread unconditionally, plus
+// messages-by-hour and average first-response time, for the popup's own period filter
+// (from/to/since/until only; no bucket, no q, no unreadOnly — this isn't a board column).
+export async function fetchPipelineStats(filters = {}) {
+  const params = pipelineFilterParams(filters);
+  const res = await apiFetch(`/api/tickets/pipeline/stats?${params}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las estadísticas');
+  return res.json();
+}
+
 export async function fetchLastAdvisorActivity(before) {
   const params = before ? `?before=${encodeURIComponent(before)}` : '';
   const res = await apiFetch(`/api/tickets/last-advisor-activity${params}`);

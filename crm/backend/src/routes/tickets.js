@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
+import { requireRole } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
@@ -377,6 +378,115 @@ router.get('/pipeline/export', async (req, res, next) => {
       lastMessageAt: r.last_customer_message_at ?? r.last_message_at,
       lastMessage: r.last_customer_message ?? r.last_message,
     })));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Bucket-agnostic date-range clause for /pipeline/stats below — same since/from/until/to
+// parsing and Guatemala -06 convention buildPipelineFilters already uses, minus the
+// search/orderExpr coupling that only makes sense for a single paginated column. Used
+// against three different date columns (ticket stage_since, message created_at, ticket
+// created_at) in three separate queries, so the column expression is caller-supplied
+// rather than implied by a bucket the way orderExprFor is.
+function buildDateRangeClause(query, params, dateExpr) {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const { from, to, since, until } = query;
+  if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
+    throw Object.assign(new Error('from/to must be YYYY-MM-DD'), { status: 400 });
+  }
+  if (since && !Number.isFinite(Date.parse(since))) {
+    throw Object.assign(new Error('since must be a valid timestamp'), { status: 400 });
+  }
+  if (until && !Number.isFinite(Date.parse(until))) {
+    throw Object.assign(new Error('until must be a valid timestamp'), { status: 400 });
+  }
+  let clause = '';
+  if (since) {
+    params.push(new Date(since).toISOString());
+    clause += ` AND ${dateExpr} >= $${params.length}`;
+  } else if (from) {
+    params.push(`${from}T00:00:00-06:00`);
+    clause += ` AND ${dateExpr} >= $${params.length}`;
+  }
+  if (until) {
+    params.push(new Date(until).toISOString());
+    clause += ` AND ${dateExpr} < $${params.length}`;
+  } else if (to) {
+    const toTs = new Date(`${to}T00:00:00-06:00`);
+    toTs.setUTCDate(toTs.getUTCDate() + 1); // exclusive end — the whole "to" day counts
+    params.push(toTs.toISOString());
+    clause += ` AND ${dateExpr} < $${params.length}`;
+  }
+  return clause;
+}
+
+// The "expandir estadísticas" popup (2026-09-12) — the board's own stat strip only ever
+// shows a card for a bucket that HAS unread messages, so an admin can't see the complete
+// picture (a bucket sitting at 0 just isn't there). This is the "show me everything, no
+// exceptions" view: every one of the 8 buckets' total+unread, plus two operational
+// numbers the board doesn't surface at all (message volume by hour of day, average time
+// to first advisor response) — all for whatever date range the popup's own period
+// selector is set to, independent of the board's own filter. One round trip, three cheap
+// queries, no caching layer (an on-demand popup, not a page load).
+// Admin-only for now (2026-09-12 request) — meant to widen to every role once it's had
+// a bit of real-world use, same reasoning as campaigns.js's admin-only template routes.
+router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
+  try {
+    const bucketParams = [];
+    const bucketDateClause = buildDateRangeClause(req.query, bucketParams, 'stage_since');
+    const historyParams = [];
+    const historyDateClause = buildDateRangeClause(req.query, historyParams, 'h.created_at');
+    const responseParams = [];
+    const responseDateClause = buildDateRangeClause(req.query, responseParams, 't.created_at');
+
+    const [buckets, byHour, responseDelay] = await Promise.all([
+      pool.query(`
+        WITH temped AS (
+          SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
+                 GREATEST(t.updated_at, c.updated_at) AS stage_since,
+                 c.has_unread AS customer_has_unread
+          FROM tickets t JOIN customers c ON c.id = t.customer_id
+          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+        ),
+        bucketed AS (
+          SELECT ${BUCKET_CASE_SQL} AS bucket, customer_has_unread
+          FROM temped WHERE true ${bucketDateClause}
+        )
+        SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total
+        FROM bucketed GROUP BY bucket
+      `, bucketParams),
+      pool.query(`
+        SELECT extract(hour FROM h.created_at AT TIME ZONE 'America/Guatemala')::int AS hour, count(*) AS total
+        FROM n8n_chat_histories h
+        WHERE h.message->>'type' = 'human' ${historyDateClause}
+        GROUP BY hour ORDER BY hour
+      `, historyParams),
+      pool.query(`
+        SELECT round(avg(extract(epoch FROM (t.first_response_at - t.created_at)))/60) AS avg_min
+        FROM tickets t JOIN customers c ON c.id = t.customer_id
+        WHERE t.first_response_at IS NOT NULL ${responseDateClause}
+      `, responseParams),
+    ]);
+
+    // Zero-fill every bucket/hour a GROUP BY silently drops instead of returning it as
+    // 0 — that omission is exactly the "se oculta esa casilla" problem this popup exists
+    // to fix, so it can't happen again one level down in the response either.
+    const totalsByBucket = Object.fromEntries(buckets.rows.map((r) => [r.bucket, { total: Number(r.total), unreadTotal: Number(r.unread_total) }]));
+    const bucketStats = PIPELINE_COLUMNS.map((key) => ({
+      bucket: key,
+      total: totalsByBucket[key]?.total ?? 0,
+      unreadTotal: totalsByBucket[key]?.unreadTotal ?? 0,
+    }));
+    const countByHour = Object.fromEntries(byHour.rows.map((r) => [r.hour, Number(r.total)]));
+    const messagesByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
+
+    res.json({
+      buckets: bucketStats,
+      messagesByHour,
+      avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
+    });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);

@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download } from 'lucide-react';
+import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
 import { fetchPipelineColumn, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
+import StatsModal from './components/StatsModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { formatWait, minutesSince } from './lib/sla.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
@@ -94,6 +95,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // gets the full board (defaults do the rest: "Todo" period, no column narrowing) plus
   // just "Solo no leídos", which stays available to every role.
   const canFilter = user.role === 'admin' || user.role === 'supervisor';
+  // 2026-09-12: the "expandir estadísticas" popup ships admin-only for now, per request
+  // — meant to widen to every role once it's had a bit of real-world use.
+  const isAdmin = user.role === 'admin';
   const [columns, setColumns] = useState(emptyColumns);
   const [search, setSearch] = useState('');
   // Debounced separately from `search` itself — the input needs to feel instant, but a
@@ -109,6 +113,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // instead of replacing it (Hoy + solo no leídos, una búsqueda + solo no leídos, etc.
   // all compose).
   const [unreadOnly, setUnreadOnly] = useState(false);
+  // "Expandir estadísticas" popup — every bucket unconditionally, plus messages-por-hora
+  // and demora en respuesta, none of which the board's own stat strip surfaces today.
+  const [statsOpen, setStatsOpen] = useState(false);
   const [exportingKey, setExportingKey] = useState(null);
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
@@ -459,6 +466,16 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 </div>
               );
             })}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setStatsOpen(true)}
+                title="Ver todos los estados sin excepción, mensajes por hora y demora en respuesta"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-paper text-greige-ink shadow-sm transition-colors hover:text-ink"
+              >
+                <Plus size={14} />
+              </button>
+            )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -691,6 +708,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           );
         })}
       </div>
+      {isAdmin && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />}
     </div>
   );
 }
