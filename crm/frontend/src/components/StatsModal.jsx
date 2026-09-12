@@ -4,7 +4,7 @@ import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip }
 import { X, Loader2 } from 'lucide-react';
 import { fetchPipelineStats } from '../api.js';
 import Select from './Select.jsx';
-import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES, guatemalaMidnight, useDayCutoffs } from '../lib/pipelinePeriod.js';
+import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
 import { DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from '../lib/pipelineColumns.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
@@ -23,6 +23,16 @@ function formatMinutes(m) {
   if (m === null) return 'Sin datos';
   if (m < 60) return `${m} min`;
   return `${(m / 60).toFixed(1)} h`;
+}
+
+function formatMoney(amount, currency) {
+  try {
+    return new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(amount);
+  } catch {
+    // An unrecognized/unusual currency code from Meta shouldn't crash the whole popup —
+    // falls back to a plain grouped number with the raw code appended.
+    return `${new Intl.NumberFormat('es-GT').format(amount)} ${currency}`;
+  }
 }
 
 function metaFor(key) {
@@ -63,14 +73,16 @@ export default function StatsModal({ open, onClose }) {
   });
   const [customFrom, setCustomFrom] = useState(todayStr);
   const [customTo, setCustomTo] = useState(todayStr);
-  const { todayCutoff, yesterdayCutoff } = useDayCutoffs(todayStr);
 
-  let dateFrom, dateTo, sinceTs, untilTs;
-  if (periodPreset === 'hoy') { sinceTs = todayCutoff ?? guatemalaMidnight(todayStr); }
-  else if (periodPreset === 'ayer') {
-    sinceTs = yesterdayCutoff ?? guatemalaMidnight(addDays(todayStr, -1));
-    untilTs = todayCutoff ?? guatemalaMidnight(todayStr);
-  }
+  // Plain calendar days, on purpose — NOT the advisor board's "since the last advisor
+  // message before the day started" shift-aware cutoff (HandoffQueue.jsx/pipelinePeriod's
+  // useDayCutoffs). This is a reporting popup: "Hoy" has to mean literally today,
+  // midnight to now (2026-09-13 report: bars for hours that hadn't happened yet today
+  // were actually yesterday's activity bleeding in through that cutoff), not a
+  // pipeline-specific idea of when "today's backlog" starts.
+  let dateFrom, dateTo;
+  if (periodPreset === 'hoy') { dateFrom = todayStr; dateTo = todayStr; }
+  else if (periodPreset === 'ayer') { dateFrom = addDays(todayStr, -1); dateTo = addDays(todayStr, -1); }
   else if (periodPreset === 'semana') { dateFrom = addDays(todayStr, -6); dateTo = todayStr; }
   else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
   else if (periodPreset === 'personalizado') { dateFrom = customFrom; dateTo = customTo; }
@@ -91,11 +103,11 @@ export default function StatsModal({ open, onClose }) {
     if (!open) return;
     setData(null);
     setError(null);
-    fetchPipelineStats({ from: dateFrom, to: dateTo, since: sinceTs, until: untilTs })
+    fetchPipelineStats({ from: dateFrom, to: dateTo })
       .then(setData)
       .catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo, sinceTs, untilTs]);
+  }, [open, dateFrom, dateTo]);
 
   const hourRef = useRef(null);
   useChart(hourRef, () => ({
@@ -193,7 +205,7 @@ export default function StatsModal({ open, onClose }) {
                   <div className="flex flex-wrap gap-2">
                     <StatCard
                       label="gasto en pauta"
-                      value={`${data.conversionCost.spend.toFixed(2)} ${data.conversionCost.currency}`}
+                      value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
                       iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
                       iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
                       icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -207,7 +219,7 @@ export default function StatsModal({ open, onClose }) {
                     />
                     <StatCard
                       label="por conversión"
-                      value={data.conversionCost.costPerConversion != null ? `${data.conversionCost.costPerConversion.toFixed(2)} ${data.conversionCost.currency}` : 'Sin conversiones'}
+                      value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin conversiones'}
                       iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                       iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                       icon={PIPELINE_ICON_MAP.CircleDollarSign}
