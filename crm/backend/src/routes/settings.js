@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
 import { PIPELINE_COLUMNS } from './tickets.js';
 import { encryptToken } from '../tokenCrypto.js';
+import { testMetaAdsConnection } from '../metaAds.js';
 
 const router = Router();
 
@@ -140,6 +141,19 @@ router.put('/:key', requireRole('admin'), async (req, res, next) => {
     );
     res.json({ key, value: spec.secret ? true : rows[0].value, updatedAt: rows[0].updated_at });
   } catch (err) { next(err); }
+});
+
+// Confirms the already-SAVED account id/token pair actually resolves to a real,
+// readable ad account — reads from storage (decrypting server-side), never needs the
+// plaintext token sent back from the frontend, since GET / above never hands it out in
+// the first place.
+router.get('/meta-ads/test', requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await testMetaAdsConnection();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 export default router;

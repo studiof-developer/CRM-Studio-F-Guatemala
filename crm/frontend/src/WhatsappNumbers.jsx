@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
-  fetchSettings, updateSetting,
+  fetchSettings, updateSetting, testMetaAdsConnection,
 } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
@@ -131,6 +131,8 @@ function MetaAdsTab() {
   const [tokenMeta, setTokenMeta] = useState(null);
   const [savingAccountId, setSavingAccountId] = useState(false);
   const [savingToken, setSavingToken] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   const load = useCallback(() => {
     fetchSettings().then((rows) => {
@@ -167,6 +169,23 @@ function MetaAdsTab() {
       showError(err.message);
     } finally {
       setSavingToken(false);
+    }
+  }
+
+  // Reads what's already saved — never sends the token back out, the backend decrypts
+  // its own stored copy (see settings.js's `secret` handling / api.js's comment).
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testMetaAdsConnection();
+      setTestResult(result);
+      if (!result.ok) showError(result.error);
+    } catch (err) {
+      setTestResult({ ok: false, error: err.message });
+      showError(err.message);
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -210,6 +229,27 @@ function MetaAdsTab() {
           </Button>
         </div>
         {tokenMeta?.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(tokenMeta.updatedAt)}</p>}
+      </div>
+
+      <div className="mt-6 border-t border-line-soft pt-6">
+        <button
+          type="button"
+          onClick={handleTest}
+          disabled={testing}
+          className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+        >
+          <ShieldAlert size={13} /> {testing ? 'Probando…' : 'Probar conexión'}
+        </button>
+        {testResult?.ok && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-success">
+            <CheckCircle2 size={13} /> Conectado a "{testResult.name}" ({testResult.currency})
+          </p>
+        )}
+        {testResult && !testResult.ok && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-danger">
+            <X size={13} /> {testResult.error}
+          </p>
+        )}
       </div>
     </section>
   );

@@ -512,6 +512,14 @@ export async function updateSetting(key, value) {
   return res.json();
 }
 
+// Tests the ALREADY-SAVED Meta Ads account id/token pair — never sends the token back
+// out, the backend reads and decrypts its own stored copy (see settings.js's secret
+// handling), so this only ever needs the account to have been saved first.
+export async function testMetaAdsConnection() {
+  const res = await apiFetch('/api/settings/meta-ads/test');
+  return res.json();
+}
+
 export async function fetchDashboard() {
   const res = await apiFetch('/api/dashboard');
   if (!res.ok) throw new Error('Error al cargar el dashboard');
