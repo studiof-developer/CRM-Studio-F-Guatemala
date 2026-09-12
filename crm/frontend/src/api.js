@@ -46,7 +46,7 @@ export async function fetchMe() {
 
 // Shared by the paged column fetch and the whole-bucket export below — same period/
 // search/unreadOnly filters either way.
-function pipelineFilterParams({ from, to, since, until, q, unreadOnly } = {}) {
+function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant } = {}) {
   const params = new URLSearchParams();
   if (q) {
     // A search match has to show up regardless of the active period — the backend
@@ -61,6 +61,9 @@ function pipelineFilterParams({ from, to, since, until, q, unreadOnly } = {}) {
   // Independent of the period/search filters above — narrows whatever's already
   // selected instead of replacing it, so it stacks with either.
   if (unreadOnly) params.set('unreadOnly', 'true');
+  // Marketing's board (dormant=true) vs the advisor board (absent) — see
+  // dormancyClauseSql in tickets.js.
+  if (dormant) params.set('dormant', 'true');
   return params;
 }
 

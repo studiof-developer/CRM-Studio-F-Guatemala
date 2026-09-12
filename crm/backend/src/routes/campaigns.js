@@ -396,18 +396,30 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   // like nothing happened at all when someone checked the logs instead of the tooltip.
   if (error) console.error(`campaign ${campaignId} send to ${customer.whatsapp_number} failed:`, error);
 
-  // A "No atendidos" contact who just got a broadcast HAS been reached — but not by an
-  // advisor, so it's wrong to show them as "En atención" (nobody's actually attending).
-  // 'difusion_enviada' takes them off the board entirely (same as 'bot', see
-  // HIDDEN_TICKET_STATUSES_SQL in tickets.js) until they actually reply, at which point
-  // db/init/045's trigger flips them straight back to esperando_asesor with a fresh
-  // stage_since — reappearing as a normal, recently-arrived "No atendido", not a stale
-  // one. Only on an actual successful send (a failed one didn't really reach them) and
-  // only from esperando_asesor — never touches a ticket already claimed or further along.
+  // Whoever just got a broadcast HAS been reached — but not by an advisor, so it's wrong
+  // to keep showing them as actively "En atención"/Cotización/etc (nobody's actually
+  // attending). 'difusion_enviada' takes them off BOTH pipelines entirely (same as 'bot',
+  // see HIDDEN_TICKET_STATUSES_SQL in tickets.js) until they actually reply, at which
+  // point db/init/045's trigger flips them straight back to esperando_asesor with a fresh
+  // stage_since — reappearing as a normal, recently-arrived "No atendido", not wherever
+  // they used to sit. Originally guarded to status = 'esperando_asesor' only, back when a
+  // broadcast could only ever reach a "No atendidos" contact — the 2026-09-12 Marketing
+  // Pipeline can now hand this function a dormant contact from ANY temperature bucket
+  // (en_atencion, cotizacion, medio_pago, pagado, pqrs all share ticket_status
+  // 'en_atencion' under the hood — see tickets.js's BUCKET_CASE_SQL), so both need
+  // covering or most of that pipeline never actually disappears after being broadcast to.
+  // despacho stays excluded on purpose — same "sitting quiet while it ships is normal,
+  // not a cold lead" exemption already applied everywhere else this session, so it's
+  // never touched even if someone deliberately picks a despacho customer by hand. Only on
+  // an actual successful send (a failed one didn't really reach them), and never touches
+  // an already-resolved ticket (not in the IN list).
   if (sentWamid) {
     await pool.query(
-      `UPDATE tickets SET status = 'difusion_enviada', updated_at = now()
-       WHERE customer_id = $1 AND status = 'esperando_asesor'`,
+      `UPDATE tickets t SET status = 'difusion_enviada', updated_at = now()
+       FROM customers c
+       WHERE t.customer_id = $1 AND c.id = t.customer_id
+         AND t.status IN ('esperando_asesor', 'en_atencion')
+         AND COALESCE(c.manual_status, '') <> 'despacho'`,
       [customer.id]
     );
   }
@@ -480,13 +492,16 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   }
   if (error) console.error(`campaign retry message ${messageId} to ${phone} failed:`, error);
 
-  // Same "reached, so leave No atendidos (without faking En atención)" reasoning as
-  // sendToRecipient above — a retry is just the send finally landing, so it earns the
-  // same ticket flip on success.
+  // Same broadened "reached, so leave the pipeline (without faking En atención)"
+  // reasoning as sendToRecipient above — a retry is just the send finally landing, so it
+  // earns the same ticket flip on success, from any active status, despacho excluded.
   if (sentWamid) {
     await pool.query(
-      `UPDATE tickets SET status = 'difusion_enviada', updated_at = now()
-       WHERE status = 'esperando_asesor' AND customer_id = (SELECT id FROM customers WHERE whatsapp_number = $1)`,
+      `UPDATE tickets t SET status = 'difusion_enviada', updated_at = now()
+       FROM customers c
+       WHERE c.whatsapp_number = $1 AND c.id = t.customer_id
+         AND t.status IN ('esperando_asesor', 'en_atencion')
+         AND COALESCE(c.manual_status, '') <> 'despacho'`,
       [phone]
     );
   }

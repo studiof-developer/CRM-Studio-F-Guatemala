@@ -52,6 +52,27 @@ const BUCKET_CASE_SQL = `
   END
 `;
 
+// WhatsApp closes the free-form window 24h after the customer's own last message — past
+// that, only a template reaches them, so there's nothing left for an advisor to do here.
+// Shared by both /pipeline and /pipeline/export: normally (dormant !== 'true') a stale
+// contact is hidden from the advisor board entirely; dormant='true' (Marketing's board)
+// shows ONLY those. Restricted (2026-09-12 request) to just en_atencion/cotizacion/
+// medio_pago — "No atendidos" is already the highest-priority signal and shouldn't be
+// hidden away, and "Pagado"/"PQRS"/"Por despacho" sitting quiet doesn't mean "cold lead"
+// the way it does mid-conversation. Every other bucket ALWAYS stays on the advisor board
+// and NEVER appears on Marketing's, regardless of how long it's been quiet. Re-embeds
+// BUCKET_CASE_SQL directly (reading temped's own ticket_status/temperature columns)
+// rather than the `bucket` alias it computes — a CTE can't reference its own SELECT-list
+// aliases in its own WHERE clause, so the raw expression has to be repeated here at the
+// same level. Same 24h condition audit.js's /unanswered already uses
+// (c.last_customer_message_at <= now() - interval '24 hours').
+const DORMANT_ELIGIBLE_BUCKET_SQL = `(${BUCKET_CASE_SQL}) IN ('en_atencion', 'cotizacion', 'medio_pago')`;
+function dormancyClauseSql(dormant) {
+  return dormant === 'true'
+    ? ` AND ${DORMANT_ELIGIBLE_BUCKET_SQL} AND last_customer_message_at IS NOT NULL AND last_customer_message_at < now() - interval '24 hours'`
+    : ` AND (NOT (${DORMANT_ELIGIBLE_BUCKET_SQL}) OR last_customer_message_at IS NULL OR last_customer_message_at >= now() - interval '24 hours')`;
+}
+
 // One column at a time, paged — "traer todo" (2026-08-31: 2733 in "en_atencion" alone)
 // still can't mean one query that returns thousands of rows. Instead every column loads
 // its first page up front and pulls the next one as the advisor scrolls that column,
@@ -171,7 +192,8 @@ router.get('/pipeline', async (req, res, next) => {
 
     const params = [bucket];
     const { orderExpr, dateClause, unreadOnlyClause, trimmedQ, periodStartIso, periodEndIso } = buildPipelineFilters(bucket, req.query, params);
-    const { from, to, since, until, unreadOnly } = req.query;
+    const { from, to, since, until, unreadOnly, dormant } = req.query;
+    const dormancyClause = dormancyClauseSql(dormant);
 
     // "Nuevas" vs "continuas" — only computable when there's an actual period boundary
     // to compare customer.created_at against (not for "Todo" or a search, neither of
@@ -209,7 +231,7 @@ router.get('/pipeline', async (req, res, next) => {
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}`, () => pool.query(`
+    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}`, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
@@ -225,6 +247,9 @@ router.get('/pipeline', async (req, res, next) => {
       -- bucket_total and friends counted here, over the whole (small — tickets/
       -- customers, not messages) date-filtered set, before narrowing to just this one
       -- column — same reasoning for all four, just different partitioned counts.
+      -- dormancyClause references temped's OWN output columns (temperature,
+      -- last_customer_message_at), so it has to live here rather than in temped's own
+      -- WHERE — a CTE can't reference its own SELECT-list aliases in its WHERE clause.
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket,
                count(*) OVER (PARTITION BY ${BUCKET_CASE_SQL}) AS bucket_total,
@@ -232,7 +257,7 @@ router.get('/pipeline', async (req, res, next) => {
                ${newTodaySql} AS bucket_new_today_total,
                ${unreadTotalSql} AS bucket_unread_total
         FROM temped
-        WHERE true ${dateClause} ${unreadOnlyClause}
+        WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       ),
       paged AS (
         SELECT * FROM totaled WHERE bucket = $1
@@ -305,6 +330,7 @@ router.get('/pipeline/export', async (req, res, next) => {
 
     const params = [bucket];
     const { orderExpr, dateClause, unreadOnlyClause } = buildPipelineFilters(bucket, req.query, params);
+    const dormancyClause = dormancyClauseSql(req.query.dormant);
 
     const { rows } = await pool.query(`
       WITH temped AS (
@@ -319,7 +345,7 @@ router.get('/pipeline/export', async (req, res, next) => {
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket
         FROM temped
-        WHERE true ${dateClause} ${unreadOnlyClause}
+        WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       )
       SELECT full_name, whatsapp_number, stage_since, last_customer_message_at, last_customer_message
       FROM totaled WHERE bucket = $1

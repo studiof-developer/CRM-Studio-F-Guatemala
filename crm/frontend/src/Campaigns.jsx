@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow } from 'lucide-react';
+import MarketingPipeline from './MarketingPipeline.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
@@ -38,7 +39,7 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('es-GT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function Campaigns({ user }) {
+export default function Campaigns({ user, onOpenConversation }) {
   const [tab, setTab] = useState('difusion');
   const isAdmin = user?.role === 'admin';
 
@@ -55,6 +56,7 @@ export default function Campaigns({ user }) {
         <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
           {[
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
+            { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             ...(isAdmin ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -72,6 +74,7 @@ export default function Campaigns({ user }) {
 
       <div className="px-4 pb-8 md:px-8">
         {tab === 'difusion' && <DifusionTab />}
+        {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'templates' && isAdmin && <TemplatesTab />}
       </div>
     </div>
