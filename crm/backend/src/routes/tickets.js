@@ -495,10 +495,12 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
     const conversationsByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
 
     // Costo de conversión (2026-09-13): gasto en pauta (Meta Ads, act_ account in
-    // Configuración) ÷ clientes que pasaron a Pagado en el MISMO periodo — the
-    // conversion count is customers.js's own 'customer_marked_paid' audit event
-    // (access_audit), not anything from Meta, since Meta has no way to know which of
-    // its leads actually paid inside this CRM. "Todo" has no bounded range to ask Meta
+    // Configuración) ÷ clientes QUE LLEGARON POR ESA PAUTA y pasaron a Pagado en el
+    // periodo — "de los que entran por pauta, cuántos de verdad terminan comprando"
+    // (2026-09-13 clarification), not "cost per sale" in general. The conversion count
+    // is customers.js's own 'customer_marked_paid' audit event (access_audit) narrowed
+    // to a referral-tagged thread, not anything from Meta, since Meta has no way to know
+    // which of its leads actually paid inside this CRM. "Todo" has no bounded range to ask Meta
     // for — pulling an ad account's entire lifetime spend on every popup open is both
     // slow and not really what "costo de conversión" means without a period attached —
     // so the metric is simply unavailable then, same as it would be for any "since the
@@ -513,11 +515,26 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
     if (metaSinceDate && metaUntilDate) {
       try {
         const conversionParams = [];
-        const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'accessed_at');
+        const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'aa.accessed_at');
         const [conversionsResult, spend] = await Promise.all([
+          // Scoped to customers who actually arrived THROUGH a pauta — a referral-
+          // tagged message anywhere in their thread, same signal dashboard.js's
+          // pautaByDay already keys on — and NOT just "everyone who got marked paid"
+          // this period, or the number answers "how much did we spend per sale
+          // overall" instead of the ad-specific question it's named for (2026-09-13
+          // correction). The referral can predate this period by a lot (the ad click
+          // and the eventual sale are rarely the same day), so it's checked over the
+          // customer's whole history, not narrowed to the same date window as the sale.
           pool.query(
-            `SELECT count(DISTINCT customer_id) AS conversions FROM access_audit
-             WHERE action = 'customer_marked_paid' ${conversionDateClause}`,
+            `SELECT count(DISTINCT aa.customer_id) AS conversions
+             FROM access_audit aa
+             JOIN customers c ON c.id = aa.customer_id
+             WHERE aa.action = 'customer_marked_paid' ${conversionDateClause}
+               AND EXISTS (
+                 SELECT 1 FROM n8n_chat_histories h
+                 WHERE h.session_id LIKE c.whatsapp_number || '%'
+                   AND h.message->'additional_kwargs'->'referral' IS NOT NULL
+               )`,
             conversionParams
           ),
           fetchAdSpend(metaSinceDate, metaUntilDate),

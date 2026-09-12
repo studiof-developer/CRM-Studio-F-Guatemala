@@ -211,7 +211,7 @@ export default function StatsModal({ open, onClose }) {
                       icon={PIPELINE_ICON_MAP.CircleDollarSign}
                     />
                     <StatCard
-                      label="clientes pagados"
+                      label="pagados de pauta"
                       value={data.conversionCost.conversions}
                       iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
                       iconText={PIPELINE_COLOR_CLASSES.success.iconText}
