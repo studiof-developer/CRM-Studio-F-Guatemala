@@ -21,7 +21,10 @@ const ENV_WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 // WhatsApp configured" resolved successfully, the caller saw no wamid and quietly gave
 // up, and the advisor kept looking at a normal checkmark for a message that was never
 // sent to anyone. A missing config is a send failure and has to be loud.
-async function getActiveCredentials() {
+// Exported for whatsappPricing.js — "costo por mensaje" reads the same active
+// number/token this file already sends messages with, rather than asking for a
+// second, separate WhatsApp credential the admin would have to keep in sync.
+export async function getActiveCredentials() {
   const { rows } = await pool.query(
     `SELECT waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`
   );
