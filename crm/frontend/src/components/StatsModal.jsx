@@ -101,9 +101,9 @@ export default function StatsModal({ open, onClose }) {
   useChart(hourRef, () => ({
     type: 'bar',
     data: {
-      labels: (data?.messagesByHour ?? []).map((r) => `${r.hour}h`),
+      labels: (data?.conversationsByHour ?? []).map((r) => `${r.hour}h`),
       datasets: [{
-        data: (data?.messagesByHour ?? []).map((r) => r.total),
+        data: (data?.conversationsByHour ?? []).map((r) => r.total),
         backgroundColor: '#4338ca',
         borderRadius: 4,
       }],
@@ -188,9 +188,9 @@ export default function StatsModal({ open, onClose }) {
                   icon={PIPELINE_ICON_MAP.Clock}
                 />
 
-                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Mensajes por hora del día</p>
+                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
                 <div style={{ position: 'relative', height: 200 }}>
-                  <canvas ref={hourRef} role="img" aria-label="Mensajes de clientes por hora del día" />
+                  <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
                 </div>
               </>
             )}

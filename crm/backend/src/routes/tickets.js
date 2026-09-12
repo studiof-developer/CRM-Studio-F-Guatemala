@@ -426,7 +426,7 @@ function buildDateRangeClause(query, params, dateExpr) {
 // shows a card for a bucket that HAS unread messages, so an admin can't see the complete
 // picture (a bucket sitting at 0 just isn't there). This is the "show me everything, no
 // exceptions" view: every one of the 8 buckets' total+unread, plus two operational
-// numbers the board doesn't surface at all (message volume by hour of day, average time
+// numbers the board doesn't surface at all (conversation volume by hour of day, average time
 // to first advisor response) — all for whatever date range the popup's own period
 // selector is set to, independent of the board's own filter. One round trip, three cheap
 // queries, no caching layer (an on-demand popup, not a page load).
@@ -457,8 +457,13 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
         SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total
         FROM bucketed GROUP BY bucket
       `, bucketParams),
+      // count(DISTINCT session_id), not count(*) — a back-and-forth conversation with 20
+      // messages in the same hour is one conversation happening that hour, not 20. Same
+      // distinct-session reasoning dashboard.js's pautaByDay already uses for the same
+      // "count real conversations, not raw messages" problem (2026-09-12 report: this
+      // was showing 2554 "messages" at 9am, which read as 2554 conversations).
       pool.query(`
-        SELECT extract(hour FROM h.created_at AT TIME ZONE 'America/Guatemala')::int AS hour, count(*) AS total
+        SELECT extract(hour FROM h.created_at AT TIME ZONE 'America/Guatemala')::int AS hour, count(DISTINCT h.session_id) AS total
         FROM n8n_chat_histories h
         WHERE h.message->>'type' = 'human' ${historyDateClause}
         GROUP BY hour ORDER BY hour
@@ -480,11 +485,11 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
       unreadTotal: totalsByBucket[key]?.unreadTotal ?? 0,
     }));
     const countByHour = Object.fromEntries(byHour.rows.map((r) => [r.hour, Number(r.total)]));
-    const messagesByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
+    const conversationsByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
 
     res.json({
       buckets: bucketStats,
-      messagesByHour,
+      conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
     });
   } catch (err) {
