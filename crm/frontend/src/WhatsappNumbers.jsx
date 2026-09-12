@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X } from 'lucide-react';
+import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
   fetchSettings, updateSetting,
@@ -34,6 +34,7 @@ export default function Configuracion() {
             { key: 'numbers', label: 'Números de WhatsApp', icon: Smartphone },
             { key: 'pipeline', label: 'Pipeline', icon: LayoutGrid },
             { key: 'deteccion', label: 'Detección', icon: Radar },
+            { key: 'metaads', label: 'Meta Ads', icon: CircleDollarSign },
             { key: 'general', label: 'General', icon: Settings2 },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -53,6 +54,7 @@ export default function Configuracion() {
         {tab === 'numbers' && <NumbersTab />}
         {tab === 'pipeline' && <PipelineTab />}
         {tab === 'deteccion' && <DeteccionTab />}
+        {tab === 'metaads' && <MetaAdsTab />}
         {tab === 'general' && <GeneralTab />}
       </div>
     </div>
@@ -112,6 +114,103 @@ function GeneralTab() {
           {s.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(s.updatedAt)}</p>}
         </div>
       ))}
+    </section>
+  );
+}
+
+// Two settings feeding "costo de conversión" (Meta Ads spend ÷ clientes pagados en el
+// mismo periodo — el conteo de conversiones ya sale de nuestros propios datos). The
+// token is `secret: true` server-side (settings.js) — GET only ever says whether one is
+// configured, never the value, so the password field always starts blank, same UX as
+// WhatsappNumbers' own token field just below in the Números tab.
+function MetaAdsTab() {
+  const [accountId, setAccountId] = useState('');
+  const [accountIdMeta, setAccountIdMeta] = useState(null);
+  const [tokenConfigured, setTokenConfigured] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenMeta, setTokenMeta] = useState(null);
+  const [savingAccountId, setSavingAccountId] = useState(false);
+  const [savingToken, setSavingToken] = useState(false);
+
+  const load = useCallback(() => {
+    fetchSettings().then((rows) => {
+      const acct = rows.find((r) => r.key === 'meta_ads_account_id');
+      const token = rows.find((r) => r.key === 'meta_ads_access_token');
+      if (acct) { setAccountId(acct.value ?? ''); setAccountIdMeta(acct); }
+      if (token) { setTokenConfigured(token.value === true); setTokenMeta(token); }
+    }).catch((err) => showError(err.message));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSaveAccountId() {
+    setSavingAccountId(true);
+    try {
+      await updateSetting('meta_ads_account_id', accountId.trim());
+      load();
+      showSuccess('ID de cuenta guardado');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSavingAccountId(false);
+    }
+  }
+
+  async function handleSaveToken() {
+    setSavingToken(true);
+    try {
+      await updateSetting('meta_ads_access_token', tokenInput.trim());
+      setTokenInput('');
+      load();
+      showSuccess('Token guardado');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSavingToken(false);
+    }
+  }
+
+  return (
+    <section className="max-w-md rounded-2xl border border-line bg-paper p-4 md:p-8">
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-ink">{accountIdMeta?.label ?? 'ID de la cuenta publicitaria de Meta'}</label>
+        <p className="mb-2 text-xs text-greige-ink">{accountIdMeta?.description}</p>
+        <div className="flex items-center gap-3">
+          <input
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            placeholder="act_219418884450326"
+            className="w-56 rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <Button type="button" onClick={handleSaveAccountId} disabled={savingAccountId || !accountId.trim()}>
+            {savingAccountId ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </div>
+        {accountIdMeta?.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(accountIdMeta.updatedAt)}</p>}
+      </div>
+
+      <div className="mt-6 border-t border-line-soft pt-6">
+        <label className="mb-1.5 block text-sm font-medium text-ink">{tokenMeta?.label ?? 'Token de acceso de Meta Ads'}</label>
+        <p className="mb-2 text-xs text-greige-ink">{tokenMeta?.description}</p>
+        {tokenConfigured && (
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-success">
+            <CheckCircle2 size={13} /> Ya hay un token configurado
+          </p>
+        )}
+        <div className="flex items-center gap-3">
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            placeholder={tokenConfigured ? 'Dejar vacío para no cambiarlo' : 'Token con permiso ads_read'}
+            className="w-56 rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+          <Button type="button" onClick={handleSaveToken} disabled={savingToken || !tokenInput.trim()}>
+            {savingToken ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </div>
+        {tokenMeta?.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(tokenMeta.updatedAt)}</p>}
+      </div>
     </section>
   );
 }

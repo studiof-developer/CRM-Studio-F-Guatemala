@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
 import { PIPELINE_COLUMNS } from './tickets.js';
+import { encryptToken } from '../tokenCrypto.js';
 
 const router = Router();
 
@@ -79,6 +80,23 @@ const SETTINGS = {
     description: 'Se suman (no reemplazan) a las palabras ya incorporadas — útil para un banco o pasarela de pago nueva cuyo comprobante no trae ninguna de esas palabras.',
     validate: isValidPhraseList,
   },
+  // "Costo de conversión" (2026-09-13): gasto en pauta ÷ clientes pagados en el mismo
+  // periodo — el conteo de conversiones ya sale de nuestros propios datos, solo el gasto
+  // viene de Meta. account_id no es secreto (solo un identificador); el token sí, así
+  // que nunca vuelve en la respuesta de GET una vez guardado (ver `secret` abajo) —
+  // mismo criterio que whatsapp_numbers.access_token_enc, solo que aquí es un único
+  // valor global en vez de una fila por número.
+  meta_ads_account_id: {
+    label: 'ID de la cuenta publicitaria de Meta',
+    description: 'El "Identificador" que aparece en Meta Business → Cuentas publicitarias, con o sin el prefijo "act_".',
+    validate: (v) => typeof v === 'string' && /^(act_)?\d{5,20}$/.test(v.trim()),
+  },
+  meta_ads_access_token: {
+    label: 'Token de acceso de Meta Ads (permiso ads_read)',
+    description: 'Token de un usuario del sistema de Meta Business con permiso ads_read sobre esa cuenta — usado solo para leer el gasto en pauta.',
+    secret: true,
+    validate: (v) => typeof v === 'string' && v.trim().length > 20,
+  },
 };
 
 // Read by every logged-in role (the Pipeline board itself needs pipeline_columns to
@@ -88,13 +106,21 @@ router.get('/', async (req, res, next) => {
     const keys = Object.keys(SETTINGS);
     const { rows } = await pool.query(`SELECT key, value, updated_at FROM app_settings WHERE key = ANY($1)`, [keys]);
     const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
-    res.json(keys.map((key) => ({
-      key,
-      label: SETTINGS[key].label,
-      description: SETTINGS[key].description,
-      value: byKey[key]?.value ?? null,
-      updatedAt: byKey[key]?.updated_at ?? null,
-    })));
+    res.json(keys.map((key) => {
+      const spec = SETTINGS[key];
+      const stored = byKey[key];
+      return {
+        key,
+        label: spec.label,
+        description: spec.description,
+        secret: spec.secret ?? false,
+        // A secret's real (encrypted) value never round-trips back out — just whether
+        // one is currently set, same as whatsapp_numbers never returning the plaintext
+        // token, only tokenLast4.
+        value: spec.secret ? Boolean(stored?.value) : (stored?.value ?? null),
+        updatedAt: stored?.updated_at ?? null,
+      };
+    }));
   } catch (err) { next(err); }
 });
 
@@ -105,13 +131,14 @@ router.put('/:key', requireRole('admin'), async (req, res, next) => {
     if (!spec) return res.status(404).json({ error: 'unknown setting' });
     const { value } = req.body ?? {};
     if (!spec.validate(value)) return res.status(400).json({ error: 'invalid value' });
+    const storedValue = spec.secret ? encryptToken(value.trim()) : value;
     const { rows } = await pool.query(
       `INSERT INTO app_settings (key, value, updated_at, updated_by) VALUES ($1, $2::jsonb, now(), $3)
        ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = now(), updated_by = $3
        RETURNING value, updated_at`,
-      [key, JSON.stringify(value), req.user.id]
+      [key, JSON.stringify(storedValue), req.user.id]
     );
-    res.json({ key, value: rows[0].value, updatedAt: rows[0].updated_at });
+    res.json({ key, value: spec.secret ? true : rows[0].value, updatedAt: rows[0].updated_at });
   } catch (err) { next(err); }
 });
 
