@@ -4,7 +4,6 @@ import { requireRole } from '../auth.js';
 import { PIPELINE_COLUMNS } from './tickets.js';
 import { encryptToken } from '../tokenCrypto.js';
 import { testMetaAdsConnection } from '../metaAds.js';
-import { testPricingAnalytics } from '../whatsappPricing.js';
 
 const router = Router();
 
@@ -157,18 +156,6 @@ router.get('/meta-ads/test', requireRole('admin'), async (req, res, next) => {
   }
 });
 
-// TEMPORARY discovery endpoint for "costo por mensaje" (2026-09-13) — returns Meta's raw
-// pricing_analytics response verbatim, no parsing, so the real field shape can be
-// confirmed against Studio F's own WABA before anything is built on top of it. Delete
-// once fetchMessageCost() exists and reads real fields instead of guessing.
-router.get('/whatsapp-pricing/test', requireRole('admin'), async (req, res, next) => {
-  try {
-    const result = await testPricingAnalytics();
-    res.json({ ok: true, result });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
-  }
-});
 
 export default router;
 

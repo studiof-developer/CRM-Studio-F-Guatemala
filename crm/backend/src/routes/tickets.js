@@ -5,6 +5,7 @@ import { logAccess, logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { fetchAdSpend } from '../metaAds.js';
+import { fetchMessageCost } from '../whatsappPricing.js';
 
 const router = Router();
 
@@ -561,12 +562,30 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
       }
     }
 
+    // Costo por mensaje (2026-09-13) — WhatsApp's own pricing_analytics, confirmed
+    // against Studio F's real WABA: SERVICE (a normal reply inside the customer-opened
+    // 24h window) always costs 0, MARKETING is what's actually billed. Same
+    // period/config-vs-no-range distinction as conversionCost above.
+    let messageCost = null;
+    let messageCostError = null;
+    if (metaSinceDate && metaUntilDate) {
+      try {
+        const cost = await fetchMessageCost(metaSinceDate, metaUntilDate);
+        if (cost !== null) messageCost = cost;
+        else messageCostError = 'WhatsApp no está configurado — agrega un número activo en Configuración > Números de WhatsApp';
+      } catch (err) {
+        messageCostError = err.message;
+      }
+    }
+
     res.json({
       buckets: bucketStats,
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
       conversionCost,
       conversionCostError,
+      messageCost,
+      messageCostError,
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

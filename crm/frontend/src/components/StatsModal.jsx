@@ -25,6 +25,11 @@ function formatMinutes(m) {
   return `${(m / 60).toFixed(1)} h`;
 }
 
+// Meta's own pricing_category values, confirmed against Studio F's WABA (MARKETING,
+// SERVICE) plus the two other billable categories the docs list — shown as whatever
+// Meta actually sends if a new one ever shows up, rather than hiding it.
+const PRICING_CATEGORY_LABELS = { MARKETING: 'Marketing', UTILITY: 'Utilidad', AUTHENTICATION: 'Autenticación', SERVICE: 'Servicio (gratis)', AI_BOT: 'Bot IA' };
+
 function formatMoney(amount, currency) {
   try {
     return new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(amount);
@@ -230,6 +235,50 @@ export default function StatsModal({ open, onClose }) {
                   <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
                 )}
                 {!data.conversionCost && !data.conversionCostError && (
+                  <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                )}
+
+                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
+                {data.messageCost && (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <StatCard
+                        label="gasto acumulado"
+                        value={formatMoney(data.messageCost.totalCost, data.messageCost.currency)}
+                        iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
+                        iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
+                        icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                      />
+                      <StatCard
+                        label="mensajes cobrados"
+                        value={data.messageCost.billableVolume}
+                        iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
+                        iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
+                        icon={PIPELINE_ICON_MAP.MessageSquareWarning}
+                      />
+                      <StatCard
+                        label="promedio por mensaje"
+                        value={data.messageCost.avgCostPerMessage != null ? formatMoney(data.messageCost.avgCostPerMessage, data.messageCost.currency) : 'Sin mensajes cobrados'}
+                        iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                        iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                        icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                      />
+                    </div>
+                    {data.messageCost.byCategory.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {data.messageCost.byCategory.map((c) => (
+                          <span key={c.category} className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] text-greige-ink">
+                            {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, data.messageCost.currency)}/msg` : 'gratis'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                {data.messageCostError && (
+                  <p className="text-xs text-danger">No se pudo leer WhatsApp: {data.messageCostError}</p>
+                )}
+                {!data.messageCost && !data.messageCostError && (
                   <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
                 )}
 

@@ -1,18 +1,19 @@
-// "Costo por mensaje" (2026-09-13, still in discovery) — Meta moved WhatsApp billing
-// from per-conversation to per-message on 2025-07-01; the field that replaced the now-
-// deprecated conversation_analytics is pricing_analytics on the WhatsApp Business
-// Account node. Its outer request shape is documented (start/end as unix timestamps,
-// granularity, metric_types, dimensions, pricing_categories — see
-// developers.facebook.com/docs/graph-api/reference/whats-app-business-account/pricing_analytics),
-// but the actual per-row field names in the response aren't spelled out anywhere public,
-// so this starts as a raw pass-through against the real account instead of code written
-// blind against a guessed shape — see testPricingAnalytics's route in settings.js.
+// "Costo por mensaje" — Meta moved WhatsApp billing from per-conversation to
+// per-message on 2025-07-01; the field that replaced the now-deprecated
+// conversation_analytics is pricing_analytics on the WhatsApp Business Account node.
+// Confirmed against Studio F's own WABA (2026-09-13): each data_point carries
+// {start, end, pricing_category, volume, cost} — SERVICE (a normal reply inside the
+// customer-opened 24h window) always costs 0; MARKETING is the category that's
+// actually billed, at a flat per-message rate (confirmed 0.074/msg across every row
+// seen). No currency field anywhere in the response — Meta's WhatsApp Business
+// Platform bills in USD by default (unlike Ads, which reports in the ad account's own
+// currency), so that's assumed here; if Studio F's actual invoice ever comes back in
+// something else, this is the one place to change it.
 import { getActiveCredentials } from './whatsapp.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
+const CURRENCY = 'USD';
 
-// Same reasoning as metaAds.js's graphGet — Meta's own {error:{message}} beats a bare
-// status code for figuring out what a real WABA/token is missing.
 async function graphGet(path, token) {
   const res = await fetch(`${GRAPH_BASE}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
   const body = await res.json();
@@ -20,18 +21,14 @@ async function graphGet(path, token) {
   return body;
 }
 
-// Raw response, deliberately unparsed — read via Configuración's discovery test until
-// the real field names are confirmed against Studio F's own WABA, then this becomes the
-// basis for a real fetchMessageCost()-style function next to metaAds.js's fetchAdSpend.
-export async function testPricingAnalytics(days = 7) {
-  const creds = await getActiveCredentials();
-  if (!creds.wabaId) throw new Error('Falta el waba_id del número activo — revisa Configuración > Números de WhatsApp');
-  const end = Math.floor(Date.now() / 1000);
-  const start = end - days * 86400;
-  // Array-type Graph API params want a JSON-encoded array, not repeated key=value pairs
-  // (metaAds.js's time_range needed the same JSON-string treatment for an object) — the
-  // first attempt at this used repeated params and got volume back with no cost field
-  // at all, which is what asking for an array parameter the wrong way looks like here.
+// Total + per-category message cost over [since, until] (YYYY-MM-DD each, Guatemala
+// calendar days). Array-type Graph API params want a JSON-encoded array, not repeated
+// key=value pairs (same convention metaAds.js's time_range needs for an object).
+export async function fetchMessageCost(since, until) {
+  const creds = await getActiveCredentials().catch(() => null);
+  if (!creds?.wabaId) return null;
+  const start = Math.floor(new Date(`${since}T00:00:00-06:00`).getTime() / 1000);
+  const end = Math.floor(new Date(`${until}T23:59:59-06:00`).getTime() / 1000);
   const params = new URLSearchParams({
     start: String(start),
     end: String(end),
@@ -39,5 +36,32 @@ export async function testPricingAnalytics(days = 7) {
     metric_types: JSON.stringify(['COST', 'VOLUME']),
     dimensions: JSON.stringify(['PRICING_CATEGORY']),
   });
-  return graphGet(`${creds.wabaId}/pricing_analytics?${params}`, creds.token);
+  const body = await graphGet(`${creds.wabaId}/pricing_analytics?${params}`, creds.token);
+  const points = body.data?.[0]?.data_points ?? [];
+
+  let totalCost = 0;
+  let billableVolume = 0;
+  const byCategory = {};
+  for (const p of points) {
+    const cost = p.cost ?? 0;
+    const volume = p.volume ?? 0;
+    totalCost += cost;
+    if (cost > 0) billableVolume += volume;
+    const entry = byCategory[p.pricing_category] ?? { volume: 0, cost: 0 };
+    entry.volume += volume;
+    entry.cost += cost;
+    byCategory[p.pricing_category] = entry;
+  }
+  return {
+    currency: CURRENCY,
+    totalCost,
+    billableVolume,
+    avgCostPerMessage: billableVolume > 0 ? totalCost / billableVolume : null,
+    byCategory: Object.entries(byCategory).map(([category, { volume, cost }]) => ({
+      category,
+      volume,
+      cost,
+      costPerMessage: cost > 0 && volume > 0 ? cost / volume : 0,
+    })),
+  };
 }
