@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchLastAdvisorActivity, fetchSettings } from './api.js';
+import { fetchPipelineColumn, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -9,6 +9,7 @@ import { formatWait, minutesSince } from './lib/sla.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
+import { guatemalaToday, addDays, monthBounds, MONTH_NAMES, PERIOD_OPTIONS, guatemalaMidnight, useDayCutoffs } from './lib/pipelinePeriod.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
 // name — see the 2026-08-31 conversation that settled this. "No atendidos" comes from
@@ -60,31 +61,6 @@ function formatMinutes(m) {
   return m % 60 === 0 ? `${m / 60}h` : `${m} min`;
 }
 
-// Guatemala never observes DST — a fixed -06 offset always gives today's real local
-// calendar date regardless of the browser's own timezone, matching the same
-// convention the "Sin responder" report and the backend's own pipeline date filter use.
-function guatemalaToday() {
-  return new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
-}
-function addDays(dateStr, days) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-function monthBounds(year, month) {
-  const from = `${year}-${String(month).padStart(2, '0')}-01`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return { from, to: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` };
-}
-const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const PERIOD_OPTIONS = [
-  { value: 'todo', label: 'Todo', icon: LayoutGrid, iconClassName: 'text-greige-ink' },
-  { value: 'hoy', label: 'Hoy', icon: Calendar, iconClassName: 'text-accent' },
-  { value: 'ayer', label: 'Ayer', icon: Calendar, iconClassName: 'text-accent' },
-  { value: 'semana', label: 'Última semana', icon: Calendar, iconClassName: 'text-accent' },
-  { value: 'mes', label: 'Mes', icon: Calendar, iconClassName: 'text-accent' },
-  { value: 'personalizado', label: 'Periodo personalizado', icon: Calendar, iconClassName: 'text-accent' },
-];
 function emptyColumn(key) {
   return { cards: [], total: 0, newTotal: null, continuingTotal: null, newTodayTotal: 0, unreadTotal: 0, offset: 0, loading: false, sort: DEFAULT_SORT[key] ?? 'desc' };
 }
@@ -185,19 +161,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const [customTo, setCustomTo] = useState(todayStr);
   const [onlyColumn, setOnlyColumn] = useState('');
 
-  // "Hoy"/"Ayer" don't cut at calendar midnight — they cut at the last moment staff
-  // (advisor/supervisor/admin, all tagged sentBy:'advisor') wrote before that day
-  // started, since a shift's leftover backlog from 11pm is "today's" work, not
-  // yesterday's. Fetched once on mount, not kept live — a fixed snapshot for the
-  // session, same reasoning as the old "Novedades" idea this replaces.
-  const guatemalaMidnight = (dateStr) => `${dateStr}T00:00:00-06:00`;
-  const [todayCutoff, setTodayCutoff] = useState(null);
-  const [yesterdayCutoff, setYesterdayCutoff] = useState(null);
-  useEffect(() => {
-    fetchLastAdvisorActivity(guatemalaMidnight(todayStr)).then(({ timestamp }) => setTodayCutoff(timestamp)).catch(() => {});
-    fetchLastAdvisorActivity(guatemalaMidnight(addDays(todayStr, -1))).then(({ timestamp }) => setYesterdayCutoff(timestamp)).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { todayCutoff, yesterdayCutoff } = useDayCutoffs(todayStr);
 
   let dateFrom, dateTo, sinceTs, untilTs;
   if (periodPreset === 'hoy') { sinceTs = todayCutoff ?? guatemalaMidnight(todayStr); }

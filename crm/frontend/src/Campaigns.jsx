@@ -55,8 +55,8 @@ export default function Campaigns({ user, onOpenConversation }) {
 
         <div className="inline-flex flex-wrap rounded-xl border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1">
           {[
-            { key: 'difusion', label: 'Difusión', icon: Megaphone },
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
+            { key: 'difusion', label: 'Difusión', icon: Megaphone },
             ...(isAdmin ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
