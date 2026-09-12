@@ -446,13 +446,19 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                  GREATEST(t.updated_at, c.updated_at) AS stage_since,
-                 c.has_unread AS customer_has_unread
+                 c.has_unread AS customer_has_unread,
+                 c.last_customer_message_at, c.last_message_at
           FROM tickets t JOIN customers c ON c.id = t.customer_id
           WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
         ),
+        -- Same dormancy exclusion the advisor board itself applies (dormant absent —
+        -- this popup is scoped to the advisor Pipeline, never Marketing's dormant view)
+        -- — without it, a dormant en_atencion/cotizacion/medio_pago contact counted here
+        -- but not on the board it's meant to mirror (2026-09-13 report: this was showing
+        -- 3759 "En conversación" while the actual board, post-dormancy, showed ~20).
         bucketed AS (
           SELECT ${BUCKET_CASE_SQL} AS bucket, customer_has_unread
-          FROM temped WHERE true ${bucketDateClause}
+          FROM temped WHERE true ${bucketDateClause} ${dormancyClauseSql()}
         )
         SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total
         FROM bucketed GROUP BY bucket
