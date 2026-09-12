@@ -40,7 +40,7 @@ function formatDateTime(iso) {
 }
 
 export default function Campaigns({ user, onOpenConversation }) {
-  const [tab, setTab] = useState('difusion');
+  const [tab, setTab] = useState('pipeline');
   const isAdmin = user?.role === 'admin';
 
   return (
