@@ -66,11 +66,22 @@ const BUCKET_CASE_SQL = `
 // aliases in its own WHERE clause, so the raw expression has to be repeated here at the
 // same level. Same 24h condition audit.js's /unanswered already uses
 // (c.last_customer_message_at <= now() - interval '24 hours').
+//
+// last_customer_message_at is NULL for a contact who never wrote back at all — only
+// ever received an outbound bot/advisor message (e.g. a Meta-ad lead that got the
+// welcome template and went silent) — and NULL was being treated as "nothing to judge
+// staleness against, leave it alone", which pinned these ancient, obviously-cold
+// contacts on the advisor board forever (2026-09-12 report: months-old threads still
+// showing in "En conversación"). There's no customer-opened WhatsApp window to measure
+// in that case, but functionally it's the same "needs a template, not a normal reply"
+// situation, so it falls back to last_message_at — whichever side wrote last (db/init/
+// 046), always set once ANY message exists — to judge staleness instead of exempting it.
 const DORMANT_ELIGIBLE_BUCKET_SQL = `(${BUCKET_CASE_SQL}) IN ('en_atencion', 'cotizacion', 'medio_pago')`;
+const DORMANCY_TIMESTAMP_SQL = `COALESCE(last_customer_message_at, last_message_at)`;
 function dormancyClauseSql(dormant) {
   return dormant === 'true'
-    ? ` AND ${DORMANT_ELIGIBLE_BUCKET_SQL} AND last_customer_message_at IS NOT NULL AND last_customer_message_at < now() - interval '24 hours'`
-    : ` AND (NOT (${DORMANT_ELIGIBLE_BUCKET_SQL}) OR last_customer_message_at IS NULL OR last_customer_message_at >= now() - interval '24 hours')`;
+    ? ` AND ${DORMANT_ELIGIBLE_BUCKET_SQL} AND ${DORMANCY_TIMESTAMP_SQL} IS NOT NULL AND ${DORMANCY_TIMESTAMP_SQL} < now() - interval '24 hours'`
+    : ` AND (NOT (${DORMANT_ELIGIBLE_BUCKET_SQL}) OR ${DORMANCY_TIMESTAMP_SQL} IS NULL OR ${DORMANCY_TIMESTAMP_SQL} >= now() - interval '24 hours')`;
 }
 
 // One column at a time, paged — "traer todo" (2026-08-31: 2733 in "en_atencion" alone)
@@ -337,7 +348,8 @@ router.get('/pipeline/export', async (req, res, next) => {
         SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                c.full_name, c.whatsapp_number,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
-               c.last_customer_message_at, c.last_customer_message
+               c.last_customer_message_at, c.last_customer_message,
+               c.last_message_at, c.last_message
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
@@ -347,7 +359,8 @@ router.get('/pipeline/export', async (req, res, next) => {
         FROM temped
         WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       )
-      SELECT full_name, whatsapp_number, stage_since, last_customer_message_at, last_customer_message
+      SELECT full_name, whatsapp_number, stage_since,
+             last_customer_message_at, last_customer_message, last_message_at, last_message
       FROM totaled WHERE bucket = $1
       ORDER BY ${orderExpr} ASC
       LIMIT ${EXPORT_ROW_CAP}
@@ -357,8 +370,12 @@ router.get('/pipeline/export', async (req, res, next) => {
       fullName: r.full_name,
       whatsappNumber: r.whatsapp_number,
       stageSince: r.stage_since,
-      lastMessageAt: r.last_customer_message_at,
-      lastMessage: r.last_customer_message,
+      // Falls back to the generic last-message columns for a contact who never wrote
+      // back at all (last_customer_message_at is NULL for those) — same reasoning as
+      // DORMANCY_TIMESTAMP_SQL above, otherwise these rows exported with a blank
+      // "Último mensaje" and "Sin responder desde" fell back all the way to stage_since.
+      lastMessageAt: r.last_customer_message_at ?? r.last_message_at,
+      lastMessage: r.last_customer_message ?? r.last_message,
     })));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
