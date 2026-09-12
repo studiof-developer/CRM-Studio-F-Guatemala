@@ -4,6 +4,7 @@ import { isValidStatus } from '../ticketStatus.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
+import { fetchAdSpend } from '../metaAds.js';
 
 const router = Router();
 
@@ -493,10 +494,62 @@ router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
     const countByHour = Object.fromEntries(byHour.rows.map((r) => [r.hour, Number(r.total)]));
     const conversationsByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
 
+    // Costo de conversión (2026-09-13): gasto en pauta (Meta Ads, act_ account in
+    // Configuración) ÷ clientes que pasaron a Pagado en el MISMO periodo — the
+    // conversion count is customers.js's own 'customer_marked_paid' audit event
+    // (access_audit), not anything from Meta, since Meta has no way to know which of
+    // its leads actually paid inside this CRM. "Todo" has no bounded range to ask Meta
+    // for — pulling an ad account's entire lifetime spend on every popup open is both
+    // slow and not really what "costo de conversión" means without a period attached —
+    // so the metric is simply unavailable then, same as it would be for any "since the
+    // beginning of time" spend figure.
+    const { from, to, since, until } = req.query;
+    const guatemalaDateOnly = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
+    const metaSinceDate = since ? guatemalaDateOnly(since) : (from ?? null);
+    const metaUntilDate = until ? guatemalaDateOnly(until) : (to ?? (metaSinceDate ? guatemalaDateOnly(new Date().toISOString()) : null));
+
+    let conversionCost = null;
+    let conversionCostError = null;
+    if (metaSinceDate && metaUntilDate) {
+      try {
+        const conversionParams = [];
+        const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'accessed_at');
+        const [conversionsResult, spend] = await Promise.all([
+          pool.query(
+            `SELECT count(DISTINCT customer_id) AS conversions FROM access_audit
+             WHERE action = 'customer_marked_paid' ${conversionDateClause}`,
+            conversionParams
+          ),
+          fetchAdSpend(metaSinceDate, metaUntilDate),
+        ]);
+        if (spend !== null) {
+          const conversions = Number(conversionsResult.rows[0].conversions);
+          conversionCost = {
+            spend: spend.spend,
+            currency: spend.currency,
+            conversions,
+            costPerConversion: conversions > 0 ? spend.spend / conversions : null,
+          };
+        } else {
+          // A period WAS picked (that's the only way this branch runs at all) — null
+          // here means "not configured", not "no range chosen", and the frontend can't
+          // tell those two null/null states apart on its own, so it has to be spelled
+          // out as an error rather than left silent the way "Todo" is.
+          conversionCostError = 'Meta Ads no está configurado — agrégalo en Configuración > Meta Ads';
+        }
+      } catch (err) {
+        // Meta Ads misconfigured/unreachable shouldn't take the whole popup down with
+        // it — the bucket/hour/response-delay numbers above are still good on their own.
+        conversionCostError = err.message;
+      }
+    }
+
     res.json({
       buckets: bucketStats,
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
+      conversionCost,
+      conversionCostError,
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

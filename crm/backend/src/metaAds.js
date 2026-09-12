@@ -36,12 +36,17 @@ export async function testMetaAdsConnection() {
   return { name: account.name, currency: account.currency, accountStatus: account.account_status };
 }
 
-// Total spend (in the ad account's own currency) over [since, until] — YYYY-MM-DD each.
+// Spend (in the ad account's own currency — MIILA reports in COP, confirmed via
+// "Probar conexión") over [since, until], YYYY-MM-DD each. Two calls in parallel: the
+// insights endpoint has no currency field of its own, only the AdAccount object does.
 export async function fetchAdSpend(since, until) {
   const creds = await getMetaAdsCredentials();
   if (!creds) return null;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
-  const body = await graphGet(`act_${creds.accountId}/insights?fields=spend&time_range=${timeRange}`, creds.token);
-  const row = body.data?.[0];
-  return row ? Number(row.spend) : 0;
+  const [insights, account] = await Promise.all([
+    graphGet(`act_${creds.accountId}/insights?fields=spend&time_range=${timeRange}`, creds.token),
+    graphGet(`act_${creds.accountId}?fields=currency`, creds.token),
+  ]);
+  const row = insights.data?.[0];
+  return { spend: row ? Number(row.spend) : 0, currency: account.currency };
 }

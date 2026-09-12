@@ -188,6 +188,39 @@ export default function StatsModal({ open, onClose }) {
                   icon={PIPELINE_ICON_MAP.Clock}
                 />
 
+                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
+                {data.conversionCost && (
+                  <div className="flex flex-wrap gap-2">
+                    <StatCard
+                      label="gasto en pauta"
+                      value={`${data.conversionCost.spend.toFixed(2)} ${data.conversionCost.currency}`}
+                      iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
+                      iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
+                      icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                    />
+                    <StatCard
+                      label="clientes pagados"
+                      value={data.conversionCost.conversions}
+                      iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
+                      iconText={PIPELINE_COLOR_CLASSES.success.iconText}
+                      icon={PIPELINE_ICON_MAP.CheckCircle2}
+                    />
+                    <StatCard
+                      label="por conversión"
+                      value={data.conversionCost.costPerConversion != null ? `${data.conversionCost.costPerConversion.toFixed(2)} ${data.conversionCost.currency}` : 'Sin conversiones'}
+                      iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                      iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                      icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                    />
+                  </div>
+                )}
+                {data.conversionCostError && (
+                  <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
+                )}
+                {!data.conversionCost && !data.conversionCostError && (
+                  <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                )}
+
                 <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
                 <div style={{ position: 'relative', height: 200 }}>
                   <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
