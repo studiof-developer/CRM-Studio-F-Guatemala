@@ -36,6 +36,10 @@ function InstagramGlyph({ size }) {
 }
 
 function MessengerGlyph({ size }) {
+  // A full circle background, not the real logo's pointed-tail bubble — Avatar.jsx always
+  // clips this into a circular mask (rounded-full overflow-hidden), which cropped that
+  // asymmetric tail shape into an illegible blob. WhatsApp/Instagram's marks are already
+  // circle/square-ish so the same clip doesn't hurt them; Messenger needed this fix.
   return (
     <svg viewBox="0 0 32 32" width={size} height={size}>
       <defs>
@@ -45,8 +49,8 @@ function MessengerGlyph({ size }) {
           <stop offset="1" stopColor="#A100FF" />
         </linearGradient>
       </defs>
-      <path fill="url(#msgr-grad)" d="M16 2C8.3 2 2 7.8 2 15.2c0 4.2 2 7.9 5.2 10.3V30l4.7-2.6c1.3.4 2.7.6 4.1.6 7.7 0 14-5.8 14-13.2S23.7 2 16 2Z" />
-      <path fill="#fff" d="m9 19.4 5.1-5.4 4.1 3.9 5.6-6.1-5.1 5.4-4.1-3.9L9 19.4Z" />
+      <circle cx="16" cy="16" r="16" fill="url(#msgr-grad)" />
+      <path fill="#fff" d="M16.1 8.7 7.6 18.9h7.6l-.8 6.8 8.5-10.2h-7.7l.9-6.8Z" />
     </svg>
   );
 }

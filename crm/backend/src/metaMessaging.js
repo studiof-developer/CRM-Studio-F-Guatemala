@@ -79,7 +79,12 @@ export async function fetchProfileName(externalId) {
   try {
     const result = await graphFetch(`${externalId}?fields=name,username,first_name,last_name`, { method: 'GET' }, creds.token);
     return result?.name || result?.username || [result?.first_name, result?.last_name].filter(Boolean).join(' ') || null;
-  } catch {
+  } catch (err) {
+    // Logged (not swallowed) on purpose — Meta's User Profile API for a Messenger PSID
+    // has been permission-restricted since 2018 for most apps, so a 400 here is expected
+    // and worth seeing once to confirm rather than guess; Instagram IGSIDs are less
+    // restricted and more likely to actually return a username.
+    console.error('fetchProfileName failed', err.message);
     return null;
   }
 }
