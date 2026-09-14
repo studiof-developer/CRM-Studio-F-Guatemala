@@ -2,8 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { Smartphone, Plus, Trash2, CheckCircle2, ShieldAlert, Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign } from 'lucide-react';
 import {
   fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber,
-  fetchSettings, updateSetting, testMetaAdsConnection,
+  fetchSettings, updateSetting, testMetaAdsConnection, testSocialConnection,
 } from './api.js';
+import { ChannelIcon } from './lib/channelIcons.jsx';
+
+// lucide-react dropped brand/logo icons — reuses our own Instagram mark for the tab
+// instead of a generic lucide glyph, same icon shown next to Instagram threads elsewhere.
+function SocialTabIcon({ size }) {
+  return <ChannelIcon channel="instagram" size={size} />;
+}
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
@@ -35,6 +42,7 @@ export default function Configuracion() {
             { key: 'pipeline', label: 'Pipeline', icon: LayoutGrid },
             { key: 'deteccion', label: 'Detección', icon: Radar },
             { key: 'metaads', label: 'Meta Ads', icon: CircleDollarSign },
+            { key: 'social', label: 'Redes sociales', icon: SocialTabIcon },
             { key: 'general', label: 'General', icon: Settings2 },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -55,6 +63,7 @@ export default function Configuracion() {
         {tab === 'pipeline' && <PipelineTab />}
         {tab === 'deteccion' && <DeteccionTab />}
         {tab === 'metaads' && <MetaAdsTab />}
+        {tab === 'social' && <SocialTab />}
         {tab === 'general' && <GeneralTab />}
       </div>
     </div>
@@ -243,6 +252,121 @@ function MetaAdsTab() {
         {testResult?.ok && (
           <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-success">
             <CheckCircle2 size={13} /> Conectado a "{testResult.name}" ({testResult.currency})
+          </p>
+        )}
+        {testResult && !testResult.ok && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-danger">
+            <X size={13} /> {testResult.error}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// 5 credentials for the Instagram/Messenger inbox (2026-09-14) — one Meta App,
+// separate from WhatsApp's, one Page Access Token covering both channels. Loops over
+// a field list instead of 5 sets of useState, same values/settingsByKey shape as
+// GeneralTab just below.
+const SOCIAL_FIELDS = [
+  { key: 'meta_page_id', placeholder: '61551234567890' },
+  { key: 'meta_ig_business_id', placeholder: '17841400000000000' },
+  { key: 'meta_page_access_token', placeholder: 'Token con permisos de mensajería' },
+  { key: 'meta_app_secret', placeholder: 'App Secret de la App de Meta' },
+  { key: 'meta_webhook_verify_token', placeholder: 'Frase que también escribes en Meta' },
+];
+
+function SocialTab() {
+  const [settingsByKey, setSettingsByKey] = useState({});
+  const [inputs, setInputs] = useState({});
+  const [saving, setSaving] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  const load = useCallback(() => {
+    fetchSettings().then((rows) => {
+      setSettingsByKey(Object.fromEntries(rows.filter((r) => SOCIAL_FIELDS.some((f) => f.key === r.key)).map((r) => [r.key, r])));
+    }).catch((err) => showError(err.message));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSave(key) {
+    const value = (inputs[key] ?? '').trim();
+    if (!value) return;
+    setSaving(key);
+    try {
+      await updateSetting(key, value);
+      setInputs((prev) => ({ ...prev, [key]: '' }));
+      load();
+      showSuccess('Guardado');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testSocialConnection();
+      setTestResult(result);
+      if (!result.ok) showError(result.error);
+    } catch (err) {
+      setTestResult({ ok: false, error: err.message });
+      showError(err.message);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <section className="max-w-md rounded-2xl border border-line bg-paper p-4 md:p-8">
+      <p className="mb-6 text-sm text-greige-ink">
+        Credenciales de la App de Meta usada para la bandeja de Instagram y Messenger — una App separada de la que envía WhatsApp.
+      </p>
+      {SOCIAL_FIELDS.map(({ key, placeholder }, i) => {
+        const meta = settingsByKey[key];
+        const configured = Boolean(meta?.value);
+        return (
+          <div key={key} className={i > 0 ? 'mt-6 border-t border-line-soft pt-6' : ''}>
+            <label className="mb-1.5 block text-sm font-medium text-ink">{meta?.label ?? key}</label>
+            <p className="mb-2 text-xs text-greige-ink">{meta?.description}</p>
+            {configured && (
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-success">
+                <CheckCircle2 size={13} /> {meta?.secret ? 'Ya hay un valor configurado' : `Valor actual: ${meta.value}`}
+              </p>
+            )}
+            <div className="flex items-center gap-3">
+              <input
+                type={meta?.secret ? 'password' : 'text'}
+                value={inputs[key] ?? ''}
+                onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={configured ? 'Dejar vacío para no cambiarlo' : placeholder}
+                className="w-56 rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              />
+              <Button type="button" onClick={() => handleSave(key)} disabled={saving === key || !(inputs[key] ?? '').trim()}>
+                {saving === key ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+            {meta?.updatedAt && <p className="mt-1.5 text-xs text-greige">Última edición: {formatDate(meta.updatedAt)}</p>}
+          </div>
+        );
+      })}
+
+      <div className="mt-6 border-t border-line-soft pt-6">
+        <button
+          type="button"
+          onClick={handleTest}
+          disabled={testing}
+          className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+        >
+          <ShieldAlert size={13} /> {testing ? 'Probando…' : 'Probar conexión'}
+        </button>
+        {testResult?.ok && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-success">
+            <CheckCircle2 size={13} /> Conectado a "{testResult.name}"
           </p>
         )}
         {testResult && !testResult.ok && (

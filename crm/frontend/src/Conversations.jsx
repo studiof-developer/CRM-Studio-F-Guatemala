@@ -10,12 +10,14 @@ import {
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
+  fetchSocialMessages, sendSocialMessage,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
+import { CHANNEL_LABELS } from './lib/channelIcons.jsx';
 import Avatar from './components/Avatar.jsx';
 import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -56,6 +58,12 @@ const TEMP_FILTER_OPTIONS = [
 const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
   value: k, label: PAID_METHOD_LABELS[k], icon: PAID_METHOD_ICONS[k], iconClassName: 'text-greige-ink',
 }));
+const CHANNEL_FILTER_OPTIONS = [
+  { value: '', label: 'Todas las redes' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'messenger', label: 'Messenger' },
+];
 
 // Turns a message into what its quote preview should show — a document shows its
 // filename (not a generic "Adjunto"), an image shows nothing here since the preview
@@ -106,6 +114,110 @@ function describeQuoted(msg, from) {
   const att = msg.attachment;
   const content = msg.content?.trim() || describeAttachment(att);
   return { from, content, attachmentKind: att?.kind ?? null, attachmentId: att?.id ?? null };
+}
+
+// Deliberately separate from the WhatsApp thread above — no tickets, no quotes/replies,
+// no attachments yet (2026-09-14 plan: Instagram/Messenger inbox stays a simple sibling
+// view rather than bending the WhatsApp-specific thread machinery to a second identity
+// shape). Polls instead of using live SSE — the webhook receiver doesn't broadcast an
+// event yet, fine for Phase 1's test-mode traffic volume.
+function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack }) {
+  const [messages, setMessages] = useState(null);
+  const [error, setError] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef(null);
+
+  const load = useCallback(() => {
+    if (!contactId) return;
+    fetchSocialMessages(contactId).then((rows) => { setMessages(rows); setError(null); }).catch((err) => setError(err.message));
+  }, [contactId]);
+
+  useEffect(() => { setMessages(null); load(); }, [load]);
+  useEffect(() => {
+    const id = setInterval(load, 8000);
+    return () => clearInterval(id);
+  }, [load]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }); }, [messages]);
+
+  async function handleSend(e) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      await sendSocialMessage(contactId, text);
+      setDraft('');
+      load();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="flex w-full items-center gap-3 border-b border-line bg-paper px-5 py-3">
+        {!singleThreadMode && (
+          <span
+            role="button"
+            onClick={onBack}
+            className="-ml-1 flex shrink-0 items-center justify-center rounded-full p-1.5 text-greige-ink hover:bg-black/[0.05] dark:hover:bg-white/[0.08] md:hidden"
+          >
+            <ArrowLeft size={18} />
+          </span>
+        )}
+        <Avatar channel={channel} name={name} size={36} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{name}</p>
+          <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {error && <p className="text-sm text-danger">{error}</p>}
+        {!messages && !error && (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 size={28} strokeWidth={1.5} className="animate-spin text-greige" />
+          </div>
+        )}
+        {messages?.length === 0 && <p className="text-sm text-greige-ink">Sin mensajes todavía.</p>}
+        {messages?.map((m) => {
+          const outgoing = m.direction === 'out';
+          return (
+            <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
+                outgoing ? 'bg-accent text-white' : 'border border-line-soft bg-paper text-ink'
+              }`}>
+                {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                <span className={`mt-0.5 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
+                  {formatBubbleTime(m.createdAt)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={`Responder por ${CHANNEL_LABELS[channel] ?? channel}…`}
+          className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+        />
+        <button
+          type="submit"
+          disabled={sending || !draft.trim()}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+        >
+          <Send size={16} />
+        </button>
+      </form>
+    </>
+  );
 }
 
 function Tail({ side, color }) {
@@ -189,6 +301,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [globalSearching, setGlobalSearching] = useState(false);
   const [temperature, setTemperature] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState('');
+  const [channelFilter, setChannelFilter] = useState('');
   // Real advisors who've taken at least one ticket — powers the per-advisor filter
   // options in place of the old generic "Asesor" one. New name shows up on its own the
   // first time someone takes a ticket, nothing hardcoded.
@@ -365,8 +478,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       // capping it the same way as the plain list silently hid real unread threads
       // that fell outside the recency window (the bug reported 2026-08-26).
       const data = isUnreadFilter
-        ? await fetchConversations(search, temperature, '', undefined, true)
-        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount);
+        ? await fetchConversations(search, temperature, '', undefined, true, channelFilter)
+        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount, undefined, channelFilter);
       setConversations(data);
       setHasMore(isUnreadFilter ? false : data.length >= visibleCount);
       setListLoaded(true);
@@ -375,10 +488,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature, ticketStatusFilter, visibleCount]);
+  }, [search, temperature, ticketStatusFilter, channelFilter, visibleCount]);
 
   // A new search/filter is a fresh list — start back at one page of it.
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter, channelFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -458,7 +571,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [searching, setSearching] = useState(false);
 
   const loadThread = useCallback(() => {
-    if (!selectedId) { setThread(null); return; }
+    // Instagram/Messenger threads (sessionId prefixed "social:") don't live in
+    // n8n_chat_histories — SocialThreadPanel below fetches and renders them on its own.
+    if (!selectedId || selectedId.startsWith('social:')) { setThread(null); return; }
     fetchConversation(selectedId, threadLimit)
       .then((t) => { setThread(t); setThreadError(null); })
       .catch((err) => setThreadError(err.message));
@@ -1022,6 +1137,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               options={buildTicketStatusOptions(advisors)}
               className="md:flex-1"
             />
+            <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="md:flex-1" />
           </div>
         </div>
 
@@ -1115,7 +1231,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 }`}
                 style={presence && !isMyPresence && !isSelected ? { backgroundColor: hexToRgba(colorFor(presence.fullName), 0.14) } : undefined}
               >
-                <Avatar name={name} />
+                <Avatar name={name} channel={c.channel} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-sm font-medium text-ink">{name}</p>
@@ -1145,7 +1261,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         </span>
                       );
                     })()}
-                    {c.ticketStatus === 'en_atencion' && (
+                    {c.channel === 'whatsapp' && c.ticketStatus === 'en_atencion' && (
                       c.assignedAdvisor ? (
                         // Whoever actually took the ticket, by name and in their own
                         // color — permanent (from the ticket record), unlike the row
@@ -1172,12 +1288,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         <CheckCircle2 size={10} /> resuelto
                       </span>
                     )}
-                    {!c.ticketStatus && isUnansweredBroadcast(c.lastMessage) && (
+                    {c.channel === 'whatsapp' && !c.ticketStatus && isUnansweredBroadcast(c.lastMessage) && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-cyan-bg px-2 py-0.5 text-[10px] font-semibold text-cyan">
                         <Megaphone size={10} /> difusión
                       </span>
                     )}
-                    {!c.ticketStatus && !isUnansweredBroadcast(c.lastMessage) && (
+                    {c.channel === 'whatsapp' && !c.ticketStatus && !isUnansweredBroadcast(c.lastMessage) && (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-greige-ink">
                         <Bot size={10} /> agente
                       </span>
@@ -1196,7 +1312,17 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       <div className={`min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02] ${
         singleThreadMode ? 'flex' : selectedId ? 'flex' : 'hidden md:flex'
       }`}>
-        {!thread && (
+        {selectedId?.startsWith('social:') && (
+          <SocialThreadPanel
+            key={selectedId}
+            contactId={selected?.socialContactId}
+            channel={selected?.channel}
+            name={selected?.customerName || 'Contacto'}
+            singleThreadMode={singleThreadMode}
+            onBack={() => setSelectedId(null)}
+          />
+        )}
+        {!thread && !selectedId?.startsWith('social:') && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
             {threadError ? (
               <>

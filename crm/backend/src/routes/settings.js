@@ -4,6 +4,7 @@ import { requireRole } from '../auth.js';
 import { PIPELINE_COLUMNS } from './tickets.js';
 import { encryptToken } from '../tokenCrypto.js';
 import { testMetaAdsConnection } from '../metaAds.js';
+import { testSocialConnection } from '../metaMessaging.js';
 
 const router = Router();
 
@@ -98,6 +99,39 @@ const SETTINGS = {
     secret: true,
     validate: (v) => typeof v === 'string' && v.trim().length > 20,
   },
+  // Bandeja de Instagram/Messenger (2026-09-14) — una sola App de Meta, separada de la
+  // que envía WhatsApp, con un solo Token de Página que cubre tanto Messenger como los
+  // DMs de Instagram (la cuenta profesional de Instagram envía a través del token de su
+  // Página vinculada). App Secret y el token de verificación del webhook también son
+  // secretos — nunca vuelven en la respuesta de GET una vez guardados.
+  meta_page_id: {
+    label: 'ID de la Página de Facebook',
+    description: 'El "ID de la página" que aparece en Configuración de la Página en Facebook — la que está conectada a tu cuenta de Instagram profesional.',
+    validate: (v) => typeof v === 'string' && /^\d{5,25}$/.test(v.trim()),
+  },
+  meta_ig_business_id: {
+    label: 'ID de la cuenta de Instagram profesional',
+    description: 'El "Instagram Business Account ID" vinculado a esa Página — se obtiene desde Meta for Developers al conectar Instagram a tu App.',
+    validate: (v) => typeof v === 'string' && /^\d{5,25}$/.test(v.trim()),
+  },
+  meta_page_access_token: {
+    label: 'Token de acceso de la Página (Messenger + Instagram)',
+    description: 'Token de Página generado en Meta for Developers, con los permisos de mensajería de Messenger e Instagram — usado para leer y enviar mensajes en ambos canales.',
+    secret: true,
+    validate: (v) => typeof v === 'string' && v.trim().length > 20,
+  },
+  meta_app_secret: {
+    label: 'App Secret de la App de Meta',
+    description: 'El "App Secret" de la App de Meta usada para Redes Sociales — se usa para verificar que cada mensaje entrante realmente viene de Meta.',
+    secret: true,
+    validate: (v) => typeof v === 'string' && v.trim().length > 10,
+  },
+  meta_webhook_verify_token: {
+    label: 'Token de verificación del webhook',
+    description: 'Una palabra o frase que tú inventas — la escribes aquí Y en la configuración del Webhook en Meta for Developers, para que ambos lados se reconozcan al conectar.',
+    secret: true,
+    validate: (v) => typeof v === 'string' && v.trim().length >= 8,
+  },
 };
 
 // Read by every logged-in role (the Pipeline board itself needs pipeline_columns to
@@ -150,6 +184,15 @@ router.put('/:key', requireRole('admin'), async (req, res, next) => {
 router.get('/meta-ads/test', requireRole('admin'), async (req, res, next) => {
   try {
     const result = await testMetaAdsConnection();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/social/test', requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await testSocialConnection();
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

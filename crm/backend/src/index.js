@@ -19,6 +19,8 @@ import campaignsRouter from './routes/campaigns.js';
 import agentTestRouter from './routes/agentTest.js';
 import agentToolsRouter from './routes/agentTools.js';
 import settingsRouter from './routes/settings.js';
+import socialWebhookRouter from './routes/socialWebhook.js';
+import socialRouter from './routes/social.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
@@ -29,7 +31,11 @@ const app = express();
 // globally instead of per-client.
 app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
-app.use(express.json({ limit: '25mb' }));
+// `verify` stashes the exact raw bytes Express received onto req.rawBody, alongside the
+// normal parsed req.body every other route already relies on — the Meta webhook route
+// below needs those exact bytes to check X-Hub-Signature-256 (an HMAC over the raw
+// payload; re-serializing the parsed JSON wouldn't byte-for-byte match what Meta signed).
+app.use(express.json({ limit: '25mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -56,6 +62,10 @@ app.use('/api/settings', requireAuth, settingsRouter);
 // No requireAuth: n8n calls this directly (no advisor session), protected by its own
 // shared-secret header check inside the router instead.
 app.use('/api/whatsapp-inbound', inboundRouter);
+// No requireAuth: Meta calls this directly, no CRM session — protected by its own
+// verify_token handshake (GET) and X-Hub-Signature-256 check (POST) instead.
+app.use('/api/webhooks/meta', socialWebhookRouter);
+app.use('/api/social', requireAuth, socialRouter);
 // Called by the n8n AI Agent as tools (inventory/customer lookup) — server-to-server,
 // not a logged-in CRM session, same as whatsapp-inbound above.
 app.use('/api/agent-tools', agentToolsRouter);

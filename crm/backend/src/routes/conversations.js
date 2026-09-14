@@ -365,7 +365,7 @@ router.post('/', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { q, temperature, ticketStatus } = req.query;
+    const { q, temperature, ticketStatus, channel } = req.query;
     const unreadOnly = req.query.unread === 'true';
     // Loading every conversation up front got heavy once the list passed ~1000 threads.
     // Filters run in JS below (over fields the SQL doesn't have a clean WHERE for), so a
@@ -377,7 +377,11 @@ router.get('/', async (req, res, next) => {
     // that fell outside the default recency window instead of showing every real one.
     const hasFilter = !!(q?.trim() || temperature || ticketStatus || unreadOnly);
     const limit = hasFilter ? null : Math.min(Number(req.query.limit) || 50, 5000);
-    const { rows } = await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
+    // A channel filter naming Instagram/Messenger means zero WhatsApp rows can ever
+    // survive — skip the (expensive) query entirely instead of running it just to
+    // discard every row below.
+    const skipWhatsapp = channel && channel !== 'whatsapp';
+    const { rows } = skipWhatsapp ? { rows: [] } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
         -- human/assistant messages count here. Empty content alone can't be the test
@@ -494,7 +498,50 @@ router.get('/', async (req, res, next) => {
       visible = visible.filter((r) => Number(r.unread_count) > 0);
     }
 
-    res.json(visible.map((r) => ({
+    // Instagram/Messenger contacts (2026-09-14) — a separate, much smaller table, not
+    // the WhatsApp query above (see db/init/054-social-inbox.sh and the 2026-09-14
+    // plan). temperature/ticketStatus don't exist yet for a social contact, so either
+    // filter simply excludes them — same as a WhatsApp thread with no customer/ticket
+    // record already silently not matching those filters. unread_count does exist on
+    // social_contacts though, so "No leído" still applies to them.
+    let socialItems = [];
+    if (channel !== 'whatsapp' && !temperature && !ticketStatus) {
+      const { rows: socialRows } = await pool.query(`
+        SELECT sc.id, sc.provider, sc.display_name, sc.last_message_at, sc.unread_count,
+               sm.body AS last_message_body, sm.direction AS last_message_direction
+        FROM social_contacts sc
+        LEFT JOIN LATERAL (
+          SELECT body, direction FROM social_messages WHERE contact_id = sc.id ORDER BY created_at DESC LIMIT 1
+        ) sm ON true
+        ${channel ? 'WHERE sc.provider = $1' : ''}
+        ORDER BY sc.last_message_at DESC NULLS LAST
+      `, channel ? [channel] : []);
+      socialItems = socialRows
+        .filter((r) => !qLower || (r.display_name ?? '').toLowerCase().includes(qLower))
+        .filter((r) => !unreadOnly || Number(r.unread_count) > 0)
+        .map((r) => ({
+          channel: r.provider,
+          sessionId: `social:${r.id}`,
+          socialContactId: r.id,
+          lastId: null,
+          lastMessageAt: r.last_message_at,
+          messageCount: null,
+          lastMessage: { type: r.last_message_direction === 'out' ? 'ai' : 'human', content: r.last_message_body ?? '' },
+          lastAttachment: null,
+          customerName: r.display_name,
+          phone: null,
+          ticketStatus: null,
+          assignedAdvisor: null,
+          enAtencion: false,
+          temperature: null,
+          paidLocked: false,
+          paymentSuggested: false,
+          unreadCount: Number(r.unread_count),
+        }));
+    }
+
+    const whatsappItems = visible.map((r) => ({
+      channel: 'whatsapp',
       sessionId: cleanSessionId(r.thread_key),
       lastId: r.last_id,
       lastMessageAt: r.created_at,
@@ -514,7 +561,11 @@ router.get('/', async (req, res, next) => {
       paidLocked: r.paid_locked ?? false,
       paymentSuggested: r.payment_suggested_at != null,
       unreadCount: Number(r.unread_count),
-    })));
+    }));
+
+    res.json([...whatsappItems, ...socialItems].sort(
+      (a, b) => new Date(b.lastMessageAt ?? 0) - new Date(a.lastMessageAt ?? 0)
+    ));
   } catch (err) { next(err); }
 });
 

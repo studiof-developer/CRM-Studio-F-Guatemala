@@ -137,7 +137,7 @@ export async function updateTicket(id, patch) {
   return res.json();
 }
 
-export async function fetchConversations(q, temperature, ticketStatus, limit, unreadOnly) {
+export async function fetchConversations(q, temperature, ticketStatus, limit, unreadOnly, channel) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (temperature) params.set('temperature', temperature);
@@ -147,6 +147,7 @@ export async function fetchConversations(q, temperature, ticketStatus, limit, un
   // capped by the recency limit above, or a real unread thread outside that window
   // would silently disappear from both this filter and the sidebar badge count.
   if (unreadOnly) params.set('unread', 'true');
+  if (channel) params.set('channel', channel);
   const qs = params.toString();
   const res = await apiFetch(`/api/conversations${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar conversaciones');
@@ -529,6 +530,33 @@ export async function updateSetting(key, value) {
 // handling), so this only ever needs the account to have been saved first.
 export async function testMetaAdsConnection() {
   const res = await apiFetch('/api/settings/meta-ads/test');
+  return res.json();
+}
+
+export async function testSocialConnection() {
+  const res = await apiFetch('/api/settings/social/test');
+  return res.json();
+}
+
+export async function fetchSocialContacts() {
+  const res = await apiFetch('/api/social/contacts');
+  if (!res.ok) throw new Error('Error al cargar las conversaciones');
+  return res.json();
+}
+
+export async function fetchSocialMessages(contactId) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}/messages`);
+  if (!res.ok) throw new Error('Error al cargar los mensajes');
+  return res.json();
+}
+
+export async function sendSocialMessage(contactId, body) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al enviar el mensaje');
   return res.json();
 }
 
