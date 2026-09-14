@@ -54,6 +54,9 @@ const DEFAULT_AWAITING_REPLY_OVERDUE_MINUTES = 60;
 const TEMPERATURE_FOR_COLUMN = { en_atencion: 'frio', cotizacion: 'tibio', medio_pago: 'caliente', pqrs: 'pqrs', despacho: 'despacho' };
 
 const PAGE_SIZE = 50;
+// Matches tickets.js's own MAX_PAGE_SIZE — the server clamps a larger `limit` to this
+// anyway, so reloadAll below asks for exactly what it can actually get back.
+const MAX_LOADED_PAGE_SIZE = 200;
 
 // "60" reads better as "1h" than "60 min" in the overdue tooltip — matches the
 // implicit assumption the old hardcoded "(más de 1h)" text baked in, now that the
@@ -244,12 +247,18 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
 
-  // Replaces a column's cards from scratch, page 1 — used for the initial load, a
-  // sort-direction change, and any live-update refresh.
-  const loadColumn = useCallback(async (key, sort) => {
+  // Replaces a column's cards from scratch, starting at offset 0 — used for the initial
+  // load, a sort-direction change, and any live-update refresh. `limit` defaults to one
+  // page (a deliberate sort change should start over at page 1), but a live-triggered
+  // reloadAll passes however many cards were already scrolled into view, so an advisor
+  // deep in "En conversación" via infinite scroll doesn't get silently snapped back to
+  // the first 50 every time a message lands ANYWHERE in the whole system (2026-09-14
+  // report — with thousands of active conversations, message_changes alone fires often
+  // enough that this was visibly "cada segundos" mid-scroll).
+  const loadColumn = useCallback(async (key, sort, limit = PAGE_SIZE) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
@@ -277,7 +286,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
 
   const reloadAll = useCallback(() => {
-    for (const key of COLUMN_ORDER) loadColumn(key, columnsRef.current[key].sort);
+    for (const key of COLUMN_ORDER) {
+      const col = columnsRef.current[key];
+      loadColumn(key, col.sort, Math.min(Math.max(col.cards.length, PAGE_SIZE), MAX_LOADED_PAGE_SIZE));
+    }
   }, [loadColumn]);
 
   // Also re-fires on mount (dateFrom/dateTo are already set on first render) — one
@@ -286,14 +298,21 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // ticket_changes also now fires on a plain customer temperature change (drag-and-drop,
   // the OCR auto-Pagado, "Marcar como Pagado" — see db/init/037), not just a real ticket
   // row — reused instead of a new channel since this board already listens to it.
-  useLiveEvent('ticket_changes', reloadAll);
+  // Each channel below debounces independently (useLiveEvent's own 400ms default), but
+  // with thousands of active conversations message_changes alone can still fire every
+  // few seconds — a stale badge for a couple seconds costs nothing, so this board can
+  // afford a slower cadence than the default in exchange for a lot less background
+  // reload traffic (2026-09-14 report — this and the loadColumn depth fix above are the
+  // two halves of the same "bounced back while scrolling" complaint).
+  const LIVE_RELOAD_DEBOUNCE_MS = 1500;
+  useLiveEvent('ticket_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
   // A new message is what moves the unread badge and "atrasado" clock — without this,
   // those only updated on the next drag/take action or the 60s fallback below.
-  useLiveEvent('message_changes', reloadAll);
+  useLiveEvent('message_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
   // Marking a thread read/unread from Conversations changes conversation_reads, which
   // this board's own unread_count depends on — without this the badge only caught up
   // on the next unrelated reload (message/ticket change or the 60s fallback).
-  useLiveEvent('read_changes', reloadAll);
+  useLiveEvent('read_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
   // Safety net for anything that still slips through (e.g. this tab losing its SSE
   // connection briefly) — same fallback role polling already played in the old queue view.
   useEffect(() => {
