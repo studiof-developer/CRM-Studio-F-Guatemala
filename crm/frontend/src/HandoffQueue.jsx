@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
+import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import StatsModal from './components/StatsModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { formatWait, minutesSince } from './lib/sla.js';
-import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
+import { onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
 import { guatemalaToday, addDays, monthBounds, MONTH_NAMES, PERIOD_OPTIONS, guatemalaMidnight, useDayCutoffs } from './lib/pipelinePeriod.js';
@@ -295,26 +295,71 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // Also re-fires on mount (dateFrom/dateTo are already set on first render) — one
   // effect covers both the initial load and any period/month/custom-range change.
   useEffect(() => { reloadAll(); }, [reloadAll]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Removes any existing card for this customer from every column, then (if bucket/card
+  // are non-null) adds it into the right one — a live event patches ONE customer into
+  // place instead of reloading all 8 columns from the server (2026-09-14 request: "no
+  // hace falta recargar toda la lista, solo posicionarlo"). offset moves with it, same
+  // bookkeeping moveCard's own drag-and-drop optimistic update already does, so the next
+  // loadMore still asks for the right page.
+  const patchCard = useCallback((customerId, bucket, card) => {
+    setColumns((prev) => {
+      const next = { ...prev };
+      for (const key of COLUMN_ORDER) {
+        const col = next[key];
+        const idx = col.cards.findIndex((c) => c.customerId === customerId);
+        if (idx !== -1) {
+          next[key] = { ...col, cards: col.cards.filter((_, i) => i !== idx), total: Math.max(0, col.total - 1), offset: Math.max(0, col.offset - 1) };
+        }
+      }
+      if (bucket && card) {
+        const col = next[bucket];
+        const cards = col.sort === 'asc' ? [...col.cards, card] : [card, ...col.cards];
+        next[bucket] = { ...col, cards, total: col.total + 1, offset: col.offset + 1 };
+      }
+      return next;
+    });
+  }, []);
+
+  // Same filters the board itself is currently viewing (period/search/unreadOnly) — a
+  // customer a live event just touched only gets patched INTO a column if they'd
+  // actually show up there right now; otherwise (search doesn't match, outside the
+  // period, etc.) any existing card for them just gets removed, same as a real reload
+  // would have done.
+  const patchByIdentifier = useCallback((identifier) => {
+    fetchPipelineCard(identifier, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly })
+      .then(({ customerId, bucket, card }) => { if (customerId) patchCard(customerId, bucket, card); })
+      .catch(() => {}); // stays stale until the next event or the 60s fallback below — not worth an error toast for a background patch
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, patchCard]);
+
   // ticket_changes also now fires on a plain customer temperature change (drag-and-drop,
   // the OCR auto-Pagado, "Marcar como Pagado" — see db/init/037), not just a real ticket
-  // row — reused instead of a new channel since this board already listens to it.
-  // Each channel below debounces independently (useLiveEvent's own 400ms default), but
-  // with thousands of active conversations message_changes alone can still fire every
-  // few seconds — a stale badge for a couple seconds costs nothing, so this board can
-  // afford a slower cadence than the default in exchange for a lot less background
-  // reload traffic (2026-09-14 report — this and the loadColumn depth fix above are the
-  // two halves of the same "bounced back while scrolling" complaint).
-  const LIVE_RELOAD_DEBOUNCE_MS = 1500;
-  useLiveEvent('ticket_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
+  // row — reused instead of a new channel since this board already listens to it. Each
+  // pg_notify payload (db/init/003, 020, 037) carries a different identifier shape —
+  // parsed here into whichever one fetchPipelineCard needs to resolve the customer.
+  useEffect(() => onLiveEvent('ticket_changes', (data) => {
+    try {
+      const { customerId, id } = JSON.parse(data);
+      patchByIdentifier(customerId ? { customerId } : { ticketId: id });
+    } catch { /* malformed payload — nothing to patch */ }
+  }), [patchByIdentifier]);
   // A new message is what moves the unread badge and "atrasado" clock — without this,
   // those only updated on the next drag/take action or the 60s fallback below.
-  useLiveEvent('message_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
+  useEffect(() => onLiveEvent('message_changes', (data) => {
+    try {
+      const { session_id } = JSON.parse(data);
+      patchByIdentifier({ sessionId: session_id });
+    } catch { /* malformed payload — nothing to patch */ }
+  }), [patchByIdentifier]);
   // Marking a thread read/unread from Conversations changes conversation_reads, which
   // this board's own unread_count depends on — without this the badge only caught up
-  // on the next unrelated reload (message/ticket change or the 60s fallback).
-  useLiveEvent('read_changes', reloadAll, LIVE_RELOAD_DEBOUNCE_MS);
+  // on the next unrelated reload (message/ticket change or the 60s fallback). Unlike the
+  // other two channels this one's payload is a bare phone string, not JSON.
+  useEffect(() => onLiveEvent('read_changes', (phone) => patchByIdentifier({ phone })), [patchByIdentifier]);
+
   // Safety net for anything that still slips through (e.g. this tab losing its SSE
-  // connection briefly) — same fallback role polling already played in the old queue view.
+  // connection briefly, or a patch that failed) — a real full reload, same fallback role
+  // polling already played in the old queue view.
   useEffect(() => {
     const id = setInterval(reloadAll, 60000);
     return () => clearInterval(id);

@@ -346,6 +346,98 @@ router.get('/pipeline', async (req, res, next) => {
   }
 });
 
+// One customer's current card, wherever (if anywhere) it belongs — what the board's
+// live-update listeners fetch instead of reloading all 8 columns from scratch on every
+// ticket/message/read event system-wide (2026-09-14 request: "no hace falta recargar
+// toda la lista, solo posicionarlo" — a full reload was also what kept snapping an
+// advisor's scroll position back to page 1 mid-browse). Accepts whichever identifier the
+// triggering event actually carried (see db/init/003, 020, 037's pg_notify payloads):
+// customerId directly, a ticketId (the tickets-table trigger only has that), a phone
+// (read_changes), or a session_id (message_changes, phone before the "__").
+// bucket:null means "doesn't belong on the board right now" (hidden status, dormant,
+// outside the active search/period/unreadOnly filter) — the frontend removes whatever
+// card it had for this customer instead of adding/updating one.
+router.get('/pipeline/card', async (req, res, next) => {
+  try {
+    const { customerId: customerIdParam, ticketId, sessionId, phone } = req.query;
+    let customerId = customerIdParam ? Number(customerIdParam) : null;
+    if (!customerId && ticketId) {
+      const { rows } = await pool.query(`SELECT customer_id FROM tickets WHERE id = $1`, [ticketId]);
+      customerId = rows[0]?.customer_id ?? null;
+    }
+    if (!customerId && (phone || sessionId)) {
+      const rawPhone = phone ?? String(sessionId).split('__')[0];
+      const { rows } = await pool.query(`SELECT id FROM customers WHERE whatsapp_number = $1`, [rawPhone]);
+      customerId = rows[0]?.id ?? null;
+    }
+    if (!customerId) return res.json({ customerId: null, bucket: null, card: null });
+
+    const params = [customerId];
+    // 'en_atencion' is a throwaway bucket arg — only dateClause/unreadOnlyClause get
+    // used below, orderExpr doesn't apply to a single-row lookup.
+    const { dateClause, unreadOnlyClause } = buildPipelineFilters('en_atencion', req.query, params);
+    const dormancyClause = dormancyClauseSql(req.query.dormant);
+
+    const { rows } = await pool.query(`
+      WITH temped AS (
+        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
+               c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
+               c.has_unread AS customer_has_unread,
+               ${EFFECTIVE_STATUS_SQL} AS temperature,
+               GREATEST(t.updated_at, c.updated_at) AS stage_since,
+               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
+               c.last_message_at, c.last_message,
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+        FROM tickets t
+        JOIN customers c ON c.id = t.customer_id
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1
+      ),
+      deduped AS (SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1)
+      SELECT *, ${BUCKET_CASE_SQL} AS bucket
+      FROM deduped
+      WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
+      -- Prefer this customer's current active ticket; only fall back to a resuelto one
+      -- (their most recent) if that's genuinely all they have — same "which single card
+      -- represents them right now" priority the board itself applies via BUCKET_CASE_SQL.
+      ORDER BY (ticket_status = 'resuelto') ASC, ticket_id DESC
+      LIMIT 1
+    `, params);
+
+    if (!rows.length) return res.json({ customerId, bucket: null, card: null });
+    const r = rows[0];
+    const unread = await pool.query(
+      `SELECT count(*) FROM n8n_chat_histories h
+       WHERE h.session_id LIKE $1 || '%' AND h.message->>'type' = 'human'
+         AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = $1), 0)`,
+      [r.whatsapp_number]
+    );
+
+    res.json({
+      customerId,
+      bucket: r.bucket,
+      card: {
+        ticketId: r.ticket_id,
+        customerId: r.customer_id,
+        fullName: r.full_name,
+        whatsappNumber: r.whatsapp_number,
+        temperature: r.temperature,
+        ticketStatus: r.ticket_status,
+        assignedAdvisor: r.assigned_advisor,
+        lastMessage: r.last_customer_message,
+        awaitingReply: r.awaiting_reply === true,
+        unreadCount: Number(unread.rows[0].count),
+        stageSince: r.stage_since,
+        lastMessageAt: r.last_customer_message_at,
+        previewMessage: r.last_message,
+        previewMessageAt: r.last_message_at,
+      },
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
 // Whole-bucket, unpaginated — "download everyone in this column" instead of the paged
 // board view above (same filters: period, search, unreadOnly). No unread_count (that
 // per-row subquery is only cheap bounded to one page, see the comment above) and a hard

@@ -78,6 +78,18 @@ export async function fetchPipelineColumn(bucket, { offset = 0, limit = 50, sort
   return res.json();
 }
 
+// One customer's current card — what a live event (ticket/message/read change) patches
+// into the board instead of triggering a full 8-column reload. `identifier` is exactly
+// one of {customerId}/{ticketId}/{phone}/{sessionId}, whichever the triggering event
+// actually carried.
+export async function fetchPipelineCard(identifier, filters = {}) {
+  const params = pipelineFilterParams(filters);
+  for (const [k, v] of Object.entries(identifier)) if (v != null) params.set(k, v);
+  const res = await apiFetch(`/api/tickets/pipeline/card?${params}`);
+  if (!res.ok) throw new Error('Error al actualizar la tarjeta');
+  return res.json();
+}
+
 export async function fetchPipelineExport(bucket, filters = {}) {
   const params = pipelineFilterParams(filters);
   params.set('bucket', bucket);
