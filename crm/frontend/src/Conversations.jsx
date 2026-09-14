@@ -17,7 +17,7 @@ import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { PAID_METHOD_LABELS, PAID_METHOD_ICONS, PAID_METHOD_ORDER } from './lib/paymentMethods.js';
 import { useLiveEvent, onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
-import { CHANNEL_LABELS } from './lib/channelIcons.jsx';
+import { CHANNEL_LABELS, ChannelIcon } from './lib/channelIcons.jsx';
 import Avatar from './components/Avatar.jsx';
 import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -58,11 +58,19 @@ const TEMP_FILTER_OPTIONS = [
 const PAID_METHOD_OPTIONS = PAID_METHOD_ORDER.map((k) => ({
   value: k, label: PAID_METHOD_LABELS[k], icon: PAID_METHOD_ICONS[k], iconClassName: 'text-greige-ink',
 }));
+// Select.jsx expects `icon` to be a component taking a `size` prop, same shape as a
+// lucide icon — wraps our own brand-colored ChannelIcon (which takes `channel` instead)
+// so this filter carries the same icon language as the temperature/estado ones beside it.
+function channelFilterIcon(channel) {
+  return function ChannelFilterIcon({ size }) {
+    return <ChannelIcon channel={channel} size={size} />;
+  };
+}
 const CHANNEL_FILTER_OPTIONS = [
   { value: '', label: 'Todas las redes' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'messenger', label: 'Messenger' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: channelFilterIcon('whatsapp') },
+  { value: 'instagram', label: 'Instagram', icon: channelFilterIcon('instagram') },
+  { value: 'messenger', label: 'Messenger', icon: channelFilterIcon('messenger') },
 ];
 
 // Turns a message into what its quote preview should show — a document shows its
