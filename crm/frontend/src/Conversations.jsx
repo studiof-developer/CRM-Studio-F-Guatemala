@@ -1137,7 +1137,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               options={buildTicketStatusOptions(advisors)}
               className="md:flex-1"
             />
-            <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="md:flex-1" />
+            {/* Social inbox rollout (2026-09-14): admin-only for now — the backend never
+                sends a social item or a `channel` field to a non-admin, so this filter
+                would just be dead UI for them. */}
+            {user.role === 'admin' && (
+              <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="md:flex-1" />
+            )}
           </div>
         </div>
 

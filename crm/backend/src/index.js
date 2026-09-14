@@ -65,7 +65,10 @@ app.use('/api/whatsapp-inbound', inboundRouter);
 // No requireAuth: Meta calls this directly, no CRM session — protected by its own
 // verify_token handshake (GET) and X-Hub-Signature-256 check (POST) instead.
 app.use('/api/webhooks/meta', socialWebhookRouter);
-app.use('/api/social', requireAuth, socialRouter);
+// Admin-only for the same reason as the Conversaciones merge (conversations.js's
+// isAdmin check) — rolling out progressively so asesores' workflow doesn't change
+// until this is proven out in production. Widen alongside that check together.
+app.use('/api/social', requireAuth, requireRole('admin'), socialRouter);
 // Called by the n8n AI Agent as tools (inventory/customer lookup) — server-to-server,
 // not a logged-in CRM session, same as whatsapp-inbound above.
 app.use('/api/agent-tools', agentToolsRouter);
