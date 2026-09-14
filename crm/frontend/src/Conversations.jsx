@@ -1137,19 +1137,23 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               className="w-full rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
           </div>
-          <div className="flex flex-col gap-2 md:flex-row">
-            <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} className="md:flex-1" />
+          {/* flex-wrap, not a forced single row — this panel is a narrow fixed-width
+              column regardless of viewport, and 3 filters (2 + the channel one below)
+              don't fit on one line without overflowing past its edge. Wrapping to a
+              second row beats spilling outside the container. */}
+          <div className="flex flex-wrap gap-2">
+            <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} className="min-w-[140px] flex-1" />
             <Select
               value={ticketStatusFilter}
               onChange={setTicketStatusFilter}
               options={buildTicketStatusOptions(advisors)}
-              className="md:flex-1"
+              className="min-w-[140px] flex-1"
             />
             {/* Social inbox rollout (2026-09-14): admin-only for now — the backend never
                 sends a social item or a `channel` field to a non-admin, so this filter
                 would just be dead UI for them. */}
             {user.role === 'admin' && (
-              <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="md:flex-1" />
+              <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="min-w-[140px] flex-1" />
             )}
           </div>
         </div>
