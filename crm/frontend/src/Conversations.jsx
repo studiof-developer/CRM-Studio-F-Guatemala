@@ -1216,7 +1216,12 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             <p className="p-4 text-sm text-greige-ink">Sin conversaciones.</p>
           )}
           {conversations.map((c) => {
-            const name = c.customerName || c.phone || c.sessionId.slice(0, 12);
+            // Social contacts have no phone to fall back to, and their raw sessionId
+            // ("social:3") is an internal id, not something to show — falls back to a
+            // channel-labeled placeholder instead until fetchProfileName (socialWebhook.js)
+            // fills in a real name.
+            const name = c.customerName || c.phone
+              || (c.channel && c.channel !== 'whatsapp' ? `Contacto de ${CHANNEL_LABELS[c.channel]}` : c.sessionId.slice(0, 12));
             const unread = c.unreadCount ?? 0;
             // Someone (possibly me, on another tab/device) currently has this chat open —
             // see the presence effects above. Local selection always wins visually; my own
@@ -1334,7 +1339,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             key={selectedId}
             contactId={selected?.socialContactId}
             channel={selected?.channel}
-            name={selected?.customerName || 'Contacto'}
+            name={selected?.customerName || `Contacto de ${CHANNEL_LABELS[selected?.channel] ?? ''}`.trim()}
             singleThreadMode={singleThreadMode}
             onBack={() => setSelectedId(null)}
           />

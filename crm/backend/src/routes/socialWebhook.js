@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { pool } from '../db.js';
 import { getSetting } from './settings.js';
 import { decryptToken } from '../tokenCrypto.js';
+import { fetchProfileName } from '../metaMessaging.js';
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.post('/', async (req, res) => {
            VALUES ($1, $2, now(), 1)
            ON CONFLICT (provider, external_id)
              DO UPDATE SET last_message_at = now(), unread_count = social_contacts.unread_count + 1
-           RETURNING id`,
+           RETURNING id, display_name`,
           [provider, externalId]
         );
         await pool.query(
@@ -75,6 +76,15 @@ router.post('/', async (req, res) => {
            VALUES ($1, 'in', $2, $3, $4)`,
           [rows[0].id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
         );
+
+        // Best-effort — a brand-new contact (or one whose name lookup failed last time)
+        // gets a real display name instead of the CRM's raw "social:<id>" fallback.
+        // Never blocks/breaks ingestion of the message itself if this fails.
+        if (!rows[0].display_name) {
+          fetchProfileName(externalId)
+            .then((name) => name && pool.query(`UPDATE social_contacts SET display_name = $1 WHERE id = $2`, [name, rows[0].id]))
+            .catch((err) => console.error('social webhook: profile name lookup failed', err));
+        }
       }
     }
   } catch (err) {

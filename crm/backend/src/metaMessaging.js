@@ -67,6 +67,23 @@ export async function sendInstagramText(igsid, text) {
   return sendViaMessagesApi(igsid, text, creds.token);
 }
 
+// Meta doesn't push a contact's display name along with their first message — this
+// looks it up once, right after a brand-new social_contacts row is created (see
+// socialWebhook.js), so the CRM shows a real name instead of the raw "social:<id>"
+// fallback. Best-effort: Graph API's available fields differ between a Messenger PSID
+// and an Instagram IGSID, and neither is guaranteed while the App is still in
+// Development mode — any failure here should never break webhook ingestion.
+export async function fetchProfileName(externalId) {
+  const creds = await getSocialCredentials();
+  if (!creds) return null;
+  try {
+    const result = await graphFetch(`${externalId}?fields=name,username,first_name,last_name`, { method: 'GET' }, creds.token);
+    return result?.name || result?.username || [result?.first_name, result?.last_name].filter(Boolean).join(' ') || null;
+  } catch {
+    return null;
+  }
+}
+
 // Confirms the saved Page Access Token is actually valid and readable — same idea as
 // metaAds.js's testMetaAdsConnection, just against the Page's own /me instead of an ad account.
 export async function testSocialConnection() {
