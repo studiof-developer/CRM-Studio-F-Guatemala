@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
 import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
@@ -663,7 +662,6 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 {cards.length === 0 && !col.loading && (
                   <p className="p-3 text-center text-xs text-muted-foreground">Nada aquí.</p>
                 )}
-                <AnimatePresence initial={false}>
                 {cards.map((card) => {
                   const overdue = key === 'pendiente'
                     ? minutesSince(card.stageSince) > slaMinutes
@@ -676,13 +674,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                   // read-only (Pipeline itself never "holds" a chat open).
                   const presence = presenceByPhone[card.whatsappNumber];
                   return (
-                    <motion.div
+                    <div
                       key={card.ticketId}
-                      layout
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.96 }}
-                      transition={{ duration: 0.18, ease: 'easeOut' }}
                       draggable={DRAG_SOURCES.has(key)}
                       onDragStart={(e) => handleDragStart(e, card, key)}
                       title={presence ? `${presence.fullName || 'Alguien'} tiene este chat abierto` : undefined}
@@ -766,10 +759,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                           ))}
                         </select>
                       )}
-                    </motion.div>
+                    </div>
                   );
                 })}
-                </AnimatePresence>
                 {col.loading && (
                   <div className="flex justify-center py-2">
                     <Loader2 size={16} className="animate-spin text-muted-foreground" />
