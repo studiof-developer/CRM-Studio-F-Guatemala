@@ -544,6 +544,12 @@ export async function fetchSocialContacts() {
   return res.json();
 }
 
+export async function fetchSocialContact(contactId) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}`);
+  if (!res.ok) throw new Error('Error al cargar la información del cliente');
+  return res.json();
+}
+
 export async function fetchSocialMessages(contactId) {
   const res = await apiFetch(`/api/social/contacts/${contactId}/messages`);
   if (!res.ok) throw new Error('Error al cargar los mensajes');

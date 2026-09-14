@@ -10,6 +10,7 @@ import { formatWait, minutesSince } from './lib/sla.js';
 import { onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
+import { ChannelIcon, CHANNEL_LABELS } from './lib/channelIcons.jsx';
 import { guatemalaToday, addDays, monthBounds, MONTH_NAMES, PERIOD_OPTIONS, guatemalaMidnight, useDayCutoffs } from './lib/pipelinePeriod.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
@@ -669,6 +670,11 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                       && minutesSince(card.lastMessageAt) > awaitingReplyOverdueMinutes;
                   const unreadCount = card.unreadCount ?? 0;
                   const hasUnread = unreadCount > 0;
+                  // A social customer with no name yet would otherwise show its raw
+                  // synthetic whatsappNumber ("social:42") — same channel-labeled
+                  // fallback Conversations.jsx's list already uses.
+                  const name = card.fullName
+                    || (card.channel && card.channel !== 'whatsapp' ? `Contacto de ${CHANNEL_LABELS[card.channel]}` : card.whatsappNumber);
                   // Someone (possibly me, elsewhere) currently has this chat open in
                   // Conversaciones — same live map that page keeps, just consumed here
                   // read-only (Pipeline itself never "holds" a chat open).
@@ -685,7 +691,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                       } ${DRAG_SOURCES.has(key) ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">{card.fullName || card.whatsappNumber}</p>
+                        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+                          {card.channel && <ChannelIcon channel={card.channel} size={13} />}
+                          <span className="truncate">{name}</span>
+                        </p>
                         <div className="flex shrink-0 items-center gap-1.5">
                           {hasUnread && (
                             <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-warning px-1.5 text-[10px] font-bold text-white">

@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
            VALUES ($1, $2, now(), 1)
            ON CONFLICT (provider, external_id)
              DO UPDATE SET last_message_at = now(), unread_count = social_contacts.unread_count + 1
-           RETURNING id, display_name`,
+           RETURNING id, display_name, customer_id`,
           [provider, externalId]
         );
         await pool.query(
@@ -76,6 +76,8 @@ router.post('/', async (req, res) => {
            VALUES ($1, 'in', $2, $3, $4)`,
           [rows[0].id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
         );
+
+        await ensureCustomerAndTicket(rows[0], provider, text);
 
         // Best-effort — a brand-new contact (or one whose name lookup failed last time)
         // gets a real display name instead of the CRM's raw "social:<id>" fallback.
@@ -91,5 +93,51 @@ router.post('/', async (req, res) => {
     console.error('social webhook processing failed', err);
   }
 });
+
+// Phase 3 (2026-09-14): gives a social contact the same customers/tickets presence a
+// WhatsApp customer already has, so it can appear on the shared Pipeline board.
+// whatsapp_number stores the synthetic 'social:<social_contacts.id>' — see
+// db/init/055's comment for why that exact format is safe against the ~20 phone-regex
+// call sites elsewhere, and why it doubles for free as the sessionId
+// Conversations.jsx already routes to SocialThreadPanel.
+async function ensureCustomerAndTicket(contact, provider, text) {
+  let customerId = contact.customer_id;
+  if (!customerId) {
+    const { rows: custRows } = await pool.query(
+      `INSERT INTO customers (whatsapp_number, full_name, channel) VALUES ($1, $2, $3) RETURNING id`,
+      [`social:${contact.id}`, contact.display_name ?? null, provider]
+    );
+    customerId = custRows[0].id;
+    await pool.query(`UPDATE social_contacts SET customer_id = $1 WHERE id = $2`, [customerId, contact.id]);
+  }
+
+  // No bot/AI layer intercepts social messages — every inbound message needs a human
+  // right away, so a brand-new ticket starts at 'esperando_asesor' ("Pendiente"), not
+  // 'bot'. Reuses the same "one open ticket per customer" invariant conversations.js's
+  // own /:sessionId/take already relies on: reuse whatever non-resuelto ticket exists,
+  // only open a new one if the customer's last ticket was actually resolved.
+  const { rows: openTickets } = await pool.query(
+    `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+    [customerId]
+  );
+  if (!openTickets.length) {
+    await pool.query(
+      `INSERT INTO tickets (customer_id, status, handoff_reason) VALUES ($1, 'esperando_asesor', 'mensaje_entrante_social')`,
+      [customerId]
+    );
+  }
+
+  // Mirrors update_customer_last_message() (db/init/031/046/051) — there's no
+  // n8n_chat_histories row here to hang that trigger off of, so this is the
+  // application-code equivalent. Firing this UPDATE is also what makes the Pipeline
+  // board live-update for free: db/init/037's trigger already notifies on any
+  // customers UPDATE, and HandoffQueue.jsx already listens for it.
+  await pool.query(
+    `UPDATE customers SET last_customer_message_at = now(), last_customer_message = $1,
+       last_message_at = now(), last_message = $1, awaiting_reply = true, has_unread = true
+     WHERE id = $2`,
+    [text ?? null, customerId]
+  );
+}
 
 export default router;

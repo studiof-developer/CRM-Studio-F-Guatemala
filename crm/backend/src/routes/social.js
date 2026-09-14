@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { sendMessengerText, sendInstagramText } from '../metaMessaging.js';
 import { logBusinessAction } from '../auditLog.js';
+import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
 
@@ -46,7 +47,49 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
     // like WhatsApp's conversation_reads, this inbox doesn't have the same shared-team
     // "who read what" nuance yet.
     await pool.query(`UPDATE social_contacts SET unread_count = 0 WHERE id = $1`, [req.params.id]);
+    // Mirrors sync_customer_unread_on_read() (db/init/051) — keeps the linked customer's
+    // Pipeline badge in sync, same reasoning as ensureCustomerAndTicket in socialWebhook.js.
+    await pool.query(
+      `UPDATE customers SET has_unread = false WHERE id = (SELECT customer_id FROM social_contacts WHERE id = $1)`,
+      [req.params.id]
+    );
     res.json(rows.map((r) => ({ id: r.id, direction: r.direction, body: r.body, createdAt: r.created_at })));
+  } catch (err) { next(err); }
+});
+
+// Feeds Conversations.jsx's shared "Info del cliente" panel (Phase 3, 2026-09-14) — same
+// response shape the WhatsApp thread loader already produces, so the panel renders
+// without a channel-specific branch. No real "phone" for a social contact, so that field
+// is just omitted — the panel already treats a missing phone as blank.
+router.get('/contacts/:id', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT sc.display_name, sc.provider, t.status AS ticket_status, t.assigned_advisor,
+              c.id AS customer_id, ${EFFECTIVE_STATUS_SQL} AS temperature, c.manual_status,
+              c.paid_locked, c.paid_method
+       FROM social_contacts sc
+       JOIN customers c ON c.id = sc.customer_id
+       LEFT JOIN LATERAL (
+         SELECT status, assigned_advisor FROM tickets WHERE customer_id = c.id
+         ORDER BY created_at DESC LIMIT 1
+       ) t ON true
+       WHERE sc.id = $1`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    const r = rows[0];
+    res.json({
+      customerId: r.customer_id,
+      customerName: r.display_name,
+      channel: r.provider,
+      temperature: r.temperature,
+      manualStatus: r.manual_status,
+      paidLocked: r.paid_locked ?? false,
+      paidMethod: r.paid_method,
+      ticketStatus: r.ticket_status,
+      assignedAdvisor: r.assigned_advisor,
+      enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
+    });
   } catch (err) { next(err); }
 });
 
@@ -54,9 +97,9 @@ router.post('/contacts/:id/messages', async (req, res, next) => {
   try {
     const { body } = req.body ?? {};
     if (!body?.trim()) return res.status(400).json({ error: 'body required' });
-    const { rows: contactRows } = await pool.query(`SELECT provider, external_id FROM social_contacts WHERE id = $1`, [req.params.id]);
+    const { rows: contactRows } = await pool.query(`SELECT provider, external_id, customer_id FROM social_contacts WHERE id = $1`, [req.params.id]);
     if (!contactRows.length) return res.status(404).json({ error: 'not found' });
-    const { provider, external_id: externalId } = contactRows[0];
+    const { provider, external_id: externalId, customer_id: customerId } = contactRows[0];
 
     const send = provider === 'instagram' ? sendInstagramText : sendMessengerText;
     let externalMessageId = null;
@@ -73,7 +116,15 @@ router.post('/contacts/:id/messages', async (req, res, next) => {
       [req.params.id, body.trim(), externalMessageId]
     );
     await pool.query(`UPDATE social_contacts SET last_message_at = now() WHERE id = $1`, [req.params.id]);
-    logBusinessAction(req.user, null, 'social_message_sent', `${provider}:${externalId}`);
+    // Mirrors the "this was our own reply" branch of update_customer_last_message()
+    // (db/init/031/046) for a WhatsApp customer.
+    if (customerId) {
+      await pool.query(
+        `UPDATE customers SET last_message_at = now(), last_message = $1, awaiting_reply = false WHERE id = $2`,
+        [body.trim(), customerId]
+      );
+    }
+    logBusinessAction(req.user, customerId ?? null, 'social_message_sent', `${provider}:${externalId}`);
     res.status(201).json({ id: rows[0].id, direction: 'out', body: body.trim(), createdAt: rows[0].created_at });
   } catch (err) { next(err); }
 });

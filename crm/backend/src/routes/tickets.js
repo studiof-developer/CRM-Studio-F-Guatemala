@@ -249,7 +249,7 @@ router.get('/pipeline', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               c.has_unread AS customer_has_unread,
+               c.has_unread AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
@@ -295,13 +295,19 @@ router.get('/pipeline', async (req, res, next) => {
       -- unread_count only computed for this one page (up to 200 rows), same reasoning
       -- as MAX_PAGE_SIZE above and audit.js's message_count — a per-row subquery over
       -- n8n_chat_histories is fine bounded to a page, not fine over a whole 2733-row
-      -- bucket, which is why it's kept out of temped/totaled entirely.
+      -- bucket, which is why it's kept out of temped/totaled entirely. A social-linked
+      -- customer has no n8n_chat_histories rows at all — its real count instead comes
+      -- from social_contacts.unread_count, already kept current by the webhook/mark-as-
+      -- read paths (socialWebhook.js, social.js).
       SELECT paged.*,
-             (SELECT count(*) FROM n8n_chat_histories h
-              WHERE h.session_id LIKE paged.whatsapp_number || '%'
-                AND h.message->>'type' = 'human'
-                AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = paged.whatsapp_number), 0)
-             ) AS unread_count
+             CASE WHEN paged.channel = 'whatsapp' THEN (
+               SELECT count(*) FROM n8n_chat_histories h
+               WHERE h.session_id LIKE paged.whatsapp_number || '%'
+                 AND h.message->>'type' = 'human'
+                 AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = paged.whatsapp_number), 0)
+             ) ELSE (
+               SELECT unread_count FROM social_contacts WHERE customer_id = paged.customer_id
+             ) END AS unread_count
       FROM paged
       ORDER BY ${orderExpr} ${sort}
     `, params));
@@ -323,6 +329,7 @@ router.get('/pipeline', async (req, res, next) => {
         customerId: r.customer_id,
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
+        channel: r.channel,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         assignedAdvisor: r.assigned_advisor,
@@ -382,7 +389,7 @@ router.get('/pipeline/card', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               c.has_unread AS customer_has_unread,
+               c.has_unread AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
@@ -405,12 +412,14 @@ router.get('/pipeline/card', async (req, res, next) => {
 
     if (!rows.length) return res.json({ customerId, bucket: null, card: null });
     const r = rows[0];
-    const unread = await pool.query(
-      `SELECT count(*) FROM n8n_chat_histories h
-       WHERE h.session_id LIKE $1 || '%' AND h.message->>'type' = 'human'
-         AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = $1), 0)`,
-      [r.whatsapp_number]
-    );
+    const unreadCount = r.channel === 'whatsapp'
+      ? Number((await pool.query(
+          `SELECT count(*) FROM n8n_chat_histories h
+           WHERE h.session_id LIKE $1 || '%' AND h.message->>'type' = 'human'
+             AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = $1), 0)`,
+          [r.whatsapp_number]
+        )).rows[0].count)
+      : Number((await pool.query(`SELECT unread_count FROM social_contacts WHERE customer_id = $1`, [r.customer_id])).rows[0]?.unread_count ?? 0);
 
     res.json({
       customerId,
@@ -420,12 +429,13 @@ router.get('/pipeline/card', async (req, res, next) => {
         customerId: r.customer_id,
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
+        channel: r.channel,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         assignedAdvisor: r.assigned_advisor,
         lastMessage: r.last_customer_message,
         awaitingReply: r.awaiting_reply === true,
-        unreadCount: Number(unread.rows[0].count),
+        unreadCount,
         stageSince: r.stage_since,
         lastMessageAt: r.last_customer_message_at,
         previewMessage: r.last_message,

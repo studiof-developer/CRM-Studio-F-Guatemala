@@ -367,10 +367,6 @@ router.get('/', async (req, res, next) => {
   try {
     const { q, temperature, ticketStatus, channel } = req.query;
     const unreadOnly = req.query.unread === 'true';
-    // Social inbox rollout (2026-09-14): admin-only for now, so asesores' Conversaciones
-    // list stays byte-for-byte what it's always been while this gets tested in production —
-    // widen to every role once it's proven out.
-    const isAdmin = req.user.role === 'admin';
     // Loading every conversation up front got heavy once the list passed ~1000 threads.
     // Filters run in JS below (over fields the SQL doesn't have a clean WHERE for), so a
     // filtered view still needs the full set — only the plain, most-common "just open the
@@ -384,7 +380,7 @@ router.get('/', async (req, res, next) => {
     // A channel filter naming Instagram/Messenger means zero WhatsApp rows can ever
     // survive — skip the (expensive) query entirely instead of running it just to
     // discard every row below.
-    const skipWhatsapp = isAdmin && channel && channel !== 'whatsapp';
+    const skipWhatsapp = channel && channel !== 'whatsapp';
     const { rows } = skipWhatsapp ? { rows: [] } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
@@ -509,7 +505,7 @@ router.get('/', async (req, res, next) => {
     // record already silently not matching those filters. unread_count does exist on
     // social_contacts though, so "No leído" still applies to them.
     let socialItems = [];
-    if (isAdmin && channel !== 'whatsapp' && !temperature && !ticketStatus) {
+    if (channel !== 'whatsapp' && !temperature && !ticketStatus) {
       const { rows: socialRows } = await pool.query(`
         SELECT sc.id, sc.provider, sc.display_name, sc.last_message_at, sc.unread_count,
                sm.body AS last_message_body, sm.direction AS last_message_direction
@@ -545,10 +541,7 @@ router.get('/', async (req, res, next) => {
     }
 
     const whatsappItems = visible.map((r) => ({
-      // Omitted entirely for non-admins — Avatar.jsx only swaps to a channel logo when
-      // this field is present, so leaving it out keeps their list visually identical to
-      // before this feature existed.
-      ...(isAdmin ? { channel: 'whatsapp' } : {}),
+      channel: 'whatsapp',
       sessionId: cleanSessionId(r.thread_key),
       lastId: r.last_id,
       lastMessageAt: r.created_at,
@@ -570,12 +563,9 @@ router.get('/', async (req, res, next) => {
       unreadCount: Number(r.unread_count),
     }));
 
-    // Non-admins: return exactly the original WhatsApp-only order (by message id), no
-    // re-sort — socialItems is always empty for them, but sorting is a needless behavior
-    // change on a response that's supposed to be untouched for that role.
-    res.json(isAdmin
-      ? [...whatsappItems, ...socialItems].sort((a, b) => new Date(b.lastMessageAt ?? 0) - new Date(a.lastMessageAt ?? 0))
-      : whatsappItems);
+    res.json([...whatsappItems, ...socialItems].sort(
+      (a, b) => new Date(b.lastMessageAt ?? 0) - new Date(a.lastMessageAt ?? 0)
+    ));
   } catch (err) { next(err); }
 });
 

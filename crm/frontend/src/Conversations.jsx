@@ -10,7 +10,7 @@ import {
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
-  fetchSocialMessages, sendSocialMessage,
+  fetchSocialMessages, sendSocialMessage, fetchSocialContact,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -124,24 +124,38 @@ function describeQuoted(msg, from) {
   return { from, content, attachmentKind: att?.kind ?? null, attachmentId: att?.id ?? null };
 }
 
-// Deliberately separate from the WhatsApp thread above — no tickets, no quotes/replies,
-// no attachments yet (2026-09-14 plan: Instagram/Messenger inbox stays a simple sibling
-// view rather than bending the WhatsApp-specific thread machinery to a second identity
-// shape). Polls instead of using live SSE — the webhook receiver doesn't broadcast an
-// event yet, fine for Phase 1's test-mode traffic volume.
-function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack }) {
+// Deliberately separate from the WhatsApp thread above — no quotes/replies/attachments
+// yet — but the "Info del cliente" panel below IS the same one WhatsApp threads get
+// (Phase 3, 2026-09-14: a social contact now has a real customerId), self-contained
+// here (own fetch, own ConfirmDialog/EditCustomerModal instances) rather than routed
+// through the giant WhatsApp-specific `thread` state above, so this never risks that
+// component's revenue-critical JSX. Polls instead of using live SSE — the webhook
+// receiver doesn't broadcast an event yet, fine for this traffic volume.
+function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack, onCustomerChanged }) {
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
 
+  const [info, setInfo] = useState(null);
+  const [infoOpen, setInfoOpen] = useState(isDesktopViewport());
+  const [editOpen, setEditOpen] = useState(false);
+  const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
+  const [paidMethod, setPaidMethod] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+
   const load = useCallback(() => {
     if (!contactId) return;
     fetchSocialMessages(contactId).then((rows) => { setMessages(rows); setError(null); }).catch((err) => setError(err.message));
   }, [contactId]);
+  const loadInfo = useCallback(() => {
+    if (!contactId) return;
+    fetchSocialContact(contactId).then(setInfo).catch(() => {});
+  }, [contactId]);
 
   useEffect(() => { setMessages(null); load(); }, [load]);
+  useEffect(() => { setInfo(null); loadInfo(); }, [loadInfo]);
   useEffect(() => {
     const id = setInterval(load, 8000);
     return () => clearInterval(id);
@@ -164,6 +178,35 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack 
     }
   }
 
+  async function handleSetStatus(value) {
+    if (!info?.customerId) return;
+    try {
+      await updateCustomerTags(info.customerId, { manualStatus: value || null });
+      loadInfo();
+      onCustomerChanged?.();
+      showSuccess(value ? `Estado cambiado a ${TEMP_META[value].label}` : 'Estado devuelto a automático');
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  async function handleMarkPaid() {
+    if (!info?.customerId || !paidMethod) return;
+    setActionBusy(true);
+    try {
+      await updateCustomerTags(info.customerId, { paidLocked: true, paidMethod });
+      loadInfo();
+      onCustomerChanged?.();
+      showSuccess('Cliente marcado como Pagado');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setActionBusy(false);
+      setConfirmPaidOpen(false);
+      setPaidMethod('');
+    }
+  }
+
   return (
     <>
       <div className="flex w-full items-center gap-3 border-b border-line bg-paper px-5 py-3">
@@ -181,49 +224,155 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack 
           <p className="truncate text-sm font-semibold text-ink">{name}</p>
           <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
         </div>
+        <Info
+          role="button"
+          size={16}
+          onClick={() => setInfoOpen((v) => !v)}
+          className="shrink-0 cursor-pointer text-greige hover:text-ink"
+        />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {error && <p className="text-sm text-danger">{error}</p>}
-        {!messages && !error && (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 size={28} strokeWidth={1.5} className="animate-spin text-greige" />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            {error && <p className="text-sm text-danger">{error}</p>}
+            {!messages && !error && (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 size={28} strokeWidth={1.5} className="animate-spin text-greige" />
+              </div>
+            )}
+            {messages?.length === 0 && <p className="text-sm text-greige-ink">Sin mensajes todavía.</p>}
+            {messages?.map((m) => {
+              const outgoing = m.direction === 'out';
+              return (
+                <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
+                    outgoing ? 'bg-accent text-white' : 'border border-line-soft bg-paper text-ink'
+                  }`}>
+                    {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                    <span className={`mt-0.5 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
+                      {formatBubbleTime(m.createdAt)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
           </div>
-        )}
-        {messages?.length === 0 && <p className="text-sm text-greige-ink">Sin mensajes todavía.</p>}
-        {messages?.map((m) => {
-          const outgoing = m.direction === 'out';
-          return (
-            <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
-                outgoing ? 'bg-accent text-white' : 'border border-line-soft bg-paper text-ink'
-              }`}>
-                {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
-                <span className={`mt-0.5 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
-                  {formatBubbleTime(m.createdAt)}
-                </span>
+
+          <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={`Responder por ${CHANNEL_LABELS[channel] ?? channel}…`}
+              className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+            />
+            <button
+              type="submit"
+              disabled={sending || !draft.trim()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              <Send size={16} />
+            </button>
+          </form>
+        </div>
+
+        {infoOpen && info && (
+          <div className="fixed inset-0 z-40 overflow-y-auto bg-paper p-5 md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-line">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="rounded-lg p-1 text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink"
+                  aria-label="Editar cliente"
+                  title="Editar cliente"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => setInfoOpen(false)} className="text-greige hover:text-ink">
+                  <X size={16} />
+                </button>
               </div>
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
+            <div className="flex flex-col items-center text-center">
+              <Avatar channel={channel} name={info.customerName} size={64} />
+              <p className="mt-3 text-sm font-semibold text-ink">{info.customerName || 'Sin nombre'}</p>
+              <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                {info.temperature && (() => {
+                  const { label, icon: Icon, iconBg, iconText } = TEMP_META[info.temperature];
+                  return (
+                    <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${iconBg} ${iconText}`}>
+                      <Icon size={12} /> {label}
+                    </span>
+                  );
+                })()}
+                {info.paidLocked && info.temperature !== 'pagado' && (() => {
+                  const { label, icon: Icon, iconBg, iconText } = TEMP_META.pagado;
+                  return (
+                    <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${iconBg} ${iconText}`}>
+                      <Icon size={12} /> {label}
+                    </span>
+                  );
+                })()}
+              </div>
+              {info.paidLocked && info.paidMethod && (
+                <p className="mt-1 text-[11px] text-greige-ink">Pagó por {PAID_METHOD_LABELS[info.paidMethod]}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 border-t border-line-soft pt-5">
+              <label className="text-xs font-medium text-greige-ink">Estado (control del asesor)</label>
+              <Select
+                value={info.manualStatus ?? ''}
+                onChange={handleSetStatus}
+                options={[
+                  { value: '', label: `Automático (${TEMP_META[info.temperature]?.label ?? '—'})` },
+                  ...BUCKET_ORDER.map((k) => ({
+                    value: k, label: TEMP_META[k].label, icon: TEMP_META[k].icon, iconClassName: TEMP_META[k].iconText,
+                  })),
+                ]}
+              />
+              {!info.paidLocked && (
+                <button
+                  onClick={() => setConfirmPaidOpen(true)}
+                  className="mt-1 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
+                >
+                  Marcar como Pagado (permanente)
+                </button>
+              )}
+            </div>
+
+            {info.handoffReason && (
+              <div className="mt-6 border-t border-line-soft pt-5">
+                <p className="mb-1.5 text-xs font-medium text-greige-ink">Motivo del handoff</p>
+                <p className="text-sm text-ink">{info.handoffReason}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Responder por ${CHANNEL_LABELS[channel] ?? channel}…`}
-          className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
-        />
-        <button
-          type="submit"
-          disabled={sending || !draft.trim()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-        >
-          <Send size={16} />
-        </button>
-      </form>
+      <ConfirmDialog
+        open={confirmPaidOpen}
+        title="Marcar como Pagado"
+        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. Indica el medio de pago:"
+        confirmLabel="Marcar como Pagado"
+        busy={actionBusy}
+        confirmDisabled={!paidMethod}
+        onConfirm={handleMarkPaid}
+        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
+      >
+        <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
+      </ConfirmDialog>
+
+      <EditCustomerModal
+        open={editOpen}
+        customer={info?.customerId ? { id: info.customerId, full_name: info.customerName } : null}
+        onCancel={() => setEditOpen(false)}
+        onSaved={() => { setEditOpen(false); loadInfo(); onCustomerChanged?.(); }}
+      />
     </>
   );
 }
@@ -1149,12 +1298,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               options={buildTicketStatusOptions(advisors)}
               className="min-w-[140px] flex-1"
             />
-            {/* Social inbox rollout (2026-09-14): admin-only for now — the backend never
-                sends a social item or a `channel` field to a non-admin, so this filter
-                would just be dead UI for them. */}
-            {user.role === 'admin' && (
-              <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="min-w-[140px] flex-1" />
-            )}
+            <Select value={channelFilter} onChange={setChannelFilter} options={CHANNEL_FILTER_OPTIONS} className="min-w-[140px] flex-1" />
           </div>
         </div>
 
@@ -1342,6 +1486,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             name={selected?.customerName || `Contacto de ${CHANNEL_LABELS[selected?.channel] ?? ''}`.trim()}
             singleThreadMode={singleThreadMode}
             onBack={() => setSelectedId(null)}
+            onCustomerChanged={() => load(false)}
           />
         )}
         {!thread && !selectedId?.startsWith('social:') && (
