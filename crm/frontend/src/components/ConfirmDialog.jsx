@@ -14,10 +14,10 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'Co
           onClick={onCancel}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 12 }}
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 8 }}
-            transition={{ type: 'spring', bounce: 0.25, duration: 0.45 }}
+            exit={{ opacity: 0, scale: 0.97, y: 4 }}
+            transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
             className={`glass-card w-full rounded-2xl border border-line bg-paper p-6 shadow-xl ${
               wide ? 'max-w-lg max-h-[85vh] overflow-y-auto' : 'max-w-sm'
             }`}

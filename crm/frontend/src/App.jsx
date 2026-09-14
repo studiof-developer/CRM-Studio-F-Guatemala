@@ -445,9 +445,9 @@ export default function App() {
         <main className="w-full min-w-0 min-h-0 flex-1 overflow-hidden">
           <motion.div
             key={tab}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
             className="h-full w-full overflow-y-auto overflow-x-hidden bg-paper"
           >
             <ChunkErrorBoundary key={tab}>
