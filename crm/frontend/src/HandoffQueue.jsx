@@ -100,10 +100,11 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // 2026-09-11: search/period/column filters are admin+supervisor only — an asesor
   // gets the full board (defaults do the rest: "Todo" period, no column narrowing) plus
   // just "Solo no leídos", which stays available to every role.
+  // Admin+supervisor — same reach as canFilter below, since both the stats popup and
+  // "Descargar Conversaciones" are informational/read-only, not something that changes
+  // customer data (2026-09-16: widened from admin-only per request, asesores excluded
+  // on purpose — this is analysis/reporting, not day-to-day chat work).
   const canFilter = user.role === 'admin' || user.role === 'supervisor';
-  // 2026-09-12: the "expandir estadísticas" popup ships admin-only for now, per request
-  // — meant to widen to every role once it's had a bit of real-world use.
-  const isAdmin = user.role === 'admin';
   const [columns, setColumns] = useState(emptyColumns);
   const [search, setSearch] = useState('');
   // Debounced separately from `search` itself — the input needs to feel instant, but a
@@ -612,7 +613,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 </div>
               );
             })}
-            {isAdmin && (
+            {canFilter && (
               <button
                 type="button"
                 onClick={() => setStatsOpen(true)}
@@ -688,7 +689,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
             </>
           )}
 
-          {isAdmin && searching && (
+          {canFilter && searching && (
             <button
               type="button"
               onClick={openDownloadPreview}
@@ -874,9 +875,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           );
         })}
       </div>
-      {isAdmin && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />}
+      {canFilter && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />}
 
-      {isAdmin && (
+      {canFilter && (
         <ConfirmDialog
           open={searchSummary !== null}
           title="Descargar conversaciones"

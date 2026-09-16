@@ -567,8 +567,10 @@ router.get('/pipeline/export', async (req, res, next) => {
     if (allBuckets && !trimmedQ) {
       return res.status(400).json({ error: 'bucket=all requires a search query' });
     }
-    // Admin-only, unlike the pre-existing single-column export below — 2026-09-16 request.
-    if (allBuckets && req.user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    // Admin+supervisor, unlike the pre-existing single-column export below — 2026-09-16
+    // request, widened same day to include supervisor (informational/read-only, not
+    // something that changes customer data).
+    if (allBuckets && !['admin', 'supervisor'].includes(req.user.role)) return res.status(403).json({ error: 'forbidden' });
 
     if (allBuckets) {
       const params = [];
@@ -664,7 +666,7 @@ router.get('/pipeline/export', async (req, res, next) => {
 // despacho es porque ya pagó"). "Ventas este mes" reads the same customer_marked_paid
 // audit event /pipeline/stats' own conversionCost already keys on, scoped to Guatemala's
 // calendar month (same AT TIME ZONE convention used everywhere else in this file).
-router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, next) => {
+router.get('/pipeline/search-summary', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const trimmedQ = (req.query.q ?? '').trim();
     if (!trimmedQ) return res.status(400).json({ error: 'q is required' });
@@ -757,7 +759,7 @@ function buildDateRangeClause(query, params, dateExpr) {
 // queries, no caching layer (an on-demand popup, not a page load).
 // Admin-only for now (2026-09-12 request) — meant to widen to every role once it's had
 // a bit of real-world use, same reasoning as campaigns.js's admin-only template routes.
-router.get('/pipeline/stats', requireRole('admin'), async (req, res, next) => {
+router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const bucketParams = [];
     const bucketDateClause = buildDateRangeClause(req.query, bucketParams, 'stage_since');
