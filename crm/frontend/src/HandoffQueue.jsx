@@ -245,6 +245,26 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
       ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 40 }];
       const wb = XLSX.utils.book_new();
+
+      // "Informe gerencial" sheet (2026-09-16) — the same numbers shown in the preview
+      // dialog, so the file is a self-contained mini-report on its own, not just raw
+      // rows someone has to re-derive the totals from by hand.
+      if (searchSummary) {
+        const summaryLines = [
+          ['Búsqueda', debouncedSearch],
+          ['Total de conversaciones', searchSummary.total],
+          ['Compraron (pagado + despacho)', searchSummary.compraron],
+          ['Tasa de conversión', `${(searchSummary.conversionRate * 100).toFixed(1)}%`],
+          ['Ventas este mes', searchSummary.ventasEsteMes],
+          [],
+          ['Por temperatura', ''],
+          ...BUCKET_ORDER.filter((k) => searchSummary.byTemperature[k]).map((k) => [TEMP_META[k].label, searchSummary.byTemperature[k]]),
+        ];
+        const summaryWs = XLSX.utils.aoa_to_sheet(summaryLines);
+        summaryWs['!cols'] = [{ wch: 28 }, { wch: 16 }];
+        XLSX.utils.book_append_sheet(wb, summaryWs, 'Resumen');
+      }
+
       XLSX.utils.book_append_sheet(wb, ws, 'Conversaciones');
       XLSX.writeFile(wb, `conversaciones_${debouncedSearch.replace(/[^a-zA-Z0-9]/g, '_')}_${guatemalaToday()}.xlsx`);
       showSuccess(`${rows.length} conversación(es) exportada(s)`);
@@ -859,25 +879,46 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           confirmLabel={downloadingAll ? 'Descargando…' : 'Descargar todo'}
           busy={downloadingAll}
           confirmDisabled={!searchSummary?.total}
+          wide
           onConfirm={downloadAllMatching}
           onCancel={() => setSearchSummary(null)}
         >
           {searchSummary?.total > 0 && (
-            <div className="flex flex-col gap-1.5">
-              {BUCKET_ORDER.filter((key) => searchSummary.byTemperature[key]).map((key) => {
-                const { label, icon: Icon, iconBg, iconText } = TEMP_META[key];
-                return (
-                  <div key={key} className="flex items-center justify-between rounded-lg bg-black/[0.03] px-3 py-1.5 text-sm dark:bg-white/[0.05]">
-                    <span className="flex items-center gap-2 text-ink">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full ${iconBg}`}>
-                        <Icon size={12} className={iconText} />
+            <div className="flex flex-col gap-4">
+              {/* KPIs gerenciales (2026-09-16) — mismos 3 números que van en la hoja
+                  "Resumen" del Excel, para que el admin los vea sin tener que descargar
+                  primero. */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-success-bg px-3 py-2 text-center">
+                  <p className="text-lg font-semibold text-success">{searchSummary.compraron}</p>
+                  <p className="text-[11px] text-greige-ink">Compraron</p>
+                </div>
+                <div className="rounded-lg bg-accent-soft px-3 py-2 text-center">
+                  <p className="text-lg font-semibold text-accent">{(searchSummary.conversionRate * 100).toFixed(1)}%</p>
+                  <p className="text-[11px] text-greige-ink">Conversión</p>
+                </div>
+                <div className="rounded-lg bg-black/[0.03] px-3 py-2 text-center dark:bg-white/[0.05]">
+                  <p className="text-lg font-semibold text-ink">{searchSummary.ventasEsteMes}</p>
+                  <p className="text-[11px] text-greige-ink">Ventas este mes</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                {BUCKET_ORDER.filter((key) => searchSummary.byTemperature[key]).map((key) => {
+                  const { label, icon: Icon, iconBg, iconText } = TEMP_META[key];
+                  return (
+                    <div key={key} className="flex items-center justify-between rounded-lg bg-black/[0.03] px-3 py-1.5 text-sm dark:bg-white/[0.05]">
+                      <span className="flex items-center gap-2 text-ink">
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full ${iconBg}`}>
+                          <Icon size={12} className={iconText} />
+                        </span>
+                        {label}
                       </span>
-                      {label}
-                    </span>
-                    <span className="font-semibold text-ink">{searchSummary.byTemperature[key]}</span>
-                  </div>
-                );
-              })}
+                      <span className="font-semibold text-ink">{searchSummary.byTemperature[key]}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </ConfirmDialog>

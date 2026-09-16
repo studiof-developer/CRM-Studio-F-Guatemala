@@ -638,6 +638,15 @@ router.get('/pipeline/export', async (req, res, next) => {
 // temperature rather than BUCKET_CASE_SQL's board bucket, since bucket is a ticket-
 // status-flavored concept (pendiente/resuelto/etc.) that doesn't cleanly apply to a
 // customer with no active ticket at all.
+// "Informe gerencial" numbers (2026-09-16 request) — on top of the temperature
+// breakdown, how many of these conversations actually bought (ever), how many of those
+// sales landed in the current calendar month specifically, and the conversion rate —
+// the same three questions Mauricio asks for any reference, not just this one, so this
+// stays reusable rather than one-off. "Compraron" counts pagado+despacho — despacho is
+// still a sale, just further along in fulfillment (Mauricio's own words: "si es
+// despacho es porque ya pagó"). "Ventas este mes" reads the same customer_marked_paid
+// audit event /pipeline/stats' own conversionCost already keys on, scoped to Guatemala's
+// calendar month (same AT TIME ZONE convention used everywhere else in this file).
 router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, next) => {
   try {
     const trimmedQ = (req.query.q ?? '').trim();
@@ -645,18 +654,37 @@ router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, ne
 
     const params = [];
     const cte = buildArchiveSearchCte(trimmedQ, params);
-    const { rows } = await pool.query(`
-      ${cte}
-      SELECT ${EFFECTIVE_STATUS_SQL} AS temperature, count(*) AS total
-      FROM customers c
-      WHERE c.id IN (SELECT customer_id FROM all_matches)
-      GROUP BY temperature
-    `, params);
+    const [byTempResult, salesResult] = await Promise.all([
+      pool.query(`
+        ${cte}
+        SELECT ${EFFECTIVE_STATUS_SQL} AS temperature, count(*) AS total
+        FROM customers c
+        WHERE c.id IN (SELECT customer_id FROM all_matches)
+        GROUP BY temperature
+      `, params),
+      pool.query(`
+        ${cte}
+        SELECT
+          count(*) FILTER (WHERE ${EFFECTIVE_STATUS_SQL} IN ('pagado', 'despacho')) AS compraron,
+          (SELECT count(*) FROM access_audit aa
+           WHERE aa.action = 'customer_marked_paid'
+             AND aa.customer_id IN (SELECT customer_id FROM all_matches)
+             AND (aa.accessed_at AT TIME ZONE 'America/Guatemala') >= date_trunc('month', now() AT TIME ZONE 'America/Guatemala')
+          ) AS ventas_mes
+        FROM customers c
+        WHERE c.id IN (SELECT customer_id FROM all_matches)
+      `, params),
+    ]);
 
-    const byTemperature = Object.fromEntries(rows.map((r) => [r.temperature, Number(r.total)]));
+    const byTemperature = Object.fromEntries(byTempResult.rows.map((r) => [r.temperature, Number(r.total)]));
+    const total = byTempResult.rows.reduce((sum, r) => sum + Number(r.total), 0);
+    const compraron = Number(salesResult.rows[0]?.compraron ?? 0);
     res.json({
-      total: rows.reduce((sum, r) => sum + Number(r.total), 0),
+      total,
       byTemperature,
+      compraron,
+      conversionRate: total > 0 ? compraron / total : 0,
+      ventasEsteMes: Number(salesResult.rows[0]?.ventas_mes ?? 0),
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
