@@ -152,7 +152,7 @@ export default function StatsModal({ open, onClose }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
-            className="glass-card w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className="glass-card w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -184,109 +184,123 @@ export default function StatsModal({ open, onClose }) {
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
-              <>
-                <p className="mb-2 mt-5 text-xs font-medium uppercase tracking-wide text-greige-ink">Todos los estados</p>
-                <div className="flex flex-wrap gap-2">
-                  {data.buckets.map((b) => {
-                    const meta = metaFor(b.bucket);
-                    return (
-                      <StatCard key={b.bucket} label={meta.label} value={b.total} iconBg={meta.iconBg} iconText={meta.iconText} icon={meta.icon}
-                        sub={`${b.unreadTotal} no leído(s)`} unit={b.unreadTotal > 0 ? `· ${b.unreadTotal} no leídos` : undefined} />
-                    );
-                  })}
-                </div>
+              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_1fr]">
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Todos los estados</p>
+                    <div className="flex flex-col gap-2">
+                      {data.buckets.map((b) => {
+                        const meta = metaFor(b.bucket);
+                        return (
+                          <StatCard key={b.bucket} label={meta.label} value={b.total} iconBg={meta.iconBg} iconText={meta.iconText} icon={meta.icon}
+                            sub={`${b.unreadTotal} no leído(s)`} unit={b.unreadTotal > 0 ? `· ${b.unreadTotal} no leídos` : undefined} />
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Demora en primera respuesta</p>
-                <StatCard
-                  label="promedio en el periodo"
-                  value={formatMinutes(data.avgFirstResponseMinutes)}
-                  iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
-                  iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
-                  icon={PIPELINE_ICON_MAP.Clock}
-                />
-
-                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
-                {data.conversionCost && (
-                  <div className="flex flex-wrap gap-2">
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Demora en primera respuesta</p>
                     <StatCard
-                      label="gasto en pauta"
-                      value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
-                      iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
-                      iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
-                      icon={PIPELINE_ICON_MAP.CircleDollarSign}
-                    />
-                    <StatCard
-                      label="pagados de pauta"
-                      value={data.conversionCost.conversions}
-                      iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
-                      iconText={PIPELINE_COLOR_CLASSES.success.iconText}
-                      icon={PIPELINE_ICON_MAP.CheckCircle2}
-                    />
-                    <StatCard
-                      label="por conversión"
-                      value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin conversiones'}
-                      iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
-                      iconText={PIPELINE_COLOR_CLASSES.info.iconText}
-                      icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                      label="promedio en el periodo"
+                      value={formatMinutes(data.avgFirstResponseMinutes)}
+                      iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
+                      iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
+                      icon={PIPELINE_ICON_MAP.Clock}
                     />
                   </div>
-                )}
-                {data.conversionCostError && (
-                  <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
-                )}
-                {!data.conversionCost && !data.conversionCostError && (
-                  <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
-                )}
+                </div>
 
-                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
-                {data.messageCost && (
-                  <>
-                    <div className="flex flex-wrap gap-2">
-                      <StatCard
-                        label="gasto acumulado"
-                        value={formatMoney(data.messageCost.totalCost, data.messageCost.currency)}
-                        iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
-                        iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
-                        icon={PIPELINE_ICON_MAP.CircleDollarSign}
-                      />
-                      <StatCard
-                        label="mensajes cobrados"
-                        value={data.messageCost.billableVolume}
-                        iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
-                        iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
-                        icon={PIPELINE_ICON_MAP.MessageSquareWarning}
-                      />
-                      <StatCard
-                        label="promedio por mensaje"
-                        value={data.messageCost.avgCostPerMessage != null ? formatMoney(data.messageCost.avgCostPerMessage, data.messageCost.currency) : 'Sin mensajes cobrados'}
-                        iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
-                        iconText={PIPELINE_COLOR_CLASSES.info.iconText}
-                        icon={PIPELINE_ICON_MAP.CircleDollarSign}
-                      />
-                    </div>
-                    {data.messageCost.byCategory.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {data.messageCost.byCategory.map((c) => (
-                          <span key={c.category} className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] text-greige-ink">
-                            {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, data.messageCost.currency)}/msg` : 'gratis'}
-                          </span>
-                        ))}
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
+                    {data.conversionCost && (
+                      <div className="flex flex-wrap gap-2">
+                        <StatCard
+                          label="gasto en pauta"
+                          value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
+                          iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
+                          iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
+                          icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                        />
+                        <StatCard
+                          label="pagados de pauta"
+                          value={data.conversionCost.conversions}
+                          iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
+                          iconText={PIPELINE_COLOR_CLASSES.success.iconText}
+                          icon={PIPELINE_ICON_MAP.CheckCircle2}
+                        />
+                        <StatCard
+                          label="por conversión"
+                          value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin conversiones'}
+                          iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                          iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                          icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                        />
                       </div>
                     )}
-                  </>
-                )}
-                {data.messageCostError && (
-                  <p className="text-xs text-danger">No se pudo leer WhatsApp: {data.messageCostError}</p>
-                )}
-                {!data.messageCost && !data.messageCostError && (
-                  <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
-                )}
+                    {data.conversionCostError && (
+                      <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
+                    )}
+                    {!data.conversionCost && !data.conversionCostError && (
+                      <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                    )}
+                  </div>
 
-                <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
-                <div style={{ position: 'relative', height: 200 }}>
-                  <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
+                    {data.messageCost && (
+                      <>
+                        <div className="flex flex-wrap gap-2">
+                          <StatCard
+                            label="gasto acumulado"
+                            value={formatMoney(data.messageCost.totalCost, data.messageCost.currency)}
+                            iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
+                            iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
+                            icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                          />
+                          <StatCard
+                            label="mensajes cobrados"
+                            value={data.messageCost.billableVolume}
+                            iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
+                            iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
+                            icon={PIPELINE_ICON_MAP.MessageSquareWarning}
+                          />
+                          <StatCard
+                            label="promedio por mensaje"
+                            value={data.messageCost.avgCostPerMessage != null ? formatMoney(data.messageCost.avgCostPerMessage, data.messageCost.currency) : 'Sin mensajes cobrados'}
+                            iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                            iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                            icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                          />
+                        </div>
+                        {data.messageCost.byCategory.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {data.messageCost.byCategory.map((c) => (
+                              <span key={c.category} className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] text-greige-ink">
+                                {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, data.messageCost.currency)}/msg` : 'gratis'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {data.messageCostError && (
+                      <p className="text-xs text-danger">No se pudo leer WhatsApp: {data.messageCostError}</p>
+                    )}
+                    {!data.messageCost && !data.messageCostError && (
+                      <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
+                    <div style={{ position: 'relative', height: 200 }}>
+                      <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
+                    </div>
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </motion.div>
         </motion.div>
