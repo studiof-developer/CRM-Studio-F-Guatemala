@@ -7,12 +7,35 @@
 // actually billed, at a flat per-message rate (confirmed 0.074/msg across every row
 // seen). No currency field anywhere in the response — Meta's WhatsApp Business
 // Platform bills in USD by default (unlike Ads, which reports in the ad account's own
-// currency), so that's assumed here; if Studio F's actual invoice ever comes back in
-// something else, this is the one place to change it.
+// currency); converted to COP below (2026-09-16 request) so it reads consistently
+// alongside "Costo de conversión", which is already COP from the ad account itself.
 import { getActiveCredentials } from './whatsapp.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
-const CURRENCY = 'USD';
+const DISPLAY_CURRENCY = 'COP';
+// Only used if the live rate below can't be reached at all (first call after a restart,
+// no network) — a rough recent USD/COP level, not meant to stay accurate over time.
+const FALLBACK_USD_TO_COP = 4000;
+const RATE_TTL_MS = 6 * 60 * 60 * 1000; // a reporting figure doesn't need a live rate every popup open
+let cachedRate = null;
+let cachedRateAt = 0;
+
+async function getUsdToCopRate() {
+  if (cachedRate && Date.now() - cachedRateAt < RATE_TTL_MS) return cachedRate;
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const body = await res.json();
+    const rate = body?.rates?.[DISPLAY_CURRENCY];
+    if (rate) {
+      cachedRate = rate;
+      cachedRateAt = Date.now();
+      return rate;
+    }
+  } catch {
+    // fall through to whatever we've got
+  }
+  return cachedRate ?? FALLBACK_USD_TO_COP;
+}
 
 async function graphGet(path, token) {
   const res = await fetch(`${GRAPH_BASE}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -52,16 +75,19 @@ export async function fetchMessageCost(since, until) {
     entry.cost += cost;
     byCategory[p.pricing_category] = entry;
   }
+
+  const rate = await getUsdToCopRate();
+  const totalCostCop = totalCost * rate;
   return {
-    currency: CURRENCY,
-    totalCost,
+    currency: DISPLAY_CURRENCY,
+    totalCost: totalCostCop,
     billableVolume,
-    avgCostPerMessage: billableVolume > 0 ? totalCost / billableVolume : null,
+    avgCostPerMessage: billableVolume > 0 ? totalCostCop / billableVolume : null,
     byCategory: Object.entries(byCategory).map(([category, { volume, cost }]) => ({
       category,
       volume,
-      cost,
-      costPerMessage: cost > 0 && volume > 0 ? cost / volume : 0,
+      cost: cost * rate,
+      costPerMessage: cost > 0 && volume > 0 ? (cost * rate) / volume : 0,
     })),
   };
 }
