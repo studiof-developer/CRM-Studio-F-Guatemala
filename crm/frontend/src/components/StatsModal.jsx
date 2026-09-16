@@ -152,7 +152,7 @@ export default function StatsModal({ open, onClose }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
-            className="glass-card w-full max-w-5xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className="glass-card w-full max-w-7xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -184,7 +184,7 @@ export default function StatsModal({ open, onClose }) {
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
-              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[200px_260px_1fr]">
+              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[180px_240px_340px_1fr]">
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen</p>
@@ -347,12 +347,12 @@ export default function StatsModal({ open, onClose }) {
                       <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
                     )}
                   </div>
+                </div>
 
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
-                    <div style={{ position: 'relative', height: 200 }}>
-                      <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
-                    </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
+                  <div style={{ position: 'relative', height: 380 }}>
+                    <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
                   </div>
                 </div>
               </div>
