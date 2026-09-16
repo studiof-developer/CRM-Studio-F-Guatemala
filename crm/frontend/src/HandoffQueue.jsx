@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, fetchPipelineSearchSummary, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
+import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, fetchPipelineArchiveExport, fetchPipelineSearchSummary, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import StatsModal from './components/StatsModal.jsx';
@@ -216,11 +216,16 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     }
   }
 
+  // Reuses whatever period is already selected on the board (Hoy/Ayer/Semana/Mes/
+  // personalizado/Todo) — 2026-09-16 request: Mauricio needed to scope a reference
+  // search to just the current month instead of always "todo el tiempo". "Todo" leaves
+  // dateFrom/dateTo/sinceTs/untilTs all undefined, which the backend already treats as
+  // no period filter, so this needs no special-casing here.
   async function openDownloadPreview() {
     setLoadingSummary(true);
     setSearchSummary(null);
     try {
-      const summary = await fetchPipelineSearchSummary(debouncedSearch);
+      const summary = await fetchPipelineSearchSummary(debouncedSearch, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
       setSearchSummary(summary);
     } catch (err) {
       showError(err.message);
@@ -235,7 +240,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   async function downloadAllMatching() {
     setDownloadingAll(true);
     try {
-      const rows = await fetchPipelineExport('all', { q: debouncedSearch });
+      const rows = await fetchPipelineArchiveExport(debouncedSearch, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs });
       if (!rows.length) { showError('No hay nada que exportar con esta búsqueda'); return; }
       const headers = ['Cliente', 'Teléfono', 'Red', 'Temperatura', 'Último mensaje (hace)', 'Último mensaje'];
       const lines = rows.map((r) => [
@@ -875,7 +880,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         <ConfirmDialog
           open={searchSummary !== null}
           title="Descargar conversaciones"
-          message={`"${debouncedSearch}" — ${searchSummary?.total ?? 0} conversación(es) encontrada(s), en todas las redes, sin importar el estado o cuánto tiempo tenga el ticket.`}
+          message={`"${debouncedSearch}" — ${searchSummary?.total ?? 0} conversación(es) encontrada(s), en todas las redes, sin importar el estado del ticket. Periodo: ${PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? 'Todo'}${periodPreset !== 'todo' ? ' (cámbialo arriba del tablero antes de buscar si necesitas otro)' : ''}.`}
           confirmLabel={downloadingAll ? 'Descargando…' : 'Descargar todo'}
           busy={downloadingAll}
           confirmDisabled={!searchSummary?.total}

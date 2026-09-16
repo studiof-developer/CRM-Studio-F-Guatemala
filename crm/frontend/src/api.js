@@ -98,10 +98,28 @@ export async function fetchPipelineExport(bucket, filters = {}) {
   return res.json();
 }
 
+// "Descargar Conversaciones" (2026-09-16) — unlike fetchPipelineExport above,
+// pipelineFilterParams drops from/to/since/until whenever q is set (right for the
+// board's own per-column search, which always ignores period on purpose) — this
+// archive download deliberately wants BOTH q and an optional period together.
+export async function fetchPipelineArchiveExport(q, period = {}) {
+  const params = new URLSearchParams({ q, bucket: 'all' });
+  const { from, to, since, until } = period;
+  if (since) params.set('since', since); else if (from) params.set('from', from);
+  if (until) params.set('until', until); else if (to) params.set('to', to);
+  const res = await apiFetch(`/api/tickets/pipeline/export?${params}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al exportar');
+  return res.json();
+}
+
 // "Descargar Conversaciones" preview (2026-09-16) — a search's count broken down by
 // bucket/temperature, shown before committing to the (possibly cross-bucket) download.
-export async function fetchPipelineSearchSummary(q) {
+// period ({from,to} or {since,until}) is optional — omit for "todo el tiempo".
+export async function fetchPipelineSearchSummary(q, period = {}) {
   const params = new URLSearchParams({ q });
+  const { from, to, since, until } = period;
+  if (since) params.set('since', since); else if (from) params.set('from', from);
+  if (until) params.set('until', until); else if (to) params.set('to', to);
   const res = await apiFetch(`/api/tickets/pipeline/search-summary?${params}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al buscar');
   return res.json();

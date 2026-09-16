@@ -482,7 +482,12 @@ const EXPORT_ROW_CAP = 10000;
 // the bot (HIDDEN_TICKET_STATUSES_SQL). None of those apply here: this scans every
 // customer directly, not tickets, so nothing about ticket lifecycle state can hide a
 // real match.
-function buildAllTimeSearchClause(trimmedQ, params) {
+// dateClause (from buildDateRangeClause against 'h.created_at', or '' for no period —
+// 2026-09-16: Mauricio needed to scope a reference search to just the current month
+// instead of always "todo el tiempo") only narrows the MESSAGE-content match — a plain
+// name/phone match has no message event to date-scope against, so it stays period-
+// agnostic, same as it's always been.
+function buildAllTimeSearchClause(trimmedQ, params, dateClause = '') {
   params.push(`%${trimmedQ}%`);
   const nameOrPhone = `c.full_name ILIKE $${params.length} OR c.whatsapp_number ILIKE $${params.length}`;
   let messageMatch = '';
@@ -490,7 +495,7 @@ function buildAllTimeSearchClause(trimmedQ, params) {
     messageMatch = `
       OR EXISTS (
         SELECT 1 FROM n8n_chat_histories h
-        WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'content' ILIKE $${params.length}
+        WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'content' ILIKE $${params.length} ${dateClause}
       )
       OR EXISTS (
         SELECT 1 FROM social_messages sm
@@ -502,33 +507,45 @@ function buildAllTimeSearchClause(trimmedQ, params) {
   return `${nameOrPhone} ${messageMatch}`;
 }
 
-// Broadens a text search into "everyone who came from the same ad" (2026-09-16 finding):
+// Broadens a text search into "everyone who came from the SAME ad" (2026-09-16 finding):
 // comparing a literal text search against Meta's own ad-conversation count for a product
 // reference showed the CRM wasn't missing data — most customers who click a Click-to-
 // WhatsApp ad never retype the product reference in the chat at all, so a pure text
 // search structurally undercounts against what Meta reports for that ad. Meta stamps a
 // `referral.source_id` (the ad's id) on a customer's first message when they arrive via
-// an ad — this finds which ad(s) the text-matched customers actually came from, then
-// includes EVERY customer who came from that same ad, whether or not they ever
-// mentioned the reference by name. Returns a WITH-chain ending in all_matches(customer_id);
-// splice it before the caller's own SELECT.
-function buildArchiveSearchCte(trimmedQ, params) {
-  const whereClause = buildAllTimeSearchClause(trimmedQ, params);
+// an ad — this finds which ONE ad the text-matched customers most commonly came from
+// (LIMIT 1, ordered by frequency), then includes every customer who came from THAT ad.
+// Deliberately not every ad any text-matched customer ever touched: a repeat customer
+// who later clicked an unrelated generic "50% OFF" ad would otherwise drag in everyone
+// who ever clicked THAT ad too — confirmed live (2026-09-16): using every associated ad
+// instead of just the dominant one inflated 347 real matches to 2027 bogus ones.
+// dateQuery (req.query's from/to/since/until, or {} for no period) optionally scopes
+// both which messages count as a text match and which ad-referral messages count toward
+// finding/broadening by the dominant ad — Mauricio needed "just September", not always
+// every message ever. Returns a WITH-chain ending in all_matches(customer_id); splice
+// it before the caller's own SELECT.
+function buildArchiveSearchCte(trimmedQ, params, dateQuery = {}) {
+  const dateClause = buildDateRangeClause(dateQuery, params, 'h.created_at');
+  const whereClause = buildAllTimeSearchClause(trimmedQ, params, dateClause);
   return `
     WITH text_matches AS (
       SELECT c.id AS customer_id, c.whatsapp_number FROM customers c WHERE ${whereClause}
     ),
     related_ads AS (
-      SELECT DISTINCT h.message->'additional_kwargs'->'referral'->>'source_id' AS ad_id
+      SELECT h.message->'additional_kwargs'->'referral'->>'source_id' AS ad_id, count(*) AS n
       FROM n8n_chat_histories h
       JOIN text_matches tm ON h.session_id LIKE tm.whatsapp_number || '%'
-      WHERE h.message->'additional_kwargs'->'referral' IS NOT NULL
+      WHERE h.message->'additional_kwargs'->'referral' IS NOT NULL ${dateClause}
+      GROUP BY ad_id
+      ORDER BY n DESC
+      LIMIT 1
     ),
     ad_matches AS (
       SELECT DISTINCT c.id AS customer_id
       FROM customers c
       JOIN n8n_chat_histories h ON h.session_id LIKE c.whatsapp_number || '%'
       WHERE h.message->'additional_kwargs'->'referral'->>'source_id' IN (SELECT ad_id FROM related_ads)
+        ${dateClause}
     ),
     all_matches AS (
       SELECT customer_id FROM text_matches
@@ -555,7 +572,7 @@ router.get('/pipeline/export', async (req, res, next) => {
 
     if (allBuckets) {
       const params = [];
-      const cte = buildArchiveSearchCte(trimmedQ, params);
+      const cte = buildArchiveSearchCte(trimmedQ, params, req.query);
       const { rows } = await pool.query(`
         ${cte}
         SELECT c.full_name, c.whatsapp_number, c.channel, ${EFFECTIVE_STATUS_SQL} AS temperature,
@@ -653,7 +670,7 @@ router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, ne
     if (!trimmedQ) return res.status(400).json({ error: 'q is required' });
 
     const params = [];
-    const cte = buildArchiveSearchCte(trimmedQ, params);
+    const cte = buildArchiveSearchCte(trimmedQ, params, req.query);
     const [byTempResult, salesResult] = await Promise.all([
       pool.query(`
         ${cte}
