@@ -502,6 +502,42 @@ function buildAllTimeSearchClause(trimmedQ, params) {
   return `${nameOrPhone} ${messageMatch}`;
 }
 
+// Broadens a text search into "everyone who came from the same ad" (2026-09-16 finding):
+// comparing a literal text search against Meta's own ad-conversation count for a product
+// reference showed the CRM wasn't missing data — most customers who click a Click-to-
+// WhatsApp ad never retype the product reference in the chat at all, so a pure text
+// search structurally undercounts against what Meta reports for that ad. Meta stamps a
+// `referral.source_id` (the ad's id) on a customer's first message when they arrive via
+// an ad — this finds which ad(s) the text-matched customers actually came from, then
+// includes EVERY customer who came from that same ad, whether or not they ever
+// mentioned the reference by name. Returns a WITH-chain ending in all_matches(customer_id);
+// splice it before the caller's own SELECT.
+function buildArchiveSearchCte(trimmedQ, params) {
+  const whereClause = buildAllTimeSearchClause(trimmedQ, params);
+  return `
+    WITH text_matches AS (
+      SELECT c.id AS customer_id, c.whatsapp_number FROM customers c WHERE ${whereClause}
+    ),
+    related_ads AS (
+      SELECT DISTINCT h.message->'additional_kwargs'->'referral'->>'source_id' AS ad_id
+      FROM n8n_chat_histories h
+      JOIN text_matches tm ON h.session_id LIKE tm.whatsapp_number || '%'
+      WHERE h.message->'additional_kwargs'->'referral' IS NOT NULL
+    ),
+    ad_matches AS (
+      SELECT DISTINCT c.id AS customer_id
+      FROM customers c
+      JOIN n8n_chat_histories h ON h.session_id LIKE c.whatsapp_number || '%'
+      WHERE h.message->'additional_kwargs'->'referral'->>'source_id' IN (SELECT ad_id FROM related_ads)
+    ),
+    all_matches AS (
+      SELECT customer_id FROM text_matches
+      UNION
+      SELECT customer_id FROM ad_matches
+    )
+  `;
+}
+
 router.get('/pipeline/export', async (req, res, next) => {
   try {
     const bucket = req.query.bucket;
@@ -519,12 +555,13 @@ router.get('/pipeline/export', async (req, res, next) => {
 
     if (allBuckets) {
       const params = [];
-      const whereClause = buildAllTimeSearchClause(trimmedQ, params);
+      const cte = buildArchiveSearchCte(trimmedQ, params);
       const { rows } = await pool.query(`
+        ${cte}
         SELECT c.full_name, c.whatsapp_number, c.channel, ${EFFECTIVE_STATUS_SQL} AS temperature,
                c.last_customer_message_at, c.last_customer_message, c.last_message_at, c.last_message
         FROM customers c
-        WHERE ${whereClause}
+        WHERE c.id IN (SELECT customer_id FROM all_matches)
         ORDER BY COALESCE(c.last_customer_message_at, c.last_message_at, c.created_at) DESC
         LIMIT ${EXPORT_ROW_CAP}
       `, params);
@@ -607,11 +644,12 @@ router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, ne
     if (!trimmedQ) return res.status(400).json({ error: 'q is required' });
 
     const params = [];
-    const whereClause = buildAllTimeSearchClause(trimmedQ, params);
+    const cte = buildArchiveSearchCte(trimmedQ, params);
     const { rows } = await pool.query(`
+      ${cte}
       SELECT ${EFFECTIVE_STATUS_SQL} AS temperature, count(*) AS total
       FROM customers c
-      WHERE ${whereClause}
+      WHERE c.id IN (SELECT customer_id FROM all_matches)
       GROUP BY temperature
     `, params);
 
