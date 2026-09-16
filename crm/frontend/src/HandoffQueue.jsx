@@ -12,6 +12,7 @@ import { onLiveEvent } from './lib/liveEvents.js';
 import { colorFor, hexToRgba } from './lib/avatarColor.js';
 import { COLUMN_ORDER, DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from './lib/pipelineColumns.js';
 import { ChannelIcon, CHANNEL_LABELS } from './lib/channelIcons.jsx';
+import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { guatemalaToday, addDays, monthBounds, MONTH_NAMES, PERIOD_OPTIONS, guatemalaMidnight, useDayCutoffs } from './lib/pipelinePeriod.js';
 
 // The 4 columns that are really the customer's temperature wearing a pipeline-stage
@@ -236,13 +237,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     try {
       const rows = await fetchPipelineExport('all', { q: debouncedSearch });
       if (!rows.length) { showError('No hay nada que exportar con esta búsqueda'); return; }
-      const headers = ['Cliente', 'Teléfono', 'Red', 'Columna', 'Esperando desde', 'Último mensaje'];
+      const headers = ['Cliente', 'Teléfono', 'Red', 'Temperatura', 'Último mensaje (hace)', 'Último mensaje'];
       const lines = rows.map((r) => [
         r.fullName ?? '', r.whatsappNumber, CHANNEL_LABELS[r.channel] ?? r.channel,
-        metaFor(r.bucket).label, formatWait(r.lastMessageAt ?? r.stageSince), r.lastMessage ?? '',
+        TEMP_META[r.temperature]?.label ?? r.temperature ?? '', r.lastMessageAt ? formatWait(r.lastMessageAt) : '', r.lastMessage ?? '',
       ]);
       const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
-      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
+      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 40 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Conversaciones');
       XLSX.writeFile(wb, `conversaciones_${debouncedSearch.replace(/[^a-zA-Z0-9]/g, '_')}_${guatemalaToday()}.xlsx`);
@@ -854,7 +855,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         <ConfirmDialog
           open={searchSummary !== null}
           title="Descargar conversaciones"
-          message={`"${debouncedSearch}" — ${searchSummary?.total ?? 0} conversación(es) encontrada(s), en todas las redes y columnas del Pipeline.`}
+          message={`"${debouncedSearch}" — ${searchSummary?.total ?? 0} conversación(es) encontrada(s), en todas las redes, sin importar el estado o cuánto tiempo tenga el ticket.`}
           confirmLabel={downloadingAll ? 'Descargando…' : 'Descargar todo'}
           busy={downloadingAll}
           confirmDisabled={!searchSummary?.total}
@@ -863,8 +864,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         >
           {searchSummary?.total > 0 && (
             <div className="flex flex-col gap-1.5">
-              {COLUMN_ORDER.filter((key) => searchSummary.byBucket[key]).map((key) => {
-                const { label, icon: Icon, iconBg, iconText } = metaFor(key);
+              {BUCKET_ORDER.filter((key) => searchSummary.byTemperature[key]).map((key) => {
+                const { label, icon: Icon, iconBg, iconText } = TEMP_META[key];
                 return (
                   <div key={key} className="flex items-center justify-between rounded-lg bg-black/[0.03] px-3 py-1.5 text-sm dark:bg-white/[0.05]">
                     <span className="flex items-center gap-2 text-ink">
@@ -873,7 +874,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                       </span>
                       {label}
                     </span>
-                    <span className="font-semibold text-ink">{searchSummary.byBucket[key]}</span>
+                    <span className="font-semibold text-ink">{searchSummary.byTemperature[key]}</span>
                   </div>
                 );
               })}
