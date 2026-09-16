@@ -37,16 +37,26 @@ export async function testMetaAdsConnection() {
 }
 
 // Spend (in the ad account's own currency — MIILA reports in COP, confirmed via
-// "Probar conexión") over [since, until], YYYY-MM-DD each. Two calls in parallel: the
-// insights endpoint has no currency field of its own, only the AdAccount object does.
+// "Probar conexión") over [since, until], YYYY-MM-DD each, plus Meta's own "resultados"
+// count and "Costo por resultado" — 2026-09-16 report: Studio F's own campaigns are all
+// click-to-WhatsApp, so the result Ads Manager counts is a started messaging
+// conversation (onsite_conversion.messaging_conversation_started_7d, its default
+// attribution window); this is Meta's own metric, spend ÷ conversations STARTED, not
+// our "por conversión" (spend ÷ conversations that actually paid) computed separately
+// in tickets.js from our own data. Two calls in parallel: the insights endpoint has no
+// currency field of its own, only the AdAccount object does.
 export async function fetchAdSpend(since, until) {
   const creds = await getMetaAdsCredentials();
   if (!creds) return null;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
   const [insights, account] = await Promise.all([
-    graphGet(`act_${creds.accountId}/insights?fields=spend&time_range=${timeRange}`, creds.token),
+    graphGet(`act_${creds.accountId}/insights?fields=spend,actions&time_range=${timeRange}`, creds.token),
     graphGet(`act_${creds.accountId}?fields=currency`, creds.token),
   ]);
   const row = insights.data?.[0];
-  return { spend: row ? Number(row.spend) : 0, currency: account.currency };
+  const spend = row ? Number(row.spend) : 0;
+  const conversationAction = row?.actions?.find((a) => a.action_type === 'onsite_conversion.messaging_conversation_started_7d')
+    ?? row?.actions?.find((a) => a.action_type?.includes('messaging_conversation_started'));
+  const results = conversationAction ? Number(conversationAction.value) : 0;
+  return { spend, currency: account.currency, results, costPerResult: results > 0 ? spend / results : null };
 }

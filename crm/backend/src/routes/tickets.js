@@ -885,6 +885,11 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
             currency: spend.currency,
             conversions,
             costPerConversion: conversions > 0 ? spend.spend / conversions : null,
+            // Meta Ads' own "Costo por resultado" — spend ÷ conversations STARTED via
+            // the ad, not ÷ actual sales like costPerConversion above (2026-09-16
+            // report: the two read as the same thing but aren't).
+            results: spend.results,
+            costPerResult: spend.costPerResult,
           };
         } else {
           // A period WAS picked (that's the only way this branch runs at all) — null

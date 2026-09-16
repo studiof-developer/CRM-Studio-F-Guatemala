@@ -243,30 +243,54 @@ export default function StatsModal({ open, onClose }) {
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
-                    <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Gasto en pauta ÷ conversiones logradas — el mismo "Costo por resultado" de Meta Ads.</p>
+                    <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Dos formas de medirlo: lo que Meta cuenta como "resultado" (conversaciones iniciadas) y lo que el CRM confirma como venta real. No tienen por qué coincidir.</p>
                     {data.conversionCost && (
-                      <div className="flex flex-wrap gap-2">
-                        <StatCard
-                          label="gasto en pauta"
-                          value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
-                          iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
-                          iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
-                          icon={PIPELINE_ICON_MAP.CircleDollarSign}
-                        />
-                        <StatCard
-                          label="pagados de pauta"
-                          value={data.conversionCost.conversions}
-                          iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
-                          iconText={PIPELINE_COLOR_CLASSES.success.iconText}
-                          icon={PIPELINE_ICON_MAP.CheckCircle2}
-                        />
-                        <StatCard
-                          label="por conversión"
-                          value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin conversiones'}
-                          iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
-                          iconText={PIPELINE_COLOR_CLASSES.info.iconText}
-                          icon={PIPELINE_ICON_MAP.CircleDollarSign}
-                        />
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <p className="mb-1 text-[11px] font-medium text-greige-ink">Costo por resultado — igual a Meta Ads</p>
+                          <div className="flex flex-wrap gap-2">
+                            <StatCard
+                              label="gasto en pauta"
+                              value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
+                              iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
+                              iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
+                              icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                            />
+                            <StatCard
+                              label="conversaciones"
+                              value={data.conversionCost.results}
+                              iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                              iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                              icon={PIPELINE_ICON_MAP.MessageSquareWarning}
+                            />
+                            <StatCard
+                              label="por resultado"
+                              value={data.conversionCost.costPerResult != null ? formatMoney(data.conversionCost.costPerResult, data.conversionCost.currency) : 'Sin conversaciones'}
+                              iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
+                              iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
+                              icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-[11px] font-medium text-greige-ink">Costo por venta — confirmada en el CRM</p>
+                          <div className="flex flex-wrap gap-2">
+                            <StatCard
+                              label="pagados de pauta"
+                              value={data.conversionCost.conversions}
+                              iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
+                              iconText={PIPELINE_COLOR_CLASSES.success.iconText}
+                              icon={PIPELINE_ICON_MAP.CheckCircle2}
+                            />
+                            <StatCard
+                              label="por venta"
+                              value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin ventas'}
+                              iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
+                              iconText={PIPELINE_COLOR_CLASSES.info.iconText}
+                              icon={PIPELINE_ICON_MAP.CircleDollarSign}
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                     {data.conversionCostError && (
