@@ -773,7 +773,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                  GREATEST(t.updated_at, c.updated_at) AS stage_since,
-                 c.has_unread AS customer_has_unread,
+                 c.has_unread AS customer_has_unread, c.created_at AS customer_created_at,
                  c.last_customer_message_at, c.last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
@@ -791,10 +791,15 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
         -- but not on the board it's meant to mirror (2026-09-13 report: this was showing
         -- 3759 "En conversación" while the actual board, post-dormancy, showed ~20).
         bucketed AS (
-          SELECT ${BUCKET_CASE_SQL} AS bucket, customer_has_unread
+          SELECT ${BUCKET_CASE_SQL} AS bucket, customer_has_unread, customer_created_at
           FROM deduped WHERE true ${bucketDateClause} ${dormancyClauseSql()}
         )
-        SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total
+        SELECT bucket, count(*) AS total, count(*) FILTER (WHERE customer_has_unread) AS unread_total,
+               -- Same "cuánta gente entró hoy" the board's own top stat strip shows
+               -- (HandoffQueue.jsx's grandNewToday), fixed to today's Guatemala calendar
+               -- day regardless of whatever period this popup itself is filtered to —
+               -- 2026-09-16 request to fold the board's own summary strip into this popup.
+               count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) AS new_today_total
         FROM bucketed GROUP BY bucket
       `, bucketParams),
       // count(DISTINCT session_id), not count(*) — a back-and-forth conversation with 20
@@ -824,6 +829,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
       total: totalsByBucket[key]?.total ?? 0,
       unreadTotal: totalsByBucket[key]?.unreadTotal ?? 0,
     }));
+    const newToday = buckets.rows.reduce((sum, r) => sum + Number(r.new_today_total), 0);
     const countByHour = Object.fromEntries(byHour.rows.map((r) => [r.hour, Number(r.total)]));
     const conversationsByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: countByHour[hour] ?? 0 }));
 
@@ -912,6 +918,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
 
     res.json({
       buckets: bucketStats,
+      newToday,
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
       conversionCost,

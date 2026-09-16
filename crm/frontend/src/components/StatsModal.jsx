@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip } from 'chart.js';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Calendar, Mail } from 'lucide-react';
 import { fetchPipelineStats } from '../api.js';
 import Select from './Select.jsx';
 import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
@@ -152,7 +152,7 @@ export default function StatsModal({ open, onClose }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
-            className="glass-card w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className="glass-card w-full max-w-5xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -184,7 +184,36 @@ export default function StatsModal({ open, onClose }) {
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
-              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_1fr]">
+              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[200px_260px_1fr]">
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen</p>
+                    <div className="flex flex-col gap-2">
+                      <StatCard
+                        label="Nuevas hoy"
+                        value={data.newToday}
+                        iconBg="bg-accent-soft"
+                        iconText="text-accent"
+                        icon={Calendar}
+                      />
+                      <StatCard
+                        label="No leídos"
+                        value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
+                        iconBg="bg-warning/10"
+                        iconText="text-warning"
+                        icon={Mail}
+                      />
+                      <StatCard
+                        label="No atendidos"
+                        value={data.buckets.find((b) => b.bucket === 'pendiente')?.total ?? 0}
+                        iconBg={metaFor('pendiente').iconBg}
+                        iconText={metaFor('pendiente').iconText}
+                        icon={metaFor('pendiente').icon}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Todos los estados</p>
@@ -213,7 +242,8 @@ export default function StatsModal({ open, onClose }) {
 
                 <div className="flex flex-col gap-6">
                   <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
+                    <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Gasto en pauta ÷ conversiones logradas — el mismo "Costo por resultado" de Meta Ads.</p>
                     {data.conversionCost && (
                       <div className="flex flex-wrap gap-2">
                         <StatCard
@@ -248,7 +278,8 @@ export default function StatsModal({ open, onClose }) {
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
+                    <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Lo que WhatsApp cobra por cada mensaje enviado — facturación de la plataforma, no gasto en pauta. No tiene por qué coincidir con "Costo de conversión".</p>
                     {data.messageCost && (
                       <>
                         <div className="flex flex-wrap gap-2">
