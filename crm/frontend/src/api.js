@@ -98,6 +98,15 @@ export async function fetchPipelineExport(bucket, filters = {}) {
   return res.json();
 }
 
+// "Descargar Conversaciones" preview (2026-09-16) — a search's count broken down by
+// bucket/temperature, shown before committing to the (possibly cross-bucket) download.
+export async function fetchPipelineSearchSummary(q) {
+  const params = new URLSearchParams({ q });
+  const res = await apiFetch(`/api/tickets/pipeline/search-summary?${params}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al buscar');
+  return res.json();
+}
+
 // The "expandir estadísticas" popup — every bucket's total+unread unconditionally, plus
 // messages-by-hour and average first-response time, for the popup's own period filter
 // (from/to/since/until only; no bucket, no q, no unreadOnly — this isn't a board column).

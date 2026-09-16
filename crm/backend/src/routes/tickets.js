@@ -151,9 +151,30 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
   if (trimmedQ) {
     // A search match has to show up no matter what period is selected — a customer
     // who wrote a week ago is still a real result, not something Hoy/Ayer should be
-    // able to hide. Name/phone only (temped never carries message text to search).
+    // able to hide. Name/phone always matches; a 3+ char query also matches message
+    // content (2026-09-16 request: find every conversation that mentioned a product
+    // reference like "S342232", not just name/phone). Each EXISTS only scans that ONE
+    // customer's own messages (session_id/contact_id already narrows it), and — unlike
+    // the board's own unfiltered load — this only ever runs when an admin deliberately
+    // searches, never on a plain poll, so it doesn't carry the same risk as the
+    // per-row subqueries that caused earlier outages here.
     params.push(`%${trimmedQ}%`);
-    dateClause += ` AND (full_name ILIKE $${params.length} OR whatsapp_number ILIKE $${params.length})`;
+    const nameOrPhone = `full_name ILIKE $${params.length} OR whatsapp_number ILIKE $${params.length}`;
+    let messageMatch = '';
+    if (trimmedQ.length >= 3) {
+      messageMatch = `
+        OR EXISTS (
+          SELECT 1 FROM n8n_chat_histories h
+          WHERE h.session_id LIKE whatsapp_number || '%' AND h.message->>'content' ILIKE $${params.length}
+        )
+        OR EXISTS (
+          SELECT 1 FROM social_messages sm
+          JOIN social_contacts sc ON sc.id = sm.contact_id
+          WHERE sc.customer_id = customer_id AND sm.body ILIKE $${params.length}
+        )
+      `;
+    }
+    dateClause += ` AND (${nameOrPhone} ${messageMatch})`;
   } else if (since) {
     // "Hoy"/"Ayer" filter on the exact moment staff last wrote before that day started
     // (see /last-advisor-activity below), not calendar midnight — a precise timestamp,
@@ -456,15 +477,27 @@ const EXPORT_ROW_CAP = 10000;
 router.get('/pipeline/export', async (req, res, next) => {
   try {
     const bucket = req.query.bucket;
-    if (!PIPELINE_COLUMNS.includes(bucket)) return res.status(400).json({ error: 'invalid bucket' });
+    // 'all' spans every column instead of one — added 2026-09-16 for "download every
+    // conversation that mentioned this reference", which can legitimately land in any
+    // bucket. Only allowed alongside an actual search — otherwise this would be an
+    // unfiltered whole-database dump, exactly the kind of query this file's history
+    // warns against.
+    const allBuckets = bucket === 'all';
+    if (!allBuckets && !PIPELINE_COLUMNS.includes(bucket)) return res.status(400).json({ error: 'invalid bucket' });
+    if (allBuckets && !(req.query.q ?? '').trim()) {
+      return res.status(400).json({ error: 'bucket=all requires a search query' });
+    }
+    // Admin-only, unlike the pre-existing single-column export below — 2026-09-16 request.
+    if (allBuckets && req.user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
 
     const params = [bucket];
-    const { orderExpr, dateClause, unreadOnlyClause } = buildPipelineFilters(bucket, req.query, params);
+    const { orderExpr, dateClause, unreadOnlyClause } = buildPipelineFilters(allBuckets ? 'en_atencion' : bucket, req.query, params);
     const dormancyClause = dormancyClauseSql(req.query.dormant);
 
     const { rows } = await pool.query(`
       WITH temped AS (
-        SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
+        SELECT t.status AS ticket_status, c.id AS customer_id, c.channel,
+               ${EFFECTIVE_STATUS_SQL} AS temperature,
                c.full_name, c.whatsapp_number,
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message,
@@ -481,11 +514,15 @@ router.get('/pipeline/export', async (req, res, next) => {
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket
         FROM deduped
-        WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
+        -- $1::text anchors an explicit type for the bucket placeholder — it's otherwise
+        -- unreferenced in bucket=all mode (no "WHERE bucket = $1" below), and Postgres
+        -- can't infer a bare unused parameter's type on its own ("could not determine
+        -- data type of parameter $1").
+        WHERE $1::text IS NOT NULL ${dateClause} ${unreadOnlyClause} ${dormancyClause}
       )
-      SELECT full_name, whatsapp_number, stage_since,
+      SELECT full_name, whatsapp_number, channel, temperature, bucket, stage_since,
              last_customer_message_at, last_customer_message, last_message_at, last_message
-      FROM totaled WHERE bucket = $1
+      FROM totaled ${allBuckets ? '' : 'WHERE bucket = $1'}
       ORDER BY ${orderExpr} ASC
       LIMIT ${EXPORT_ROW_CAP}
     `, params);
@@ -493,6 +530,9 @@ router.get('/pipeline/export', async (req, res, next) => {
     res.json(rows.map((r) => ({
       fullName: r.full_name,
       whatsappNumber: r.whatsapp_number,
+      channel: r.channel,
+      temperature: r.temperature,
+      bucket: r.bucket,
       stageSince: r.stage_since,
       // Falls back to the generic last-message columns for a contact who never wrote
       // back at all (last_customer_message_at is NULL for those) — same reasoning as
@@ -501,6 +541,50 @@ router.get('/pipeline/export', async (req, res, next) => {
       lastMessageAt: r.last_customer_message_at ?? r.last_message_at,
       lastMessage: r.last_customer_message ?? r.last_message,
     })));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Preview for the "Descargar Conversaciones" button (2026-09-16 request) — a search's
+// count broken down by bucket/temperature, so an admin can see "8 en frío, 3 en
+// caliente..." before committing to a possibly-large download. A separate, small route
+// rather than folding into /pipeline/stats above: that one already juggles three
+// different queries for a different purpose (the date-range analytics popup); this is
+// one query, always search-scoped, admin-only for the same reason /pipeline/stats is.
+router.get('/pipeline/search-summary', requireRole('admin'), async (req, res, next) => {
+  try {
+    const trimmedQ = (req.query.q ?? '').trim();
+    if (!trimmedQ) return res.status(400).json({ error: 'q is required' });
+
+    const params = ['en_atencion'];
+    const { dateClause } = buildPipelineFilters('en_atencion', req.query, params);
+
+    const { rows } = await pool.query(`
+      WITH temped AS (
+        SELECT t.status AS ticket_status, c.id AS customer_id, c.full_name, c.whatsapp_number,
+               ${EFFECTIVE_STATUS_SQL} AS temperature,
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+        FROM tickets t JOIN customers c ON c.id = t.customer_id
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+      ),
+      deduped AS (
+        SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+      ),
+      bucketed AS (
+        -- $1::text anchors an explicit type for the unused bucket placeholder — see the
+        -- identical comment in /pipeline/export's bucket=all branch.
+        SELECT ${BUCKET_CASE_SQL} AS bucket FROM deduped WHERE $1::text IS NOT NULL ${dateClause}
+      )
+      SELECT bucket, count(*) AS total FROM bucketed GROUP BY bucket
+    `, params);
+
+    const byBucket = Object.fromEntries(rows.map((r) => [r.bucket, Number(r.total)]));
+    res.json({
+      total: rows.reduce((sum, r) => sum + Number(r.total), 0),
+      byBucket,
+    });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);

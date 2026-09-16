@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
+import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, fetchPipelineSearchSummary, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import StatsModal from './components/StatsModal.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { formatWait, minutesSince } from './lib/sla.js';
 import { onLiveEvent } from './lib/liveEvents.js';
@@ -121,6 +122,12 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // and demora en respuesta, none of which the board's own stat strip surfaces today.
   const [statsOpen, setStatsOpen] = useState(false);
   const [exportingKey, setExportingKey] = useState(null);
+  // "Descargar Conversaciones" (2026-09-16) — search-scoped, admin-only: preview the
+  // count per columna before committing to a cross-bucket download, since a reference
+  // search can span every temperature/status, not just the one column being viewed.
+  const [searchSummary, setSearchSummary] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const [error, setError] = useState(null);
   const [busyTicketId, setBusyTicketId] = useState(null);
   const dragDataRef = useRef(null);
@@ -205,6 +212,46 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
     } finally {
       setExportingKey(null);
+    }
+  }
+
+  async function openDownloadPreview() {
+    setLoadingSummary(true);
+    setSearchSummary(null);
+    try {
+      const summary = await fetchPipelineSearchSummary(debouncedSearch);
+      setSearchSummary(summary);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setLoadingSummary(false);
+    }
+  }
+
+  // Spans every column in one file — a reference search can legitimately match
+  // conversations in any temperature/status, unlike exportColumn above which is always
+  // scoped to whichever single column the admin is looking at.
+  async function downloadAllMatching() {
+    setDownloadingAll(true);
+    try {
+      const rows = await fetchPipelineExport('all', { q: debouncedSearch });
+      if (!rows.length) { showError('No hay nada que exportar con esta búsqueda'); return; }
+      const headers = ['Cliente', 'Teléfono', 'Red', 'Columna', 'Esperando desde', 'Último mensaje'];
+      const lines = rows.map((r) => [
+        r.fullName ?? '', r.whatsappNumber, CHANNEL_LABELS[r.channel] ?? r.channel,
+        metaFor(r.bucket).label, formatWait(r.lastMessageAt ?? r.stageSince), r.lastMessage ?? '',
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...lines]);
+      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Conversaciones');
+      XLSX.writeFile(wb, `conversaciones_${debouncedSearch.replace(/[^a-zA-Z0-9]/g, '_')}_${guatemalaToday()}.xlsx`);
+      showSuccess(`${rows.length} conversación(es) exportada(s)`);
+      setSearchSummary(null);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setDownloadingAll(false);
     }
   }
 
@@ -439,7 +486,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   }
 
   const q = search.trim().toLowerCase();
-  const matches = (c) => !q || (c.fullName || '').toLowerCase().includes(q) || (c.whatsappNumber || '').includes(q);
+  // Instant client-side pre-filter for the split second before the debounce fires and
+  // the server responds — name/phone only, since that's all a card carries client-side.
+  // Once col.cards actually reflects the current (debounced) query, this must stop
+  // re-filtering: the server search now also matches message content (2026-09-16), so
+  // a card like a reference match can legitimately have a name/phone that doesn't
+  // contain the search text at all — re-applying this narrower check on top of an
+  // already-correct server result hid real matches.
+  const searchSettled = search.trim().toLowerCase() === debouncedSearch.trim().toLowerCase();
+  const matches = (c) => searchSettled || !q || (c.fullName || '').toLowerCase().includes(q) || (c.whatsappNumber || '').includes(q);
 
   // The single number the period filter is actually for — "cuántos entraron hoy",
   // not "go add up the 7 column headers yourself". Sums whatever's currently visible:
@@ -605,6 +660,18 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 <Mail size={12} /> Solo no leídos
               </button>
             </>
+          )}
+
+          {isAdmin && searching && (
+            <button
+              type="button"
+              onClick={openDownloadPreview}
+              disabled={loadingSummary}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-greige-ink shadow-sm transition-colors hover:text-ink disabled:opacity-50"
+            >
+              {loadingSummary ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              Descargar Conversaciones
+            </button>
           )}
 
           {!searching && (periodPreset === 'hoy' || periodPreset === 'ayer') && (
@@ -782,6 +849,38 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         })}
       </div>
       {isAdmin && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />}
+
+      {isAdmin && (
+        <ConfirmDialog
+          open={searchSummary !== null}
+          title="Descargar conversaciones"
+          message={`"${debouncedSearch}" — ${searchSummary?.total ?? 0} conversación(es) encontrada(s), en todas las redes y columnas del Pipeline.`}
+          confirmLabel={downloadingAll ? 'Descargando…' : 'Descargar todo'}
+          busy={downloadingAll}
+          confirmDisabled={!searchSummary?.total}
+          onConfirm={downloadAllMatching}
+          onCancel={() => setSearchSummary(null)}
+        >
+          {searchSummary?.total > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {COLUMN_ORDER.filter((key) => searchSummary.byBucket[key]).map((key) => {
+                const { label, icon: Icon, iconBg, iconText } = metaFor(key);
+                return (
+                  <div key={key} className="flex items-center justify-between rounded-lg bg-black/[0.03] px-3 py-1.5 text-sm dark:bg-white/[0.05]">
+                    <span className="flex items-center gap-2 text-ink">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full ${iconBg}`}>
+                        <Icon size={12} className={iconText} />
+                      </span>
+                      {label}
+                    </span>
+                    <span className="font-semibold text-ink">{searchSummary.byBucket[key]}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
