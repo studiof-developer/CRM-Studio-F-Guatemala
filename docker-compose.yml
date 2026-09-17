@@ -70,6 +70,7 @@ services:
       - "4000:4000"
     volumes:
       - ./crm/backend/src:/app/src
+      - ./crm/backend/migrations:/app/migrations
       - backend_uploads:/app/uploads
     command: ["node", "--watch", "src/index.js"]
 

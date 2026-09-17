@@ -24,6 +24,10 @@ import socialRouter from './routes/social.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
+import { runMigrations } from './migrate.js';
+
+// Before anything else touches the database — everything below assumes today's schema.
+await runMigrations();
 
 const app = express();
 // Behind Dokploy's Traefik in production — without this, req.ip is the proxy's
