@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign } from 'lucide-react';
+import { Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign, ShieldAlert, CheckCircle2, Plus } from 'lucide-react';
 import {
   fetchSettings, updateSetting, testMetaAdsConnection, testSocialConnection,
 } from './api.js';

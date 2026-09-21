@@ -7,8 +7,8 @@ import { fetchBrands, createBrand, updateBrand, deleteBrand, createBranch, updat
 function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-paper p-6 shadow-xl relative text-left">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-paper border border-line p-6 shadow-xl relative text-left">
         <button onClick={onClose} className="absolute right-4 top-4 text-greige-ink hover:text-ink">
           ✕
         </button>
@@ -134,7 +134,7 @@ export default function Brands() {
                         <Building2 size={12} /> {brand.company_name}
                       </span>
                     ) : (
-                      <span className="rounded-md bg-black/5 px-2 py-0.5 text-xs text-greige italic">
+                      <span className="rounded-md bg-black/5 dark:bg-white/[0.06] px-2 py-0.5 text-xs text-greige italic">
                         Sin empresa asignada
                       </span>
                     )}
@@ -144,14 +144,14 @@ export default function Brands() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setBrandModal({ open: true, mode: 'edit', data: brand })}
-                  className="rounded-lg p-2 text-greige hover:bg-black/5 hover:text-ink"
+                  className="rounded-lg p-2 text-greige hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"
                   title="Editar Marca"
                 >
                   <Edit2 size={16} />
                 </button>
                 <button
                   onClick={() => handleBrandDelete(brand.id)}
-                  className="rounded-lg p-2 text-greige hover:bg-red-500/10 hover:text-red-500"
+                  className="rounded-lg p-2 text-greige hover:bg-red-500/10 hover:text-red-500 transition-colors"
                   title="Eliminar Marca"
                 >
                   <Trash2 size={16} />
@@ -164,7 +164,7 @@ export default function Brands() {
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-greige">Sucursales ({brand.branches?.length ?? 0})</h3>
                 <button
                   onClick={() => setBranchModal({ open: true, mode: 'create', brandId: brand.id, data: null })}
-                  className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-black/5"
+                  className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-black/5 dark:hover:bg-white/10"
                 >
                   <Plus size={14} />
                   Añadir Sucursal
@@ -175,20 +175,20 @@ export default function Brands() {
                 {brand.branches?.map(branch => (
                   <div key={branch.id} className="group flex items-center justify-between rounded-xl border border-line-soft p-3 transition-colors hover:border-line">
                     <div className="flex items-center gap-3">
-                      <div className="rounded-lg bg-black/5 p-1.5"><Building2 size={16} className="text-greige" /></div>
+                      <div className="rounded-lg bg-black/5 dark:bg-white/[0.06] p-1.5"><Building2 size={16} className="text-greige" /></div>
                       <span className="text-sm font-medium text-ink">{branch.name}</span>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         onClick={() => setBranchModal({ open: true, mode: 'edit', brandId: brand.id, data: branch })}
-                        className="rounded p-1.5 text-greige hover:bg-black/5 hover:text-ink"
+                        className="rounded p-1.5 text-greige hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"
                         title="Editar Sucursal"
                       >
                         <Edit2 size={14} />
                       </button>
                       <button
                         onClick={() => handleBranchDelete(brand.id, branch.id)}
-                        className="rounded p-1.5 text-greige hover:bg-red-500/10 hover:text-red-500"
+                        className="rounded p-1.5 text-greige hover:bg-red-500/10 hover:text-red-500 transition-colors"
                         title="Eliminar Sucursal"
                       >
                         <Trash2 size={14} />
@@ -222,7 +222,7 @@ export default function Brands() {
               defaultValue={brandModal.data?.name}
               required
               autoFocus
-              className="rounded-xl border border-line px-4 py-2 text-sm text-ink outline-none transition-colors focus:border-ink"
+              className="rounded-xl border border-line bg-paper text-ink px-4 py-2 text-sm outline-none transition-colors focus:border-accent"
               placeholder="Ej. Studio F, H&M, Puma..."
             />
           </label>
@@ -232,7 +232,7 @@ export default function Brands() {
             <select
               name="companyId"
               defaultValue={brandModal.data?.company_id ?? ''}
-              className="rounded-xl border border-line px-4 py-2 text-sm text-ink outline-none transition-colors focus:border-ink bg-white"
+              className="rounded-xl border border-line bg-paper text-ink px-4 py-2 text-sm outline-none transition-colors focus:border-accent"
             >
               <option value="">Sin empresa asignada</option>
               {companies.map(c => (
@@ -243,8 +243,8 @@ export default function Brands() {
           </label>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-line">
-            <button type="button" onClick={() => setBrandModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige hover:bg-black/5">Cancelar</button>
-            <button type="submit" className="rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95">Guardar</button>
+            <button type="button" onClick={() => setBrandModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
+            <button type="submit" className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95">Guardar</button>
           </div>
         </form>
       </Modal>
@@ -259,13 +259,13 @@ export default function Brands() {
               defaultValue={branchModal.data?.name}
               required
               autoFocus
-              className="rounded-xl border border-line px-4 py-2 text-sm text-ink outline-none transition-colors focus:border-ink"
+              className="rounded-xl border border-line bg-paper text-ink px-4 py-2 text-sm outline-none transition-colors focus:border-accent"
               placeholder="Ej. Virtual, Naranjos, Pance..."
             />
           </label>
           <div className="flex justify-end gap-3 pt-4 border-t border-line">
-            <button type="button" onClick={() => setBranchModal({ open: false, mode: 'create', brandId: null, data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige hover:bg-black/5">Cancelar</button>
-            <button type="submit" className="rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95">Guardar</button>
+            <button type="button" onClick={() => setBranchModal({ open: false, mode: 'create', brandId: null, data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
+            <button type="submit" className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95">Guardar</button>
           </div>
         </form>
       </Modal>

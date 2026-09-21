@@ -7,8 +7,8 @@ import Badge from './components/Badge.jsx';
 function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className={`w-full ${maxWidth} rounded-2xl bg-paper p-6 shadow-xl relative text-left my-8`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className={`w-full ${maxWidth} rounded-2xl bg-paper border border-line p-6 shadow-xl relative text-left my-8`}>
         <button type="button" onClick={onClose} className="absolute right-4 top-4 text-greige-ink hover:text-ink">
           <X size={20} />
         </button>
@@ -153,16 +153,16 @@ export default function Companies() {
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
+          className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95"
         >
           <Plus size={16} /> Nueva Empresa
         </button>
       </div>
 
       {/* Tabla de empresas */}
-      <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-paper shadow-sm">
         <table className="w-full text-left text-sm text-ink whitespace-nowrap">
-          <thead className="border-b border-line-soft bg-black/5 text-greige-ink">
+          <thead className="border-b border-line-soft bg-black/[0.03] dark:bg-white/[0.04] text-greige-ink">
             <tr>
               <th className="p-4 font-medium">Empresa</th>
               <th className="p-4 font-medium">Marcas Asociadas</th>
@@ -179,7 +179,7 @@ export default function Companies() {
                 </td>
               </tr>
             ) : companies.map(comp => (
-              <tr key={comp.id} className="hover:bg-black/[0.02] transition-colors">
+              <tr key={comp.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                 <td className="p-4 font-medium flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">
                     <Building2 size={20} />
@@ -207,10 +207,10 @@ export default function Companies() {
                 </td>
                 <td className="p-4 text-xs text-greige-ink">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-lg bg-black/5 px-2 py-1 font-medium">
+                    <span className="rounded-lg bg-black/5 dark:bg-white/[0.06] px-2 py-1 font-medium">
                       {comp.branch_count ?? 0} sucursales
                     </span>
-                    <span className="rounded-lg bg-black/5 px-2 py-1 font-medium">
+                    <span className="rounded-lg bg-black/5 dark:bg-white/[0.06] px-2 py-1 font-medium">
                       {comp.line_count ?? 0} líneas
                     </span>
                   </div>
@@ -221,19 +221,19 @@ export default function Companies() {
                   </Badge>
                 </td>
                 <td className="p-4 text-right">
-                  <div className="flex justify-end items-center gap-2">
+                  <div className="flex justify-end gap-1.5">
                     <button
                       onClick={() => handleOpenBrands(comp)}
-                      className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:border-accent hover:text-accent transition-colors"
-                      title="Gestionar Marcas"
+                      className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                      title="Gestionar marcas"
                     >
-                      <SlidersHorizontal size={14} />
-                      Marcas ({comp.brand_count ?? 0})
+                      <SlidersHorizontal size={14} className="text-accent" />
+                      <span>Marcas ({comp.brands?.length ?? 0})</span>
                     </button>
                     <button
                       onClick={() => handleOpenEdit(comp)}
-                      className="rounded-lg p-2 text-greige-ink hover:bg-black/5 hover:text-ink transition-colors"
-                      title="Editar Empresa"
+                      className="rounded-lg p-1.5 text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"
+                      title="Editar empresa"
                     >
                       <Edit2 size={16} />
                     </button>
@@ -277,7 +277,7 @@ export default function Companies() {
               required
               autoFocus
               placeholder="Ej. Bagneres, Vyntra Orbit..."
-              className="w-full rounded-xl border border-line px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent"
+              className="w-full rounded-xl border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
           </div>
 
@@ -298,14 +298,14 @@ export default function Companies() {
             <button
               type="button"
               onClick={() => setCompanyModal({ open: false, mode: 'create', data: null })}
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-greige-ink hover:bg-black/5 transition-colors"
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={savingCompany}
-              className="flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               {savingCompany && <RefreshCw size={14} className="animate-spin" />}
               {companyModal.mode === 'create' ? 'Guardar' : 'Actualizar'}
@@ -342,13 +342,13 @@ export default function Companies() {
                   onClick={() => !isOwnedByOther && handleToggleBrand(brand.id, isOwnedByOther)}
                   className={`flex items-center justify-between p-3.5 transition-colors ${
                     isOwnedByOther
-                      ? 'bg-black/[0.02] opacity-60 cursor-not-allowed'
-                      : 'cursor-pointer hover:bg-black/[0.03]'
+                      ? 'bg-black/[0.02] dark:bg-white/[0.02] opacity-60 cursor-not-allowed'
+                      : 'cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                      isSelected ? 'bg-accent text-white' : 'bg-black/5 text-greige'
+                      isSelected ? 'bg-accent text-white' : 'bg-black/5 dark:bg-white/10 text-greige'
                     }`}>
                       <Store size={18} />
                     </div>
@@ -369,7 +369,7 @@ export default function Companies() {
 
                   <div>
                     {isOwnedByOther ? (
-                      <div className="flex items-center gap-1 text-xs text-greige px-2 py-1 rounded bg-black/5">
+                      <div className="flex items-center gap-1 text-xs text-greige px-2 py-1 rounded bg-black/5 dark:bg-white/10">
                         <Lock size={12} /> Bloqueada
                       </div>
                     ) : (
@@ -404,7 +404,7 @@ export default function Companies() {
               <button
                 type="button"
                 onClick={() => setBrandsModal({ open: false, company: null })}
-                className="rounded-xl px-4 py-2.5 text-sm font-medium text-greige-ink hover:bg-black/5 transition-colors"
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
               >
                 Cancelar
               </button>

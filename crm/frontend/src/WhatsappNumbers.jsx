@@ -16,8 +16,8 @@ function formatDate(iso) {
 function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-lg rounded-2xl bg-paper p-6 shadow-xl relative text-left my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl bg-paper border border-line p-6 shadow-xl relative text-left my-auto">
         <button onClick={onClose} className="absolute right-4 top-4 text-greige-ink hover:text-ink">
           <X size={20} />
         </button>
@@ -137,16 +137,16 @@ export default function WhatsappNumbers() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
+          className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95"
         >
           <Plus size={16} />
           Conectar número
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-paper shadow-sm">
         <table className="w-full text-left text-sm text-ink whitespace-nowrap">
-          <thead className="border-b border-line-soft bg-black/5 text-greige-ink">
+          <thead className="border-b border-line-soft bg-black/[0.03] dark:bg-white/[0.04] text-greige-ink">
             <tr>
               <th className="p-4 font-medium">Línea</th>
               <th className="p-4 font-medium">Empresa / Marca / Sucursal</th>
@@ -162,7 +162,7 @@ export default function WhatsappNumbers() {
                 <td colSpan="6" className="p-8 text-center text-greige-ink">Sin números conectados todavía.</td>
               </tr>
             ) : numbers.map(n => (
-              <tr key={n.id} className="hover:bg-black/[0.02] transition-colors">
+              <tr key={n.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                 <td className="p-4 font-medium flex items-center gap-2">
                   <Smartphone size={16} className="text-greige" /> {n.label}
                 </td>
@@ -171,7 +171,7 @@ export default function WhatsappNumbers() {
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {n.companyName && (
-                          <span className="inline-flex items-center gap-0.5 rounded bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold text-greige-ink">
+                          <span className="inline-flex items-center gap-0.5 rounded bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-greige-ink">
                             {n.companyName}
                           </span>
                         )}
@@ -180,17 +180,23 @@ export default function WhatsappNumbers() {
                       <span className="text-xs text-greige-ink">{n.branchName}</span>
                     </div>
                   ) : (
-                    <span className="text-greige italic">Sin asignar</span>
+                    <span className="text-xs text-error italic">Sin asignar</span>
                   )}
                 </td>
-                <td className="p-4 text-greige-ink font-mono text-xs">{n.displayPhoneNumber ?? n.phoneNumberId}</td>
-                <td className="p-4 text-greige-ink">{formatDate(n.lastTestedAt)}</td>
+                <td className="p-4 font-mono text-xs text-greige">{n.phoneNumberId}</td>
+                <td className="p-4 text-xs text-greige">{formatDate(n.lastTestedAt)}</td>
                 <td className="p-4">
-                  <Badge variant={n.isActive ? 'success' : 'neutral'}>{n.isActive ? 'Activa' : 'Inactiva'}</Badge>
+                  <Badge variant={n.isActive ? 'success' : 'neutral'}>
+                    {n.isActive ? 'Activa' : 'Inactiva'}
+                  </Badge>
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => openEdit(n)} className="rounded-lg p-2 text-greige-ink hover:bg-black/5 hover:text-ink transition-colors">
+                    <button
+                      onClick={() => openEdit(n)}
+                      className="rounded-lg p-2 text-greige hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"
+                      title="Editar"
+                    >
                       <Edit2 size={16} />
                     </button>
                     {confirmDeleteId === n.id ? (
@@ -198,7 +204,11 @@ export default function WhatsappNumbers() {
                         {deleting ? <RefreshCw size={16} className="animate-spin" /> : 'Confirmar'}
                       </button>
                     ) : (
-                      <button onClick={() => setConfirmDeleteId(n.id)} className="rounded-lg p-2 text-greige-ink hover:bg-error/10 hover:text-error transition-colors">
+                      <button
+                        onClick={() => setConfirmDeleteId(n.id)}
+                        className="rounded-lg p-2 text-greige hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                        title="Eliminar"
+                      >
                         <Trash2 size={16} />
                       </button>
                     )}
@@ -210,7 +220,7 @@ export default function WhatsappNumbers() {
         </table>
       </div>
 
-      <Modal open={modal.open} onClose={() => setModal({ open: false, mode: 'create', data: null })} title={modal.mode === 'create' ? 'Conectar número de WhatsApp' : 'Editar número'}>
+      <Modal open={modal.open} onClose={() => setModal({ open: false, mode: 'create', data: null })} title={modal.mode === 'create' ? 'Conectar nueva línea' : 'Editar línea'}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && <div className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</div>}
           
@@ -220,7 +230,7 @@ export default function WhatsappNumbers() {
               value={form.branchId}
               onChange={(e) => setForm({ ...form, branchId: e.target.value })}
               required
-              className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             >
               <option value="" disabled>Selecciona una sucursal...</option>
               {brands.map(brand => (
@@ -240,7 +250,7 @@ export default function WhatsappNumbers() {
               onChange={(e) => setForm({ ...form, label: e.target.value })}
               required
               placeholder="Ventas, Soporte, Studio F..."
-              className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
           </div>
 
@@ -251,7 +261,7 @@ export default function WhatsappNumbers() {
               onChange={(e) => setForm({ ...form, wabaId: e.target.value })}
               required
               placeholder="ID de la cuenta de WhatsApp Business"
-              className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
           </div>
 
@@ -262,7 +272,7 @@ export default function WhatsappNumbers() {
               onChange={(e) => { setForm({ ...form, phoneNumberId: e.target.value }); setTestResult(null); }}
               required
               placeholder="Phone Number ID de Meta"
-              className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
           </div>
 
@@ -276,7 +286,7 @@ export default function WhatsappNumbers() {
               onChange={(e) => { setForm({ ...form, accessToken: e.target.value }); setTestResult(null); }}
               required={modal.mode === 'create'}
               placeholder={modal.mode === 'create' ? 'Token permanente de Meta' : 'Dejar vacío para no cambiarlo'}
-              className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
           </div>
 
@@ -295,7 +305,7 @@ export default function WhatsappNumbers() {
             type="button"
             onClick={handleTest}
             disabled={testing}
-            className="flex items-center justify-center gap-2 rounded-xl bg-black/5 px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-black/10 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-xl bg-black/5 dark:bg-white/10 px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-black/10 dark:hover:bg-white/15 disabled:opacity-50"
           >
             {testing ? <RefreshCw size={16} className="animate-spin" /> : <ShieldAlert size={16} />}
             {testing ? 'Probando...' : 'Probar conexión'}
@@ -311,7 +321,7 @@ export default function WhatsappNumbers() {
           )}
 
           <div className="mt-4 flex justify-end gap-3 border-t border-line pt-4">
-            <button type="button" onClick={() => setModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink hover:bg-black/5 transition-colors">
+            <button type="button" onClick={() => setModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2.5 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
               Cancelar
             </button>
             <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95 disabled:opacity-50">

@@ -26,10 +26,10 @@ function suggestUsername(fullName) {
 function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-xl rounded-2xl bg-paper p-6 shadow-xl relative text-left my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-xl rounded-2xl bg-paper border border-line p-6 shadow-xl relative text-left my-8">
         <button type="button" onClick={onClose} className="absolute right-4 top-4 text-greige-ink hover:text-ink">
-          X
+          ✕
         </button>
         <h2 className="mb-4 text-xl font-bold text-ink">{title}</h2>
         {children}
@@ -108,10 +108,10 @@ export default function Users() {
 
   function handleLineToggle(lineId) {
     setForm(prev => {
-      const isSelected = prev.assigned_lines.includes(lineId);
+      const exists = prev.assigned_lines.includes(lineId);
       return {
         ...prev,
-        assigned_lines: isSelected 
+        assigned_lines: exists
           ? prev.assigned_lines.filter(id => id !== lineId)
           : [...prev.assigned_lines, lineId]
       };
@@ -122,16 +122,18 @@ export default function Users() {
     e.preventDefault();
     setSaving(true);
     try {
-      if (modal.mode === 'new' || modal.mode === 'create') {
-        await createUser(form);
-        showSuccess('Usuario creado correctamente');
-      } else {
-        const patch = { ...form };
-        if (!patch.password) delete patch.password;
-        await updateUser(modal.data.id, patch);
-        showSuccess('Usuario actualizado correctamente');
+      const payload = { ...form };
+      if (modal.mode === 'edit' && !payload.password) {
+        delete payload.password;
       }
-      setModal({ open: false, mode: 'create', data: null });
+      if (modal.mode === 'create') {
+        await createUser(payload);
+        showSuccess('Usuario creado');
+      } else {
+        await updateUser(modal.data.id, payload);
+        showSuccess('Usuario actualizado');
+      }
+      setModal({ open: false, data: null });
       loadData();
     } catch (err) {
       showError(err.message);
@@ -140,10 +142,10 @@ export default function Users() {
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(id) {
     setDeleting(true);
     try {
-      await deleteUser(confirmDeleteId);
+      await deleteUser(id);
       showSuccess('Usuario eliminado');
       setConfirmDeleteId(null);
       loadData();
@@ -165,15 +167,15 @@ export default function Users() {
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
+          className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95"
         >
           <UserPlus size={16} /> Nuevo usuario
         </button>
       </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-paper shadow-sm">
         <table className="w-full text-left text-sm text-ink whitespace-nowrap">
-          <thead className="border-b border-line-soft bg-black/5 text-greige-ink">
+          <thead className="border-b border-line-soft bg-black/[0.03] dark:bg-white/[0.04] text-greige-ink">
             <tr>
               <th className="p-4 font-medium">Usuario</th>
               <th className="p-4 font-medium">Nombre / Correo</th>
@@ -184,9 +186,9 @@ export default function Users() {
           </thead>
           <tbody className="divide-y divide-line-soft">
             {users.map(u => (
-              <tr key={u.id} className="hover:bg-black/[0.02] transition-colors">
+              <tr key={u.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                 <td className="p-4 font-medium flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-accent font-bold">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 dark:bg-accent/20 text-accent font-bold">
                     {u.username.charAt(0).toUpperCase()}
                   </div>
                   {u.username}
@@ -205,7 +207,7 @@ export default function Users() {
                 <td className="p-4 text-xs text-greige-ink">
                   {u.role === 'asesor' ? (
                     u.assigned_lines?.length > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/5 px-2 py-1">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/5 dark:bg-white/[0.08] px-2 py-1 text-ink">
                         <Smartphone size={12} /> {u.assigned_lines.length} {u.assigned_lines.length === 1 ? 'línea' : 'líneas'}
                       </span>
                     ) : (
@@ -217,7 +219,7 @@ export default function Users() {
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => handleOpenEdit(u)} className="rounded-lg p-2 text-greige-ink hover:bg-black/5 hover:text-ink transition-colors">
+                    <button onClick={() => handleOpenEdit(u)} className="rounded-lg p-2 text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors">
                       <Edit2 size={16} />
                     </button>
                     {u.username !== 'admin' && (
@@ -248,7 +250,7 @@ export default function Users() {
                 value={form.full_name}
                 onChange={(e) => handleNameChange(e.target.value)}
                 required
-                className="rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+                className="rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
               />
             </label>
             <label className="flex flex-col gap-1.5">
@@ -259,7 +261,7 @@ export default function Users() {
                 required
                 pattern="^[a-z0-9._-]{3,32}$"
                 title="3-32 caracteres: letras minúsculas, números, puntos, guiones"
-                className="rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+                className="rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
               />
             </label>
           </div>
@@ -270,7 +272,7 @@ export default function Users() {
               <select
                 value={form.role}
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+                className="rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
               >
                 <option value="asesor">Asesor</option>
                 <option value="supervisor">Supervisor</option>
@@ -285,13 +287,13 @@ export default function Users() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 required={modal.mode === 'create'}
                 minLength={8}
-                className="rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+                className="rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
               />
             </label>
           </div>
 
           {form.role === 'asesor' && (
-            <div className="mt-4 rounded-xl border border-line-soft bg-black/5 p-4">
+            <div className="mt-4 rounded-xl border border-line-soft bg-black/[0.03] dark:bg-white/[0.03] p-4">
               <h3 className="mb-3 font-semibold text-ink flex items-center gap-2"><Smartphone size={16}/> Asignación de Líneas</h3>
               <p className="mb-4 text-xs text-greige-ink">Selecciona las líneas de atención a las que este asesor tendrá acceso.</p>
               
@@ -304,7 +306,7 @@ export default function Users() {
                       <h4 className="font-bold text-sm text-ink">{brandName}</h4>
                       {Object.entries(branches).map(([branchName, lines]) => (
                         <div key={branchName} className="ml-2 flex flex-col gap-2 border-l-2 border-line-soft pl-3">
-                          <span className="text-xs font-semibold text-greige-ink uppercase">{branchName}</span>
+                          <span className="text-xs font-semibold text-greige uppercase">{branchName}</span>
                           {lines.map(line => (
                             <label key={line.id} className="flex items-center gap-2 cursor-pointer">
                               <input
@@ -313,7 +315,7 @@ export default function Users() {
                                 onChange={() => handleLineToggle(line.id)}
                                 className="h-4 w-4 rounded border-line text-accent focus:ring-accent"
                               />
-                              <span className="text-sm text-ink">{line.label} <span className="text-xs text-greige-ink">({line.displayPhoneNumber})</span></span>
+                              <span className="text-sm text-ink">{line.label} <span className="text-xs text-greige">({line.displayPhoneNumber})</span></span>
                             </label>
                           ))}
                         </div>
@@ -329,14 +331,14 @@ export default function Users() {
             <button
               type="button"
               onClick={() => setModal({ open: false, data: null })}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 hover:text-ink"
+              className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent/90 disabled:opacity-50"
+              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               {saving ? 'Guardando...' : 'Guardar usuario'}
             </button>
