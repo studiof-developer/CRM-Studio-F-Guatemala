@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
 import { encryptToken, decryptToken, tokenLast4 } from '../tokenCrypto.js';
 import * as whatsapp from '../whatsapp.js';
+import { seedDefaultWhatsappNumber } from '../seedWhatsappNumber.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ function serialize(row) {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(
+    let { rows } = await pool.query(
       `SELECT w.id, w.label, w.waba_id, w.phone_number_id, w.display_phone_number, w.verified_name,
               w.access_token_enc, w.is_active, w.last_tested_at, w.created_at, w.updated_at, w.updated_by,
               w.branch_id, br.name AS branch_name, brnd.id AS brand_id, brnd.name AS brand_name,
@@ -42,6 +43,23 @@ router.get('/', async (req, res, next) => {
        LEFT JOIN companies c ON brnd.company_id = c.id
        ORDER BY w.id ASC`
     );
+
+    if (rows.length === 0) {
+      await seedDefaultWhatsappNumber();
+      const refetched = await pool.query(
+        `SELECT w.id, w.label, w.waba_id, w.phone_number_id, w.display_phone_number, w.verified_name,
+                w.access_token_enc, w.is_active, w.last_tested_at, w.created_at, w.updated_at, w.updated_by,
+                w.branch_id, br.name AS branch_name, brnd.id AS brand_id, brnd.name AS brand_name,
+                c.id AS company_id, c.name AS company_name
+         FROM whatsapp_numbers w
+         LEFT JOIN branches br ON w.branch_id = br.id
+         LEFT JOIN brands brnd ON br.brand_id = brnd.id
+         LEFT JOIN companies c ON brnd.company_id = c.id
+         ORDER BY w.id ASC`
+      );
+      rows = refetched.rows;
+    }
+
     res.json(rows.map((r) => serialize({ ...r, token_last4: tokenLast4(decryptToken(r.access_token_enc)) })));
   } catch (err) { next(err); }
 });
