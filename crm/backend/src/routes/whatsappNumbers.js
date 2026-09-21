@@ -66,7 +66,12 @@ router.post('/', async (req, res, next) => {
   try {
     const { label, wabaId, phoneNumberId, accessToken, branchId } = req.body ?? {};
     if (!label?.trim() || !wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim() || !branchId) {
-      return res.status(400).json({ error: 'label, wabaId, phoneNumberId, accessToken and branchId required' });
+      return res.status(400).json({ error: 'Todos los campos son obligatorios (incluyendo la sucursal)' });
+    }
+
+    const cleanBranchId = Number(branchId);
+    if (!cleanBranchId || isNaN(cleanBranchId)) {
+      return res.status(400).json({ error: 'Debes seleccionar una sucursal válida' });
     }
 
     let info;
@@ -83,12 +88,13 @@ router.post('/', async (req, res, next) => {
        RETURNING id, label, waba_id, phone_number_id, display_phone_number, verified_name, branch_id,
                  access_token_enc, is_active, last_tested_at, created_at, updated_at, updated_by`,
       [label.trim(), wabaId.trim(), phoneNumberId.trim(), info.display_phone_number ?? null, info.verified_name ?? null,
-       encryptToken(accessToken.trim()), req.user.fullName, branchId]
+       encryptToken(accessToken.trim()), req.user.fullName, cleanBranchId]
     );
     logAccess(req.user, null, 'whatsapp_number_created');
     res.status(201).json(serialize({ ...rows[0], token_last4: tokenLast4(accessToken.trim()) }));
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Ese número ya está registrado' });
+    if (err.code === '23503') return res.status(400).json({ error: 'La sucursal seleccionada no existe' });
     next(err);
   }
 });

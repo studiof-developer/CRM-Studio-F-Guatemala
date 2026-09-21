@@ -23,6 +23,8 @@ export default function Brands() {
   const [brands, setBrands] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [savingBrand, setSavingBrand] = useState(false);
+  const [savingBranch, setSavingBranch] = useState(false);
   
   const [brandModal, setBrandModal] = useState({ open: false, mode: 'create', data: null });
   const [branchModal, setBranchModal] = useState({ open: false, mode: 'create', brandId: null, data: null });
@@ -43,9 +45,14 @@ export default function Brands() {
   const handleBrandSave = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const name = fd.get('name');
+    const name = fd.get('name')?.trim();
+    if (!name) {
+      toast.error('El nombre de la marca es obligatorio');
+      return;
+    }
     const companyIdVal = fd.get('companyId');
     const companyId = companyIdVal ? Number(companyIdVal) : null;
+    setSavingBrand(true);
     try {
       if (brandModal.mode === 'create') {
         await createBrand({ name, companyId });
@@ -58,6 +65,8 @@ export default function Brands() {
       loadData();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setSavingBrand(false);
     }
   };
 
@@ -75,7 +84,12 @@ export default function Brands() {
   const handleBranchSave = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const name = fd.get('name');
+    const name = fd.get('name')?.trim();
+    if (!name) {
+      toast.error('El nombre de la sucursal es obligatorio');
+      return;
+    }
+    setSavingBranch(true);
     try {
       if (branchModal.mode === 'create') {
         await createBranch(branchModal.brandId, { name });
@@ -88,6 +102,8 @@ export default function Brands() {
       loadData();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setSavingBranch(false);
     }
   };
 
@@ -214,12 +230,12 @@ export default function Brands() {
 
       {/* Modal Marca */}
       <Modal open={brandModal.open} onClose={() => setBrandModal({ open: false, mode: 'create', data: null })} title={brandModal.mode === 'create' ? 'Nueva Marca' : 'Editar Marca'}>
-        <form onSubmit={handleBrandSave} className="flex flex-col gap-4 p-2">
+        <form key={brandModal.mode + (brandModal.data?.id || 'new')} onSubmit={handleBrandSave} className="flex flex-col gap-4 p-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink">Nombre de la marca</span>
             <input
               name="name"
-              defaultValue={brandModal.data?.name}
+              defaultValue={brandModal.data?.name || ''}
               required
               autoFocus
               className="rounded-xl border border-line bg-paper text-ink px-4 py-2 text-sm outline-none transition-colors focus:border-accent"
@@ -243,20 +259,22 @@ export default function Brands() {
           </label>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-line">
-            <button type="button" onClick={() => setBrandModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
-            <button type="submit" className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95">Guardar</button>
+            <button type="button" disabled={savingBrand} onClick={() => setBrandModal({ open: false, mode: 'create', data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
+            <button type="submit" disabled={savingBrand} className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95 disabled:opacity-50">
+              {savingBrand ? 'Guardando...' : 'Guardar'}
+            </button>
           </div>
         </form>
       </Modal>
 
       {/* Modal Sucursal */}
       <Modal open={branchModal.open} onClose={() => setBranchModal({ open: false, mode: 'create', brandId: null, data: null })} title={branchModal.mode === 'create' ? 'Nueva Sucursal' : 'Editar Sucursal'}>
-        <form onSubmit={handleBranchSave} className="flex flex-col gap-4 p-2">
+        <form key={branchModal.mode + (branchModal.data?.id || 'new')} onSubmit={handleBranchSave} className="flex flex-col gap-4 p-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink">Nombre de la sucursal</span>
             <input
               name="name"
-              defaultValue={branchModal.data?.name}
+              defaultValue={branchModal.data?.name || ''}
               required
               autoFocus
               className="rounded-xl border border-line bg-paper text-ink px-4 py-2 text-sm outline-none transition-colors focus:border-accent"
@@ -264,8 +282,10 @@ export default function Brands() {
             />
           </label>
           <div className="flex justify-end gap-3 pt-4 border-t border-line">
-            <button type="button" onClick={() => setBranchModal({ open: false, mode: 'create', brandId: null, data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
-            <button type="submit" className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95">Guardar</button>
+            <button type="button" disabled={savingBranch} onClick={() => setBranchModal({ open: false, mode: 'create', brandId: null, data: null })} className="rounded-xl px-4 py-2 text-sm font-medium text-greige-ink hover:bg-black/5 dark:hover:bg-white/10 transition-colors">Cancelar</button>
+            <button type="submit" disabled={savingBranch} className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover transition-transform hover:scale-105 active:scale-95 disabled:opacity-50">
+              {savingBranch ? 'Guardando...' : 'Guardar'}
+            </button>
           </div>
         </form>
       </Modal>

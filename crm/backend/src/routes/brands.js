@@ -26,8 +26,9 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const { name, companyId, company_id } = req.body ?? {};
-    if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-    const targetCompanyId = companyId || company_id || null;
+    if (!name?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+    const rawCid = companyId !== undefined ? companyId : company_id;
+    const targetCompanyId = (rawCid && !isNaN(Number(rawCid))) ? Number(rawCid) : null;
     const { rows } = await pool.query(
       'INSERT INTO brands (name, company_id) VALUES ($1, $2) RETURNING *',
       [name.trim(), targetCompanyId]
@@ -52,18 +53,19 @@ router.patch('/:id', async (req, res, next) => {
     const params = [];
 
     if (name !== undefined) {
-      if (!name.trim()) return res.status(400).json({ error: 'Name required' });
+      if (!name.trim()) return res.status(400).json({ error: 'El nombre no puede estar vacío' });
       params.push(name.trim());
       updates.push(`name = $${params.length}`);
     }
 
     if (companyId !== undefined || company_id !== undefined) {
-      const cid = companyId !== undefined ? companyId : company_id;
-      params.push(cid || null);
+      const rawCid = companyId !== undefined ? companyId : company_id;
+      const cleanCid = (rawCid && !isNaN(Number(rawCid))) ? Number(rawCid) : null;
+      params.push(cleanCid);
       updates.push(`company_id = $${params.length}`);
     }
 
-    if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
+    if (!updates.length) return res.status(400).json({ error: 'No se enviaron campos para actualizar' });
 
     updates.push('updated_at = now()');
     params.push(req.params.id);
@@ -72,7 +74,7 @@ router.patch('/:id', async (req, res, next) => {
       `UPDATE brands SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
       params
     );
-    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    if (!rows.length) return res.status(404).json({ error: 'Marca no encontrada' });
 
     let companyName = null;
     if (rows[0].company_id) {
@@ -91,11 +93,11 @@ router.patch('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     const { rows } = await pool.query('DELETE FROM brands WHERE id = $1 RETURNING id', [req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    if (!rows.length) return res.status(404).json({ error: 'Marca no encontrada' });
     logAccess(req.user, null, 'brand_deleted');
     res.status(204).end();
   } catch (err) {
-    if (err.code === '23503') return res.status(409).json({ error: 'No se puede eliminar la marca porque tiene sucursales o numeros asociados' });
+    if (err.code === '23503') return res.status(409).json({ error: 'No se puede eliminar la marca porque tiene sucursales o números asociados' });
     next(err);
   }
 });
@@ -103,14 +105,17 @@ router.delete('/:id', async (req, res, next) => {
 router.post('/:brandId/branches', async (req, res, next) => {
   try {
     const { name } = req.body ?? {};
-    if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+    if (!name?.trim()) return res.status(400).json({ error: 'El nombre de la sucursal es obligatorio' });
+    const brandId = Number(req.params.brandId);
+    if (!brandId || isNaN(brandId)) return res.status(400).json({ error: 'ID de marca inválido' });
     const { rows } = await pool.query(
       'INSERT INTO branches (brand_id, name) VALUES ($1, $2) RETURNING *',
-      [req.params.brandId, name.trim()]
+      [brandId, name.trim()]
     );
     logAccess(req.user, null, 'branch_created');
     res.status(201).json(rows[0]);
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Ya existe una sucursal con ese nombre en esta marca' });
     next(err);
   }
 });
@@ -118,15 +123,16 @@ router.post('/:brandId/branches', async (req, res, next) => {
 router.patch('/:brandId/branches/:id', async (req, res, next) => {
   try {
     const { name } = req.body ?? {};
-    if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+    if (!name?.trim()) return res.status(400).json({ error: 'El nombre de la sucursal no puede estar vacío' });
     const { rows } = await pool.query(
       'UPDATE branches SET name = $1 WHERE id = $2 AND brand_id = $3 RETURNING *',
       [name.trim(), req.params.id, req.params.brandId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    if (!rows.length) return res.status(404).json({ error: 'Sucursal no encontrada' });
     logAccess(req.user, null, 'branch_updated');
     res.json(rows[0]);
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Ya existe una sucursal con ese nombre en esta marca' });
     next(err);
   }
 });

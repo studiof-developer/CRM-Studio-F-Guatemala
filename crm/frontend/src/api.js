@@ -7,8 +7,13 @@ export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'
 // in. App.jsx listens for this and drops straight to the Login screen instead.
 async function apiFetch(path, options = {}) {
   let res;
+  const headers = { ...(options.headers || {}) };
+  if (typeof options.body === 'string' && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const opts = { ...options, headers };
   try {
-    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...opts });
   } catch (err) {
     // A tab left idle for a few minutes can have its connection silently closed by
     // Dokploy's proxy or Node's own keep-alive timeout right as a new request lands on
@@ -16,7 +21,7 @@ async function apiFetch(path, options = {}) {
     // real outage. A fresh connection on one retry succeeds immediately; if the network
     // is genuinely down, this second attempt fails too and the error still surfaces.
     if (!(err instanceof TypeError)) throw err;
-    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options });
+    res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...opts });
   }
   if (res.status === 401 && path !== '/api/auth/login') {
     window.dispatchEvent(new Event('studio-f-session-expired'));
@@ -635,36 +640,50 @@ export async function fetchBrands() {
   return res.json();
 }
 export async function createBrand(data) {
-  const res = await apiFetch('/api/brands', { method: 'POST', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/brands', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la marca');
   return res.json();
 }
 
-
-
-
-
-
-
 export async function updateBrand(id, data) {
-  const res = await apiFetch('/api/brands/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/brands/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la marca');
   return res.json();
 }
+
 export async function deleteBrand(id) {
   const res = await apiFetch('/api/brands/' + id, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la marca');
 }
+
 export async function createBranch(brandId, data) {
-  const res = await apiFetch('/api/brands/' + brandId + '/branches', { method: 'POST', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/brands/' + brandId + '/branches', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear sucursal');
   return res.json();
 }
+
 export async function updateBranch(brandId, id, data) {
-  const res = await apiFetch('/api/brands/' + brandId + '/branches/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/brands/' + brandId + '/branches/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar sucursal');
   return res.json();
 }
+
 export async function deleteBranch(brandId, id) {
   const res = await apiFetch('/api/brands/' + brandId + '/branches/' + id, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar sucursal');
@@ -677,13 +696,21 @@ export async function fetchCompanies() {
 }
 
 export async function createCompany(data) {
-  const res = await apiFetch('/api/companies', { method: 'POST', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/companies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la empresa');
   return res.json();
 }
 
 export async function updateCompany(id, data) {
-  const res = await apiFetch('/api/companies/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  const res = await apiFetch('/api/companies/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la empresa');
   return res.json();
 }
@@ -696,7 +723,8 @@ export async function deleteCompany(id) {
 export async function updateCompanyBrands(companyId, brandIds) {
   const res = await apiFetch('/api/companies/' + companyId + '/brands', {
     method: 'PUT',
-    body: JSON.stringify({ brandIds })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brandIds }),
   });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar las marcas de la empresa');
   return res.json();

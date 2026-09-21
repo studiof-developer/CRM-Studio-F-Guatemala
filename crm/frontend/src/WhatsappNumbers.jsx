@@ -96,9 +96,20 @@ export default function WhatsappNumbers() {
     setError(null);
     try {
       if (modal.mode === 'create') {
-        await createWhatsappNumber(form);
+        if (!form.branchId) {
+          setError('Debes seleccionar una sucursal para la línea');
+          setSaving(false);
+          return;
+        }
+        await createWhatsappNumber({ ...form, branchId: Number(form.branchId) });
       } else {
-        const patch = { label: form.label, branchId: form.branchId, wabaId: form.wabaId, phoneNumberId: form.phoneNumberId, isActive: form.isActive };
+        const patch = {
+          label: form.label,
+          branchId: form.branchId ? Number(form.branchId) : null,
+          wabaId: form.wabaId,
+          phoneNumberId: form.phoneNumberId,
+          isActive: form.isActive
+        };
         if (form.accessToken.trim()) patch.accessToken = form.accessToken.trim();
         await updateWhatsappNumber(modal.data.id, patch);
       }
