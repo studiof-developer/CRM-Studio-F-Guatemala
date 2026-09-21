@@ -627,3 +627,78 @@ export async function importProducts(file) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al importar el catálogo');
   return res.json();
 }
+
+
+export async function fetchBrands() {
+  const res = await apiFetch('/api/brands');
+  if (!res.ok) throw new Error('Error al cargar marcas');
+  return res.json();
+}
+export async function createBrand(data) {
+  const res = await apiFetch('/api/brands', { method: 'POST', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la marca');
+  return res.json();
+}
+
+
+
+
+
+
+
+export async function updateBrand(id, data) {
+  const res = await apiFetch('/api/brands/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la marca');
+  return res.json();
+}
+export async function deleteBrand(id) {
+  const res = await apiFetch('/api/brands/' + id, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la marca');
+}
+export async function createBranch(brandId, data) {
+  const res = await apiFetch('/api/brands/' + brandId + '/branches', { method: 'POST', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear sucursal');
+  return res.json();
+}
+export async function updateBranch(brandId, id, data) {
+  const res = await apiFetch('/api/brands/' + brandId + '/branches/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar sucursal');
+  return res.json();
+}
+export async function deleteBranch(brandId, id) {
+  const res = await apiFetch('/api/brands/' + brandId + '/branches/' + id, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar sucursal');
+}
+
+export async function fetchCompanies() {
+  const res = await apiFetch('/api/companies');
+  if (!res.ok) throw new Error('Error al cargar empresas');
+  return res.json();
+}
+
+export async function createCompany(data) {
+  const res = await apiFetch('/api/companies', { method: 'POST', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al crear la empresa');
+  return res.json();
+}
+
+export async function updateCompany(id, data) {
+  const res = await apiFetch('/api/companies/' + id, { method: 'PATCH', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la empresa');
+  return res.json();
+}
+
+export async function deleteCompany(id) {
+  const res = await apiFetch('/api/companies/' + id, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la empresa');
+}
+
+export async function updateCompanyBrands(companyId, brandIds) {
+  const res = await apiFetch('/api/companies/' + companyId + '/brands', {
+    method: 'PUT',
+    body: JSON.stringify({ brandIds })
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar las marcas de la empresa');
+  return res.json();
+}
+

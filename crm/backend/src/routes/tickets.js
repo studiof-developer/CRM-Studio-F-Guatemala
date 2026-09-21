@@ -13,8 +13,10 @@ const TICKET_STATUS_LABELS = { esperando_asesor: 'Pendiente', en_atencion: 'En a
 
 // The advisor team handles every zone for Studio F Guatemala (not zone-assigned
 // individually), so this is a no-op — kept as a hook in case that ever changes.
-function zoneClause() {
-  return '';
+function linesClause(user, tableAlias = 't') {
+  if (user.role !== 'asesor') return '';
+  // Restrict to assigned lines, preserving social/unassigned tickets
+  return ` AND (${tableAlias}.whatsapp_number_id IS NULL OR ${tableAlias}.whatsapp_number_id IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)}))`;
 }
 
 // Every column a contact can land in, and the order they're drawn in on the board.
@@ -266,7 +268,10 @@ router.get('/pipeline', async (req, res, next) => {
     const limitParam = params.length + 1;
     params.push(limit);
 
-    const { rows } = await cachedRead(`${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}`, () => pool.query(`
+    const lClause = linesClause(req.user, 't');
+    const cacheKey = `${req.user.id}:${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}`;
+
+    const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
@@ -275,10 +280,15 @@ router.get('/pipeline', async (req, res, next) => {
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
                c.last_message_at, c.last_message,
+               brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+        LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
+        LEFT JOIN branches br ON wn.branch_id = br.id
+        LEFT JOIN brands brnd ON br.brand_id = brnd.id
+        LEFT JOIN companies comp ON brnd.company_id = comp.id
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${lClause}
       ),
       -- A duplicate open ticket for the same customer (n8n's handoff firing twice on
       -- the same inbound message, 2026-09-14 report — two identical cards, same phone,
@@ -351,6 +361,9 @@ router.get('/pipeline', async (req, res, next) => {
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
         channel: r.channel,
+        branchName: r.branch_name,
+        brandName: r.brand_name,
+        companyName: r.company_name,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         assignedAdvisor: r.assigned_advisor,
@@ -366,6 +379,9 @@ router.get('/pipeline', async (req, res, next) => {
         // as lastMessage above); false means it's our own most recent reply.
         previewMessage: r.last_message,
         previewMessageAt: r.last_message_at,
+        brandName: r.brand_name,
+        branchName: r.branch_name,
+        lineLabel: r.line_label,
       })),
     });
   } catch (err) {
@@ -415,9 +431,14 @@ router.get('/pipeline/card', async (req, res, next) => {
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
                c.last_message_at, c.last_message,
+               brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
+        LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
+        LEFT JOIN branches br ON wn.branch_id = br.id
+        LEFT JOIN brands brnd ON br.brand_id = brnd.id
+        LEFT JOIN companies comp ON brnd.company_id = comp.id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1
       ),
       deduped AS (SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1)
@@ -451,6 +472,8 @@ router.get('/pipeline/card', async (req, res, next) => {
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
         channel: r.channel,
+        branchName: r.branch_name,
+        brandName: r.brand_name,
         temperature: r.temperature,
         ticketStatus: r.ticket_status,
         assignedAdvisor: r.assigned_advisor,
@@ -461,7 +484,11 @@ router.get('/pipeline/card', async (req, res, next) => {
         lastMessageAt: r.last_customer_message_at,
         previewMessage: r.last_message,
         previewMessageAt: r.last_message_at,
-      },
+          brandName: r.brand_name,
+          branchName: r.branch_name,
+          lineLabel: r.line_label,
+          companyName: r.company_name,
+        },
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -607,9 +634,13 @@ router.get('/pipeline/export', async (req, res, next) => {
                GREATEST(t.updated_at, c.updated_at) AS stage_since,
                c.last_customer_message_at, c.last_customer_message,
                c.last_message_at, c.last_message,
+               brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
+        LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
+        LEFT JOIN branches br ON wn.branch_id = br.id
+        LEFT JOIN brands brnd ON br.brand_id = brnd.id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
       ),
       -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
@@ -972,7 +1003,7 @@ router.get('/', async (req, res, next) => {
       params.push(status);
       statusClause = `AND t.status = $${params.length}`;
     }
-    const zClause = zoneClause(req.user, params);
+    const zClause = linesClause(req.user, 't');
 
     const { rows } = await pool.query(
       `SELECT t.id, t.status, t.handoff_reason, t.assigned_advisor, t.created_at, t.updated_at,

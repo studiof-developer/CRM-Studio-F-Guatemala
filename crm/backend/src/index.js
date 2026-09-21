@@ -15,6 +15,8 @@ import authRouter from './routes/auth.js';
 import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import quickRepliesRouter from './routes/quickReplies.js';
 import whatsappNumbersRouter from './routes/whatsappNumbers.js';
+import brandsRouter from './routes/brands.js';
+import companiesRouter from './routes/companies.js';
 import campaignsRouter from './routes/campaigns.js';
 import agentTestRouter from './routes/agentTest.js';
 import agentToolsRouter from './routes/agentTools.js';
@@ -54,6 +56,8 @@ app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRout
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 app.use('/api/quick-replies', requireAuth, quickRepliesRouter);
 app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin'), whatsappNumbersRouter);
+app.use('/api/brands', requireAuth, requireRole('admin'), brandsRouter);
+app.use('/api/companies', requireAuth, requireRole('admin'), companiesRouter);
 // A broadcast reaches hundreds of customers at once and costs real money per message —
 // restricted the same way WhatsApp number configuration is, not opened to every asesor.
 app.use('/api/campaigns', requireAuth, requireRole('admin', 'supervisor'), campaignsRouter);

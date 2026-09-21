@@ -20,15 +20,27 @@ function serialize(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
+    branchId: row.branch_id,
+    brandId: row.brand_id,
+    branchName: row.branch_name,
+    brandName: row.brand_name,
+    companyId: row.company_id,
+    companyName: row.company_name,
   };
 }
 
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, label, waba_id, phone_number_id, display_phone_number, verified_name,
-              access_token_enc, is_active, last_tested_at, created_at, updated_at, updated_by
-       FROM whatsapp_numbers ORDER BY id ASC`
+      `SELECT w.id, w.label, w.waba_id, w.phone_number_id, w.display_phone_number, w.verified_name,
+              w.access_token_enc, w.is_active, w.last_tested_at, w.created_at, w.updated_at, w.updated_by,
+              w.branch_id, br.name AS branch_name, brnd.id AS brand_id, brnd.name AS brand_name,
+              c.id AS company_id, c.name AS company_name
+       FROM whatsapp_numbers w
+       LEFT JOIN branches br ON w.branch_id = br.id
+       LEFT JOIN brands brnd ON br.brand_id = brnd.id
+       LEFT JOIN companies c ON brnd.company_id = c.id
+       ORDER BY w.id ASC`
     );
     res.json(rows.map((r) => serialize({ ...r, token_last4: tokenLast4(decryptToken(r.access_token_enc)) })));
   } catch (err) { next(err); }
@@ -52,9 +64,9 @@ router.post('/test', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { label, wabaId, phoneNumberId, accessToken } = req.body ?? {};
-    if (!label?.trim() || !wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim()) {
-      return res.status(400).json({ error: 'label, wabaId, phoneNumberId and accessToken required' });
+    const { label, wabaId, phoneNumberId, accessToken, branchId } = req.body ?? {};
+    if (!label?.trim() || !wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim() || !branchId) {
+      return res.status(400).json({ error: 'label, wabaId, phoneNumberId, accessToken and branchId required' });
     }
 
     let info;
@@ -66,12 +78,12 @@ router.post('/', async (req, res, next) => {
 
     const { rows } = await pool.query(
       `INSERT INTO whatsapp_numbers
-         (label, waba_id, phone_number_id, display_phone_number, verified_name, access_token_enc, last_tested_at, updated_by)
-       VALUES ($1, $2, $3, $4, $5, $6, now(), $7)
-       RETURNING id, label, waba_id, phone_number_id, display_phone_number, verified_name,
+         (label, waba_id, phone_number_id, display_phone_number, verified_name, access_token_enc, last_tested_at, updated_by, branch_id)
+       VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8)
+       RETURNING id, label, waba_id, phone_number_id, display_phone_number, verified_name, branch_id,
                  access_token_enc, is_active, last_tested_at, created_at, updated_at, updated_by`,
       [label.trim(), wabaId.trim(), phoneNumberId.trim(), info.display_phone_number ?? null, info.verified_name ?? null,
-       encryptToken(accessToken.trim()), req.user.fullName]
+       encryptToken(accessToken.trim()), req.user.fullName, branchId]
     );
     logAccess(req.user, null, 'whatsapp_number_created');
     res.status(201).json(serialize({ ...rows[0], token_last4: tokenLast4(accessToken.trim()) }));
@@ -86,7 +98,7 @@ router.patch('/:id', async (req, res, next) => {
     const { rows: existing } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
 
-    const { label, wabaId, phoneNumberId, accessToken, isActive } = req.body ?? {};
+    const { label, wabaId, phoneNumberId, accessToken, isActive, branchId } = req.body ?? {};
     let displayPhoneNumber = existing[0].display_phone_number;
     let verifiedName = existing[0].verified_name;
     let accessTokenEnc = existing[0].access_token_enc;
@@ -120,12 +132,13 @@ router.patch('/:id', async (req, res, next) => {
          is_active = COALESCE($7, is_active),
          last_tested_at = $8,
          updated_at = now(),
-         updated_by = $9
-       WHERE id = $10
-       RETURNING id, label, waba_id, phone_number_id, display_phone_number, verified_name,
+         updated_by = $9,
+         branch_id = COALESCE($10, branch_id)
+       WHERE id = $11
+       RETURNING id, label, waba_id, phone_number_id, display_phone_number, verified_name, branch_id,
                  access_token_enc, is_active, last_tested_at, created_at, updated_at, updated_by`,
       [label?.trim() || null, wabaId?.trim() || null, phoneNumberId?.trim() || null, displayPhoneNumber, verifiedName,
-       accessTokenEnc, isActive ?? null, lastTestedAt, req.user.fullName, req.params.id]
+       accessTokenEnc, isActive ?? null, lastTestedAt, req.user.fullName, branchId || null, req.params.id]
     );
     logAccess(req.user, null, 'whatsapp_number_updated');
     res.json(serialize({ ...rows[0], token_last4: tokenLast4(decryptToken(rows[0].access_token_enc)) }));

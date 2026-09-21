@@ -1399,6 +1399,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               >
                 <Avatar name={name} channel={c.channel} />
                 <div className="min-w-0 flex-1">
+                    {c.branchName && (
+                      <div className="mb-0.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                          {c.companyName && <span className="opacity-70 font-normal">{c.companyName} ›</span>}
+                          <span>{c.brandName}</span>
+                          <span className="opacity-70 font-normal">· {c.branchName}</span>
+                        </span>
+                      </div>
+                    )}
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-sm font-medium text-ink">{name}</p>
                     <span className="shrink-0 text-[11px] text-greige">{formatListTime(c.lastMessageAt)}</span>
@@ -1543,6 +1552,15 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               )}
               <Avatar name={thread.customerName || thread.phone} size={36} />
               <div className="min-w-0 flex-1">
+                {thread?.branchName && (
+                  <div className="mb-0.5">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                      {thread.companyName && <span className="opacity-70 font-normal">{thread.companyName} ›</span>}
+                      <span>{thread.brandName}</span>
+                      <span className="opacity-70 font-normal">· {thread.branchName}</span>
+                    </span>
+                  </div>
+                )}
                 <p className="truncate text-sm font-semibold text-ink">
                   {thread.customerName || thread.phone || selected?.sessionId.slice(0, 12)}
                 </p>

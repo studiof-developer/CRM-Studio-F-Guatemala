@@ -62,11 +62,21 @@ router.get('/customer', async (req, res, next) => {
 
     const { rows } = await pool.query(
       `SELECT c.full_name, c.preferred_line, c.preferred_size, ${EFFECTIVE_STATUS_SQL} AS temperature,
+              t.brand_name, t.branch_name, t.line_label,
               e.nombre AS erp_nombre, e.venta_neta_total, e.facturas_totales, e.unidades_totales,
               e.fecha_ultima_compra, e.dias_sin_compra, e.segmento_sin_compra, e.sucursal_preferida,
               e.blusas, e.jeans, e.vestidos, e.pantalones, e.otros,
               e.talla_blusa, e.talla_jean, e.talla_calzado
        FROM customers c
+       LEFT JOIN LATERAL (
+         SELECT tk.id, brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label
+         FROM tickets tk
+         LEFT JOIN whatsapp_numbers wn ON tk.whatsapp_number_id = wn.id
+         LEFT JOIN branches br ON wn.branch_id = br.id
+         LEFT JOIN brands brnd ON br.brand_id = brnd.id
+         WHERE tk.customer_id = c.id
+         ORDER BY tk.created_at DESC LIMIT 1
+       ) t ON true
        LEFT JOIN LATERAL (
          SELECT * FROM erp_customers WHERE right($1::text, 8) IN (telefono, celular)
          ORDER BY venta_neta_total DESC NULLS LAST LIMIT 1
@@ -114,6 +124,9 @@ router.get('/customer', async (req, res, next) => {
       sucursalPreferida: r.sucursal_preferida,
       interesPorLinea: { blusas: r.blusas, jeans: r.jeans, vestidos: r.vestidos, pantalones: r.pantalones, otros: r.otros },
       tallas: { blusa: r.talla_blusa, jean: r.talla_jean, calzado: r.talla_calzado },
+      marcaContacto: r.brand_name,
+      sucursalContacto: r.branch_name,
+      lineaContacto: r.line_label,
     });
   } catch (err) { next(err); }
 });

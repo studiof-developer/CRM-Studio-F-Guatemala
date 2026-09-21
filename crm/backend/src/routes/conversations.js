@@ -195,6 +195,7 @@ async function findCustomerByPhone(phone) {
             c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
             c.payment_suggested_at, c.payment_suggestion_reason, c.payment_suggestion_method,
             t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
+            t.brand_name, t.branch_name, t.line_label,
             e.nombre AS erp_nombre, e.venta_neta_total AS erp_venta_neta_total,
             e.facturas_totales AS erp_facturas_totales, e.unidades_totales AS erp_unidades_totales,
             e.fecha_ultima_compra AS erp_fecha_ultima_compra, e.dias_sin_compra AS erp_dias_sin_compra,
@@ -204,9 +205,14 @@ async function findCustomerByPhone(phone) {
             e.talla_blusa AS erp_talla_blusa, e.talla_jean AS erp_talla_jean, e.talla_calzado AS erp_talla_calzado
      FROM customers c
      LEFT JOIN LATERAL (
-       SELECT id, status, handoff_reason FROM tickets
-       WHERE customer_id = c.id
-       ORDER BY created_at DESC LIMIT 1
+       SELECT tk.id, tk.status, tk.handoff_reason, brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
+       FROM tickets tk
+       LEFT JOIN whatsapp_numbers wn ON tk.whatsapp_number_id = wn.id
+       LEFT JOIN branches br ON wn.branch_id = br.id
+       LEFT JOIN brands brnd ON br.brand_id = brnd.id
+       LEFT JOIN companies comp ON brnd.company_id = comp.id
+       WHERE tk.customer_id = c.id
+       ORDER BY tk.created_at DESC LIMIT 1
      ) t ON true
      LEFT JOIN LATERAL (
        SELECT * FROM erp_customers
@@ -446,6 +452,7 @@ router.get('/', async (req, res, next) => {
       SELECT l.thread_key, l.id AS last_id, l.message, l.created_at, cnt.message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, c.payment_suggested_at, t.status AS ticket_status,
              t.assigned_advisor,
+             t.brand_name, t.branch_name, t.line_label, t.whatsapp_number_id,
              CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
              COALESCE(uc.unread_count, 0) AS unread_count,
              att.kind AS last_attachment_kind, att.filename AS last_attachment_filename
@@ -457,15 +464,29 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN message_attachments att ON att.n8n_message_id = l.id
       LEFT JOIN customers c ON c.whatsapp_number = l.phone
       LEFT JOIN LATERAL (
-        SELECT status, assigned_advisor FROM tickets
-        WHERE customer_id = c.id
-        ORDER BY created_at DESC LIMIT 1
+        SELECT tk.id, tk.status, tk.handoff_reason, tk.assigned_advisor, tk.whatsapp_number_id, brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
+        FROM tickets tk
+        LEFT JOIN whatsapp_numbers wn ON tk.whatsapp_number_id = wn.id
+        LEFT JOIN branches br ON wn.branch_id = br.id
+        LEFT JOIN brands brnd ON br.brand_id = brnd.id
+        LEFT JOIN companies comp ON brnd.company_id = comp.id
+        WHERE tk.customer_id = c.id
+        ORDER BY tk.created_at DESC LIMIT 1
       ) t ON true
       ORDER BY l.id DESC
       ${limit ? 'LIMIT $1' : ''}
     `, limit ? [limit] : []));
-    // The advisor team handles every zone, so no zone filtering here.
     let visible = rows;
+
+    // Filter conversations by lines assigned to the advisor
+    if (req.user.role === 'asesor') {
+      const { rows: assignedLines } = await pool.query(
+        'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1',
+        [req.user.id]
+      );
+      const allowedLineIds = new Set(assignedLines.map((l) => l.whatsapp_number_id));
+      visible = visible.filter((r) => !r.whatsapp_number_id || allowedLineIds.has(r.whatsapp_number_id));
+    }
 
     const qLower = q?.trim().toLowerCase();
     if (qLower) {
@@ -532,6 +553,9 @@ router.get('/', async (req, res, next) => {
           phone: null,
           ticketStatus: null,
           assignedAdvisor: null,
+          brandName: null,
+          branchName: null,
+          lineLabel: null,
           enAtencion: false,
           temperature: null,
           paidLocked: false,
@@ -554,6 +578,10 @@ router.get('/', async (req, res, next) => {
       phone: r.phone,
       ticketStatus: r.ticket_status,
       assignedAdvisor: r.assigned_advisor,
+      brandName: r.brand_name,
+      branchName: r.branch_name,
+      lineLabel: r.line_label,
+      companyName: r.company_name,
       // Resuelto still lets the advisor keep typing — only "no ticket at all yet" and
       // "esperando_asesor" (needs to be taken first) lock the compose box.
       enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
@@ -755,6 +783,9 @@ router.get('/:sessionId', async (req, res, next) => {
       ticketId: customer?.ticket_id ?? null,
       ticketStatus: customer?.ticket_status ?? null,
       handoffReason: customer?.handoff_reason ?? null,
+      brandName: customer?.brand_name ?? null,
+      branchName: customer?.branch_name ?? null,
+      lineLabel: customer?.line_label ?? null,
       customerId: customer?.id ?? null,
       customerName: customer?.full_name ?? null,
       department: customer?.department ?? null,
@@ -1105,7 +1136,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
-      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype)
+      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, phone)
         .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
         .then((result) => handleSendResult(inserted[0].id, result))
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
@@ -1163,7 +1194,7 @@ async function deliverStoredMessage(row, phone, attachment) {
   let result;
   if (attachment) {
     const buffer = await fs.promises.readFile(attachment.file_path);
-    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type);
+    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type, phone);
     result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined);
   } else {
     result = await whatsapp.sendText(phone, row.message.content);

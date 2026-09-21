@@ -1,13 +1,10 @@
 import { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2 } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Login from './Login.jsx';
-// Lazy — each tab's code (and whatever it pulls in, like Dashboard's Chart.js) only
-// downloads the first time that tab is actually opened, instead of every visit
-// downloading the whole app up front regardless of which pages a role ever uses.
 const Dashboard = lazy(() => import('./Dashboard.jsx'));
 const HandoffQueue = lazy(() => import('./HandoffQueue.jsx'));
 const Conversations = lazy(() => import('./Conversations.jsx'));
@@ -18,7 +15,10 @@ const Audit = lazy(() => import('./Audit.jsx'));
 const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
 const Campaigns = lazy(() => import('./Campaigns.jsx'));
 const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
+const Configuracion = lazy(() => import('./Configuracion.jsx'));
 const AgentTest = lazy(() => import('./AgentTest.jsx'));
+const Companies = lazy(() => import('./Companies.jsx'));
+const Brands = lazy(() => import('./Brands.jsx'));
 // Pulls in Conversations.jsx (which ChatPopup renders directly, not lazily) the first
 // time anything actually opens the popup — kept lazy for the same reason every other
 // tab here is: nothing pays for the chat UI's bundle weight until it's actually used.
@@ -79,23 +79,17 @@ const CAMPAIGN_TABS = {
 // Admin only.
 const ADMIN_TABS = {
   users: { label: 'Usuarios', icon: UserCog, Component: Users },
+  companies: { label: 'Empresas', icon: Building2, Component: Companies },
+  brands: { label: 'Marcas', icon: Store, Component: Brands },
+  whatsappNumbers: { label: 'Líneas', icon: Smartphone, Component: WhatsappNumbers },
 };
 
-// Admin only — a sandbox to try the AI agent before it ever reaches a real customer.
-// Reachable directly at crm.bagneres.online/pruebas (see the pathname sync below).
-// Not shown in the regular nav list at all — it's launched from the floating button
-// instead (see the fixed TestTube button below) so it doesn't add another row to an
-// already-long sidebar. Still merged into `tabs` so tabs[tab] resolves its Component,
-// and still falls back to Dashboard for any role that doesn't have this key.
 const TEST_TABS = {
   pruebas: { label: 'Pruebas', icon: TestTube, Component: AgentTest },
 };
 
-// Admin only — kept out of ADMIN_TABS and rendered in its own section at the
-// bottom of the sidebar, below a divider, since it's system configuration
-// rather than a day-to-day page like the rest of the nav.
 const SETTINGS_TABS = {
-  whatsappNumbers: { label: 'Configuración', icon: Smartphone, Component: WhatsappNumbers },
+  configuracion: { label: 'Configuración', icon: Zap, Component: Configuracion }
 };
 
 // Sidebar layout: a handful of pages used constantly stay pinned at the top; everything
@@ -105,7 +99,7 @@ const SETTINGS_TABS = {
 const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
 const NAV_GROUPS = [
   { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns'] },
-  { key: 'admin', title: 'Administración', keys: ['audit', 'users'] },
+  { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
 ];
 
 // Every tab reachable at its own bookmarkable URL — an explicit map rather than
@@ -124,7 +118,10 @@ const TAB_PATHS = {
   campaigns: '/difusion',
   audit: '/auditoria',
   users: '/usuarios',
-  whatsappNumbers: '/configuracion',
+  companies: '/empresas',
+  brands: '/marcas',
+  whatsappNumbers: '/lineas',
+  configuracion: '/configuracion',
   pruebas: '/pruebas',
 };
 const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([key, path]) => [path, key]));

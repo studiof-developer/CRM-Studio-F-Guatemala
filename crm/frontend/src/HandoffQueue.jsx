@@ -784,6 +784,15 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         overdue ? 'border-danger/40 bg-danger/5' : hasUnread ? 'border-warning/40 bg-warning/5' : 'border-border bg-paper'
                       } ${DRAG_SOURCES.has(key) ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
+                      {card.branchName && (
+                        <div className="mb-1.5 flex flex-wrap gap-1">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                            {card.companyName && <span className="opacity-70 font-normal">{card.companyName} ›</span>}
+                            <span>{card.brandName}</span>
+                            <span className="opacity-70 font-normal">· {card.branchName}</span>
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-start justify-between gap-2">
                         <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
                           {card.channel && <ChannelIcon channel={card.channel} size={13} />}
