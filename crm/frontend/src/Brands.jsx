@@ -113,7 +113,7 @@ export default function Brands() {
         </div>
         <button
           onClick={() => setBrandModal({ open: true, mode: 'create', data: null })}
-          className="flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
+          className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform hover:bg-accent-hover hover:scale-105 active:scale-95"
         >
           <Plus size={16} />
           Nueva Marca
@@ -122,10 +122,10 @@ export default function Brands() {
 
       <div className="grid gap-6">
         {brands.map(brand => (
-          <motion.div key={brand.id} className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-line-soft bg-black/5 p-4">
+          <motion.div key={brand.id} className="overflow-hidden rounded-2xl border border-line bg-paper shadow-sm">
+            <div className="flex items-center justify-between border-b border-line-soft bg-black/[0.03] dark:bg-white/[0.04] p-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-white p-2 shadow-sm"><Store size={20} className="text-ink" /></div>
+                <div className="rounded-xl bg-accent/10 p-2 text-accent shadow-sm"><Store size={20} /></div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-bold text-ink">{brand.name}</h2>
@@ -173,7 +173,7 @@ export default function Brands() {
               
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {brand.branches?.map(branch => (
-                  <div key={branch.id} className="group flex items-center justify-between rounded-xl border border-line-soft p-3 transition-colors hover:border-line">
+                  <div key={branch.id} className="group flex items-center justify-between rounded-xl border border-line-soft bg-paper-soft/50 dark:bg-white/[0.02] p-3 transition-colors hover:border-line">
                     <div className="flex items-center gap-3">
                       <div className="rounded-lg bg-black/5 dark:bg-white/[0.06] p-1.5"><Building2 size={16} className="text-greige" /></div>
                       <span className="text-sm font-medium text-ink">{branch.name}</span>
