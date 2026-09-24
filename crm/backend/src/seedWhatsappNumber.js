@@ -1,6 +1,6 @@
 import { pool } from './db.js';
-import { encryptToken } from './tokenCrypto.js';
-import { verifyNumber } from './whatsapp.js';
+import { encryptToken, decryptToken } from './tokenCrypto.js';
+import { verifyNumber, subscribeWaba } from './whatsapp.js';
 
 export async function seedDefaultWhatsappNumber() {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -84,3 +84,24 @@ export async function seedDefaultWhatsappNumber() {
     console.error('[seedDefaultWhatsappNumber] Error auto-seeding WhatsApp line:', err.message);
   }
 }
+
+export async function syncWabaSubscriptions() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, label, waba_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true`
+    );
+    for (const line of rows) {
+      if (!line.waba_id || line.waba_id === 'default') continue;
+      try {
+        const token = decryptToken(line.access_token_enc);
+        const res = await subscribeWaba(line.waba_id, token);
+        console.log(`[syncWabaSubscriptions] WABA ${line.waba_id} (${line.label}) subscribed to webhooks:`, res);
+      } catch (err) {
+        console.warn(`[syncWabaSubscriptions] Note subscribing WABA ${line.waba_id} (${line.label}):`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[syncWabaSubscriptions] Error syncing WABA subscriptions:', err.message);
+  }
+}
+

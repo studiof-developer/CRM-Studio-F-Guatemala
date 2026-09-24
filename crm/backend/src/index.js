@@ -27,11 +27,12 @@ import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
 import { runMigrations } from './migrate.js';
-import { seedDefaultWhatsappNumber } from './seedWhatsappNumber.js';
+import { seedDefaultWhatsappNumber, syncWabaSubscriptions } from './seedWhatsappNumber.js';
 
 // Before anything else touches the database — everything below assumes today's schema.
 await runMigrations();
 await seedDefaultWhatsappNumber();
+await syncWabaSubscriptions();
 
 const app = express();
 // Behind Dokploy's Traefik in production — without this, req.ip is the proxy's

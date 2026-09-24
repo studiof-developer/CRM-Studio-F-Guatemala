@@ -608,7 +608,20 @@ router.get('/', async (req, res, next) => {
 // Registered before /:sessionId for the same reason as /search-all below.
 router.get('/unread-count', async (req, res, next) => {
   try {
-    const { rows } = await cachedRead('unread-count', () => pool.query(`
+    const isAsesor = req.user.role === 'asesor';
+    let allowedLineIds = null;
+    if (isAsesor) {
+      const { rows: assignedLines } = await pool.query(
+        'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1',
+        [req.user.id]
+      );
+      allowedLineIds = assignedLines.map((l) => l.whatsapp_number_id);
+      if (!allowedLineIds.length) {
+        return res.json({ count: 0 });
+      }
+    }
+    const cacheKey = isAsesor ? `unread-count:${req.user.id}` : 'unread-count';
+    const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH readable AS (
         SELECT h.session_id, h.id, h.message
         FROM n8n_chat_histories h
@@ -636,10 +649,19 @@ router.get('/unread-count', async (req, res, next) => {
         SELECT th.thread_key
         FROM threaded th
         LEFT JOIN conversation_reads cr ON cr.phone = th.phone
+        ${isAsesor ? `
+        JOIN customers c ON c.whatsapp_number = th.phone
+        JOIN LATERAL (
+          SELECT tk.whatsapp_number_id
+          FROM tickets tk
+          WHERE tk.customer_id = c.id
+          ORDER BY tk.created_at DESC LIMIT 1
+        ) t ON t.whatsapp_number_id = ANY($1)
+        ` : ''}
         WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
         GROUP BY th.thread_key
       ) unread
-    `));
+    `, isAsesor ? [allowedLineIds] : []));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
 });

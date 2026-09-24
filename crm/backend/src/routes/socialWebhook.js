@@ -45,6 +45,7 @@ router.post('/', async (req, res) => {
     const encSecret = await getSetting('meta_app_secret', null);
     const signature = req.get('x-hub-signature-256');
     const body = req.body;
+    console.log(`[socialWebhook] Incoming POST: object=${body?.object}, entries=${body?.entry?.length || 0}`);
 
     if (signature && req.rawBody && encSecret) {
       const appSecret = decryptToken(encSecret);
@@ -57,6 +58,7 @@ router.post('/', async (req, res) => {
     }
 
     if (body?.object === 'whatsapp_business_account') {
+      console.log('[socialWebhook] Routing to handleWhatsAppWebhook');
       await handleWhatsAppWebhook(body);
       return;
     }
@@ -208,6 +210,7 @@ async function handleWhatsAppWebhook(body) {
 
       const line = lineRows[0];
       const lineToken = decryptToken(line.access_token_enc);
+      console.log(`[handleWhatsAppWebhook] Event for line "${line.label}" (id: ${line.id}, phone_number_id: ${phoneNumberId})`);
 
       // 1. Process delivery statuses (sent, delivered, read, failed)
       if (Array.isArray(value.statuses)) {
@@ -229,6 +232,7 @@ async function handleWhatsAppWebhook(body) {
           const fromPhone = msg.from;
           const wamid = msg.id;
           if (!fromPhone || !wamid) continue;
+          console.log(`[handleWhatsAppWebhook] Inbound msg from ${fromPhone}, wamid: ${wamid}, type: ${msg.type}`);
 
           // Deduplication: if message with this wamid was already stored, skip
           const { rows: existingMsg } = await pool.query(
@@ -251,14 +255,14 @@ async function handleWhatsAppWebhook(body) {
           // 2.2 Ensure Ticket with whatsapp_number_id tied to this specific line
           const { rows: openTickets } = await pool.query(
             `SELECT id, whatsapp_number_id FROM tickets
-             WHERE customer_id = $1 AND status != 'resuelto'
+             WHERE customer_id = $1 AND status != 'resuelto' AND (whatsapp_number_id = $2 OR whatsapp_number_id IS NULL)
              ORDER BY created_at DESC LIMIT 1`,
-            [customer.id]
+            [customer.id, line.id]
           );
           let ticketId;
           if (openTickets.length) {
             ticketId = openTickets[0].id;
-            if (!openTickets[0].whatsapp_number_id) {
+            if (openTickets[0].whatsapp_number_id !== line.id) {
               await pool.query(`UPDATE tickets SET whatsapp_number_id = $1 WHERE id = $2`, [line.id, ticketId]);
             }
           } else {

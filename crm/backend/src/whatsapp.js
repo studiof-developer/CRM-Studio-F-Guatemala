@@ -237,3 +237,8 @@ export async function downloadMedia(mediaId, token) {
     fileSize: meta.file_size,
   };
 }
+
+export async function subscribeWaba(wabaId, token) {
+  return graphFetch(`${wabaId}/subscribed_apps`, { method: 'POST' }, token);
+}
+
