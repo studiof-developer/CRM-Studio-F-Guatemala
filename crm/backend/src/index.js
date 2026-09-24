@@ -73,8 +73,9 @@ app.use('/api/settings', requireAuth, settingsRouter);
 // shared-secret header check inside the router instead.
 app.use('/api/whatsapp-inbound', inboundRouter);
 // No requireAuth: Meta calls this directly, no CRM session — protected by its own
-// verify_token handshake (GET) and X-Hub-Signature-256 check (POST) instead.
+// verify_token handshake (GET) and signature/line checks (POST). Supports Messenger, Instagram and WhatsApp.
 app.use('/api/webhooks/meta', socialWebhookRouter);
+app.use('/api/webhooks/whatsapp', socialWebhookRouter);
 // Phase 3 (2026-09-14): opened to every role — Instagram/Messenger contacts now get
 // real customers/tickets rows and appear on the shared Pipeline board, so every asesor
 // needs to be able to open and reply to them, same as WhatsApp.

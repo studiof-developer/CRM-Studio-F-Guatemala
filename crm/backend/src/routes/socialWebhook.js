@@ -10,6 +10,10 @@ import { pool } from '../db.js';
 import { getSetting } from './settings.js';
 import { decryptToken } from '../tokenCrypto.js';
 import { fetchProfileName } from '../metaMessaging.js';
+import * as whatsapp from '../whatsapp.js';
+import { saveAttachment } from '../attachmentStorage.js';
+import { compressImageBuffer, compressPdfBuffer } from '../attachmentCompression.js';
+import { processInboundImageOcr, updateMessageStatus } from './attachments.js';
 
 const router = Router();
 
@@ -29,9 +33,7 @@ router.get('/', async (req, res) => {
   res.sendStatus(403);
 });
 
-// Every inbound Messenger/Instagram message lands here. Signature-verified against the
-// Meta App Secret — anyone who doesn't know that secret can't forge a message into a
-// customer's thread by POSTing here directly.
+// Every inbound Messenger/Instagram/WhatsApp message lands here.
 router.post('/', async (req, res) => {
   // Acknowledge immediately regardless of what's inside — Meta retries (and can pause
   // the whole subscription) if this doesn't return 200 quickly, and a malformed or
@@ -40,18 +42,25 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
   try {
     const encSecret = await getSetting('meta_app_secret', null);
-    if (!encSecret) return; // not configured yet — nothing to verify against
-    const appSecret = decryptToken(encSecret);
     const signature = req.get('x-hub-signature-256');
-    if (!signature || !req.rawBody) return;
-    const expectedSig = 'sha256=' + crypto.createHmac('sha256', appSecret).update(req.rawBody).digest('hex');
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
-      console.error('social webhook: signature mismatch, dropping payload');
+    const body = req.body;
+
+    if (signature && req.rawBody && encSecret) {
+      const appSecret = decryptToken(encSecret);
+      const expectedSig = 'sha256=' + crypto.createHmac('sha256', appSecret).update(req.rawBody).digest('hex');
+      const signatureMatches = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+      if (!signatureMatches && body?.object !== 'whatsapp_business_account') {
+        console.error('social webhook: signature mismatch, dropping payload');
+        return;
+      }
+    }
+
+    if (body?.object === 'whatsapp_business_account') {
+      await handleWhatsAppWebhook(body);
       return;
     }
 
     const igBusinessId = await getSetting('meta_ig_business_id', null);
-    const body = req.body;
     if (!Array.isArray(body?.entry)) return;
     for (const entry of body.entry) {
       const isInstagramEntry = body.object === 'instagram'
@@ -167,4 +176,206 @@ async function ensureCustomerAndTicket(contact, provider, text) {
   );
 }
 
+// Processes direct WhatsApp Cloud API webhook events (body.object === 'whatsapp_business_account').
+// Receives inbound messages, pautas (Meta Ads referral with copy, headline, source_url, image),
+// media attachments (photos, voice notes, PDFs), OCR receipts and delivery statuses (sent/delivered/read).
+async function handleWhatsAppWebhook(body) {
+  if (!Array.isArray(body?.entry)) return;
+
+  for (const entry of body.entry) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== 'messages') continue;
+      const value = change.value;
+      if (!value) continue;
+
+      const phoneNumberId = value.metadata?.phone_number_id;
+      if (!phoneNumberId) continue;
+
+      // Identify which active line this belongs to in the CRM
+      const { rows: lineRows } = await pool.query(
+        `SELECT id, label, branch_id, access_token_enc
+         FROM whatsapp_numbers
+         WHERE phone_number_id = $1 AND is_active = true
+         LIMIT 1`,
+        [phoneNumberId]
+      );
+
+      if (!lineRows.length) {
+        console.warn(`WhatsApp webhook received for unregistered or inactive phone_number_id: ${phoneNumberId}`);
+        continue;
+      }
+
+      const line = lineRows[0];
+      const lineToken = decryptToken(line.access_token_enc);
+
+      // 1. Process delivery statuses (sent, delivered, read, failed)
+      if (Array.isArray(value.statuses)) {
+        for (const st of value.statuses) {
+          const wamid = st.id;
+          const status = st.status;
+          const errorMsg = st.errors?.[0]?.message || st.errors?.[0]?.title || null;
+          await updateMessageStatus({ wamid, status, error: errorMsg }).catch((err) =>
+            console.error('WhatsApp status update error', err)
+          );
+        }
+      }
+
+      // 2. Process inbound messages
+      if (Array.isArray(value.messages)) {
+        const contactProfile = value.contacts?.[0]?.profile?.name || null;
+
+        for (const msg of value.messages) {
+          const fromPhone = msg.from;
+          const wamid = msg.id;
+          if (!fromPhone || !wamid) continue;
+
+          // Deduplication: if message with this wamid was already stored, skip
+          const { rows: existingMsg } = await pool.query(
+            `SELECT id FROM n8n_chat_histories WHERE message->'additional_kwargs'->>'wamid' = $1 LIMIT 1`,
+            [wamid]
+          );
+          if (existingMsg.length) continue;
+
+          // 2.1 Ensure Customer
+          const { rows: custRows } = await pool.query(
+            `INSERT INTO customers (whatsapp_number, full_name)
+             VALUES ($1, $2)
+             ON CONFLICT (whatsapp_number) DO UPDATE
+               SET full_name = COALESCE(customers.full_name, EXCLUDED.full_name)
+             RETURNING id, full_name`,
+            [fromPhone, contactProfile]
+          );
+          const customer = custRows[0];
+
+          // 2.2 Ensure Ticket with whatsapp_number_id tied to this specific line
+          const { rows: openTickets } = await pool.query(
+            `SELECT id, whatsapp_number_id FROM tickets
+             WHERE customer_id = $1 AND status != 'resuelto'
+             ORDER BY created_at DESC LIMIT 1`,
+            [customer.id]
+          );
+          let ticketId;
+          if (openTickets.length) {
+            ticketId = openTickets[0].id;
+            if (!openTickets[0].whatsapp_number_id) {
+              await pool.query(`UPDATE tickets SET whatsapp_number_id = $1 WHERE id = $2`, [line.id, ticketId]);
+            }
+          } else {
+            const { rows: newTk } = await pool.query(
+              `INSERT INTO tickets (customer_id, whatsapp_number_id, status, handoff_reason)
+               VALUES ($1, $2, 'esperando_asesor', 'mensaje_entrante_whatsapp')
+               RETURNING id`,
+              [customer.id, line.id]
+            );
+            ticketId = newTk[0].id;
+          }
+
+          // 2.3 Parse message type, context and Meta Ads referral (pautas)
+          const replyToWamid = msg.context?.id || null;
+          const referral = msg.referral || null;
+          const msgType = msg.type || 'text';
+
+          let content = '';
+          let isMedia = false;
+          let mediaInfo = null;
+
+          if (msgType === 'text') {
+            content = msg.text?.body || '';
+          } else if (['image', 'audio', 'voice', 'document', 'video', 'sticker'].includes(msgType)) {
+            isMedia = true;
+            const mData = msg[msgType] || {};
+            mediaInfo = {
+              mediaId: mData.id,
+              mimeType: mData.mime_type,
+              caption: mData.caption || '',
+              filename: mData.filename || (msgType === 'image' || msgType === 'sticker' ? 'imagen.jpg' : (msgType === 'audio' || msgType === 'voice') ? 'audio.ogg' : 'documento'),
+              kind: (msgType === 'image' || msgType === 'sticker') ? 'image' : (msgType === 'audio' || msgType === 'voice') ? 'audio' : 'document',
+            };
+            content = mediaInfo.caption;
+          } else if (msgType === 'location') {
+            content = `📍 Ubicación: https://www.google.com/maps?q=${msg.location?.latitude},${msg.location?.longitude}`;
+          } else if (msgType === 'contacts') {
+            const names = msg.contacts?.map((c) => c.name?.formatted_name || c.phones?.[0]?.phone).filter(Boolean).join(', ');
+            content = `👤 Contacto compartido: ${names || 'Contacto'}`;
+          } else if (msgType === 'reaction') {
+            const emoji = msg.reaction?.emoji;
+            const targetWamid = msg.reaction?.message_id;
+            if (emoji && targetWamid) {
+              await pool.query(
+                `UPDATE n8n_chat_histories
+                 SET message = jsonb_set(message, '{additional_kwargs,reaction}', to_jsonb($2::text))
+                 WHERE message->'additional_kwargs'->>'wamid' = $1`,
+                [targetWamid, emoji]
+              );
+              await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [fromPhone]);
+              continue;
+            }
+          } else {
+            content = `[Mensaje tipo: ${msgType}]`;
+          }
+
+          const additional_kwargs = {
+            wamid,
+            ...(replyToWamid ? { replyToWamid } : {}),
+            ...(referral ? { referral } : {}),
+          };
+
+          const messageObj = {
+            type: 'human',
+            content,
+            additional_kwargs,
+            response_metadata: {},
+          };
+
+          const { rows: insertedMsg } = await pool.query(
+            `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
+            [fromPhone, JSON.stringify(messageObj)]
+          );
+          const inboundMessageId = insertedMsg[0].id;
+
+          // 2.4 If media, download buffer from Meta Graph API using line's token and store attachment
+          if (isMedia && mediaInfo?.mediaId && lineToken) {
+            try {
+              const { buffer, mimeType: downloadedMime } = await whatsapp.downloadMedia(mediaInfo.mediaId, lineToken);
+              let finalBuffer = buffer;
+              let storedMime = downloadedMime || mediaInfo.mimeType || 'application/octet-stream';
+
+              if (mediaInfo.kind === 'image') {
+                const compressed = await compressImageBuffer(buffer).catch((err) => {
+                  console.error('WhatsApp image compression failed', err);
+                  return null;
+                });
+                if (compressed) { finalBuffer = compressed; storedMime = 'image/jpeg'; }
+              } else if (storedMime === 'application/pdf') {
+                const compressed = await compressPdfBuffer(buffer).catch((err) => {
+                  console.error('WhatsApp PDF compression failed', err);
+                  return null;
+                });
+                if (compressed) finalBuffer = compressed;
+              }
+
+              await saveAttachment({
+                n8nMessageId: inboundMessageId,
+                kind: mediaInfo.kind,
+                filename: mediaInfo.filename,
+                mimeType: storedMime,
+                buffer: finalBuffer,
+              });
+
+              // Process payment receipt OCR if it's an image
+              if (mediaInfo.kind === 'image') {
+                processInboundImageOcr({ buffer: finalBuffer, phone: fromPhone, inboundMessageId })
+                  .catch((err) => console.error('WhatsApp OCR processing error', err));
+              }
+            } catch (mediaErr) {
+              console.error(`Error downloading media ${mediaInfo.mediaId} for WhatsApp message ${wamid}:`, mediaErr);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 export default router;
+

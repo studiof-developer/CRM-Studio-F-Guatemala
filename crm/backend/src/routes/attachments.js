@@ -138,163 +138,105 @@ inboundRouter.post('/', async (req, res, next) => {
     // (ocrPayment.js) itself requires real receipt vocabulary AND a matching amount before
     // anything gets auto-confirmed — a photo of a garment or size chart still won't match.
     if (kind === 'image') {
-      const contextHours = await getSetting('ocr_context_hours', 3);
-      // Admin-added receipt vocabulary (Configuración > Detección) — a bank/gateway
-      // whose confirmation text doesn't match anything in ocrPayment.js's built-in list.
-      const extraReceiptKeywords = await getSetting('extra_receipt_keywords', []);
-      const { rows: gated } = await pool.query(
-        `SELECT c.id AS customer_id
-         FROM customers c
-         WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
-        [phone]
-      );
-
-      if (gated.length) {
-        const customerId = gated[0].customer_id;
-        let autoConfirmed = false;
-        // Refined below as the real reason becomes known, so the banner an advisor
-        // already looks at — and, for the cases OCR actually ran, a matching audit
-        // entry — says WHY this didn't confirm on its own instead of just that it
-        // didn't. Real report (2026-09-10): a Banrural deposit slip kept showing this
-        // generic text with no way to tell whether the price window had expired or the
-        // photo genuinely didn't match, without guessing.
-        let suggestionReason = 'El cliente envió una imagen (posible comprobante de pago)';
-
-        // The only "expected amount" this CRM has anywhere to check a receipt against:
-        // whatever price the advisor most recently typed in the chat (same pattern
-        // db/init/033's pipeline trigger already reads) — moving a customer through the
-        // Pipeline never creates a real orders row with a total to compare against instead.
-        // Matches a "Qxx" price OR a bare decimal (xx.xx) — an advisor quoting the final
-        // total often drops the "Q" ("Sería total de 205.50" instead of "Q205.50"), and
-        // that later total message must win over an earlier "Q56.50" (e.g. shipping-only)
-        // one, which is why this takes the MOST RECENT matching message (ORDER BY id DESC),
-        // not just any message that happens to contain a "Q" price.
-        //
-        // Deliberately NOT bounded by ocr_context_hours (2026-09-10 report: a customer
-        // deposited ~24h after the price was quoted — physically going to a bank branch
-        // routinely takes longer than any fixed window this CRM could pick, and "several
-        // days" is a real, not edge, case). Safe to leave unbounded: `gated` above already
-        // requires paid_locked = false, so this only ever runs within ONE still-open,
-        // not-yet-paid purchase — once paid_locked flips true, this whole path is closed
-        // to that customer until an admin manually reopens it (see customers.js), so a
-        // price quoted for a PAST, already-paid purchase can never leak into a new one.
-        // Within that single open purchase, "whatever was quoted most recently" is always
-        // the right number to check against no matter how long ago it was said — and if
-        // it's ever wrong, receiptContainsAmount's exact-match requirement just doesn't
-        // confirm (the same safe fallback as any other non-match), not a new risk.
-        const { rows: priced } = await pool.query(
-          `SELECT h.message->>'content' AS content
-           FROM n8n_chat_histories h
-           WHERE h.session_id LIKE $1 || '%'
-             AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
-             AND h.message->>'content' ~ 'Q\\s?\\d{1,5}|\\d{1,5}[.,]\\d{2}'
-           ORDER BY h.id DESC LIMIT 1`,
-          [phone]
-        );
-        // Pulls the raw message text (not a single pre-extracted number) so the LAST
-        // amount in the message wins, not the first — a message quoting an original
-        // price and then a discounted one ("Antes Q1200, con descuento Q950") must
-        // compare against the 950 the customer will actually pay, not the 1200. The "Q"
-        // branch captures the WHOLE digit/separator run (not just up to 2 trailing
-        // decimal digits) — real report (2026-09-10): "TOTAL Q4.034" (four thousand
-        // thirty-four, no cents) was truncating to "Q4.03", off by three orders of
-        // magnitude, so a real Q4,034 bank transfer could never match. parseAmount (same
-        // helper the receipt-reading side already uses) resolves whether that separator
-        // is a thousands group or a decimal point.
-        const priceMatches = priced[0]?.content?.match(/Q\s?\d[\d.,]*|\d{1,5}[.,]\d{2}/g);
-        const expectedAmount = priceMatches?.length
-          ? parseAmount(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
-          : null;
-
-        // ponytail: runs inline (Tesseract can take a second or two) rather than a
-        // background job — fine at this business's message volume, revisit if it ever
-        // measurably delays the inbound webhook.
-        if (expectedAmount) {
-          const ocrText = await extractText(buffer).catch((err) => {
-            console.error('receipt OCR failed', err);
-            return '';
-          });
-          // Includes a snippet of what Tesseract actually read, not just the
-          // conclusion — so a later audit of a wrong auto-mark can see WHY the
-          // system thought this photo matched, not just that it did.
-          const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
-
-          if (receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
-            const paidMethod = guessPaidMethod(ocrText);
-            await confirmAutoPayment(customerId, paidMethod, `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`);
-            autoConfirmed = true;
-          } else {
-            // Doesn't match on its own — real report (2026-09-05): a customer split one
-            // order into two separate card payments (Q35 + Q2,668 for one Q2,703 total),
-            // each receipt showing only its own partial amount. Persist whatever THIS
-            // receipt says it's for (regardless of match) so a sibling receipt — sent
-            // before or after this one — can be summed together with it below.
-            const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
-            if (ocrAmount != null) {
-              await pool.query(
-                `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
-                [inboundMessageId, ocrAmount]
-              );
-              const { rows: summed } = await pool.query(
-                `SELECT COALESCE(SUM((h.message->'additional_kwargs'->>'ocrAmount')::numeric), 0) AS total
-                 FROM n8n_chat_histories h
-                 WHERE h.session_id LIKE $1 || '%'
-                   AND h.message->>'type' = 'human'
-                   AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
-                   AND h.created_at >= now() - make_interval(hours => $2::int)`,
-                [phone, contextHours]
-              );
-              if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
-                const paidMethod = guessPaidMethod(ocrText);
-                await confirmAutoPayment(
-                  customerId, paidMethod,
-                  `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`
-                );
-                autoConfirmed = true;
-              }
-            }
-
-            if (!autoConfirmed) {
-              // OCR genuinely ran and still couldn't confirm — the one case actually
-              // worth a real diagnostic trail (not the routine "no price quoted yet"
-              // case below, which would fire on nearly every unrelated photo a caliente
-              // customer sends and drown this out). Shows in Auditoría with what
-              // Tesseract actually read, so a report like "sigue marcando Posible Pago"
-              // is answerable by looking, not by guessing at OCR quality or a keyword gap.
-              suggestionReason = ocrAmount != null
-                ? `El cliente envió una imagen (posible comprobante de pago) — leyó Q${ocrAmount}, pero se había cotizado Q${expectedAmount}`
-                : `El cliente envió una imagen (posible comprobante de pago) — no se reconoció como comprobante (sin monto ni palabras de recibo)`;
-              logBusinessAction(
-                { fullName: 'Sistema (OCR)', id: null },
-                customerId,
-                'payment_ocr_no_match',
-                `Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}"${ocrAmount != null ? ` (monto detectado: Q${ocrAmount})` : ''}`
-              );
-            }
-          }
-        } else {
-          // The price lookup above is unbounded by time now, so reaching this means the
-          // advisor genuinely never typed a "Qxx" price anywhere in this open purchase —
-          // there's nothing at all to check the photo against, not "it's too old to count."
-          suggestionReason = 'El cliente envió una imagen (posible comprobante de pago) — no se ha cotizado ningún precio en esta conversación todavía';
-        }
-
-        if (!autoConfirmed) {
-          // paid_locked = false here too, for the same reason as above: a customer who
-          // got marked Paid (by this same request's race, or by an advisor) in the time
-          // it took to reach this line must not have the suggestion banner resurrected.
-          await pool.query(
-            `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
-             WHERE id = $1 AND paid_locked = false`,
-            [customerId, suggestionReason]
-          );
-        }
-      }
+      await processInboundImageOcr({ buffer, phone, inboundMessageId });
     }
 
     res.status(201).json({ attachmentId, sessionId: cleanSessionId(sessionId) });
   } catch (err) { next(err); }
 });
+
+export async function processInboundImageOcr({ buffer, phone, inboundMessageId }) {
+  const contextHours = await getSetting('ocr_context_hours', 3);
+  const extraReceiptKeywords = await getSetting('extra_receipt_keywords', []);
+  const { rows: gated } = await pool.query(
+    `SELECT c.id AS customer_id
+     FROM customers c
+     WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
+    [phone]
+  );
+
+  if (!gated.length) return;
+
+  const customerId = gated[0].customer_id;
+  let autoConfirmed = false;
+  let suggestionReason = 'El cliente envió una imagen (posible comprobante de pago)';
+
+  const { rows: priced } = await pool.query(
+    `SELECT h.message->>'content' AS content
+     FROM n8n_chat_histories h
+     WHERE h.session_id LIKE $1 || '%'
+       AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+       AND h.message->>'content' ~ 'Q\\s?\\d{1,5}|\\d{1,5}[.,]\\d{2}'
+     ORDER BY h.id DESC LIMIT 1`,
+    [phone]
+  );
+
+  const priceMatches = priced[0]?.content?.match(/Q\s?\d[\d.,]*|\d{1,5}[.,]\d{2}/g);
+  const expectedAmount = priceMatches?.length
+    ? parseAmount(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
+    : null;
+
+  if (expectedAmount) {
+    const ocrText = await extractText(buffer).catch((err) => {
+      console.error('receipt OCR failed', err);
+      return '';
+    });
+    const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
+
+    if (receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
+      const paidMethod = guessPaidMethod(ocrText);
+      await confirmAutoPayment(customerId, paidMethod, `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`);
+      autoConfirmed = true;
+    } else {
+      const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
+      if (ocrAmount != null) {
+        await pool.query(
+          `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
+          [inboundMessageId, ocrAmount]
+        );
+        const { rows: summed } = await pool.query(
+          `SELECT COALESCE(SUM((h.message->'additional_kwargs'->>'ocrAmount')::numeric), 0) AS total
+           FROM n8n_chat_histories h
+           WHERE h.session_id LIKE $1 || '%'
+             AND h.message->>'type' = 'human'
+             AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
+             AND h.created_at >= now() - make_interval(hours => $2::int)`,
+          [phone, contextHours]
+        );
+        if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
+          const paidMethod = guessPaidMethod(ocrText);
+          await confirmAutoPayment(
+            customerId, paidMethod,
+            `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`
+          );
+          autoConfirmed = true;
+        }
+      }
+
+      if (!autoConfirmed) {
+        suggestionReason = ocrAmount != null
+          ? `El cliente envió una imagen (posible comprobante de pago) — leyó Q${ocrAmount}, pero se había cotizado Q${expectedAmount}`
+          : `El cliente envió una imagen (posible comprobante de pago) — no se reconoció como comprobante (sin monto ni palabras de recibo)`;
+        logBusinessAction(
+          { fullName: 'Sistema (OCR)', id: null },
+          customerId,
+          'payment_ocr_no_match',
+          `Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}"${ocrAmount != null ? ` (monto detectado: Q${ocrAmount})` : ''}`
+        );
+      }
+    }
+  } else {
+    suggestionReason = 'El cliente envió una imagen (posible comprobante de pago) — no se ha cotizado ningún precio en esta conversación todavía';
+  }
+
+  if (!autoConfirmed) {
+    await pool.query(
+      `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
+       WHERE id = $1 AND paid_locked = false`,
+      [customerId, suggestionReason]
+    );
+  }
+}
 
 // Meta reports delivery as a separate "statuses" webhook event (sent → delivered →
 // read), keyed by the wamid we get back when a message is sent — n8n forwards those
@@ -306,45 +248,51 @@ inboundRouter.post('/', async (req, res, next) => {
 // afterwards discover it can't be delivered, reporting it through this webhook. Dropping
 // it meant the advisor kept seeing a checkmark for a message WhatsApp already told us
 // never arrived — so it bypasses the rank check and always wins.
-const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
+export const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
+
+export async function updateMessageStatus({ wamid, status, error }) {
+  if (!wamid || !(STATUS_RANK[status] || status === 'failed')) {
+    return { updated: false };
+  }
+
+  const { rows } = status === 'failed'
+    ? await pool.query(
+        `UPDATE n8n_chat_histories
+         SET message = jsonb_set(
+               jsonb_set(message, '{additional_kwargs,status}', '"failed"'),
+               '{additional_kwargs,statusError}', to_jsonb($2::text))
+         WHERE message->'additional_kwargs'->>'wamid' = $1
+         RETURNING session_id`,
+        [wamid, (String(error ?? '').trim() || 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
+      )
+    : await pool.query(
+        `UPDATE n8n_chat_histories
+         SET message = jsonb_set(message, '{additional_kwargs,status}', to_jsonb($2::text))
+         WHERE message->'additional_kwargs'->>'wamid' = $1
+           AND (
+             message->'additional_kwargs'->>'status' IS NULL
+             OR $3 > CASE message->'additional_kwargs'->>'status' WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END
+           )
+           AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
+         RETURNING session_id`,
+        [wamid, status, STATUS_RANK[status]]
+      );
+  if (rows.length) {
+    await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
+  }
+  return { updated: rows.length > 0 };
+}
+
 inboundRouter.post('/status', async (req, res, next) => {
   try {
     const { wamid, status, error } = req.body ?? {};
     if (!wamid || !(STATUS_RANK[status] || status === 'failed')) {
       return res.status(400).json({ error: 'wamid and a valid status required' });
     }
-
-    const { rows } = status === 'failed'
-      ? await pool.query(
-          `UPDATE n8n_chat_histories
-           SET message = jsonb_set(
-                 jsonb_set(message, '{additional_kwargs,status}', '"failed"'),
-                 '{additional_kwargs,statusError}', to_jsonb($2::text))
-           WHERE message->'additional_kwargs'->>'wamid' = $1
-           RETURNING session_id`,
-          // n8n sends "" (not null) when Meta reported no errors array, and ?? only
-          // catches null/undefined — without the trim check that stores a blank reason.
-          [wamid, (String(error ?? '').trim() || 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
-        )
-      : await pool.query(
-          `UPDATE n8n_chat_histories
-           SET message = jsonb_set(message, '{additional_kwargs,status}', to_jsonb($2::text))
-           WHERE message->'additional_kwargs'->>'wamid' = $1
-             AND (
-               message->'additional_kwargs'->>'status' IS NULL
-               OR $3 > CASE message->'additional_kwargs'->>'status' WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END
-             )
-             -- a late sent/delivered must never overwrite a known failure
-             AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
-           RETURNING session_id`,
-          [wamid, status, STATUS_RANK[status]]
-        );
-    if (rows.length) {
-      await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [rows[0].session_id]);
-    }
-
-    res.json({ updated: rows.length > 0 });
+    const result = await updateMessageStatus({ wamid, status, error });
+    res.json(result);
   } catch (err) { next(err); }
 });
+
 
 export default router;

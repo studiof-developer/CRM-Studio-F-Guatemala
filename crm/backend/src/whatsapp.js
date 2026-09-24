@@ -217,3 +217,23 @@ export async function sendMedia(toPhone, kind, mediaId, filename, caption) {
     body: JSON.stringify(payload),
   }, creds.token);
 }
+
+export async function downloadMedia(mediaId, token) {
+  const meta = await graphFetch(`${mediaId}`, { method: 'GET' }, token);
+  if (!meta?.url) {
+    throw new Error('Meta no devolvió la URL de descarga para el archivo adjunto');
+  }
+  const res = await fetch(meta.url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`Error descargando archivo de Meta (${res.status}): ${await res.text().catch(() => '')}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType: meta.mime_type || res.headers.get('content-type') || 'application/octet-stream',
+    fileSize: meta.file_size,
+  };
+}
