@@ -52,7 +52,11 @@ async function sendViaMessagesApi(recipientId, text, token) {
   return graphFetch('me/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+    body: JSON.stringify({
+      messaging_type: 'RESPONSE',
+      recipient: { id: recipientId },
+      message: { text },
+    }),
   }, token);
 }
 

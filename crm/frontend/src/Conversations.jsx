@@ -207,6 +207,8 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
     }
   }
 
+  const currentName = info?.customerName || name;
+
   return (
     <>
       <div className="flex w-full items-center gap-3 border-b border-line bg-paper px-5 py-3">
@@ -219,9 +221,9 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
             <ArrowLeft size={18} />
           </span>
         )}
-        <Avatar channel={channel} name={name} size={36} />
+        <Avatar channel={channel} name={currentName} size={36} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{name}</p>
+          <p className="truncate text-sm font-semibold text-ink">{currentName}</p>
           <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
         </div>
         <Info
@@ -233,24 +235,28 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02]">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
             {error && <p className="text-sm text-danger">{error}</p>}
             {!messages && !error && (
               <div className="flex h-full items-center justify-center">
                 <Loader2 size={28} strokeWidth={1.5} className="animate-spin text-greige" />
               </div>
             )}
-            {messages?.length === 0 && <p className="text-sm text-greige-ink">Sin mensajes todavía.</p>}
+            {messages?.length === 0 && <p className="py-8 text-center text-sm text-greige-ink">Sin mensajes todavía.</p>}
             {messages?.map((m) => {
               const outgoing = m.direction === 'out';
               return (
-                <div key={m.id} className={`mb-1.5 flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
-                    outgoing ? 'bg-accent text-white' : 'border border-line-soft bg-paper text-ink'
-                  }`}>
+                <div key={m.id} className={`flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[75%] px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
+                      outgoing
+                        ? 'rounded-2xl rounded-tr-sm bg-accent text-white'
+                        : 'rounded-2xl rounded-tl-sm border border-line-soft bg-paper text-ink shadow-sm dark:bg-white/[0.08]'
+                    }`}
+                  >
                     {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
-                    <span className={`mt-0.5 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
+                    <span className={`mt-1 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
                       {formatBubbleTime(m.createdAt)}
                     </span>
                   </div>
@@ -296,8 +302,8 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
               </div>
             </div>
             <div className="flex flex-col items-center text-center">
-              <Avatar channel={channel} name={info.customerName} size={64} />
-              <p className="mt-3 text-sm font-semibold text-ink">{info.customerName || 'Sin nombre'}</p>
+              <Avatar channel={channel} name={currentName} size={64} />
+              <p className="mt-3 text-sm font-semibold text-ink">{currentName || 'Sin nombre'}</p>
               <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
               <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                 {info.temperature && (() => {
