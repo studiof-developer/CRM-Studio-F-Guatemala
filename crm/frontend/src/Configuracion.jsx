@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign, ShieldAlert, CheckCircle2, Plus } from 'lucide-react';
+import { Settings2, LayoutGrid, ChevronUp, ChevronDown, Radar, Info, X, CircleDollarSign, ShieldAlert, CheckCircle2, Plus, RefreshCw } from 'lucide-react';
 import {
-  fetchSettings, updateSetting, testMetaAdsConnection, testSocialConnection,
+  fetchSettings, updateSetting, testMetaAdsConnection, testSocialConnection, syncSocialProfiles,
 } from './api.js';
 import { ChannelIcon } from './lib/channelIcons.jsx';
 
@@ -280,6 +280,7 @@ function SocialTab() {
   const [saving, setSaving] = useState(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(() => {
     fetchSettings().then((rows) => {
@@ -310,12 +311,30 @@ function SocialTab() {
     try {
       const result = await testSocialConnection();
       setTestResult(result);
-      if (!result.ok) showError(result.error);
+      if (result.igAutoUpdated) {
+        load();
+        showSuccess('¡ID de Instagram detectado y corregido automáticamente!');
+      } else if (result.ok) {
+        showSuccess('Conexión con Meta verificada con éxito');
+      }
+      if (!result.ok && result.error) showError(result.error);
     } catch (err) {
       setTestResult({ ok: false, error: err.message });
       showError(err.message);
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleSyncProfiles() {
+    setSyncing(true);
+    try {
+      const res = await syncSocialProfiles();
+      showSuccess(`Sincronizados ${res.updated} de ${res.checked} contactos`);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -353,21 +372,53 @@ function SocialTab() {
         );
       })}
 
-      <div className="mt-6 border-t border-line-soft pt-6">
-        <button
-          type="button"
-          onClick={handleTest}
-          disabled={testing}
-          className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-        >
-          <ShieldAlert size={13} /> {testing ? 'Probando…' : 'Probar conexión'}
-        </button>
-        {testResult?.ok && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-success">
-            <CheckCircle2 size={13} /> Conectado a "{testResult.name}"
-          </p>
+      <div className="mt-6 border-t border-line-soft pt-6 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing}
+            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            <ShieldAlert size={13} /> {testing ? 'Probando…' : 'Probar conexión'}
+          </button>
+          <button
+            type="button"
+            onClick={handleSyncProfiles}
+            disabled={syncing}
+            title="Actualiza los nombres y @usuarios de los contactos de Messenger e Instagram que aún dicen 'Contacto de...'"
+            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar nombres (@usuario)'}
+          </button>
+        </div>
+
+        {testResult?.name && (
+          <div className="rounded-lg border border-line bg-muted/40 p-3 text-xs space-y-1.5">
+            <p className="flex items-center gap-1.5 font-medium text-success">
+              <CheckCircle2 size={13} /> Página de Facebook: <strong>{testResult.pageName}</strong> ({testResult.pageId})
+            </p>
+            {testResult.igAccount ? (
+              <p className="flex items-center gap-1.5 text-ink">
+                <ChannelIcon channel="instagram" size={13} /> Cuenta de Instagram: <strong>{testResult.igAccount.username || testResult.igAccount.name}</strong> ({testResult.igAccount.id})
+              </p>
+            ) : (
+              <p className="flex items-center gap-1.5 text-warning">
+                <Info size={13} /> No se detectó una cuenta de Instagram profesional vinculada a esta Página en Meta.
+              </p>
+            )}
+            <p className="text-greige-ink">
+              Webhooks: {testResult.subscribed ? '✅ Suscrito a eventos de mensajes de la Página' : '⚠️ No se pudo confirmar suscripción automática (verificar en Meta Developers)'}
+            </p>
+            {testResult.igAutoUpdated && (
+              <p className="text-success font-medium">
+                ✅ El ID de Instagram se actualizó automáticamente al valor real ({testResult.igAccount?.id}).
+              </p>
+            )}
+          </div>
         )}
-        {testResult && !testResult.ok && (
+
+        {testResult && !testResult.name && testResult.error && (
           <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-danger">
             <X size={13} /> {testResult.error}
           </p>

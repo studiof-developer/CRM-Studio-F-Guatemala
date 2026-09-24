@@ -570,6 +570,12 @@ export async function testSocialConnection() {
   return res.json();
 }
 
+export async function syncSocialProfiles() {
+  const res = await apiFetch('/api/social/sync-profiles', { method: 'POST' });
+  if (!res.ok) throw new Error('Error al sincronizar perfiles');
+  return res.json();
+}
+
 export async function fetchSocialContacts() {
   const res = await apiFetch('/api/social/contacts');
   if (!res.ok) throw new Error('Error al cargar las conversaciones');

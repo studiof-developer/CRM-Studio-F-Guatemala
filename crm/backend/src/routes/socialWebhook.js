@@ -50,43 +50,64 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    const igBusinessId = await getSetting('meta_ig_business_id', null);
     const body = req.body;
     if (!Array.isArray(body?.entry)) return;
     for (const entry of body.entry) {
-      const provider = body.object === 'instagram' ? 'instagram' : 'messenger';
+      const isInstagramEntry = body.object === 'instagram'
+        || (igBusinessId && entry.id === igBusinessId);
       for (const event of entry.messaging ?? []) {
         // Delivery/read receipts and echoes of our own sent messages also arrive on this
-        // same webhook — only a real inbound message (sender != page, has message.text)
+        // same webhook — only a real inbound message (sender != page, has message)
         // is something to store here.
         if (!event.message || event.message.is_echo) continue;
         const externalId = event.sender?.id;
-        const text = event.message.text;
         if (!externalId) continue;
+
+        const provider = (isInstagramEntry || (igBusinessId && event.recipient?.id === igBusinessId))
+          ? 'instagram'
+          : 'messenger';
+
+        let text = event.message.text;
+        if (!text && event.message.attachments?.length) {
+          const first = event.message.attachments[0];
+          text = `[${(first.type || 'archivo').toUpperCase()}]`;
+        }
 
         const { rows } = await pool.query(
           `INSERT INTO social_contacts (provider, external_id, last_message_at, unread_count)
            VALUES ($1, $2, now(), 1)
            ON CONFLICT (provider, external_id)
              DO UPDATE SET last_message_at = now(), unread_count = social_contacts.unread_count + 1
-           RETURNING id, display_name, customer_id`,
+           RETURNING id, display_name, profile_pic_url, customer_id, provider`,
           [provider, externalId]
         );
+        const contact = rows[0];
+
+        // Fetch display name if not yet set
+        if (!contact.display_name) {
+          try {
+            const profile = await fetchProfileName(externalId, contact.provider);
+            if (profile?.displayName) {
+              contact.display_name = profile.displayName;
+              contact.profile_pic_url = profile.profilePicUrl ?? contact.profile_pic_url;
+              await pool.query(
+                `UPDATE social_contacts SET display_name = $1, profile_pic_url = COALESCE($2, profile_pic_url) WHERE id = $3`,
+                [contact.display_name, contact.profile_pic_url, contact.id]
+              );
+            }
+          } catch (err) {
+            console.error('social webhook: profile name lookup failed', err);
+          }
+        }
+
         await pool.query(
           `INSERT INTO social_messages (contact_id, direction, body, raw_payload, external_message_id)
            VALUES ($1, 'in', $2, $3, $4)`,
-          [rows[0].id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
+          [contact.id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
         );
 
-        await ensureCustomerAndTicket(rows[0], provider, text);
-
-        // Best-effort — a brand-new contact (or one whose name lookup failed last time)
-        // gets a real display name instead of the CRM's raw "social:<id>" fallback.
-        // Never blocks/breaks ingestion of the message itself if this fails.
-        if (!rows[0].display_name) {
-          fetchProfileName(externalId)
-            .then((name) => name && pool.query(`UPDATE social_contacts SET display_name = $1 WHERE id = $2`, [name, rows[0].id]))
-            .catch((err) => console.error('social webhook: profile name lookup failed', err));
-        }
+        await ensureCustomerAndTicket(contact, contact.provider, text);
       }
     }
   } catch (err) {
@@ -109,6 +130,12 @@ async function ensureCustomerAndTicket(contact, provider, text) {
     );
     customerId = custRows[0].id;
     await pool.query(`UPDATE social_contacts SET customer_id = $1 WHERE id = $2`, [customerId, contact.id]);
+  } else if (contact.display_name) {
+    // If contact already exists, keep customers.full_name updated if it was missing or generic placeholder
+    await pool.query(
+      `UPDATE customers SET full_name = $1 WHERE id = $2 AND (full_name IS NULL OR full_name = '' OR full_name LIKE 'Contacto de %')`,
+      [contact.display_name, customerId]
+    );
   }
 
   // No bot/AI layer intercepts social messages — every inbound message needs a human

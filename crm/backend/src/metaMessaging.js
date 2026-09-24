@@ -2,6 +2,7 @@
 // graphFetch-style retry/timeout wrapper, credentials read via the same tokenCrypto.js
 // helpers), just for the second, unrelated Meta App (see settings.js's meta_page_*
 // entries) added for the social inbox (2026-09-14).
+import { pool } from './db.js';
 import { getSetting } from './routes/settings.js';
 import { decryptToken } from './tokenCrypto.js';
 
@@ -67,33 +68,111 @@ export async function sendInstagramText(igsid, text) {
   return sendViaMessagesApi(igsid, text, creds.token);
 }
 
-// Meta doesn't push a contact's display name along with their first message — this
-// looks it up once, right after a brand-new social_contacts row is created (see
-// socialWebhook.js), so the CRM shows a real name instead of the raw "social:<id>"
-// fallback. Best-effort: Graph API's available fields differ between a Messenger PSID
-// and an Instagram IGSID, and neither is guaranteed while the App is still in
-// Development mode — any failure here should never break webhook ingestion.
-export async function fetchProfileName(externalId) {
+// Looks up user profile for Instagram (IGSID) or Facebook Messenger (PSID).
+// NOTE: Meta Graph API node types have strictly incompatible fields:
+// - Instagram IGSID supports: name, username, profile_pic (never first_name/last_name)
+// - Messenger PSID supports: name, first_name, last_name, profile_pic (never username)
+// Querying non-existing fields causes Meta to return HTTP 400 (#100 Tried accessing nonexisting field).
+export async function fetchProfileName(externalId, provider = null) {
   const creds = await getSocialCredentials();
   if (!creds) return null;
-  try {
-    const result = await graphFetch(`${externalId}?fields=name,username,first_name,last_name`, { method: 'GET' }, creds.token);
-    return result?.name || result?.username || [result?.first_name, result?.last_name].filter(Boolean).join(' ') || null;
-  } catch (err) {
-    // Logged (not swallowed) on purpose — Meta's User Profile API for a Messenger PSID
-    // has been permission-restricted since 2018 for most apps, so a 400 here is expected
-    // and worth seeing once to confirm rather than guess; Instagram IGSIDs are less
-    // restricted and more likely to actually return a username.
-    console.error('fetchProfileName failed', err.message);
-    return null;
+
+  // 1. Instagram: query name, username, profile_pic
+  if (provider === 'instagram') {
+    try {
+      const result = await graphFetch(`${externalId}?fields=name,username,profile_pic`, { method: 'GET' }, creds.token);
+      const username = result?.username ? `@${result.username.replace(/^@/, '')}` : null;
+      const name = result?.name?.trim() || null;
+      const displayName = (name && username) ? `${name} (${username})` : (username || name || null);
+      if (displayName) {
+        return { displayName, profilePicUrl: result?.profile_pic ?? null, username: result?.username ?? null };
+      }
+    } catch (err) {
+      console.warn(`fetchProfileName instagram failed for ${externalId}:`, err.message);
+      try {
+        const result = await graphFetch(`${externalId}?fields=username`, { method: 'GET' }, creds.token);
+        if (result?.username) {
+          const username = `@${result.username.replace(/^@/, '')}`;
+          return { displayName: username, profilePicUrl: null, username: result.username };
+        }
+      } catch {}
+    }
   }
+
+  // 2. Messenger: query name, first_name, last_name, profile_pic
+  if (provider === 'messenger' || !provider) {
+    try {
+      const result = await graphFetch(`${externalId}?fields=name,first_name,last_name,profile_pic`, { method: 'GET' }, creds.token);
+      const name = result?.name || [result?.first_name, result?.last_name].filter(Boolean).join(' ') || null;
+      if (name) {
+        return { displayName: name.trim(), profilePicUrl: result?.profile_pic ?? null, username: null };
+      }
+    } catch (err) {
+      console.warn(`fetchProfileName messenger failed for ${externalId}:`, err.message);
+    }
+  }
+
+  // 3. Fallback if provider was null/unknown and messenger attempt failed:
+  if (!provider) {
+    try {
+      const result = await graphFetch(`${externalId}?fields=name,username,profile_pic`, { method: 'GET' }, creds.token);
+      const username = result?.username ? `@${result.username.replace(/^@/, '')}` : null;
+      const name = result?.name?.trim() || null;
+      const displayName = (name && username) ? `${name} (${username})` : (username || name || null);
+      if (displayName) {
+        return { displayName, profilePicUrl: result?.profile_pic ?? null, username: result?.username ?? null };
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
-// Confirms the saved Page Access Token is actually valid and readable — same idea as
-// metaAds.js's testMetaAdsConnection, just against the Page's own /me instead of an ad account.
+// Confirms the saved Page Access Token is valid, verifies Facebook Page & linked Instagram account,
+// auto-corrects meta_ig_business_id if mismatched/missing, and auto-subscribes webhooks.
 export async function testSocialConnection() {
   const creds = await getSocialCredentials();
   if (!creds) throw new Error('Redes sociales no está configurado — completa Configuración > Redes sociales');
-  const result = await graphFetch('me?fields=id,name', { method: 'GET' }, creds.token);
-  return { name: result.name, id: result.id };
+
+  const pageResult = await graphFetch(`${creds.pageId}?fields=id,name,instagram_business_account{id,username,name}`, { method: 'GET' }, creds.token);
+
+  let igAccount = null;
+  let igAutoUpdated = false;
+
+  if (pageResult?.instagram_business_account) {
+    igAccount = pageResult.instagram_business_account;
+    if (!creds.igBusinessId || creds.igBusinessId === creds.pageId || creds.igBusinessId !== igAccount.id) {
+      await pool.query(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES ('meta_ig_business_id', $1::jsonb, now())
+         ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = now()`,
+        [JSON.stringify(igAccount.id)]
+      );
+      igAutoUpdated = true;
+    }
+  }
+
+  let subscribed = false;
+  try {
+    const subResult = await graphFetch(`${creds.pageId}/subscribed_apps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscribed_fields: ['messages', 'messaging_postbacks'] }),
+    }, creds.token);
+    subscribed = subResult?.success === true;
+  } catch (err) {
+    console.warn('testSocialConnection: subscribed_apps failed:', err.message);
+  }
+
+  return {
+    name: pageResult.name,
+    pageName: pageResult.name,
+    pageId: pageResult.id,
+    igAccount: igAccount ? {
+      id: igAccount.id,
+      username: igAccount.username ? `@${igAccount.username}` : null,
+      name: igAccount.name || null,
+    } : null,
+    igAutoUpdated,
+    subscribed,
+  };
 }

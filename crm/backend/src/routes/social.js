@@ -3,11 +3,39 @@
 // 2026-09-14 plan). Logged-in advisors/admins only, same as conversations.js.
 import { Router } from 'express';
 import { pool } from '../db.js';
-import { sendMessengerText, sendInstagramText } from '../metaMessaging.js';
+import { sendMessengerText, sendInstagramText, fetchProfileName } from '../metaMessaging.js';
 import { logBusinessAction } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 
 const router = Router();
+
+async function syncMissingProfiles() {
+  try {
+    const { rows } = await pool.query(`
+      SELECT sc.id, sc.provider, sc.external_id, sc.customer_id
+      FROM social_contacts sc
+      WHERE sc.display_name IS NULL OR sc.display_name = ''
+      LIMIT 10
+    `);
+    for (const c of rows) {
+      const profile = await fetchProfileName(c.external_id, c.provider);
+      if (profile?.displayName) {
+        await pool.query(
+          `UPDATE social_contacts SET display_name = $1, profile_pic_url = COALESCE($2, profile_pic_url) WHERE id = $3`,
+          [profile.displayName, profile.profilePicUrl, c.id]
+        );
+        if (c.customer_id) {
+          await pool.query(
+            `UPDATE customers SET full_name = $1 WHERE id = $2 AND (full_name IS NULL OR full_name = '' OR full_name LIKE 'Contacto de %')`,
+            [profile.displayName, c.customer_id]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('syncMissingProfiles background failed:', err.message);
+  }
+}
 
 router.get('/contacts', async (req, res, next) => {
   try {
@@ -22,6 +50,11 @@ router.get('/contacts', async (req, res, next) => {
       ) sm ON true
       ORDER BY sc.last_message_at DESC NULLS LAST
     `);
+
+    if (rows.some((r) => !r.display_name)) {
+      syncMissingProfiles().catch(() => {});
+    }
+
     res.json(rows.map((r) => ({
       id: r.id,
       provider: r.provider,
@@ -33,6 +66,35 @@ router.get('/contacts', async (req, res, next) => {
       lastMessage: r.last_message_body,
       lastMessageDirection: r.last_message_direction,
     })));
+  } catch (err) { next(err); }
+});
+
+router.post('/sync-profiles', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT sc.id, sc.provider, sc.external_id, sc.customer_id
+      FROM social_contacts sc
+      WHERE sc.display_name IS NULL OR sc.display_name = '' OR sc.display_name LIKE 'Contacto de %'
+      LIMIT 50
+    `);
+    let updated = 0;
+    for (const c of rows) {
+      const profile = await fetchProfileName(c.external_id, c.provider);
+      if (profile?.displayName) {
+        await pool.query(
+          `UPDATE social_contacts SET display_name = $1, profile_pic_url = COALESCE($2, profile_pic_url) WHERE id = $3`,
+          [profile.displayName, profile.profilePicUrl, c.id]
+        );
+        if (c.customer_id) {
+          await pool.query(
+            `UPDATE customers SET full_name = $1 WHERE id = $2`,
+            [profile.displayName, c.customer_id]
+          );
+        }
+        updated++;
+      }
+    }
+    res.json({ checked: rows.length, updated });
   } catch (err) { next(err); }
 });
 
