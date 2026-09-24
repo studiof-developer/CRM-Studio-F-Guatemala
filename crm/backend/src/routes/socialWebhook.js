@@ -12,7 +12,8 @@ import { decryptToken } from '../tokenCrypto.js';
 import { fetchProfileName } from '../metaMessaging.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment } from '../attachmentStorage.js';
-import { compressImageBuffer, compressPdfBuffer } from '../attachmentCompression.js';
+import { compressImageBuffer } from '../imageCompression.js';
+import { compressPdfBuffer } from '../pdfCompression.js';
 import { processInboundImageOcr, updateMessageStatus } from './attachments.js';
 
 const router = Router();
