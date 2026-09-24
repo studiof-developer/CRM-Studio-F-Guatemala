@@ -593,11 +593,17 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           <div className="flex min-w-0 flex-1 flex-wrap items-stretch justify-end gap-1.5">
             {statCards.map((c) => {
               const Icon = c.icon;
+              const isUnreadCard = c.key === 'unread';
               return (
                 <div
                   key={c.key}
-                  title={c.sub ?? undefined}
-                  className="relative flex shrink-0 items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 shadow-sm"
+                  title={isUnreadCard ? (unreadOnly ? 'Mostrar todas las conversaciones' : 'Filtrar solo no leídos') : (c.sub ?? undefined)}
+                  onClick={isUnreadCard ? () => setUnreadOnly((v) => !v) : undefined}
+                  className={`relative flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 shadow-sm transition-all ${
+                    isUnreadCard
+                      ? `cursor-pointer ${unreadOnly ? 'border-accent bg-accent-soft ring-1 ring-accent/30' : 'border-line bg-paper hover:border-accent/40'}`
+                      : 'border-line bg-paper'
+                  }`}
                 >
                   {c.alert && (
                     <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5 items-center justify-center">
@@ -626,8 +632,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {/* Search is the one filter every role gets — an asesor just doesn't get
-              period/column narrowing or "Solo no leídos" alongside it. */}
+          {/* Search and "Solo no leídos" are available to every role;
+              period/column narrowing are admin+supervisor only. */}
           <div className="relative min-w-[200px] flex-1 sm:max-w-sm">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -675,19 +681,19 @@ export default function HandoffQueue({ user, onOpenConversation }) {
               )}
 
               <Select value={onlyColumn} onChange={setOnlyColumn} options={columnFilterOptions} className="w-48 shrink-0" />
-
-              <button
-                type="button"
-                onClick={() => setUnreadOnly((v) => !v)}
-                aria-pressed={unreadOnly}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
-                  unreadOnly ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-greige-ink hover:text-ink'
-                }`}
-              >
-                <Mail size={12} /> Solo no leídos
-              </button>
             </>
           )}
+
+          <button
+            type="button"
+            onClick={() => setUnreadOnly((v) => !v)}
+            aria-pressed={unreadOnly}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+              unreadOnly ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-greige-ink hover:text-ink'
+            }`}
+          >
+            <Mail size={12} /> Solo no leídos
+          </button>
 
           {canFilter && searching && (
             <button
