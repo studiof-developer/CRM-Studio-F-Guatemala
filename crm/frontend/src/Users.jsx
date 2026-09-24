@@ -207,9 +207,18 @@ export default function Users() {
                 <td className="p-4 text-xs text-greige-ink">
                   {u.role === 'asesor' ? (
                     u.assigned_lines?.length > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/5 dark:bg-white/[0.08] px-2 py-1 text-ink">
-                        <Smartphone size={12} /> {u.assigned_lines.length} {u.assigned_lines.length === 1 ? 'línea' : 'líneas'}
-                      </span>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {u.assigned_lines.map(id => {
+                          const line = whatsappNumbers.find(l => l.id === id);
+                          if (!line) return null;
+                          return (
+                            <span key={id} className="inline-flex items-center gap-1 rounded bg-black/5 dark:bg-white/[0.08] px-1.5 py-0.5 text-[11px] font-medium text-ink">
+                              <Smartphone size={10} className="text-greige" />
+                              {line.brandName ? `${line.brandName} · ${line.branchName || line.label}` : line.label}
+                            </span>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <span className="italic text-error">Sin asignar</span>
                     )

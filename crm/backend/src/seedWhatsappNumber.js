@@ -19,15 +19,6 @@ export async function seedDefaultWhatsappNumber() {
     );
 
     if (existing.length > 0) {
-      const numId = existing[0].id;
-      // Link unassigned tickets and users to this line
-      await pool.query('UPDATE tickets SET whatsapp_number_id = $1 WHERE whatsapp_number_id IS NULL', [numId]);
-      await pool.query(
-        `INSERT INTO user_whatsapp_numbers (user_id, whatsapp_number_id)
-         SELECT u.id, $1 FROM users u
-         ON CONFLICT DO NOTHING`,
-        [numId]
-      );
       return;
     }
 
@@ -83,6 +74,7 @@ export async function seedDefaultWhatsappNumber() {
       await pool.query(
         `INSERT INTO user_whatsapp_numbers (user_id, whatsapp_number_id)
          SELECT u.id, $1 FROM users u
+         WHERE NOT EXISTS (SELECT 1 FROM user_whatsapp_numbers)
          ON CONFLICT DO NOTHING`,
         [numId]
       );

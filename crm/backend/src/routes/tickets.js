@@ -15,8 +15,7 @@ const TICKET_STATUS_LABELS = { esperando_asesor: 'Pendiente', en_atencion: 'En a
 // individually), so this is a no-op — kept as a hook in case that ever changes.
 function linesClause(user, tableAlias = 't') {
   if (user.role !== 'asesor') return '';
-  // Restrict to assigned lines, preserving social/unassigned tickets
-  return ` AND (${tableAlias}.whatsapp_number_id IS NULL OR ${tableAlias}.whatsapp_number_id IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)}))`;
+  return ` AND ${tableAlias}.whatsapp_number_id IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)})`;
 }
 
 // Every column a contact can land in, and the order they're drawn in on the board.
@@ -439,7 +438,7 @@ router.get('/pipeline/card', async (req, res, next) => {
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1 ${linesClause(req.user, 't')}
       ),
       deduped AS (SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1)
       SELECT *, ${BUCKET_CASE_SQL} AS bucket
@@ -641,7 +640,7 @@ router.get('/pipeline/export', async (req, res, next) => {
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${linesClause(req.user, 't')}
       ),
       -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
       deduped AS (

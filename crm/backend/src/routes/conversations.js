@@ -478,14 +478,15 @@ router.get('/', async (req, res, next) => {
     `, limit ? [limit] : []));
     let visible = rows;
 
+    let allowedLineIds = null;
     // Filter conversations by lines assigned to the advisor
     if (req.user.role === 'asesor') {
       const { rows: assignedLines } = await pool.query(
         'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1',
         [req.user.id]
       );
-      const allowedLineIds = new Set(assignedLines.map((l) => l.whatsapp_number_id));
-      visible = visible.filter((r) => !r.whatsapp_number_id || allowedLineIds.has(r.whatsapp_number_id));
+      allowedLineIds = new Set(assignedLines.map((l) => l.whatsapp_number_id));
+      visible = visible.filter((r) => r.whatsapp_number_id && allowedLineIds.has(r.whatsapp_number_id));
     }
 
     const qLower = q?.trim().toLowerCase();
@@ -526,7 +527,8 @@ router.get('/', async (req, res, next) => {
     // record already silently not matching those filters. unread_count does exist on
     // social_contacts though, so "No leído" still applies to them.
     let socialItems = [];
-    if (channel !== 'whatsapp' && !temperature && !ticketStatus) {
+    const canSeeSocial = req.user.role !== 'asesor' || (allowedLineIds && allowedLineIds.has(1));
+    if (canSeeSocial && channel !== 'whatsapp' && !temperature && !ticketStatus) {
       const { rows: socialRows } = await pool.query(`
         SELECT sc.id, sc.provider, sc.display_name, sc.last_message_at, sc.unread_count,
                sm.body AS last_message_body, sm.direction AS last_message_direction
