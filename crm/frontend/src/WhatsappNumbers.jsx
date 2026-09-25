@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Smartphone, Plus, Trash2, ShieldAlert, Edit2, X, RefreshCw, Activity } from 'lucide-react';
 import {
-  fetchBrands, fetchWhatsappNumbers, testWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber
+  fetchBrands, fetchWhatsappNumbers, testWhatsappNumber, testSavedWhatsappNumber, createWhatsappNumber, updateWhatsappNumber, deleteWhatsappNumber
 } from './api.js';
 import Badge from './components/Badge.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
@@ -42,6 +42,7 @@ export default function WhatsappNumbers() {
 
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [testingRowId, setTestingRowId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -72,7 +73,34 @@ export default function WhatsappNumbers() {
     setModal({ open: true, mode: 'edit', data: n });
   }
 
+  async function handleTestRow(id) {
+    setTestingRowId(id);
+    try {
+      const res = await testSavedWhatsappNumber(id);
+      showSuccess(`Línea verificada con éxito: ${res.verifiedName || res.displayPhoneNumber || 'OK'}`);
+      load();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setTestingRowId(null);
+    }
+  }
+
   async function handleTest() {
+    if (modal.mode === 'edit' && !form.accessToken.trim()) {
+      setTesting(true);
+      setError(null);
+      setTestResult(null);
+      try {
+        const result = await testSavedWhatsappNumber(modal.data.id);
+        setTestResult(result);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setTesting(false);
+      }
+      return;
+    }
     if (!form.phoneNumberId.trim() || !form.accessToken.trim()) {
       setError('Completa el ID de número y el token para poder probar la conexión.');
       return;
@@ -81,7 +109,11 @@ export default function WhatsappNumbers() {
     setError(null);
     setTestResult(null);
     try {
-      const result = await testWhatsappNumber({ phoneNumberId: form.phoneNumberId.trim(), accessToken: form.accessToken.trim() });
+      const result = await testWhatsappNumber({
+        phoneNumberId: form.phoneNumberId.trim(),
+        accessToken: form.accessToken.trim(),
+        wabaId: form.wabaId?.trim(),
+      });
       setTestResult(result);
     } catch (err) {
       setError(err.message);
@@ -204,6 +236,14 @@ export default function WhatsappNumbers() {
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => handleTestRow(n.id)}
+                      disabled={testingRowId === n.id}
+                      className="rounded-lg p-2 text-greige hover:bg-black/5 dark:hover:bg-white/10 hover:text-accent transition-colors"
+                      title="Probar conexión con WhatsApp"
+                    >
+                      {testingRowId === n.id ? <RefreshCw size={16} className="animate-spin text-accent" /> : <ShieldAlert size={16} />}
+                    </button>
                     <button
                       onClick={() => openEdit(n)}
                       className="rounded-lg p-2 text-greige hover:bg-black/5 dark:hover:bg-white/10 hover:text-ink transition-colors"

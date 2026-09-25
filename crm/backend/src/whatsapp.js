@@ -105,8 +105,16 @@ async function graphFetch(path, options, token, timeoutMs = REQUEST_TIMEOUT_MS) 
 // Used by the Configuración "probar conexión" flow to validate a number/token
 // pair before it's ever saved — separate from the active-credentials path above
 // since the number being tested usually isn't the active one yet.
-export async function verifyNumber(phoneNumberId, token) {
-  return graphFetch(`${phoneNumberId}?fields=display_phone_number,verified_name`, { method: 'GET' }, token);
+export async function verifyNumber(phoneNumberId, token, wabaId) {
+  const info = await graphFetch(`${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status`, { method: 'GET' }, token);
+  if (wabaId && wabaId !== 'default') {
+    try {
+      await graphFetch(`${wabaId}?fields=id,name`, { method: 'GET' }, token);
+    } catch (err) {
+      throw new Error(`El token no tiene permisos sobre la cuenta de WhatsApp Business (WABA ID: ${wabaId}). En Meta Business Suite, debes asignar este activo al usuario del sistema con permisos de administración/mensajería: ${err.message}`);
+    }
+  }
+  return info;
 }
 
 // contextMessageId, when given the wamid of an earlier message, makes WhatsApp show

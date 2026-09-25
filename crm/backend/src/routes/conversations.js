@@ -318,6 +318,19 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
       if (!sessionIds.length) sessionIds = [`${phone}__line_1`, `${phone}__whatsapp`, phone];
     } else {
       sessionIds = allSessions.filter((s) => s.includes(`__line_${lineId}`));
+      if (!sessionIds.length) {
+        try {
+          const { rows: lRows } = await pool.query(
+            `SELECT DISTINCT session_id FROM n8n_chat_histories 
+             WHERE session_id LIKE $1 || '%' 
+               AND (whatsapp_number_id = $2 OR (message->'additional_kwargs'->>'whatsappNumberId')::int = $2)`,
+            [phone, lineId]
+          );
+          if (lRows.length) {
+            sessionIds = lRows.map((r) => r.session_id);
+          }
+        } catch (_) {}
+      }
       if (!sessionIds.length) sessionIds = [`${phone}__line_${lineId}`];
     }
   } else {
@@ -882,14 +895,14 @@ router.get('/:sessionId', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 5000);
     const { messages, customer, phone, lineId, hasMoreOlder } = await findConversationThread(req.params.sessionId, { limit, user: req.user });
-    if (!messages.length) return res.status(404).json({ error: 'not found' });
+    if (!messages.length && !customer) return res.status(404).json({ error: 'not found' });
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
 
     // Read state is shared across the team — whichever advisor opens the thread first
     // marks it read for everyone, same as a shared support inbox. Doesn't block the
     // response; the list picks up the change on its next refresh (SSE-driven).
-    if (phone) {
+    if (phone && messages.length > 0) {
       const maxId = messages[messages.length - 1].id;
       pool.query(
         `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())

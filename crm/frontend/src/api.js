@@ -516,6 +516,14 @@ export async function testWhatsappNumber(data) {
   return res.json();
 }
 
+export async function testSavedWhatsappNumber(id) {
+  const res = await apiFetch(`/api/whatsapp-numbers/${id}/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo validar la línea guardada');
+  return res.json();
+}
+
 export async function createWhatsappNumber(data) {
   const res = await apiFetch('/api/whatsapp-numbers', {
     method: 'POST',

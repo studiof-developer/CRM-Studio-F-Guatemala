@@ -69,12 +69,34 @@ router.get('/', async (req, res, next) => {
 // their message instead of by whoever's setting this up.
 router.post('/test', async (req, res, next) => {
   try {
-    const { phoneNumberId, accessToken } = req.body ?? {};
+    const { phoneNumberId, accessToken, wabaId } = req.body ?? {};
     if (!phoneNumberId?.trim() || !accessToken?.trim()) {
       return res.status(400).json({ error: 'phoneNumberId and accessToken required' });
     }
-    const info = await whatsapp.verifyNumber(phoneNumberId.trim(), accessToken.trim());
+    const info = await whatsapp.verifyNumber(phoneNumberId.trim(), accessToken.trim(), wabaId?.trim());
     res.json({ ok: true, displayPhoneNumber: info.display_phone_number, verifiedName: info.verified_name });
+  } catch (err) {
+    res.status(400).json({ error: `No se pudo validar con WhatsApp: ${err.message}` });
+  }
+});
+
+router.post('/:id/test', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+
+    const token = decryptToken(rows[0].access_token_enc);
+    const info = await whatsapp.verifyNumber(rows[0].phone_number_id, token, rows[0].waba_id);
+
+    await pool.query(`UPDATE whatsapp_numbers SET last_tested_at = now() WHERE id = $1`, [req.params.id]);
+
+    res.json({
+      ok: true,
+      displayPhoneNumber: info.display_phone_number,
+      verifiedName: info.verified_name,
+      qualityRating: info.quality_rating,
+      codeVerificationStatus: info.code_verification_status,
+    });
   } catch (err) {
     res.status(400).json({ error: `No se pudo validar con WhatsApp: ${err.message}` });
   }
@@ -94,7 +116,7 @@ router.post('/', async (req, res, next) => {
 
     let info;
     try {
-      info = await whatsapp.verifyNumber(phoneNumberId.trim(), accessToken.trim());
+      info = await whatsapp.verifyNumber(phoneNumberId.trim(), accessToken.trim(), wabaId?.trim());
     } catch (err) {
       return res.status(400).json({ error: `No se pudo validar con WhatsApp: ${err.message}` });
     }
@@ -162,9 +184,10 @@ router.patch('/:id', async (req, res, next) => {
     if (accessToken?.trim() || phoneNumberId?.trim() || pin?.trim()) {
       const testPhoneNumberId = phoneNumberId?.trim() || existing[0].phone_number_id;
       const testToken = accessToken?.trim() || decryptToken(existing[0].access_token_enc);
+      const testWabaId = wabaId?.trim() || existing[0].waba_id;
       let info;
       try {
-        info = await whatsapp.verifyNumber(testPhoneNumberId, testToken);
+        info = await whatsapp.verifyNumber(testPhoneNumberId, testToken, testWabaId);
       } catch (err) {
         return res.status(400).json({ error: `No se pudo validar con WhatsApp: ${err.message}` });
       }
