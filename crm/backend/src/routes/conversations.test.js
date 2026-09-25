@@ -20,5 +20,14 @@ test('preserves line suffix in cleanSessionId', () => {
 
 test('parses threadKey into phone and lineId', () => {
   assert.deepEqual(parseThreadKey('50254874713__line_2'), { phone: '50254874713', lineId: 2 });
+  assert.deepEqual(parseThreadKey('50254874713__line_2__Postgres_Chat_Memory'), { phone: '50254874713', lineId: 2 });
   assert.deepEqual(parseThreadKey('50254874713'), { phone: '50254874713', lineId: null });
+  assert.deepEqual(parseThreadKey('50254874713__Postgres_Chat_Memory'), { phone: '50254874713', lineId: null });
 });
+
+test('regex correctly extracts line id from complex session id', () => {
+  const match = '573151045201__line_2__Postgres_Chat_Memory'.match(/__line_([0-9]+)/);
+  assert.ok(match);
+  assert.equal(parseInt(match[1], 10), 2);
+});
+
