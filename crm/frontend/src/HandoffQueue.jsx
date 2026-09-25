@@ -449,7 +449,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) loadMore(key);
   }
 
-  async function handleTake(ticketId, whatsappNumber) {
+  async function handleTake(ticketId, whatsappNumber, whatsappNumberId) {
     setBusyTicketId(ticketId);
     try {
       await updateTicket(ticketId, { status: 'en_atencion', assigned_advisor: user.fullName });
@@ -457,7 +457,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       reloadAll();
       // Taking it is only step one — the advisor still needs to actually talk to the
       // customer, which happens in Conversaciones, not this board.
-      if (whatsappNumber) onOpenConversation?.(whatsappNumber);
+      if (whatsappNumber) onOpenConversation?.(whatsappNumber, whatsappNumberId);
     } catch (err) {
       showError(err.message);
     } finally {
@@ -843,7 +843,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         </span>
                         {key === 'pendiente' ? (
                           <Button
-                            onClick={() => handleTake(card.ticketId, card.whatsappNumber)}
+                            onClick={() => handleTake(card.ticketId, card.whatsappNumber, card.whatsappNumberId)}
                             disabled={busyTicketId === card.ticketId}
                             className="!h-7 !px-2.5 !text-xs"
                           >
@@ -852,7 +852,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => onOpenConversation?.(card.whatsappNumber)}
+                            onClick={() => onOpenConversation?.(card.whatsappNumber, card.whatsappNumberId)}
                             className="text-xs font-semibold text-accent hover:underline"
                           >
                             Ir al chat

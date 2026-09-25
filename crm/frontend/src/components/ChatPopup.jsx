@@ -10,7 +10,9 @@ import Conversations from '../Conversations.jsx';
 // which one conversation to show. `key={phone}` forces a clean remount per customer,
 // so nothing (draft text, thread scroll position, presence target) leaks from one
 // popup open to the next.
-export default function ChatPopup({ phone, user, onClose }) {
+export default function ChatPopup({ phone, lineId, user, onClose }) {
+  const sessionId = lineId ? `${phone}__line_${lineId}` : phone;
+
   useEffect(() => {
     if (!phone) return;
     const onKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
@@ -52,7 +54,7 @@ export default function ChatPopup({ phone, user, onClose }) {
                 instead of filling the box — exactly the large empty gap reported
                 (2026-09-10). Dropped `flex` above so it goes back to filling 100% width,
                 same as the real page. */}
-            <Conversations key={phone} user={user} openSessionId={phone} onOpenedConversation={() => {}} singleThreadMode onClose={onClose} />
+            <Conversations key={sessionId} user={user} openSessionId={sessionId} onOpenedConversation={() => {}} singleThreadMode onClose={onClose} />
           </motion.div>
         </motion.div>
       )}

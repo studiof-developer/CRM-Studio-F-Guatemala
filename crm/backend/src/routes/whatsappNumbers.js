@@ -82,7 +82,7 @@ router.post('/test', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { label, wabaId, phoneNumberId, accessToken, branchId } = req.body ?? {};
+    const { label, wabaId, phoneNumberId, accessToken, branchId, pin } = req.body ?? {};
     if (!label?.trim() || !wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim() || !branchId) {
       return res.status(400).json({ error: 'Todos los campos son obligatorios (incluyendo la sucursal)' });
     }
@@ -97,6 +97,15 @@ router.post('/', async (req, res, next) => {
       info = await whatsapp.verifyNumber(phoneNumberId.trim(), accessToken.trim());
     } catch (err) {
       return res.status(400).json({ error: `No se pudo validar con WhatsApp: ${err.message}` });
+    }
+
+    // Auto-register number on Meta Cloud API with PIN
+    const pinToTry = pin?.trim() || '123456';
+    try {
+      await whatsapp.registerNumber(phoneNumberId.trim(), pinToTry, accessToken.trim());
+      console.log(`[whatsappNumbers] Number ${phoneNumberId.trim()} successfully registered on Cloud API`);
+    } catch (regErr) {
+      console.warn(`[whatsappNumbers] Cloud API register note:`, regErr.message);
     }
 
     const { rows } = await pool.query(
@@ -122,12 +131,27 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+router.post('/:id/register', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    const { pin } = req.body ?? {};
+    const pinToUse = pin?.trim() || '123456';
+    const token = decryptToken(rows[0].access_token_enc);
+    const result = await whatsapp.registerNumber(rows[0].phone_number_id, pinToUse, token);
+    console.log(`[whatsappNumbers] Number ${rows[0].phone_number_id} successfully registered on Cloud API via /register`);
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(400).json({ error: `Error registrando número en WhatsApp Cloud API: ${err.message}` });
+  }
+});
+
 router.patch('/:id', async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
 
-    const { label, wabaId, phoneNumberId, accessToken, isActive, branchId } = req.body ?? {};
+    const { label, wabaId, phoneNumberId, accessToken, isActive, branchId, pin } = req.body ?? {};
     let displayPhoneNumber = existing[0].display_phone_number;
     let verifiedName = existing[0].verified_name;
     let accessTokenEnc = existing[0].access_token_enc;
@@ -135,7 +159,7 @@ router.patch('/:id', async (req, res, next) => {
 
     // Only re-validate against Meta when the token or the number actually changed —
     // no need to burn an API call just for a label rename or an activate/deactivate toggle.
-    if (accessToken?.trim() || phoneNumberId?.trim()) {
+    if (accessToken?.trim() || phoneNumberId?.trim() || pin?.trim()) {
       const testPhoneNumberId = phoneNumberId?.trim() || existing[0].phone_number_id;
       const testToken = accessToken?.trim() || decryptToken(existing[0].access_token_enc);
       let info;
@@ -150,11 +174,15 @@ router.patch('/:id', async (req, res, next) => {
       if (accessToken?.trim()) accessTokenEnc = encryptToken(accessToken.trim());
 
       // Auto-register number on Meta Cloud API with PIN
+      const testPin = pin?.trim() || '123456';
       try {
-        await whatsapp.registerNumber(testPhoneNumberId, '839204', testToken);
-        console.log(`[whatsappNumbers] Number ${testPhoneNumberId} successfully registered on Cloud API`);
+        await whatsapp.registerNumber(testPhoneNumberId, testPin, testToken);
+        console.log(`[whatsappNumbers] Number ${testPhoneNumberId} successfully registered on Cloud API with PIN ${testPin}`);
       } catch (regErr) {
         console.warn(`[whatsappNumbers] Cloud API register note:`, regErr.message);
+        if (pin?.trim()) {
+          return res.status(400).json({ error: `El PIN ingresado fue rechazado por WhatsApp: ${regErr.message}` });
+        }
       }
     }
 

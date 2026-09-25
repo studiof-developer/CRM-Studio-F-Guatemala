@@ -220,8 +220,15 @@ export default function App() {
   // "Ir al chat" (Pipeline, Auditoría's Sin responder) opens this overlay in place —
   // whatever tab you're on stays open underneath, instead of navigating away to
   // Conversaciones and losing your spot in the list/board you were just looking at.
-  const [popupPhone, setPopupPhone] = useState(null);
-  const handleOpenConversation = useCallback((phone) => setPopupPhone(phone), []);
+  const [popupData, setPopupData] = useState(null);
+  const handleOpenConversation = useCallback((phone, lineId) => {
+    if (!phone) return;
+    if (typeof phone === 'object' && phone !== null) {
+      setPopupData(phone);
+    } else {
+      setPopupData({ phone, lineId });
+    }
+  }, []);
 
   useEffect(() => { fetchMe().then(setUser); }, []);
 
@@ -457,7 +464,7 @@ export default function App() {
       </div>
 
       <Suspense fallback={null}>
-        <ChatPopup phone={popupPhone} user={user} onClose={() => setPopupPhone(null)} />
+        <ChatPopup phone={popupData?.phone} lineId={popupData?.lineId} user={user} onClose={() => setPopupData(null)} />
       </Suspense>
     </div>
   );

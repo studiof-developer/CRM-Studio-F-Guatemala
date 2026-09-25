@@ -15,7 +15,10 @@ const TICKET_STATUS_LABELS = { esperando_asesor: 'Pendiente', en_atencion: 'En a
 // individually), so this is a no-op — kept as a hook in case that ever changes.
 function linesClause(user, tableAlias = 't') {
   if (user.role !== 'asesor') return '';
-  return ` AND ${tableAlias}.whatsapp_number_id IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)})`;
+  return ` AND (
+    ${tableAlias}.whatsapp_number_id IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)})
+    OR (${tableAlias}.whatsapp_number_id IS NULL AND 1 IN (SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = ${Number(user.id)}))
+  )`;
 }
 
 // Every column a contact can land in, and the order they're drawn in on the board.
@@ -272,7 +275,7 @@ router.get('/pipeline', async (req, res, next) => {
 
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH temped AS (
-        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
+        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                c.has_unread AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
@@ -280,7 +283,7 @@ router.get('/pipeline', async (req, res, next) => {
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
                c.last_message_at, c.last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -359,6 +362,7 @@ router.get('/pipeline', async (req, res, next) => {
         customerId: r.customer_id,
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
+        whatsappNumberId: r.whatsapp_number_id,
         channel: r.channel,
         branchName: r.branch_name,
         brandName: r.brand_name,
@@ -423,7 +427,7 @@ router.get('/pipeline/card', async (req, res, next) => {
 
     const { rows } = await pool.query(`
       WITH temped AS (
-        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor,
+        SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                c.has_unread AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
@@ -431,7 +435,7 @@ router.get('/pipeline/card', async (req, res, next) => {
                c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
                c.last_message_at, c.last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -457,7 +461,7 @@ router.get('/pipeline/card', async (req, res, next) => {
       ? Number((await pool.query(
           `SELECT count(*) FROM n8n_chat_histories h
            WHERE h.session_id LIKE $1 || '%' AND h.message->>'type' = 'human'
-             AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = $1), 0)`,
+              AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = $1), 0)`,
           [r.whatsapp_number]
         )).rows[0].count)
       : Number((await pool.query(`SELECT unread_count FROM social_contacts WHERE customer_id = $1`, [r.customer_id])).rows[0]?.unread_count ?? 0);
@@ -470,6 +474,7 @@ router.get('/pipeline/card', async (req, res, next) => {
         customerId: r.customer_id,
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
+        whatsappNumberId: r.whatsapp_number_id,
         channel: r.channel,
         branchName: r.branch_name,
         brandName: r.brand_name,
@@ -483,11 +488,11 @@ router.get('/pipeline/card', async (req, res, next) => {
         lastMessageAt: r.last_customer_message_at,
         previewMessage: r.last_message,
         previewMessageAt: r.last_message_at,
-          brandName: r.brand_name,
-          branchName: r.branch_name,
-          lineLabel: r.line_label,
-          companyName: r.company_name,
-        },
+        brandName: r.brand_name,
+        branchName: r.branch_name,
+        lineLabel: r.line_label,
+        companyName: r.company_name,
+      },
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -634,7 +639,7 @@ router.get('/pipeline/export', async (req, res, next) => {
                c.last_customer_message_at, c.last_customer_message,
                c.last_message_at, c.last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -805,7 +810,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
                  GREATEST(t.updated_at, c.updated_at) AS stage_since,
                  c.has_unread AS customer_has_unread, c.created_at AS customer_created_at,
                  c.last_customer_message_at, c.last_message_at,
-                 ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+                 ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
           WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
         ),

@@ -50,7 +50,28 @@ export const MIME_KIND = (mime) => {
 };
 
 export function cleanSessionId(sessionId) {
+  if (!sessionId) return '';
+  if (sessionId.includes('__line_')) {
+    const [base, linePart] = sessionId.split('__line_');
+    const phone = base.split('__')[0];
+    const lineId = linePart.split('__')[0];
+    return `${phone}__line_${lineId}`;
+  }
   return sessionId.split('__')[0];
+}
+
+export function parseThreadKey(threadKey) {
+  const raw = String(threadKey || '').trim();
+  let lineId = null;
+  let phone = raw;
+  if (raw.includes('__line_')) {
+    const parts = raw.split('__line_');
+    phone = parts[0].split('__')[0];
+    lineId = parseInt(parts[1], 10) || null;
+  } else if (raw.includes('__')) {
+    phone = raw.split('__')[0];
+  }
+  return { phone, lineId };
 }
 
 // The real WhatsApp send happens in the background after the advisor already sees
@@ -60,7 +81,7 @@ export function cleanSessionId(sessionId) {
 // the customer never got the message. This makes the failure show up as a red mark on
 // the message itself instead of vanishing silently.
 async function markSendFailed(messageId, err) {
-  console.error('WhatsApp send failed', err);
+  console.error('WhatsApp send failed:', err);
   // Store the reason too — without it, diagnosing "why didn't this arrive" means
   // digging through container logs that may already have rotated away. Meta's error
   // bodies are verbose, so keep just enough to identify the cause.
@@ -85,12 +106,20 @@ async function markSendFailed(messageId, err) {
 // prompt a reply, and the queue flushes the moment they answer (see flushQueued below).
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-async function getConversationWindow(sessionIds) {
-  const { rows } = await pool.query(
-    `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-     WHERE session_id = ANY($1) AND message->>'type' = 'human'`,
-    [sessionIds]
-  );
+async function getConversationWindow(sessionIds, phone, lineId) {
+  let query;
+  let params;
+  if (phone && lineId) {
+    query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+     WHERE (session_id LIKE $1 || '__line_' || $2 || '%' OR (whatsapp_number_id = $2 AND session_id LIKE $1 || '%'))
+       AND message->>'type' = 'human'`;
+    params = [phone, lineId];
+  } else {
+    query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+     WHERE session_id = ANY($1) AND message->>'type' = 'human'`;
+    params = [sessionIds];
+  }
+  const { rows } = await pool.query(query, params);
   const lastInboundAt = rows[0]?.last_inbound_at ?? null;
   // No inbound at all means the customer never wrote, so there is no open window either.
   return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
@@ -118,21 +147,21 @@ async function reactivationAlreadySent(sessionIds, lastInboundAt) {
   return rows.length > 0;
 }
 
-async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboundAt) {
+async function sendReactivationTemplate(sessionId, sessionIds, phone, lastInboundAt, lineId) {
   if (await reactivationAlreadySent(sessionIds, lastInboundAt)) return;
-  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG);
+  await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [], undefined, undefined, undefined, lineId);
   // The literal text the customer received, not a note about it — the advisor needs to
   // read what was actually said before writing the next line. Doubles as the marker
   // that tells reactivationAlreadySent() this dormant stretch is already covered.
   await pool.query(
-    `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb)`,
+    `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3)`,
     [sessionId, JSON.stringify({
       type: 'ai',
       content: OUTREACH_TEMPLATE_BODY,
-      additional_kwargs: { sentBy: 'sistema', reactivationTemplate: true },
+      additional_kwargs: { sentBy: 'sistema', reactivationTemplate: true, whatsappNumberId: lineId },
       response_metadata: {},
       tool_calls: [],
-    })]
+    }), lineId]
   );
 }
 
@@ -180,7 +209,7 @@ export async function findCustomerBySessionId(sessionIdPrefix) {
   return { messages: rows, customer, phone };
 }
 
-async function findCustomerByPhone(phone) {
+async function findCustomerByPhone(phone, lineId) {
   // The most recent ticket regardless of status — not just active ones. A resolved
   // ticket still means a human has this relationship; the compose box shouldn't lock
   // back up and pretend it's "bot" again just because the last issue was closed out.
@@ -195,7 +224,7 @@ async function findCustomerByPhone(phone) {
             c.paid_locked, c.paid_method, c.manual_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
             c.payment_suggested_at, c.payment_suggestion_reason, c.payment_suggestion_method,
             t.id AS ticket_id, t.status AS ticket_status, t.handoff_reason,
-            t.brand_name, t.branch_name, t.line_label,
+            t.brand_name, t.branch_name, t.line_label, t.company_name, t.whatsapp_number_id,
             e.nombre AS erp_nombre, e.venta_neta_total AS erp_venta_neta_total,
             e.facturas_totales AS erp_facturas_totales, e.unidades_totales AS erp_unidades_totales,
             e.fecha_ultima_compra AS erp_fecha_ultima_compra, e.dias_sin_compra AS erp_dias_sin_compra,
@@ -205,13 +234,15 @@ async function findCustomerByPhone(phone) {
             e.talla_blusa AS erp_talla_blusa, e.talla_jean AS erp_talla_jean, e.talla_calzado AS erp_talla_calzado
      FROM customers c
      LEFT JOIN LATERAL (
-       SELECT tk.id, tk.status, tk.handoff_reason, brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
+       SELECT tk.id, tk.status, tk.handoff_reason, tk.assigned_advisor, tk.whatsapp_number_id,
+              brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
        FROM tickets tk
        LEFT JOIN whatsapp_numbers wn ON tk.whatsapp_number_id = wn.id
        LEFT JOIN branches br ON wn.branch_id = br.id
        LEFT JOIN brands brnd ON br.brand_id = brnd.id
        LEFT JOIN companies comp ON brnd.company_id = comp.id
        WHERE tk.customer_id = c.id
+         AND ($2::int IS NULL OR tk.whatsapp_number_id = $2 OR ($2::int = 1 AND tk.whatsapp_number_id IS NULL))
        ORDER BY tk.created_at DESC LIMIT 1
      ) t ON true
      LEFT JOIN LATERAL (
@@ -220,7 +251,7 @@ async function findCustomerByPhone(phone) {
        ORDER BY venta_neta_total DESC NULLS LAST LIMIT 1
      ) e ON true
      WHERE c.whatsapp_number = $1`,
-    [phone]
+    [phone, lineId ? Number(lineId) : null]
   );
   return { customer: rows[0] ?? null };
 }
@@ -232,12 +263,6 @@ async function findCustomerByPhone(phone) {
 // (very start of onboarding) still fall back to their raw session_id as the key.
 async function resolveSessionIds(threadKey) {
   if (PHONE_RE.test(threadKey)) {
-    // Production session_ids are the phone itself, but some channels stamp a suffix
-    // on it (e.g. "<phone>__whatsapp") — LIKE-prefix match instead of exact-match so
-    // those aren't silently invisible to this lookup even though the list (which
-    // strips the suffix the same way) shows them just fine. The content-equals-phone
-    // clause is only there for legacy sessions (random session_id) that merge into
-    // this thread because the customer once typed their own number as a message.
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
        WHERE session_id LIKE $1 || '%'
@@ -253,39 +278,95 @@ async function resolveSessionIds(threadKey) {
   return rows.map((r) => r.session_id);
 }
 
-export async function findConversationThread(threadKey, { limit = 50 } = {}) {
-  const sessionIds = await resolveSessionIds(threadKey);
-  if (!sessionIds.length) return { messages: [], customer: null, phone: null, hasMoreOlder: false };
+export async function findConversationThread(threadKey, { limit = 50, user } = {}) {
+  const { phone: extractedPhone, lineId: keyLineId } = parseThreadKey(threadKey);
+  let lineId = keyLineId;
+  let phone = extractedPhone;
 
-  // A long-running customer's full history used to load unconditionally on every open,
-  // every 15s poll, and every live event while the thread was open — the same "loads
-  // everything, gets slower as it grows" problem already fixed for the conversation
-  // list. Only the most recent `limit` messages load by default; the frontend grows
-  // `limit` and re-fetches when the advisor scrolls up wanting older ones.
-  const { rows: messagesDesc } = await pool.query(
-    `SELECT id, message, created_at FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT $2`,
-    [sessionIds, limit]
-  );
+  // If lineId not explicit in threadKey, resolve from advisor's assigned lines
+  if (!lineId && user?.role === 'asesor') {
+    const { rows: assignedLines } = await pool.query(
+      'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1 LIMIT 1',
+      [user.id]
+    );
+    if (assignedLines.length) {
+      lineId = assignedLines[0].whatsapp_number_id;
+    }
+  }
+
+  // If still no lineId, resolve from latest active ticket for this phone
+  if (!lineId && phone && PHONE_RE.test(phone)) {
+    const { rows: tRows } = await pool.query(
+      `SELECT t.whatsapp_number_id FROM tickets t
+       JOIN customers c ON c.id = t.customer_id
+       WHERE c.whatsapp_number = $1
+       ORDER BY t.created_at DESC LIMIT 1`,
+      [phone]
+    );
+    if (tRows.length && tRows[0].whatsapp_number_id) {
+      lineId = tRows[0].whatsapp_number_id;
+    }
+  }
+
+  // Default to line 1 if still not resolved
+  if (!lineId) lineId = 1;
+
+  // Now query messages strictly for this phone & line
+  let messagesQuery;
+  let queryParams;
+
+  if (PHONE_RE.test(phone)) {
+    if (lineId === 1) {
+      messagesQuery = `
+        SELECT id, message, created_at, whatsapp_number_id, session_id
+        FROM n8n_chat_histories
+        WHERE (
+          session_id = $1 || '__line_1'
+          OR session_id = $1
+          OR session_id LIKE $1 || '__whatsapp%'
+          OR session_id LIKE $1 || '__Postgres%'
+          OR whatsapp_number_id = 1
+          OR (whatsapp_number_id IS NULL AND session_id LIKE $1 || '%' AND session_id NOT LIKE '%__line_%')
+        )
+        ORDER BY id DESC LIMIT $2
+      `;
+      queryParams = [phone, limit];
+    } else {
+      messagesQuery = `
+        SELECT id, message, created_at, whatsapp_number_id, session_id
+        FROM n8n_chat_histories
+        WHERE (
+          session_id LIKE $1 || '__line_' || $3 || '%'
+          OR whatsapp_number_id = $3
+          OR (message->'additional_kwargs'->>'whatsappNumberId')::int = $3
+        )
+        ORDER BY id DESC LIMIT $2
+      `;
+      queryParams = [phone, limit, lineId];
+    }
+  } else {
+    // Non-phone legacy session
+    messagesQuery = `
+      SELECT id, message, created_at, whatsapp_number_id, session_id
+      FROM n8n_chat_histories
+      WHERE session_id LIKE $1 || '%'
+      ORDER BY id DESC LIMIT $2
+    `;
+    queryParams = [threadKey, limit];
+  }
+
+  const { rows: messagesDesc } = await pool.query(messagesQuery, queryParams);
   const messages = messagesDesc.reverse();
   const hasMoreOlder = messagesDesc.length === limit;
 
-  // Was previously read off of `messages` itself, which broke once that stopped being
-  // the full history — a targeted query stays correct regardless of the page window,
-  // and only runs at all for legacy sessions where the key isn't already the phone.
-  const phone = PHONE_RE.test(threadKey)
-    ? threadKey
-    : await (async () => {
-        const { rows } = await pool.query(
-          `SELECT trim(message->>'content') AS phone FROM n8n_chat_histories
-           WHERE session_id = ANY($1) AND message->>'type' = 'human' AND trim(message->>'content') ~ '^\\d{7,15}$'
-           ORDER BY id ASC LIMIT 1`,
-          [sessionIds]
-        );
-        return rows[0]?.phone ?? null;
-      })();
+  if (!phone && messages.length) {
+    const phoneMsg = messages.find((r) => r.message?.type === 'human' && PHONE_RE.test(String(r.message?.content).trim()));
+    phone = phoneMsg?.message?.content?.trim() ?? null;
+  }
 
-  const customer = phone ? (await findCustomerByPhone(phone)).customer : null;
-  return { messages, customer, phone, sessionIds, hasMoreOlder };
+  const sessionIds = [lineId ? `${phone}__line_${lineId}` : (messages[messages.length - 1]?.session_id || threadKey)];
+  const customer = phone ? (await findCustomerByPhone(phone, lineId)).customer : null;
+  return { messages, customer, phone, lineId, sessionIds, hasMoreOlder };
 }
 
 // The template must already be approved in Meta's WhatsApp Manager under this exact
@@ -310,14 +391,24 @@ const OUTREACH_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
 // cold) — WhatsApp requires a pre-approved template for this, not free text.
 router.post('/', async (req, res, next) => {
   try {
-    const { phone: rawPhone, fullName, address } = req.body ?? {};
+    const { phone: rawPhone, fullName, address, lineId: bodyLineId } = req.body ?? {};
     const phone = String(rawPhone ?? '').replace(/\D/g, '');
     if (!PHONE_RE.test(phone)) return res.status(400).json({ error: 'invalid phone' });
     if (!fullName?.trim()) return res.status(400).json({ error: 'fullName required' });
     if (!address?.trim()) return res.status(400).json({ error: 'address required' });
 
+    let lineId = bodyLineId ? Number(bodyLineId) : null;
+    if (!lineId && req.user?.role === 'asesor') {
+      const { rows: assignedLines } = await pool.query(
+        'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1 LIMIT 1',
+        [req.user.id]
+      );
+      if (assignedLines.length) lineId = assignedLines[0].whatsapp_number_id;
+    }
+    if (!lineId) lineId = 1;
+
     try {
-      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG);
+      await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [], undefined, undefined, undefined, lineId);
     } catch (err) {
       return res.status(502).json({ error: `no se pudo enviar la plantilla de WhatsApp: ${err.message}` });
     }
@@ -335,8 +426,8 @@ router.post('/', async (req, res, next) => {
     // existing customer contacted here again (e.g. the number was mistyped as "new")
     // could otherwise get a second, duplicate ticket alongside whatever's already open.
     const { rows: existingTicket } = await pool.query(
-      `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
-      [customerId]
+      `SELECT id FROM tickets WHERE customer_id = $1 AND (whatsapp_number_id = $2 OR ($2 = 1 AND whatsapp_number_id IS NULL)) AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+      [customerId, lineId]
     );
     if (existingTicket.length) {
       await pool.query(
@@ -347,25 +438,26 @@ router.post('/', async (req, res, next) => {
       );
     } else {
       await pool.query(
-        `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
-         VALUES ($1, 'en_atencion', 'contacto_proactivo', $2, now())`,
-        [customerId, req.user.fullName]
+        `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at, whatsapp_number_id)
+         VALUES ($1, 'en_atencion', 'contacto_proactivo', $2, now(), $3)`,
+        [customerId, req.user.fullName, lineId]
       );
     }
 
     const message = {
       type: 'ai',
       content: OUTREACH_TEMPLATE_BODY,
-      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName, template: OUTREACH_TEMPLATE_NAME },
+      additional_kwargs: { sentBy: 'advisor', advisorName: req.user.fullName, template: OUTREACH_TEMPLATE_NAME, whatsappNumberId: lineId },
       response_metadata: {},
       tool_calls: [],
     };
+    const threadSessionId = `${phone}__line_${lineId}`;
     const { rows: inserted } = await pool.query(
-      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id, created_at`,
-      [phone, JSON.stringify(message)]
+      `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id, created_at`,
+      [threadSessionId, JSON.stringify(message), lineId]
     );
 
-    res.status(201).json({ sessionId: phone, id: inserted[0].id, createdAt: inserted[0].created_at });
+    res.status(201).json({ sessionId: threadSessionId, id: inserted[0].id, createdAt: inserted[0].created_at });
   } catch (err) { next(err); }
 });
 
@@ -418,19 +510,25 @@ router.get('/', async (req, res, next) => {
       -- with random session_ids and would otherwise misfire on the DPI in the current
       -- intake flow.
       threaded AS (
-        -- n8n stamps some channels' session_ids as "<phone>__whatsapp" (or similar) —
-        -- strip everything from the first "__" on before testing/using it as the phone,
-        -- the same way cleanSessionId() does on the JS side. Without this, a suffixed
-        -- session_id with no phone-as-message fallback resolves to a NULL phone, which
-        -- silently breaks the customer/ticket join and unread counting for that thread.
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE COALESCE(p.phone, r.session_id) END AS thread_key
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               COALESCE(
+                 NULLIF((r.message->'additional_kwargs'->>'whatsappNumberId')::int, 0),
+                 CASE WHEN r.session_id LIKE '%__line_%' THEN NULLIF(split_part(r.session_id, '__line_', 2), '')::int ELSE 1 END
+               ) AS line_id,
+               CASE
+                 WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN
+                   split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
+                     NULLIF((r.message->'additional_kwargs'->>'whatsappNumberId')::int, 0),
+                     CASE WHEN r.session_id LIKE '%__line_%' THEN NULLIF(split_part(r.session_id, '__line_', 2), '')::int ELSE 1 END
+                   )
+                 ELSE COALESCE(p.phone, r.session_id)
+               END AS thread_key
         FROM readable r
         LEFT JOIN phone_by_session p USING (session_id)
       ),
       last_msg AS (
-        SELECT DISTINCT ON (thread_key) thread_key, phone, id, message, created_at
+        SELECT DISTINCT ON (thread_key) thread_key, phone, line_id, id, message, created_at
         FROM threaded
         ORDER BY thread_key, id DESC
       ),
@@ -449,10 +547,11 @@ router.get('/', async (req, res, next) => {
         WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
         GROUP BY th.thread_key
       )
-      SELECT l.thread_key, l.id AS last_id, l.message, l.created_at, cnt.message_count,
+      SELECT l.thread_key, l.line_id, l.id AS last_id, l.message, l.created_at, cnt.message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, c.payment_suggested_at, t.status AS ticket_status,
              t.assigned_advisor,
-             t.brand_name, t.branch_name, t.line_label, t.whatsapp_number_id,
+             t.brand_name, t.branch_name, t.line_label, comp.name AS company_name,
+             COALESCE(t.whatsapp_number_id, l.line_id) AS whatsapp_number_id,
              CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
              COALESCE(uc.unread_count, 0) AS unread_count,
              att.kind AS last_attachment_kind, att.filename AS last_attachment_filename
@@ -464,13 +563,15 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN message_attachments att ON att.n8n_message_id = l.id
       LEFT JOIN customers c ON c.whatsapp_number = l.phone
       LEFT JOIN LATERAL (
-        SELECT tk.id, tk.status, tk.handoff_reason, tk.assigned_advisor, tk.whatsapp_number_id, brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
+        SELECT tk.id, tk.status, tk.handoff_reason, tk.assigned_advisor, tk.whatsapp_number_id,
+               brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name
         FROM tickets tk
         LEFT JOIN whatsapp_numbers wn ON tk.whatsapp_number_id = wn.id
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
         WHERE tk.customer_id = c.id
+          AND (tk.whatsapp_number_id = l.line_id OR (l.line_id = 1 AND tk.whatsapp_number_id IS NULL))
         ORDER BY tk.created_at DESC LIMIT 1
       ) t ON true
       ORDER BY l.id DESC
@@ -584,6 +685,7 @@ router.get('/', async (req, res, next) => {
       branchName: r.branch_name,
       lineLabel: r.line_label,
       companyName: r.company_name,
+      whatsappNumberId: r.whatsapp_number_id,
       // Resuelto still lets the advisor keep typing — only "no ticket at all yet" and
       // "esperando_asesor" (needs to be taken first) lock the compose box.
       enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
@@ -773,7 +875,7 @@ router.get('/search-all', async (req, res, next) => {
 router.get('/:sessionId', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 5000);
-    const { messages, customer, phone, hasMoreOlder } = await findConversationThread(req.params.sessionId, { limit });
+    const { messages, customer, phone, lineId, hasMoreOlder } = await findConversationThread(req.params.sessionId, { limit, user: req.user });
     if (!messages.length) return res.status(404).json({ error: 'not found' });
 
     if (customer) logAccess(req.user, customer.id, 'view_conversation');
@@ -810,6 +912,8 @@ router.get('/:sessionId', async (req, res, next) => {
       brandName: customer?.brand_name ?? null,
       branchName: customer?.branch_name ?? null,
       lineLabel: customer?.line_label ?? null,
+      lineId: lineId ?? customer?.whatsapp_number_id ?? null,
+      whatsappNumberId: lineId ?? customer?.whatsapp_number_id ?? null,
       customerId: customer?.id ?? null,
       customerName: customer?.full_name ?? null,
       department: customer?.department ?? null,
@@ -979,7 +1083,7 @@ router.post('/:sessionId/mark-unread', async (req, res, next) => {
 // have saved their data) and opens a ticket straight into en_atencion.
 router.post('/:sessionId/take', async (req, res, next) => {
   try {
-    const { phone } = await findConversationThread(req.params.sessionId);
+    const { phone, lineId } = await findConversationThread(req.params.sessionId, { user: req.user });
     if (!phone) return res.status(404).json({ error: 'not found' });
 
     const { rows: customerRows } = await pool.query(
@@ -997,8 +1101,8 @@ router.post('/:sessionId/take', async (req, res, next) => {
     // same phone number on the Pipeline board (2026-09-10 report). Reuse whatever's
     // already open (anything not resuelto) instead of inserting a duplicate.
     const { rows: existing } = await pool.query(
-      `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
-      [customerId]
+      `SELECT id FROM tickets WHERE customer_id = $1 AND (whatsapp_number_id = $2 OR ($2 = 1 AND whatsapp_number_id IS NULL)) AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+      [customerId, lineId]
     );
     const { rows: ticketRows } = existing.length
       ? await pool.query(
@@ -1008,10 +1112,10 @@ router.post('/:sessionId/take', async (req, res, next) => {
           [existing[0].id, req.user.fullName]
         )
       : await pool.query(
-          `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
-           VALUES ($1, 'en_atencion', 'tomado_manualmente', $2, now())
+          `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at, whatsapp_number_id)
+           VALUES ($1, 'en_atencion', 'tomado_manualmente', $2, now(), $3)
            RETURNING id, status`,
-          [customerId, req.user.fullName]
+          [customerId, req.user.fullName, lineId]
         );
 
     res.json({ ticketId: ticketRows[0].id, ticketStatus: ticketRows[0].status });
@@ -1023,7 +1127,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     const { content, replyTo } = req.body ?? {};
     if (!content?.trim()) return res.status(400).json({ error: 'content required' });
 
-    const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
+    const { sessionIds, phone, lineId } = await findConversationThread(req.params.sessionId, { user: req.user });
     if (!sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
 
     // Multiple session_ids can share one thread (see findConversationThread) — append
@@ -1033,7 +1137,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [sessionIds]
     );
 
-    const windowState = await getConversationWindow(sessionIds);
+    const windowState = await getConversationWindow(sessionIds, phone, lineId);
 
     const message = {
       type: 'ai',
@@ -1041,6 +1145,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       additional_kwargs: {
         sentBy: 'advisor',
         advisorName: req.user.fullName,
+        whatsappNumberId: lineId,
         // Held rather than sent: Meta would reject it outright right now. It goes out
         // by itself as soon as the customer answers the reactivation template below.
         ...(windowState.isOpen ? {} : { status: 'queued' }),
@@ -1058,8 +1163,8 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       tool_calls: [],
     };
     const { rows: inserted } = await pool.query(
-      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id, created_at`,
-      [latest[0].session_id, JSON.stringify(message)]
+      `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id, created_at`,
+      [latest[0].session_id, JSON.stringify(message), lineId]
     );
     res.status(201).json({ id: inserted[0].id, createdAt: inserted[0].created_at, ...message });
 
@@ -1082,10 +1187,10 @@ router.post('/:sessionId/messages', async (req, res, next) => {
     } else if (!windowState.isOpen) {
       // Queued above; all that happens now is nudging the customer to reply so the
       // window reopens and flushQueuedMessages() can release it.
-      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt)
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt, lineId)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
-      whatsapp.sendText(phone, content.trim(), replyTo?.wamid)
+      whatsapp.sendText(phone, content.trim(), replyTo?.wamid, lineId)
         .then((result) => handleSendResult(inserted[0].id, result))
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     }
@@ -1096,7 +1201,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
   try {
     if (!req.file) return res.status(400).json({ error: 'file required or file type not allowed' });
 
-    const { sessionIds, phone } = await findConversationThread(req.params.sessionId);
+    const { sessionIds, phone, lineId } = await findConversationThread(req.params.sessionId, { user: req.user });
     if (!sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
 
     const { rows: latest } = await pool.query(
@@ -1115,7 +1220,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
 
     const caption = (req.body?.caption ?? '').trim();
 
-    const windowState = await getConversationWindow(sessionIds);
+    const windowState = await getConversationWindow(sessionIds, phone, lineId);
 
     const message = {
       type: 'ai',
@@ -1123,14 +1228,15 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       additional_kwargs: {
         sentBy: 'advisor',
         advisorName: req.user.fullName,
+        whatsappNumberId: lineId,
         ...(windowState.isOpen ? {} : { status: 'queued' }),
       },
       response_metadata: {},
       tool_calls: [],
     };
     const { rows: inserted } = await pool.query(
-      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id, created_at`,
-      [latest[0].session_id, JSON.stringify(message)]
+      `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id, created_at`,
+      [latest[0].session_id, JSON.stringify(message), lineId]
     );
 
     const attachmentId = await saveAttachment({
@@ -1157,11 +1263,11 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
     } else if (!windowState.isOpen) {
       // The file is already on disk, so the flush re-uploads it from there once the
       // customer replies — this is exactly the case that lost the guía photo.
-      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt)
+      sendReactivationTemplate(latest[0].session_id, sessionIds, phone, windowState.lastInboundAt, lineId)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
-      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, phone)
-        .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined))
+      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, phone, lineId)
+        .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined, lineId))
         .then((result) => handleSendResult(inserted[0].id, result))
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     }
@@ -1178,11 +1284,11 @@ router.post('/:sessionId/messages/:messageId/retry', async (req, res, next) => {
   try {
     if (!/^\d+$/.test(req.params.messageId)) return res.status(400).json({ error: 'invalid message id' });
 
-    const { sessionIds, phone } = await findConversationThread(cleanSessionId(req.params.sessionId));
+    const { sessionIds, phone, lineId } = await findConversationThread(cleanSessionId(req.params.sessionId), { user: req.user });
     if (!phone || !sessionIds?.length) return res.status(404).json({ error: 'conversation not found' });
 
     const { rows } = await pool.query(
-      `SELECT id, session_id, message FROM n8n_chat_histories WHERE id = $1 AND session_id = ANY($2)`,
+      `SELECT id, session_id, message, whatsapp_number_id FROM n8n_chat_histories WHERE id = $1 AND session_id = ANY($2)`,
       [req.params.messageId, sessionIds]
     );
     if (!rows.length) return res.status(404).json({ error: 'message not found' });
@@ -1196,11 +1302,13 @@ router.post('/:sessionId/messages/:messageId/retry', async (req, res, next) => {
       [row.id]
     );
 
+    const msgLineId = row.whatsapp_number_id || row.message?.additional_kwargs?.whatsappNumberId || lineId;
+
     try {
-      await deliverStoredMessage(row, phone, attachmentRows[0]);
+      await deliverStoredMessage(row, phone, attachmentRows[0], msgLineId);
     } catch (err) {
       await markSendFailed(row.id, err);
-      return res.status(502).json({ error: 'no se pudo reenviar' });
+      return res.status(502).json({ error: 'No se pudo reenviar: ' + err.message });
     }
     await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionIds[0]]);
     res.json({ retried: true });
@@ -1214,14 +1322,15 @@ router.post('/:sessionId/messages/:messageId/retry', async (req, res, next) => {
 // Sends a message that is already stored in the transcript — used both when the queue
 // is released and when a restart-orphaned send is recovered. Attachments are re-read
 // from disk, since the original upload buffer is long gone by then.
-async function deliverStoredMessage(row, phone, attachment) {
+async function deliverStoredMessage(row, phone, attachment, lineId) {
+  const targetLineId = lineId || row.whatsapp_number_id || row.message?.additional_kwargs?.whatsappNumberId || null;
   let result;
   if (attachment) {
     const buffer = await fs.promises.readFile(attachment.file_path);
-    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type, phone);
-    result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined);
+    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type, phone, targetLineId);
+    result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined, targetLineId);
   } else {
-    result = await whatsapp.sendText(phone, row.message.content);
+    result = await whatsapp.sendText(phone, row.message.content, undefined, targetLineId);
   }
   const sentWamid = result?.messages?.[0]?.id;
   if (!sentWamid) throw new Error('WhatsApp no devolvió un id de mensaje — el envío no se confirmó');
@@ -1239,11 +1348,11 @@ async function deliverStoredMessage(row, phone, attachment) {
 
 export async function flushQueuedMessages(rawSessionId) {
   if (!rawSessionId) return;
-  const { sessionIds, phone } = await findConversationThread(cleanSessionId(rawSessionId));
+  const { sessionIds, phone, lineId } = await findConversationThread(cleanSessionId(rawSessionId));
   if (!phone || !sessionIds?.length) return;
 
   const { rows: queued } = await pool.query(
-    `SELECT id, message FROM n8n_chat_histories
+    `SELECT id, message, whatsapp_number_id FROM n8n_chat_histories
      WHERE session_id = ANY($1) AND message->'additional_kwargs'->>'status' = 'queued'
      ORDER BY id ASC`,
     [sessionIds]
@@ -1252,7 +1361,7 @@ export async function flushQueuedMessages(rawSessionId) {
 
   // Re-check rather than trust the notification: the row that woke us could have been
   // our own outgoing message, in which case the window is still shut.
-  const { isOpen } = await getConversationWindow(sessionIds);
+  const { isOpen } = await getConversationWindow(sessionIds, phone, lineId);
   if (!isOpen) return;
 
   const { rows: attachments } = await pool.query(
@@ -1264,7 +1373,8 @@ export async function flushQueuedMessages(rawSessionId) {
 
   for (const row of queued) {
     try {
-      await deliverStoredMessage(row, phone, attachmentFor.get(row.id));
+      const msgLineId = row.whatsapp_number_id || row.message?.additional_kwargs?.whatsappNumberId || lineId;
+      await deliverStoredMessage(row, phone, attachmentFor.get(row.id), msgLineId);
     } catch (err) {
       // Stop on the first failure: the rest would fail the same way, and burning
       // through the whole queue just multiplies the errors the customer might see.
@@ -1294,7 +1404,7 @@ export async function flushQueuedMessages(rawSessionId) {
 // recoverable, a silently lost message is the bug we're here to kill, so it retries.
 export async function recoverOrphanedSends() {
   const { rows: orphans } = await pool.query(
-    `SELECT id, session_id, message FROM n8n_chat_histories
+    `SELECT id, session_id, message, whatsapp_number_id FROM n8n_chat_histories
      WHERE message->>'type' = 'ai'
        AND message->'additional_kwargs'->>'sentBy' = 'advisor'
        AND message->'additional_kwargs'->>'wamid' IS NULL
@@ -1317,13 +1427,13 @@ export async function recoverOrphanedSends() {
   let recovered = 0;
   for (const row of orphans) {
     try {
-      const { sessionIds, phone } = await findConversationThread(cleanSessionId(row.session_id));
+      const { sessionIds, phone, lineId } = await findConversationThread(cleanSessionId(row.session_id));
       if (!phone) throw new Error('La conversación no tiene un número de teléfono asociado');
 
       // Time passed while we were down, so the window may have shut in the meantime.
       // Hand it to the queue rather than burning a doomed send — the reactivation
       // template and the flush-on-reply already know what to do with it.
-      const { isOpen } = await getConversationWindow(sessionIds);
+      const { isOpen } = await getConversationWindow(sessionIds, phone, lineId);
       if (!isOpen) {
         await pool.query(
           `UPDATE n8n_chat_histories
@@ -1333,7 +1443,8 @@ export async function recoverOrphanedSends() {
         continue;
       }
 
-      await deliverStoredMessage(row, phone, attachmentFor.get(row.id));
+      const msgLineId = row.whatsapp_number_id || row.message?.additional_kwargs?.whatsappNumberId || lineId;
+      await deliverStoredMessage(row, phone, attachmentFor.get(row.id), msgLineId);
       recovered += 1;
     } catch (err) {
       await markSendFailed(row.id, err).catch((e) => console.error('markSendFailed failed', e));

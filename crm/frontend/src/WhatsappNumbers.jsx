@@ -6,7 +6,7 @@ import {
 import Badge from './components/Badge.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
-const EMPTY_FORM = { label: '', branchId: '', wabaId: '', phoneNumberId: '', accessToken: '', isActive: true };
+const EMPTY_FORM = { label: '', branchId: '', wabaId: '', phoneNumberId: '', accessToken: '', pin: '', isActive: true };
 
 function formatDate(iso) {
   if (!iso) return 'nunca';
@@ -66,7 +66,7 @@ export default function WhatsappNumbers() {
   }
 
   function openEdit(n) {
-    setForm({ label: n.label, branchId: n.branchId || '', wabaId: n.wabaId, phoneNumberId: n.phoneNumberId, accessToken: '', isActive: n.isActive });
+    setForm({ label: n.label, branchId: n.branchId || '', wabaId: n.wabaId, phoneNumberId: n.phoneNumberId, accessToken: '', pin: '', isActive: n.isActive });
     setTestResult(null);
     setError(null);
     setModal({ open: true, mode: 'edit', data: n });
@@ -101,7 +101,7 @@ export default function WhatsappNumbers() {
           setSaving(false);
           return;
         }
-        await createWhatsappNumber({ ...form, branchId: Number(form.branchId) });
+        await createWhatsappNumber({ ...form, branchId: Number(form.branchId), pin: form.pin.trim() || undefined });
       } else {
         const patch = {
           label: form.label,
@@ -111,6 +111,7 @@ export default function WhatsappNumbers() {
           isActive: form.isActive
         };
         if (form.accessToken.trim()) patch.accessToken = form.accessToken.trim();
+        if (form.pin.trim()) patch.pin = form.pin.trim();
         await updateWhatsappNumber(modal.data.id, patch);
       }
       load();
@@ -299,6 +300,21 @@ export default function WhatsappNumbers() {
               placeholder={modal.mode === 'create' ? 'Token permanente de Meta' : 'Dejar vacío para no cambiarlo'}
               className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink">
+              PIN de verificación en 2 pasos de Meta (6 dígitos)
+            </label>
+            <input
+              type="text"
+              maxLength={6}
+              value={form.pin}
+              onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })}
+              placeholder="Ej: 123456"
+              className="w-full rounded-lg border border-line bg-paper text-ink px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+            />
+            <p className="mt-1 text-xs text-greige">Requerido para registrar el número en WhatsApp Cloud API y habilitar envíos.</p>
           </div>
 
           <div className="flex items-center gap-2">

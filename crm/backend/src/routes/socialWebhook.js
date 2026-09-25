@@ -252,18 +252,18 @@ async function handleWhatsAppWebhook(body) {
           );
           const customer = custRows[0];
 
-          // 2.2 Ensure Ticket with whatsapp_number_id tied to this specific line
+          // 2.2 Ensure Ticket with whatsapp_number_id tied strictly to this specific line
           const { rows: openTickets } = await pool.query(
-            `SELECT id, whatsapp_number_id FROM tickets
-             WHERE customer_id = $1 AND status != 'resuelto' AND (whatsapp_number_id = $2 OR whatsapp_number_id IS NULL)
+            `SELECT id, whatsapp_number_id, status FROM tickets
+             WHERE customer_id = $1 AND whatsapp_number_id = $2 AND status != 'resuelto'
              ORDER BY created_at DESC LIMIT 1`,
             [customer.id, line.id]
           );
           let ticketId;
           if (openTickets.length) {
             ticketId = openTickets[0].id;
-            if (openTickets[0].whatsapp_number_id !== line.id) {
-              await pool.query(`UPDATE tickets SET whatsapp_number_id = $1 WHERE id = $2`, [line.id, ticketId]);
+            if (openTickets[0].status === 'difusion_enviada') {
+              await pool.query(`UPDATE tickets SET status = 'esperando_asesor', updated_at = now() WHERE id = $1`, [ticketId]);
             }
           } else {
             const { rows: newTk } = await pool.query(
@@ -306,21 +306,24 @@ async function handleWhatsAppWebhook(body) {
             const emoji = msg.reaction?.emoji;
             const targetWamid = msg.reaction?.message_id;
             if (emoji && targetWamid) {
-              await pool.query(
+              const { rows: rRows } = await pool.query(
                 `UPDATE n8n_chat_histories
                  SET message = jsonb_set(message, '{additional_kwargs,reaction}', to_jsonb($2::text))
-                 WHERE message->'additional_kwargs'->>'wamid' = $1`,
+                 WHERE message->'additional_kwargs'->>'wamid' = $1 RETURNING session_id`,
                 [targetWamid, emoji]
               );
-              await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [fromPhone]);
+              const targetSession = rRows[0]?.session_id || `${fromPhone}__line_${line.id}`;
+              await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [targetSession]);
               continue;
             }
           } else {
             content = `[Mensaje tipo: ${msgType}]`;
           }
 
+          const sessionId = `${fromPhone}__line_${line.id}`;
           const additional_kwargs = {
             wamid,
+            whatsappNumberId: line.id,
             ...(replyToWamid ? { replyToWamid } : {}),
             ...(referral ? { referral } : {}),
           };
@@ -333,10 +336,11 @@ async function handleWhatsAppWebhook(body) {
           };
 
           const { rows: insertedMsg } = await pool.query(
-            `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
-            [fromPhone, JSON.stringify(messageObj)]
+            `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id`,
+            [sessionId, JSON.stringify(messageObj), line.id]
           );
           const inboundMessageId = insertedMsg[0].id;
+          await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text, 'phone', $2::text)::text)`, [sessionId, fromPhone]);
 
           // 2.4 If media, download buffer from Meta Graph API using line's token and store attachment
           if (isMedia && mediaInfo?.mediaId && lineToken) {

@@ -24,9 +24,9 @@ const ENV_WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 // Exported for whatsappPricing.js — "costo por mensaje" reads the same active
 // number/token this file already sends messages with, rather than asking for a
 // second, separate WhatsApp credential the admin would have to keep in sync.
-export async function getActiveCredentials(toPhone) {
-  let wId;
-  if (toPhone) {
+export async function getActiveCredentials(toPhone, lineId) {
+  let wId = lineId ? Number(lineId) : undefined;
+  if (!wId && toPhone) {
     const { rows: tRows } = await pool.query(
       `SELECT t.whatsapp_number_id 
        FROM tickets t 
@@ -39,19 +39,19 @@ export async function getActiveCredentials(toPhone) {
     }
   }
 
-  let query = `SELECT waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`;
+  let query = `SELECT id, waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1`;
   let params = [];
   if (wId) {
-    query = `SELECT waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE id = $1`;
+    query = `SELECT id, waba_id, phone_number_id, access_token_enc FROM whatsapp_numbers WHERE id = $1`;
     params = [wId];
   }
 
   const { rows } = await pool.query(query, params);
   if (rows.length) {
-    return { wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
+    return { id: rows[0].id, wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
   }
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
-    return { wabaId: ENV_WABA_ID ?? null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
+    return { id: null, wabaId: ENV_WABA_ID ?? null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
   }
   throw new Error('WhatsApp no está configurado (no hay número activo en Configuración ni credenciales en el entorno)');
 }
@@ -106,8 +106,8 @@ export async function verifyNumber(phoneNumberId, token) {
 
 // contextMessageId, when given the wamid of an earlier message, makes WhatsApp show
 // this as a native quoted reply on the customer's side — not just inside the CRM.
-export async function sendText(toPhone, body, contextMessageId) {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function sendText(toPhone, body, contextMessageId, lineId) {
+  const creds = await getActiveCredentials(toPhone, lineId);
   return graphFetch(`${creds.phoneNumberId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -127,8 +127,8 @@ export async function sendText(toPhone, body, contextMessageId) {
 // rejects the send with "(#132012) ... expected IMAGE, received UNKNOWN" if a header the
 // template defines is left out, not just if it's malformed. A DOCUMENT header additionally
 // requires a filename in the parameter itself (image headers don't take one).
-export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = [], headerMediaId, headerFormat = 'IMAGE', headerFilename) {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function sendTemplate(toPhone, templateName, languageCode, bodyParams = [], headerMediaId, headerFormat = 'IMAGE', headerFilename, lineId) {
+  const creds = await getActiveCredentials(toPhone, lineId);
   const headerMediaParam = headerFormat === 'DOCUMENT'
     ? { type: 'document', document: { id: headerMediaId, filename: headerFilename || 'documento.pdf' } }
     : { type: 'image', image: { id: headerMediaId } };
@@ -151,8 +151,8 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
 // Live from Meta rather than mirrored in our own DB — a template's approval status
 // changes on Meta's side (review, reclassification, pause) and a stale local copy is
 // exactly how a campaign could try to send with a template that no longer works.
-export async function listTemplates() {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function listTemplates(lineId) {
+  const creds = await getActiveCredentials(undefined, lineId);
   if (!creds.wabaId) {
     throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
   }
@@ -171,8 +171,8 @@ export async function listTemplates() {
 // usable — this call only submits it, listTemplates() above is how the real status shows up.
 // Meta REQUIRES an example value for every {{n}} placeholder or the request is rejected
 // outright, not just flagged — bodyExample supplies that.
-export async function createTemplate({ name, category, language, bodyText, bodyExample }) {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function createTemplate({ name, category, language, bodyText, bodyExample, lineId }) {
+  const creds = await getActiveCredentials(undefined, lineId);
   if (!creds.wabaId) {
     throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
   }
@@ -187,16 +187,16 @@ export async function createTemplate({ name, category, language, bodyText, bodyE
 
 // Meta deletes by name across every language variant of that template, not one row —
 // there's no per-language delete in this API.
-export async function deleteTemplate(name) {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function deleteTemplate(name, lineId) {
+  const creds = await getActiveCredentials(undefined, lineId);
   if (!creds.wabaId) {
     throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
   }
   return graphFetch(`${creds.wabaId}/message_templates?name=${encodeURIComponent(name)}`, { method: 'DELETE' }, creds.token);
 }
 
-export async function uploadMedia(buffer, mimeType, toPhone) {
-  const creds = await getActiveCredentials(typeof toPhone !== "undefined" ? toPhone : undefined);
+export async function uploadMedia(buffer, mimeType, toPhone, lineId) {
+  const creds = await getActiveCredentials(toPhone, lineId);
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
   form.append('file', new Blob([buffer], { type: mimeType }));
@@ -205,8 +205,8 @@ export async function uploadMedia(buffer, mimeType, toPhone) {
   return id;
 }
 
-export async function sendMedia(toPhone, kind, mediaId, filename, caption) {
-  const creds = await getActiveCredentials();
+export async function sendMedia(toPhone, kind, mediaId, filename, caption, lineId) {
+  const creds = await getActiveCredentials(toPhone, lineId);
   const payload ={ messaging_product: 'whatsapp', to: toPhone, type: kind, [kind]: { id: mediaId } };
   if (kind === 'document' && filename) payload.document.filename = filename;
   // WhatsApp doesn't support captions on audio — silently ignored there is fine.

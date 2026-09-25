@@ -9,6 +9,7 @@ function fakeRes() {
   const res = { statusCode: 200, body: null };
   res.status = (code) => { res.statusCode = code; return res; };
   res.json = (body) => { res.body = body; return res; };
+  res.cookie = () => {};
   return res;
 }
 
