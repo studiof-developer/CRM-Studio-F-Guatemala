@@ -121,9 +121,9 @@ async function getConversationWindow(sessionIds, phone, lineId) {
       params = [phone];
     } else {
       query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-       WHERE (session_id LIKE $1 || '__line_' || $2 || '%' OR (whatsapp_number_id = $2 AND session_id LIKE $1 || '%'))
+       WHERE (session_id LIKE $1 || '__line_' || $2::text || '%' OR (whatsapp_number_id = $2::int AND session_id LIKE $1 || '%'))
          AND message->>'type' = 'human'`;
-      params = [phone, lineId];
+      params = [phone, String(lineId)];
     }
   } else {
     query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
@@ -351,16 +351,16 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
         FROM n8n_chat_histories
         WHERE session_id LIKE $1 || '%'
           AND (
-            session_id LIKE $1 || '__line_' || $3 || '%'
-            OR whatsapp_number_id = $3
+            session_id LIKE $1 || '__line_' || $3::text || '%'
+            OR whatsapp_number_id = $3::int
             OR (
               (message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$'
-              AND (message->'additional_kwargs'->>'whatsappNumberId')::int = $3
+              AND (message->'additional_kwargs'->>'whatsappNumberId')::int = $3::int
             )
           )
         ORDER BY id DESC LIMIT $2
       `;
-      queryParams = [phone, limit, lineId];
+      queryParams = [phone, limit, String(lineId)];
     }
   } else {
     // Non-phone legacy session
@@ -533,7 +533,7 @@ router.get('/', async (req, res, next) => {
       -- intake flow.
       threaded AS (
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
                COALESCE(
                  CASE
                    WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
@@ -545,15 +545,15 @@ router.get('/', async (req, res, next) => {
                  END
                ) AS line_id,
                CASE
-                 WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN
+                 WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
                    split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
                      CASE
-                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
+                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
                        ELSE NULL
                      END,
                      CASE
-                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]::int
-                       ELSE 1
+                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]
+                       ELSE '1'
                      END
                    )
                  ELSE COALESCE(p.phone, r.session_id)
@@ -776,7 +776,7 @@ router.get('/unread-count', async (req, res, next) => {
       ),
       threaded AS (
         SELECT r.id, r.message,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
                COALESCE(
                  CASE
                    WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
@@ -788,15 +788,15 @@ router.get('/unread-count', async (req, res, next) => {
                  END
                ) AS line_id,
                CASE
-                 WHEN split_part(r.session_id, '__', 1) ~ '^\d{7,15}$' THEN
+                 WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
                    split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
                      CASE
-                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
+                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
                        ELSE NULL
                      END,
                      CASE
-                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]::int
-                       ELSE 1
+                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]
+                       ELSE '1'
                      END
                    )
                  ELSE COALESCE(p.phone, r.session_id)

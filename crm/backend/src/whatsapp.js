@@ -47,8 +47,13 @@ export async function getActiveCredentials(toPhone, lineId) {
   }
 
   const { rows } = await pool.query(query, params);
-  if (rows.length) {
-    return { id: rows[0].id, wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token: decryptToken(rows[0].access_token_enc) };
+  if (rows.length && rows[0].access_token_enc) {
+    try {
+      const token = decryptToken(rows[0].access_token_enc);
+      return { id: rows[0].id, wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token };
+    } catch (err) {
+      console.error(`Failed to decrypt token for line ${rows[0].id}:`, err);
+    }
   }
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
     return { id: null, wabaId: ENV_WABA_ID ?? null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };
