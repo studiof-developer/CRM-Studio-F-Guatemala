@@ -148,6 +148,14 @@ router.patch('/:id', async (req, res, next) => {
       verifiedName = info.verified_name ?? null;
       lastTestedAt = new Date();
       if (accessToken?.trim()) accessTokenEnc = encryptToken(accessToken.trim());
+
+      // Auto-register number on Meta Cloud API with PIN
+      try {
+        await whatsapp.registerNumber(testPhoneNumberId, '839204', testToken);
+        console.log(`[whatsappNumbers] Number ${testPhoneNumberId} successfully registered on Cloud API`);
+      } catch (regErr) {
+        console.warn(`[whatsappNumbers] Cloud API register note:`, regErr.message);
+      }
     }
 
     const { rows } = await pool.query(

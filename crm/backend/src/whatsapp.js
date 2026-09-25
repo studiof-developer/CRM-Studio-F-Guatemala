@@ -242,3 +242,14 @@ export async function subscribeWaba(wabaId, token) {
   return graphFetch(`${wabaId}/subscribed_apps`, { method: 'POST' }, token);
 }
 
+export async function registerNumber(phoneNumberId, pin, token) {
+  return graphFetch(`${phoneNumberId}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      pin: String(pin),
+    }),
+  }, token);
+}
+
