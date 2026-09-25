@@ -109,6 +109,11 @@ router.post('/', async (req, res, next) => {
        encryptToken(accessToken.trim()), req.user.fullName, cleanBranchId]
     );
     logAccess(req.user, null, 'whatsapp_number_created');
+    if (rows[0].waba_id && rows[0].is_active) {
+      whatsapp.subscribeWaba(rows[0].waba_id, accessToken.trim()).catch((err) =>
+        console.warn(`[whatsappNumbers] Note subscribing WABA ${rows[0].waba_id}:`, err.message)
+      );
+    }
     res.status(201).json(serialize({ ...rows[0], token_last4: tokenLast4(accessToken.trim()) }));
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Ese número ya está registrado' });
@@ -165,7 +170,13 @@ router.patch('/:id', async (req, res, next) => {
        accessTokenEnc, isActive ?? null, lastTestedAt, req.user.fullName, branchId || null, req.params.id]
     );
     logAccess(req.user, null, 'whatsapp_number_updated');
-    res.json(serialize({ ...rows[0], token_last4: tokenLast4(decryptToken(rows[0].access_token_enc)) }));
+    const activeToken = decryptToken(rows[0].access_token_enc);
+    if (rows[0].waba_id && rows[0].is_active && activeToken) {
+      whatsapp.subscribeWaba(rows[0].waba_id, activeToken).catch((err) =>
+        console.warn(`[whatsappNumbers] Note subscribing WABA ${rows[0].waba_id}:`, err.message)
+      );
+    }
+    res.json(serialize({ ...rows[0], token_last4: tokenLast4(activeToken) }));
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Ese número ya está registrado' });
     next(err);
