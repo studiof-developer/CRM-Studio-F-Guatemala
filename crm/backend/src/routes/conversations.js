@@ -107,33 +107,16 @@ async function markSendFailed(messageId, err) {
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function getConversationWindow(sessionIds, phone, lineId) {
-  let query;
-  let params;
-  if (phone && lineId) {
-    if (lineId === 1) {
-      query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-       WHERE session_id LIKE $1 || '%'
-         AND (
-           session_id LIKE $1 || '__line_1%'
-           OR session_id NOT LIKE $1 || '__line_%'
-         )
-         AND message->>'type' = 'human'`;
-      params = [phone];
-    } else {
-      query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-       WHERE (session_id LIKE $1 || '__line_' || $2::text || '%' OR (whatsapp_number_id = $2::int AND session_id LIKE $1 || '%'))
-         AND message->>'type' = 'human'`;
-      params = [phone, String(lineId)];
-    }
-  } else {
-    query = `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-     WHERE session_id = ANY($1) AND message->>'type' = 'human'`;
-    params = [sessionIds];
+  if (sessionIds?.length) {
+    const { rows } = await pool.query(
+      `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+       WHERE session_id = ANY($1) AND message->>'type' = 'human'`,
+      [sessionIds]
+    );
+    const lastInboundAt = rows[0]?.last_inbound_at ?? null;
+    return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
   }
-  const { rows } = await pool.query(query, params);
-  const lastInboundAt = rows[0]?.last_inbound_at ?? null;
-  // No inbound at all means the customer never wrote, so there is no open window either.
-  return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
+  return { lastInboundAt: null, isOpen: false };
 }
 
 // One template per dormant stretch — the advisor writing five lines into a dead chat
@@ -322,58 +305,37 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
   // Default to line 1 if still not resolved
   if (!lineId) lineId = 1;
 
-  // Now query messages strictly for this phone & line
-  let messagesQuery;
-  let queryParams;
-
+  // Resolve session_ids using the indexed session_id prefix scan
+  let sessionIds = [];
   if (PHONE_RE.test(phone)) {
+    const { rows: sRows } = await pool.query(
+      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1 || '%'`,
+      [phone]
+    );
+    const allSessions = sRows.map((r) => r.session_id);
     if (lineId === 1) {
-      messagesQuery = `
-        SELECT id, message, created_at, whatsapp_number_id, session_id
-        FROM n8n_chat_histories
-        WHERE session_id LIKE $1 || '%'
-          AND (
-            session_id = $1
-            OR session_id LIKE $1 || '__line_1%'
-            OR session_id LIKE $1 || '__whatsapp%'
-            OR session_id LIKE $1 || '__Postgres%'
-            OR (
-              (whatsapp_number_id = 1 OR whatsapp_number_id IS NULL)
-              AND session_id NOT LIKE $1 || '__line_%'
-            )
-          )
-        ORDER BY id DESC LIMIT $2
-      `;
-      queryParams = [phone, limit];
+      sessionIds = allSessions.filter((s) => !s.includes('__line_') || s.includes('__line_1'));
+      if (!sessionIds.length) sessionIds = [`${phone}__line_1`, `${phone}__whatsapp`, phone];
     } else {
-      messagesQuery = `
-        SELECT id, message, created_at, whatsapp_number_id, session_id
-        FROM n8n_chat_histories
-        WHERE session_id LIKE $1 || '%'
-          AND (
-            session_id LIKE $1 || '__line_' || $3::text || '%'
-            OR whatsapp_number_id = $3::int
-            OR (
-              (message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$'
-              AND (message->'additional_kwargs'->>'whatsappNumberId')::int = $3::int
-            )
-          )
-        ORDER BY id DESC LIMIT $2
-      `;
-      queryParams = [phone, limit, String(lineId)];
+      sessionIds = allSessions.filter((s) => s.includes(`__line_${lineId}`));
+      if (!sessionIds.length) sessionIds = [`${phone}__line_${lineId}`];
     }
   } else {
-    // Non-phone legacy session
-    messagesQuery = `
-      SELECT id, message, created_at, whatsapp_number_id, session_id
-      FROM n8n_chat_histories
-      WHERE session_id LIKE $1 || '%'
-      ORDER BY id DESC LIMIT $2
-    `;
-    queryParams = [threadKey, limit];
+    const { rows: sRows } = await pool.query(
+      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1`,
+      [`${threadKey}%`]
+    );
+    sessionIds = sRows.map((r) => r.session_id);
+    if (!sessionIds.length) sessionIds = [threadKey];
   }
 
-  const { rows: messagesDesc } = await pool.query(messagesQuery, queryParams);
+  const { rows: messagesDesc } = await pool.query(
+    `SELECT id, message, created_at, whatsapp_number_id, session_id
+     FROM n8n_chat_histories
+     WHERE session_id = ANY($1)
+     ORDER BY id DESC LIMIT $2`,
+    [sessionIds, limit]
+  );
   const messages = messagesDesc.reverse();
   const hasMoreOlder = messagesDesc.length === limit;
 
@@ -381,12 +343,6 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     const phoneMsg = messages.find((r) => r.message?.type === 'human' && PHONE_RE.test(String(r.message?.content).trim()));
     phone = phoneMsg?.message?.content?.trim() ?? null;
   }
-
-  const sessionIds = Array.from(new Set([
-    ...(phone && lineId ? [`${phone}__line_${lineId}`] : []),
-    ...messages.map((m) => m.session_id).filter(Boolean),
-    threadKey
-  ]));
   const customer = phone ? (await findCustomerByPhone(phone, lineId)).customer : null;
   return { messages, customer, phone, lineId, sessionIds, hasMoreOlder };
 }
