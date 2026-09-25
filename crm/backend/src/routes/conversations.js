@@ -521,7 +521,7 @@ router.get('/', async (req, res, next) => {
         SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
         FROM readable
         WHERE message->>'type' = 'human'
-          AND trim(message->>'content') ~ '^\\d{7,15}$'
+          AND trim(message->>'content') ~ '^[0-9]{7,15}$'
         ORDER BY session_id, id ASC
       ),
       -- Once a phone is known, it — not the raw session_id — is the thread's identity,
@@ -584,7 +584,7 @@ router.get('/', async (req, res, next) => {
       SELECT l.thread_key, l.line_id, l.id AS last_id, l.message, l.created_at, cnt.message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, c.payment_suggested_at, t.status AS ticket_status,
              t.assigned_advisor,
-             t.brand_name, t.branch_name, t.line_label, comp.name AS company_name,
+             t.brand_name, t.branch_name, t.line_label, t.company_name,
              COALESCE(t.whatsapp_number_id, l.line_id) AS whatsapp_number_id,
              CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature,
              COALESCE(uc.unread_count, 0) AS unread_count,
@@ -771,7 +771,7 @@ router.get('/unread-count', async (req, res, next) => {
         SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
         FROM readable
         WHERE message->>'type' = 'human'
-          AND trim(message->>'content') ~ '^\\d{7,15}$'
+          AND trim(message->>'content') ~ '^[0-9]{7,15}$'
         ORDER BY session_id, id ASC
       ),
       threaded AS (
