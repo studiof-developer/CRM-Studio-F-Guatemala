@@ -51,7 +51,7 @@ export async function fetchMe() {
 
 // Shared by the paged column fetch and the whole-bucket export below — same period/
 // search/unreadOnly filters either way.
-function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant } = {}) {
+function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant, lineId } = {}) {
   const params = new URLSearchParams();
   if (q) {
     // A search match has to show up regardless of the active period — the backend
@@ -69,6 +69,7 @@ function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant }
   // Marketing's board (dormant=true) vs the advisor board (absent) — see
   // dormancyClauseSql in tickets.js.
   if (dormant) params.set('dormant', 'true');
+  if (lineId) params.set('lineId', lineId);
   return params;
 }
 
@@ -169,7 +170,7 @@ export async function updateTicket(id, patch) {
   return res.json();
 }
 
-export async function fetchConversations(q, temperature, ticketStatus, limit, unreadOnly, channel) {
+export async function fetchConversations(q, temperature, ticketStatus, limit, unreadOnly, channel, lineId) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (temperature) params.set('temperature', temperature);
@@ -180,6 +181,7 @@ export async function fetchConversations(q, temperature, ticketStatus, limit, un
   // would silently disappear from both this filter and the sidebar badge count.
   if (unreadOnly) params.set('unread', 'true');
   if (channel) params.set('channel', channel);
+  if (lineId) params.set('lineId', lineId);
   const qs = params.toString();
   const res = await apiFetch(`/api/conversations${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error('Error al cargar conversaciones');

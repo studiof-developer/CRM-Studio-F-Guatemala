@@ -69,7 +69,7 @@ function StatCard({ label, value, unit, iconBg, iconText, icon: Icon, sub }) {
 // This is the "todos los estados, sin excepción" view, plus two operational numbers the
 // board doesn't surface at all (mensajes por hora, demora en primera respuesta). Its own
 // period filter, independent of whatever the board is currently showing.
-export default function StatsModal({ open, onClose }) {
+export default function StatsModal({ open, onClose, lineId }) {
   const [periodPreset, setPeriodPreset] = useState('todo');
   const todayStr = guatemalaToday();
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -108,11 +108,11 @@ export default function StatsModal({ open, onClose }) {
     if (!open) return;
     setData(null);
     setError(null);
-    fetchPipelineStats({ from: dateFrom, to: dateTo })
+    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId })
       .then(setData)
       .catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo]);
+  }, [open, dateFrom, dateTo, lineId]);
 
   const hourRef = useRef(null);
   useChart(hourRef, () => ({

@@ -10,7 +10,7 @@ import {
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
-  fetchSocialMessages, sendSocialMessage, fetchSocialContact,
+  fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -465,6 +465,21 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [temperature, setTemperature] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
+  const canFilter = user?.role === 'admin' || user?.role === 'supervisor';
+  const [lineFilter, setLineFilter] = useState('');
+  const [whatsappLines, setWhatsappLines] = useState([]);
+  useEffect(() => {
+    if (canFilter) {
+      fetchWhatsappNumbers().then(setWhatsappLines).catch(() => {});
+    }
+  }, [canFilter]);
+  const lineFilterOptions = [
+    { value: '', label: 'Todas las líneas' },
+    ...whatsappLines.map((l) => ({
+      value: String(l.id),
+      label: l.label || l.brandName || `Línea ${l.id}`,
+    })),
+  ];
   // Real advisors who've taken at least one ticket — powers the per-advisor filter
   // options in place of the old generic "Asesor" one. New name shows up on its own the
   // first time someone takes a ticket, nothing hardcoded.
@@ -641,8 +656,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       // capping it the same way as the plain list silently hid real unread threads
       // that fell outside the recency window (the bug reported 2026-08-26).
       const data = isUnreadFilter
-        ? await fetchConversations(search, temperature, '', undefined, true, channelFilter)
-        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount, undefined, channelFilter);
+        ? await fetchConversations(search, temperature, '', undefined, true, channelFilter, lineFilter || undefined)
+        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount, undefined, channelFilter, lineFilter || undefined);
       setConversations(data);
       setHasMore(isUnreadFilter ? false : data.length >= visibleCount);
       setListLoaded(true);
@@ -651,10 +666,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature, ticketStatusFilter, channelFilter, visibleCount]);
+  }, [search, temperature, ticketStatusFilter, channelFilter, lineFilter, visibleCount]);
 
   // A new search/filter is a fresh list — start back at one page of it.
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter, channelFilter]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter, channelFilter, lineFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1297,6 +1312,14 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               don't fit on one line without overflowing past its edge. Wrapping to a
               second row beats spilling outside the container. */}
           <div className="flex flex-wrap gap-2">
+            {canFilter && (
+              <Select
+                value={lineFilter}
+                onChange={setLineFilter}
+                options={lineFilterOptions}
+                className="min-w-[140px] flex-1"
+              />
+            )}
             <Select value={temperature} onChange={setTemperature} options={TEMP_FILTER_OPTIONS} className="min-w-[140px] flex-1" />
             <Select
               value={ticketStatusFilter}

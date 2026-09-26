@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Clock, CheckCircle2, AlertTriangle, ArrowUpDown, Loader2, Headset, ChevronLeft, ChevronRight, Calendar, LayoutGrid, Mail, Download, Plus } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, fetchPipelineArchiveExport, fetchPipelineSearchSummary, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings } from './api.js';
+import { fetchPipelineColumn, fetchPipelineCard, fetchPipelineExport, fetchPipelineArchiveExport, fetchPipelineSearchSummary, updateTicket, updateCustomerTags, fetchPresenceSnapshot, fetchSettings, fetchWhatsappNumbers } from './api.js';
 import { Button } from './components/ui.jsx';
 import Select from './components/Select.jsx';
 import StatsModal from './components/StatsModal.jsx';
@@ -165,6 +165,21 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     ...displayOrder.map((key) => ({ value: key, label: metaFor(key).label, icon: metaFor(key).icon, iconClassName: metaFor(key).iconText })),
   ];
 
+  const [selectedLine, setSelectedLine] = useState('');
+  const [whatsappLines, setWhatsappLines] = useState([]);
+  useEffect(() => {
+    if (canFilter) {
+      fetchWhatsappNumbers().then(setWhatsappLines).catch(() => {});
+    }
+  }, [canFilter]);
+  const lineFilterOptions = [
+    { value: '', label: 'Todas las líneas' },
+    ...whatsappLines.map((l) => ({
+      value: String(l.id),
+      label: l.label || l.brandName || `Línea ${l.id}`,
+    })),
+  ];
+
   // Date filter: which period each column's cards/count are scoped to (see api.js's
   // from/to, filtered server-side on the same field the column already sorts by).
   // "onlyColumn" is purely a render-time filter, not a fetch param — every column keeps
@@ -199,7 +214,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   async function exportColumn(key) {
     setExportingKey(key);
     try {
-      const rows = await fetchPipelineExport(key, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const rows = await fetchPipelineExport(key, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       if (!rows.length) { showError('No hay nada que exportar en esta columna con los filtros actuales'); return; }
       const meta = metaFor(key);
       const headers = ['Cliente', 'Teléfono', 'Esperando desde', 'Último mensaje'];
@@ -333,13 +348,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   const loadColumn = useCallback(async (key, sort, limit = PAGE_SIZE) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
-      const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal, offset: cards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, selectedLine]);
 
   // Appends the next page — this is what makes scrolling to the bottom of, say, "En
   // conversación" (2733 contacts) eventually reach every one of them, a bounded page at
@@ -349,7 +364,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -358,7 +373,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, selectedLine]);
 
   const reloadAll = useCallback(() => {
     for (const key of COLUMN_ORDER) {
@@ -402,10 +417,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // period, etc.) any existing card for them just gets removed, same as a real reload
   // would have done.
   const patchByIdentifier = useCallback((identifier) => {
-    fetchPipelineCard(identifier, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly })
+    fetchPipelineCard(identifier, { from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined })
       .then(({ customerId, bucket, card }) => { if (customerId) patchCard(customerId, bucket, card); })
       .catch(() => {}); // stays stale until the next event or the 60s fallback below — not worth an error toast for a background patch
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, patchCard]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, selectedLine, patchCard]);
 
   // ticket_changes also now fires on a plain customer temperature change (drag-and-drop,
   // the OCR auto-Pagado, "Marcar como Pagado" — see db/init/037), not just a real ticket
@@ -646,6 +661,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
           {canFilter && (
             <>
+              <Select value={selectedLine} onChange={setSelectedLine} options={lineFilterOptions} className="w-44 shrink-0" />
               <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
 
               {periodPreset === 'mes' && (
@@ -890,7 +906,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           );
         })}
       </div>
-      {canFilter && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />}
+      {canFilter && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} lineId={selectedLine || undefined} />}
 
       {canFilter && (
         <ConfirmDialog

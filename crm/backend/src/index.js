@@ -58,7 +58,7 @@ app.use('/api/dashboard', requireAuth, dashboardRouter);
 app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRouter);
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 app.use('/api/quick-replies', requireAuth, quickRepliesRouter);
-app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin'), whatsappNumbersRouter);
+app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin', 'supervisor'), whatsappNumbersRouter);
 app.use('/api/brands', requireAuth, requireRole('admin'), brandsRouter);
 app.use('/api/companies', requireAuth, requireRole('admin'), companiesRouter);
 // A broadcast reaches hundreds of customers at once and costs real money per message —

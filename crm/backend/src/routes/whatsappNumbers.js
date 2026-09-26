@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logAccess } from '../auditLog.js';
+import { requireRole } from '../auth.js';
 import { encryptToken, decryptToken, tokenLast4 } from '../tokenCrypto.js';
 import * as whatsapp from '../whatsapp.js';
 import { seedDefaultWhatsappNumber } from '../seedWhatsappNumber.js';
@@ -67,7 +68,7 @@ router.get('/', async (req, res, next) => {
 // Validates a number/token pair against Meta before it's ever saved — mirrors the
 // "probar conexión" step so a typo doesn't get discovered by a customer not getting
 // their message instead of by whoever's setting this up.
-router.post('/test', async (req, res, next) => {
+router.post('/test', requireRole('admin'), async (req, res, next) => {
   try {
     const { phoneNumberId, accessToken, wabaId } = req.body ?? {};
     if (!phoneNumberId?.trim() || !accessToken?.trim()) {
@@ -80,7 +81,7 @@ router.post('/test', async (req, res, next) => {
   }
 });
 
-router.post('/:id/test', async (req, res, next) => {
+router.post('/:id/test', requireRole('admin'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
@@ -102,7 +103,7 @@ router.post('/:id/test', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+router.post('/', requireRole('admin'), async (req, res, next) => {
   try {
     const { label, wabaId, phoneNumberId, accessToken, branchId, pin } = req.body ?? {};
     if (!label?.trim() || !wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim() || !branchId) {
@@ -153,7 +154,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.post('/:id/register', async (req, res, next) => {
+router.post('/:id/register', requireRole('admin'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
@@ -168,7 +169,7 @@ router.post('/:id/register', async (req, res, next) => {
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query(`SELECT * FROM whatsapp_numbers WHERE id = $1`, [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'not found' });
@@ -242,7 +243,7 @@ router.patch('/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`DELETE FROM whatsapp_numbers WHERE id = $1 RETURNING id`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'not found' });

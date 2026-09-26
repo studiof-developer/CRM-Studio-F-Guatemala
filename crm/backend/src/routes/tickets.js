@@ -231,8 +231,15 @@ router.get('/pipeline', async (req, res, next) => {
 
     const params = [bucket];
     const { orderExpr, dateClause, unreadOnlyClause, trimmedQ, periodStartIso, periodEndIso } = buildPipelineFilters(bucket, req.query, params);
-    const { from, to, since, until, unreadOnly, dormant } = req.query;
+    const { from, to, since, until, unreadOnly, dormant, lineId } = req.query;
     const dormancyClause = dormancyClauseSql(dormant);
+
+    const parsedLineId = lineId ? parseInt(lineId, 10) : null;
+    let lineFilterSql = '';
+    if (parsedLineId) {
+      params.push(parsedLineId);
+      lineFilterSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${params.length}`;
+    }
 
     // "Nuevas" vs "continuas" — only computable when there's an actual period boundary
     // to compare customer.created_at against (not for "Todo" or a search, neither of
@@ -271,7 +278,7 @@ router.get('/pipeline', async (req, res, next) => {
     params.push(limit);
 
     const lClause = linesClause(req.user, 't');
-    const cacheKey = `${req.user.id}:${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}`;
+    const cacheKey = `${req.user.id}:${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}:${parsedLineId ?? ''}`;
 
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH temped AS (
@@ -290,7 +297,7 @@ router.get('/pipeline', async (req, res, next) => {
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${lClause}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${lClause} ${lineFilterSql}
       ),
       -- A duplicate open ticket for the same customer (n8n's handoff firing twice on
       -- the same inbound message, 2026-09-14 report — two identical cards, same phone,
@@ -425,6 +432,13 @@ router.get('/pipeline/card', async (req, res, next) => {
     const { dateClause, unreadOnlyClause } = buildPipelineFilters('en_atencion', req.query, params);
     const dormancyClause = dormancyClauseSql(req.query.dormant);
 
+    const parsedLineId = req.query.lineId ? parseInt(req.query.lineId, 10) : null;
+    let lineFilterSql = '';
+    if (parsedLineId) {
+      params.push(parsedLineId);
+      lineFilterSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${params.length}`;
+    }
+
     const { rows } = await pool.query(`
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
@@ -442,7 +456,7 @@ router.get('/pipeline/card', async (req, res, next) => {
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1 ${linesClause(req.user, 't')}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1 ${linesClause(req.user, 't')} ${lineFilterSql}
       ),
       deduped AS (SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1)
       SELECT *, ${BUCKET_CASE_SQL} AS bucket
@@ -630,6 +644,13 @@ router.get('/pipeline/export', async (req, res, next) => {
     const { orderExpr, dateClause, unreadOnlyClause } = buildPipelineFilters(bucket, req.query, params);
     const dormancyClause = dormancyClauseSql(req.query.dormant);
 
+    const parsedLineId = req.query.lineId ? parseInt(req.query.lineId, 10) : null;
+    let lineFilterSql = '';
+    if (parsedLineId) {
+      params.push(parsedLineId);
+      lineFilterSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${params.length}`;
+    }
+
     const { rows } = await pool.query(`
       WITH temped AS (
         SELECT t.status AS ticket_status, c.id AS customer_id, c.channel,
@@ -645,7 +666,7 @@ router.get('/pipeline/export', async (req, res, next) => {
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${linesClause(req.user, 't')}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${linesClause(req.user, 't')} ${lineFilterSql}
       ),
       -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
       deduped AS (
@@ -803,6 +824,13 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
     const responseParams = [];
     const responseDateClause = buildDateRangeClause(req.query, responseParams, 't.created_at');
 
+    const parsedLineId = req.query.lineId ? parseInt(req.query.lineId, 10) : null;
+    let statsLineSql = '';
+    if (parsedLineId) {
+      bucketParams.push(parsedLineId);
+      statsLineSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${bucketParams.length}`;
+    }
+
     const [buckets, byHour, responseDelay] = await Promise.all([
       pool.query(`
         WITH temped AS (
@@ -812,7 +840,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
                  c.last_customer_message_at, c.last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
-          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}
+          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${statsLineSql}
         ),
         -- Same duplicate-open-ticket collapse as /pipeline — see its comment. Has to
         -- happen before bucket_total/unread_total are counted, or a duplicate would

@@ -454,7 +454,7 @@ router.post('/', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { q, temperature, ticketStatus, channel } = req.query;
+    const { q, temperature, ticketStatus, channel, lineId } = req.query;
     const unreadOnly = req.query.unread === 'true';
     // Loading every conversation up front got heavy once the list passed ~1000 threads.
     // Filters run in JS below (over fields the SQL doesn't have a clean WHERE for), so a
@@ -464,7 +464,7 @@ router.get('/', async (req, res, next) => {
     // many threads exist, so it's cheap to never cap — capping it was the bug: the "no
     // leído" filter and the sidebar badge were both silently missing any unread thread
     // that fell outside the default recency window instead of showing every real one.
-    const hasFilter = !!(q?.trim() || temperature || ticketStatus || unreadOnly);
+    const hasFilter = !!(q?.trim() || temperature || ticketStatus || unreadOnly || lineId);
     const limit = hasFilter ? null : Math.min(Number(req.query.limit) || 50, 5000);
     // A channel filter naming Instagram/Messenger means zero WhatsApp rows can ever
     // survive — skip the (expensive) query entirely instead of running it just to
@@ -593,6 +593,11 @@ router.get('/', async (req, res, next) => {
       visible = visible.filter((r) => r.whatsapp_number_id && allowedLineIds.has(r.whatsapp_number_id));
     }
 
+    const parsedLineId = lineId ? parseInt(lineId, 10) : null;
+    if (parsedLineId) {
+      visible = visible.filter((r) => Number(r.whatsapp_number_id || r.line_id || 1) === parsedLineId);
+    }
+
     const qLower = q?.trim().toLowerCase();
     if (qLower) {
       visible = visible.filter((r) =>
@@ -631,7 +636,7 @@ router.get('/', async (req, res, next) => {
     // record already silently not matching those filters. unread_count does exist on
     // social_contacts though, so "No leído" still applies to them.
     let socialItems = [];
-    const canSeeSocial = req.user.role !== 'asesor' || (allowedLineIds && allowedLineIds.has(1));
+    const canSeeSocial = !parsedLineId && (req.user.role !== 'asesor' || (allowedLineIds && allowedLineIds.has(1)));
     if (canSeeSocial && channel !== 'whatsapp' && !temperature && !ticketStatus) {
       const { rows: socialRows } = await pool.query(`
         SELECT sc.id, sc.provider, sc.display_name, sc.last_message_at, sc.unread_count,
