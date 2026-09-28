@@ -264,4 +264,32 @@ router.patch('/:id/tags', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Admin/supervisor-only: manually toggle a customer's broadcast opt-out status.
+// Asesores cannot change this — it's auditable and affects billing/compliance.
+router.patch('/:id/opt-out', async (req, res, next) => {
+  try {
+    if (!['admin', 'supervisor'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const { optedOut } = req.body ?? {};
+    if (typeof optedOut !== 'boolean') return res.status(400).json({ error: 'optedOut (boolean) required' });
+
+    const { rows: existing } = await pool.query(`SELECT id, opted_out_campaigns FROM customers WHERE id = $1`, [req.params.id]);
+    if (!existing.length) return res.status(404).json({ error: 'not found' });
+
+    const { rows } = await pool.query(
+      `UPDATE customers SET
+         opted_out_campaigns = $1,
+         opted_out_at = CASE WHEN $1 THEN COALESCE(opted_out_at, now()) ELSE NULL END,
+         updated_at = now()
+       WHERE id = $2
+       RETURNING id, opted_out_campaigns, opted_out_at`,
+      [optedOut, req.params.id]
+    );
+    const action = optedOut ? 'customer_opted_out' : 'customer_opted_in';
+    logBusinessAction(req.user, Number(req.params.id), action, optedOut ? 'manual opt-out' : 'manual opt-in');
+    res.json(rows[0]);
+  } catch (err) { next(err); }
+});
+
 export default router;

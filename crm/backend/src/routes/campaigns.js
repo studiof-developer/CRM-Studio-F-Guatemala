@@ -84,7 +84,8 @@ function getHeaderFormat(template) {
 
 router.get('/templates', async (req, res, next) => {
   try {
-    const templates = await whatsapp.listTemplates();
+    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
+    const templates = await whatsapp.listTemplates(lineId);
     res.json(
       templates
         .filter((t) => t.status === 'APPROVED')
@@ -106,7 +107,8 @@ router.get('/templates', async (req, res, next) => {
 // Admin-only: creating/deleting a Meta template is account-wide, not a single send.
 router.get('/templates/manage', requireRole('admin'), async (req, res, next) => {
   try {
-    const templates = await whatsapp.listTemplates();
+    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
+    const templates = await whatsapp.listTemplates(lineId);
     res.json(templates.map((t) => ({
       name: t.name,
       language: t.language,
@@ -182,7 +184,8 @@ router.delete('/templates/:name', requireRole('admin'), async (req, res, next) =
 router.post('/header-media', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
-    const mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype);
+    const lineId = req.body.lineId ? Number(req.body.lineId) : undefined;
+    const mediaId = await whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, undefined, lineId);
     // Also kept on our own disk (separately from Meta's copy) so the CRM can show the
     // same image inline in the conversation thread, the same way any other attachment
     // renders — Meta's media id isn't fetchable back out to display in our own UI.
@@ -203,7 +206,7 @@ router.get('/audience', async (req, res, next) => {
       return res.status(400).json({ error: 'invalid temperature' });
     }
     const params = [];
-    const clauses = [];
+    const clauses = ['c.opted_out_campaigns = false'];
     if (temperature) { params.push(temperature); clauses.push(`(${EFFECTIVE_STATUS_SQL}) = $${params.length}`); }
     if (q?.trim()) {
       params.push(`%${q.trim().toLowerCase()}%`);
@@ -212,7 +215,7 @@ router.get('/audience', async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT c.id, c.full_name, c.whatsapp_number, (${EFFECTIVE_STATUS_SQL}) AS temperature
        FROM customers c
-       ${clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''}
+       WHERE ${clauses.join(' AND ')}
        ORDER BY c.full_name NULLS LAST
        LIMIT 200`,
       params
@@ -309,8 +312,9 @@ router.post('/:id/retry-failed', async (req, res, next) => {
     const { rows: campaignRows } = await pool.query(`SELECT * FROM campaigns WHERE id = $1`, [req.params.id]);
     if (!campaignRows.length) return res.status(404).json({ error: 'not found' });
     const campaign = campaignRows[0];
+    const lineId = campaign.whatsapp_number_id ? Number(campaign.whatsapp_number_id) : undefined;
 
-    const resolved = await resolveTemplate(campaign.template_name, campaign.template_language);
+    const resolved = await resolveTemplate(campaign.template_name, campaign.template_language, lineId);
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { paramCount, headerFormat, bodyTemplate } = resolved;
 
@@ -339,13 +343,13 @@ router.post('/:id/retry-failed', async (req, res, next) => {
         return res.status(400).json({ error: 'No se encontró el archivo original de esta difusión — no se puede reintentar' });
       }
       const buffer = await fs.promises.readFile(attRows[0].file_path);
-      headerMediaId = await whatsapp.uploadMedia(buffer, attRows[0].mime_type);
+      headerMediaId = await whatsapp.uploadMedia(buffer, attRows[0].mime_type, undefined, lineId);
       headerFilename = attRows[0].filename;
     }
 
     // Same respond-then-background pattern as a fresh send — the campaign detail view
     // is already SSE-driven, so each recipient's status flips live as retries land.
-    retryFailedRecipients(campaign.id, failed, campaign.template_name, campaign.template_language, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename).catch((err) =>
+    retryFailedRecipients(campaign.id, failed, campaign.template_name, campaign.template_language, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, lineId).catch((err) =>
       console.error(`campaign ${campaign.id} retry batch failed`, err)
     );
 
@@ -372,7 +376,7 @@ function renderBody(bodyTemplate, name, extraParams = []) {
   return bodyTemplate.replace(/\{\{(\d+)\}\}/g, (_, n) => (n === '1' ? name : extraParams[Number(n) - 2] ?? name));
 }
 
-async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
+async function sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat, lineId) {
   const name = firstName(customer.full_name) || FALLBACK_TEMPLATE_NAME;
   const extraParams = customer.extraParams ?? [];
   // A template with NO {{n}} placeholders at all (paramCount 0) still had the
@@ -384,7 +388,7 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   let sentWamid = null;
   let error = null;
   try {
-    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params, headerMediaId, headerFormat, headerAttachment?.filename);
+    const result = await whatsapp.sendTemplate(customer.whatsapp_number, templateName, templateLanguage, params, headerMediaId, headerFormat, headerAttachment?.filename, lineId);
     sentWamid = result?.messages?.[0]?.id ?? null;
     if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
   } catch (err) {
@@ -476,7 +480,7 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
 
 // Updates the recipient's existing row in place instead of inserting a new one — see the
 // retry-failed route for why (avoids double-counting the recipient in campaign stats).
-async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, extraParams = []) {
+async function retryRecipient(messageId, sessionId, phone, fullName, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, extraParams = [], lineId) {
   const name = firstName(fullName) || FALLBACK_TEMPLATE_NAME;
   // Same paramCount trim as sendToRecipient above — a retry must match the template
   // exactly the same way the original send needs to.
@@ -484,7 +488,7 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   let sentWamid = null;
   let error = null;
   try {
-    const result = await whatsapp.sendTemplate(phone, templateName, templateLanguage, params, headerMediaId, headerFormat, headerFilename);
+    const result = await whatsapp.sendTemplate(phone, templateName, templateLanguage, params, headerMediaId, headerFormat, headerFilename, lineId);
     sentWamid = result?.messages?.[0]?.id ?? null;
     if (!sentWamid) error = 'WhatsApp no devolvió un id de mensaje — el envío no se confirmó';
   } catch (err) {
@@ -539,18 +543,18 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   return !!sentWamid;
 }
 
-async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename) {
+async function retryFailedRecipients(campaignId, failed, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, lineId) {
   for (const r of failed) {
-    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, r.extra_params ?? []).catch((err) =>
+    await retryRecipient(r.id, r.session_id, r.phone, r.full_name, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerFormat, headerFilename, r.extra_params ?? [], lineId).catch((err) =>
       console.error(`campaign ${campaignId} retry recipient ${r.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
   }
 }
 
-async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat) {
+async function runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat, lineId) {
   for (const customer of audience) {
-    await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat).catch((err) =>
+    await sendToRecipient(campaignId, customer, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat, lineId).catch((err) =>
       console.error(`campaign ${campaignId} recipient ${customer.id} failed`, err)
     );
     await sleep(SEND_DELAY_MS);
@@ -566,8 +570,8 @@ const PHONE_RE = /^\d{7,15}$/;
 // trusted from the templates screen, since a template can be paused or fail review
 // between when the tab loaded and when send is clicked (or between the original send
 // and a retry days later).
-async function resolveTemplate(templateName, templateLanguage) {
-  const templates = await whatsapp.listTemplates();
+async function resolveTemplate(templateName, templateLanguage, lineId) {
+  const templates = await whatsapp.listTemplates(lineId);
   const template = templates.find((t) => t.name === templateName && t.language === templateLanguage);
   if (!template) return { error: 'La plantilla no existe o cambió' };
   if (template.status !== 'APPROVED') return { error: 'La plantilla no está activa en este momento' };
@@ -583,7 +587,7 @@ async function resolveTemplate(templateName, templateLanguage) {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken } = req.body ?? {};
+    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken, whatsappNumberId } = req.body ?? {};
     if (!templateName?.trim() || !templateLanguage?.trim()) {
       return res.status(400).json({ error: 'templateName and templateLanguage required' });
     }
@@ -594,9 +598,10 @@ router.post('/', async (req, res, next) => {
     if (temperature && !VALID_TEMPERATURES.includes(temperature)) {
       return res.status(400).json({ error: 'invalid temperature' });
     }
+    const lineId = whatsappNumberId ? Number(whatsappNumberId) : undefined;
     const sortOrder = order === 'oldest' ? 'ASC' : 'DESC';
 
-    const resolved = await resolveTemplate(templateName, templateLanguage);
+    const resolved = await resolveTemplate(templateName, templateLanguage, lineId);
     if (resolved.error) return res.status(400).json({ error: resolved.error });
     const { paramCount, headerFormat, bodyTemplate } = resolved;
 
@@ -648,6 +653,7 @@ router.post('/', async (req, res, next) => {
          ) act ON true
          WHERE (${EFFECTIVE_STATUS_SQL}) = $1
            AND NOT (c.whatsapp_number = ANY($3::text[]))
+           AND c.opted_out_campaigns = false
          ORDER BY act.last_seen ${sortOrder} NULLS LAST
          LIMIT $2`,
         [temperature, count && count > 0 ? count : 100000, cooldownPhones]
@@ -702,16 +708,16 @@ router.post('/', async (req, res, next) => {
     }
 
     const { rows: created } = await pool.query(
-      `INSERT INTO campaigns (template_name, template_language, temperature, requested_count, customer_ids, recipient_count, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [templateName, templateLanguage, temperature ?? null, count ?? null, audience.map((c) => c.id), audience.length, req.user.fullName]
+      `INSERT INTO campaigns (template_name, template_language, temperature, requested_count, customer_ids, recipient_count, created_by, whatsapp_number_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [templateName, templateLanguage, temperature ?? null, count ?? null, audience.map((c) => c.id), audience.length, req.user.fullName, lineId ?? null]
     );
     const campaignId = created[0].id;
 
     // Same pattern as every other outbound send in this app: respond once the audience
     // is locked in and stored, then let the actual WhatsApp calls happen in the
     // background instead of holding the request open for what could be minutes.
-    runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat).catch((err) =>
+    runCampaign(campaignId, audience, templateName, templateLanguage, bodyTemplate, paramCount, headerMediaId, headerAttachment, headerFormat, lineId).catch((err) =>
       console.error(`campaign ${campaignId} failed`, err)
     );
 

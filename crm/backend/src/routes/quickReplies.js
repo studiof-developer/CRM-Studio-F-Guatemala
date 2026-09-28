@@ -15,13 +15,26 @@ function canManage(row, user) {
 
 router.get('/', async (req, res, next) => {
   try {
+    // lineId filter: return replies for the given line + global (null line) + personal.
+    // No lineId = return all, so the admin management panel still shows everything.
+    const lineId = req.query.lineId ? Number(req.query.lineId) : null;
+    const params = [req.user.id];
+    const lineClause = lineId
+      ? `AND (qr.whatsapp_number_id = $2 OR qr.whatsapp_number_id IS NULL)`
+      : '';
+    if (lineId) params.push(lineId);
+
     const { rows } = await pool.query(
-      `SELECT qr.id, qr.shortcut, qr.content, qr.scope, qr.owner_user_id, u.full_name AS owner_name
+      `SELECT qr.id, qr.shortcut, qr.content, qr.scope, qr.owner_user_id, qr.whatsapp_number_id,
+              u.full_name AS owner_name,
+              wn.label AS line_label
        FROM quick_replies qr
        JOIN users u ON u.id = qr.owner_user_id
-       WHERE qr.scope = 'global' OR qr.owner_user_id = $1
+       LEFT JOIN whatsapp_numbers wn ON wn.id = qr.whatsapp_number_id
+       WHERE (qr.scope = 'global' OR qr.owner_user_id = $1)
+         ${lineClause}
        ORDER BY qr.shortcut ASC`,
-      [req.user.id]
+      params
     );
     res.json(rows.map((r) => ({
       id: r.id,
@@ -30,6 +43,8 @@ router.get('/', async (req, res, next) => {
       scope: r.scope,
       ownerUserId: r.owner_user_id,
       ownerName: r.owner_name,
+      whatsappNumberId: r.whatsapp_number_id,
+      lineLabel: r.line_label ?? null,
       canManage: canManage(r, req.user),
     })));
   } catch (err) { next(err); }
@@ -37,18 +52,30 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { shortcut, content, scope } = req.body ?? {};
+    const { shortcut, content, scope, whatsappNumberId } = req.body ?? {};
     const cleanShortcut = (shortcut ?? '').trim().toLowerCase().replace(/^\/+/, '');
     if (!cleanShortcut || !content?.trim()) return res.status(400).json({ error: 'shortcut and content required' });
     if (!['personal', 'global'].includes(scope)) return res.status(400).json({ error: 'invalid scope' });
+    const lineId = whatsappNumberId ? Number(whatsappNumberId) : null;
 
     const { rows } = await pool.query(
-      `INSERT INTO quick_replies (shortcut, content, scope, owner_user_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, shortcut, content, scope, owner_user_id`,
-      [cleanShortcut, content.trim(), scope, req.user.id]
+      `INSERT INTO quick_replies (shortcut, content, scope, owner_user_id, whatsapp_number_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, shortcut, content, scope, owner_user_id, whatsapp_number_id`,
+      [cleanShortcut, content.trim(), scope, req.user.id, lineId]
     );
-    res.status(201).json({ ...rows[0], ownerUserId: rows[0].owner_user_id, ownerName: req.user.fullName, canManage: true });
+    const r = rows[0];
+    let lineLabel = null;
+    if (r.whatsapp_number_id) {
+      const { rows: wn } = await pool.query(`SELECT label FROM whatsapp_numbers WHERE id = $1`, [r.whatsapp_number_id]);
+      lineLabel = wn[0]?.label ?? null;
+    }
+    res.status(201).json({
+      id: r.id, shortcut: r.shortcut, content: r.content, scope: r.scope,
+      ownerUserId: r.owner_user_id, ownerName: req.user.fullName,
+      whatsappNumberId: r.whatsapp_number_id, lineLabel,
+      canManage: true,
+    });
   } catch (err) { next(err); }
 });
 
@@ -69,7 +96,7 @@ router.patch('/:id', async (req, res, next) => {
          content = COALESCE($2, content),
          updated_at = now()
        WHERE id = $3
-       RETURNING id, shortcut, content, scope, owner_user_id`,
+       RETURNING id, shortcut, content, scope, owner_user_id, whatsapp_number_id`,
       [cleanShortcut ?? null, content?.trim() ?? null, req.params.id]
     );
     res.json(rows[0]);

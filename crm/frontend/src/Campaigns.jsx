@@ -5,6 +5,7 @@ import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
   fetchTemplatesManage, createWhatsappTemplate, deleteWhatsappTemplate,
+  fetchWhatsappNumbers,
 } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
 import { useLiveEvent } from './lib/liveEvents.js';
@@ -223,6 +224,8 @@ function DifusionTab() {
 }
 
 function NewCampaignModal({ onClose, onSent }) {
+  const [lines, setLines] = useState([]);
+  const [lineId, setLineId] = useState('');
   const [templates, setTemplates] = useState(null);
   const [templatesError, setTemplatesError] = useState(null);
   const [templateKey, setTemplateKey] = useState('');
@@ -242,9 +245,25 @@ function NewCampaignModal({ onClose, onSent }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Load WhatsApp lines (brands) on mount so the user picks which line to broadcast from.
   useEffect(() => {
-    fetchCampaignTemplates().then(setTemplates).catch((err) => setTemplatesError(err.message));
+    fetchWhatsappNumbers().then((wns) => {
+      setLines(wns);
+      if (wns.length === 1) setLineId(String(wns[0].id)); // auto-select if only one
+    }).catch(() => {});
   }, []);
+
+  // Re-fetch templates whenever the selected line changes.
+  // Reset the template selection so an old template from Line A isn't carried over.
+  useEffect(() => {
+    setTemplates(null);
+    setTemplatesError(null);
+    setTemplateKey('');
+    if (!lineId) return;
+    fetchCampaignTemplates(Number(lineId))
+      .then(setTemplates)
+      .catch((err) => setTemplatesError(err.message));
+  }, [lineId]);
 
   useEffect(() => {
     if (!temperature) { setAudienceCount(null); return; }
@@ -296,7 +315,7 @@ function NewCampaignModal({ onClose, onSent }) {
     if (!headerIsDocument) setHeaderPreviewUrl(URL.createObjectURL(file));
     setHeaderUploading(true);
     try {
-      const { mediaId, headerImageToken: token } = await uploadCampaignHeaderMedia(file);
+      const { mediaId, headerImageToken: token } = await uploadCampaignHeaderMedia(file, lineId ? Number(lineId) : undefined);
       setHeaderMediaId(mediaId);
       setHeaderImageToken(token);
     } catch (err) {
@@ -400,7 +419,7 @@ function NewCampaignModal({ onClose, onSent }) {
   }
 
   const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
-  const canSend = !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
+  const canSend = !!lineId && !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
     && (temperature || manualPicked.length > 0) && totalRecipients > 0;
 
   async function handleSend() {
@@ -416,6 +435,7 @@ function NewCampaignModal({ onClose, onSent }) {
         newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName, params: p.params })),
         headerMediaId: headerMediaId || undefined,
         headerImageToken: headerImageToken || undefined,
+        whatsappNumberId: lineId ? Number(lineId) : undefined,
       });
       showSuccess(`Difusión en marcha — ${res.recipientCount} destinatarios`);
       if (res.skippedCooldown?.length) {
@@ -445,7 +465,23 @@ function NewCampaignModal({ onClose, onSent }) {
         </div>
 
         <div className="flex flex-col gap-5">
+          {/* Step 1: pick which WhatsApp line (brand) to broadcast from */}
           <div>
+            <label className="mb-1.5 block text-xs font-medium text-greige-ink">Línea de WhatsApp</label>
+            {lines.length === 0 && <p className="text-xs text-greige-ink">Cargando líneas…</p>}
+            {lines.length > 0 && (
+              <Select
+                value={lineId}
+                onChange={(val) => setLineId(val)}
+                placeholder="Elegir línea…"
+                options={lines.map((l) => ({ value: String(l.id), label: l.label || l.brandName || `Línea ${l.id}` }))}
+              />
+            )}
+          </div>
+
+          {/* Step 2: pick a template (only shown once a line is selected) */}
+          {lineId && (
+          <>$([char]10)          <div>
             <label className="mb-1.5 block text-xs font-medium text-greige-ink">Plantilla de Meta</label>
             {templatesError && <p className="text-xs text-danger">{templatesError}</p>}
             {!templatesError && !templates && <p className="text-xs text-greige-ink">Cargando plantillas de WhatsApp Manager…</p>}
@@ -645,6 +681,7 @@ function NewCampaignModal({ onClose, onSent }) {
               </div>
             </>
           )}
+          </>)}{/* end lineId && (<>...</>) */}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line-soft pt-4">

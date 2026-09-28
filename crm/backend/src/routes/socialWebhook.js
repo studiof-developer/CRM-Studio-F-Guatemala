@@ -342,7 +342,21 @@ async function handleWhatsAppWebhook(body) {
           const inboundMessageId = insertedMsg[0].id;
           await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text, 'phone', $2::text)::text)`, [sessionId, fromPhone]);
 
-          // 2.4 If media, download buffer from Meta Graph API using line's token and store attachment
+          // 2.4b Opt-out detection: if the customer sends a known unsubscribe keyword,
+          // mark them as opted out of broadcast campaigns immediately and confirm via WhatsApp.
+          // Case-insensitive, trimmed. Common spellings used in Guatemala.
+          const OPT_OUT_KEYWORDS = /^\s*(baja|stop|cancelar|no\s*m[aá]s|desubscribir|unsuscribir|no\s*quiero|eliminar)\s*$/i;
+          if (msgType === 'text' && OPT_OUT_KEYWORDS.test(content)) {
+            await pool.query(
+              `UPDATE customers SET opted_out_campaigns = true, opted_out_at = now()
+               WHERE whatsapp_number = $1 AND opted_out_campaigns = false`,
+              [fromPhone]
+            );
+            whatsapp.sendText(fromPhone, '✅ Has sido dado de baja de nuestras difusiones. Ya no recibirás mensajes masivos de nuestra parte. Si cambias de opinión, escríbenos directamente.', null, line.id)
+              .catch((err) => console.error('opt-out reply failed', err));
+          }
+
+          // 2.5 If media, download buffer from Meta Graph API using line's token and store attachment
           if (isMedia && mediaInfo?.mediaId && lineToken) {
             try {
               const { buffer, mimeType: downloadedMime } = await whatsapp.downloadMedia(mediaInfo.mediaId, lineToken);

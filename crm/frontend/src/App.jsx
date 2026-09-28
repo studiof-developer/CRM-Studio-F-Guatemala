@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2 } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
+import { playChime, requestNotificationPermission, showDesktopNotification } from './lib/notifications.js';
 import Login from './Login.jsx';
 const Dashboard = lazy(() => import('./Dashboard.jsx'));
 const HandoffQueue = lazy(() => import('./HandoffQueue.jsx'));
@@ -273,6 +274,34 @@ export default function App() {
   useLiveEvent('ticket_changes', loadUnanswered);
   useLiveEvent('message_changes', loadUnanswered);
   useLiveEvent('read_changes', loadUnanswered);
+
+  // Request browser notification permission once, right after login.
+  // No-op if already granted or denied — won't re-prompt.
+  useEffect(() => {
+    if (!user) return;
+    requestNotificationPermission();
+  }, [user]);
+
+  // Sound + push notification whenever a new chat arrives in "esperando asesor".
+  // The SSE event itself doesn't carry the new status, so we re-fetch the count
+  // and fire a notification only when the count actually grows (new pending chat).
+  const prevPendingRef = React.useRef(0);
+  useLiveEvent('ticket_changes', useCallback(() => {
+    fetchTickets('esperando_asesor')
+      .then((rows) => {
+        const prev = prevPendingRef.current;
+        const next = rows.length;
+        prevPendingRef.current = next;
+        if (next > prev) {
+          playChime();
+          showDesktopNotification(
+            '💬 Nuevo cliente en espera',
+            `${next} cliente${next !== 1 ? 's' : ''} esperando atención`,
+          );
+        }
+      })
+      .catch(() => {});
+  }, []));
 
   if (user === undefined) return null;
   if (!user) return <Login onLoggedIn={setUser} />;

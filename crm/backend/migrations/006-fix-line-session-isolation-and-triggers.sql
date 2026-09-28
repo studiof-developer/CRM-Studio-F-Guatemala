@@ -207,9 +207,12 @@ WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = '573151045
   AND status != 'difusion_enviada'
   AND (whatsapp_number_id = 2 OR whatsapp_number_id IS NULL);
 
--- Backfill whatsapp_number_id on legacy n8n_chat_histories to 1 (Studio F Virtual)
+-- Backfill whatsapp_number_id on legacy n8n_chat_histories to Studio F Virtual / lowest id
 UPDATE n8n_chat_histories
-SET whatsapp_number_id = 1
+SET whatsapp_number_id = COALESCE(
+  (SELECT id FROM whatsapp_numbers WHERE label ILIKE '%Studio F%' ORDER BY id LIMIT 1),
+  (SELECT id FROM whatsapp_numbers ORDER BY id LIMIT 1)
+)
 WHERE whatsapp_number_id IS NULL;
 
 -- Isolate today's test messages for 573151045201 to Basshert (Line 2)

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
-  attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, startConversation,
+  attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, updateCustomerOptOut, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
   fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers,
@@ -545,7 +545,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [quickReplies, setQuickReplies] = useState([]);
   const [slashIndex, setSlashIndex] = useState(0);
 
-  useEffect(() => { fetchQuickReplies().then(setQuickReplies).catch(() => {}); }, []);
+  // Re-fetch quick replies whenever the active thread changes so the list is scoped to
+  // that conversation's WhatsApp line (global replies + that line's branded replies).
+  // Falls back to all replies (no lineId) when no thread is open.
+  const activeLineId = thread?.messages?.find((m) => m.additional_kwargs?.whatsappNumberId)?.additional_kwargs?.whatsappNumberId ?? null;
+  useEffect(() => {
+    fetchQuickReplies(activeLineId).then(setQuickReplies).catch(() => {});
+  }, [activeLineId]);
 
   // Only while the draft is *just* "/something" — a slash typed mid-sentence isn't a
   // command. Matches on shortcut prefix, personal and team templates mixed together.
@@ -2211,6 +2217,40 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     <InfoRow icon={ShoppingBag} label="Línea preferida" value={thread.preferredLine || '—'} />
                     <InfoRow icon={ShoppingBag} label="Talla" value={thread.preferredSize || '—'} />
                     <InfoRow icon={CircleDollarSign} label="Compras totales" value={thread.purchaseFrequency ?? '—'} />
+                    {/* Opt-out from campaigns: shown whenever set, togglable by admin/supervisor */}
+                    {thread.optedOutCampaigns && (
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs">
+                        <span className="font-medium text-danger">⛔ Excluido de difusiones</span>
+                        {(user?.role === 'admin' || user?.role === 'supervisor') && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await updateCustomerOptOut(thread.customerId, false);
+                                setThread((prev) => prev ? { ...prev, optedOutCampaigns: false, optedOutAt: null } : prev);
+                                showSuccess('Cliente reactivado en difusiones');
+                              } catch (err) { showError(err.message); }
+                            }}
+                            className="shrink-0 rounded-md bg-white/70 px-2 py-1 font-semibold text-danger hover:bg-white"
+                          >
+                            Reactivar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {!thread.optedOutCampaigns && (user?.role === 'admin' || user?.role === 'supervisor') && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await updateCustomerOptOut(thread.customerId, true);
+                            setThread((prev) => prev ? { ...prev, optedOutCampaigns: true, optedOutAt: new Date().toISOString() } : prev);
+                            showSuccess('Cliente excluido de difusiones');
+                          } catch (err) { showError(err.message); }
+                        }}
+                        className="mt-1 w-full rounded-lg border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10"
+                      >
+                        Excluir de difusiones masivas
+                      </button>
+                    )}
                   </div>
 
                   {/* Only shows up when this phone matches a real purchase record in the

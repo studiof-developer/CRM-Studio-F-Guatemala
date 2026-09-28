@@ -319,8 +319,9 @@ export function productImageUrl(imageUrl) {
   return imageUrl ? `${API_BASE}${imageUrl}` : null;
 }
 
-export async function fetchCampaignTemplates() {
-  const res = await apiFetch('/api/campaigns/templates');
+export async function fetchCampaignTemplates(lineId) {
+  const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
+  const res = await apiFetch(`/api/campaigns/templates${params}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las plantillas');
   return res.json();
 }
@@ -346,9 +347,10 @@ export async function deleteWhatsappTemplate(name) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
 }
 
-export async function uploadCampaignHeaderMedia(file) {
+export async function uploadCampaignHeaderMedia(file, lineId) {
   const formData = new FormData();
   formData.append('file', file);
+  if (lineId) formData.append('lineId', String(lineId));
   const res = await apiFetch('/api/campaigns/header-media', { method: 'POST', body: formData });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al subir la imagen');
   return res.json();
@@ -434,6 +436,16 @@ export async function updateCustomerTags(id, patch) {
   return res.json();
 }
 
+export async function updateCustomerOptOut(id, optedOut) {
+  const res = await apiFetch(`/api/customers/${id}/opt-out`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ optedOut }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la exclusión');
+  return res.json();
+}
+
 export async function fetchUsers() {
   const res = await apiFetch('/api/users');
   if (!res.ok) throw new Error('Error al cargar usuarios');
@@ -471,8 +483,9 @@ export async function fetchProducts() {
   return res.json();
 }
 
-export async function fetchQuickReplies() {
-  const res = await apiFetch('/api/quick-replies');
+export async function fetchQuickReplies(lineId) {
+  const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
+  const res = await apiFetch(`/api/quick-replies${params}`);
   if (!res.ok) throw new Error('Error al cargar las plantillas');
   return res.json();
 }
