@@ -477,8 +477,9 @@ export async function deleteUser(id) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar el usuario');
 }
 
-export async function fetchProducts() {
-  const res = await apiFetch('/api/products');
+export async function fetchProducts(query) {
+  const qStr = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+  const res = await apiFetch(`/api/products${qStr}`);
   if (!res.ok) throw new Error('Error al cargar el catálogo');
   return res.json();
 }

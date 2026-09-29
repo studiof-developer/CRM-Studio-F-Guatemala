@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Trash2, X, Calculator, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
 import { generateQuoteCardBlob } from '../lib/quoteImageGenerator.js';
-import { createQuote } from '../api.js';
+import { createQuote, fetchProducts } from '../api.js';
 import { showSuccess, showError } from './Toast.jsx';
 
 export default function QuoteModal({
@@ -14,18 +14,45 @@ export default function QuoteModal({
   onSendQuoteImage,
 }) {
   const [search, setSearch] = useState('');
+  const [serverResults, setServerResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [items, setItems] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewBlobUrl, setPreviewBlobUrl] = useState(null);
 
-  // Filtrado reactivo de productos del catálogo por SKU o Nombre
+  // Búsqueda dinámica en backend / catálogo cuando el usuario escribe
+  useEffect(() => {
+    const q = search.trim();
+    if (!q || q.length < 2) {
+      setServerResults([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSearching(true);
+      fetchProducts(q)
+        .then((res) => {
+          setServerResults(res || []);
+        })
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Combina resultados locales precargados y los encontrados dinámicamente en servidor
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q || q.length < 2) return [];
+
+    // Prioriza resultados directos de la búsqueda en base de datos
+    if (serverResults.length > 0) return serverResults.slice(0, 8);
+
     return catalog
       .filter((p) => (p.sku || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q))
-      .slice(0, 6);
-  }, [search, catalog]);
+      .slice(0, 8);
+  }, [search, serverResults, catalog]);
 
   function addItem(product) {
     const unitPrice = Number(product.price) || 0;
@@ -220,10 +247,22 @@ export default function QuoteModal({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Escribe código (ej. BLU-001, ACC) o nombre de prenda..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (searchResults.length > 0) {
+                      addItem(searchResults[0]);
+                    } else if (search.trim()) {
+                      addCustomItem();
+                    }
+                  }
+                }}
+                placeholder="Escribe código (ej. S176012A, BLU) o nombre de prenda... (Enter para agregar)"
                 className="w-full rounded-xl border border-line bg-black/[0.02] dark:bg-white/[0.04] py-2.5 pl-10 pr-24 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
               />
-              {search.trim() && (
+              {searching ? (
+                <Loader2 size={16} className="absolute right-3 text-greige animate-spin" />
+              ) : search.trim() ? (
                 <button
                   type="button"
                   onClick={addCustomItem}
@@ -231,7 +270,7 @@ export default function QuoteModal({
                 >
                   + Personalizada
                 </button>
-              )}
+              ) : null}
             </div>
 
             {/* Dropdown de coincidencias */}

@@ -14,6 +14,19 @@ const REQUIRED_COLUMNS = ['sku', 'name', 'category', 'price'];
 
 router.get('/', async (req, res, next) => {
   try {
+    const q = req.query.q?.trim();
+    if (q) {
+      const { rows } = await pool.query(
+        `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
+         FROM products
+         WHERE sku ILIKE $1 OR name ILIKE $1 OR color ILIKE $1
+         ORDER BY id DESC
+         LIMIT 50`,
+        [`%${q}%`]
+      );
+      return res.json(rows);
+    }
+
     const { rows } = await pool.query(
       `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
        FROM products ORDER BY id DESC LIMIT 500`
