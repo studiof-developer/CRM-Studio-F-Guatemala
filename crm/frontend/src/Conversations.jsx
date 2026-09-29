@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Send, Headset, MessageCircle, Info, X, Paperclip, SquarePen, Pencil, Reply, Bot, Clock,
+  Search, Send, Headset, MessageCircle, Info, X, Paperclip, Calculator, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
   Megaphone, Mail, Loader2, ArrowLeft, Copy,
 } from 'lucide-react';
@@ -10,7 +10,7 @@ import {
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, updateCustomerOptOut, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
-  fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers,
+  fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers, fetchProducts,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -22,6 +22,7 @@ import Avatar from './components/Avatar.jsx';
 import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
+import QuoteModal from './components/QuoteModal.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
 // Same icon/color pairing as the ticket-status pills in the list and header below —
@@ -544,6 +545,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [highlightedId, setHighlightedId] = useState(null);
   const [quickReplies, setQuickReplies] = useState([]);
   const [slashIndex, setSlashIndex] = useState(0);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState([]);
+
+  // Carga catálogo de productos para el cotizador
+  useEffect(() => {
+    fetchProducts().then(setCatalogProducts).catch(() => {});
+  }, []);
 
   // Re-fetch quick replies whenever the active thread changes so the list is scoped to
   // that conversation's WhatsApp line (global replies + that line's branded replies).
@@ -2066,8 +2074,18 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     onClick={() => fileInputRef.current?.click()}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
                     aria-label="Adjuntar archivo"
+                    title="Adjuntar archivo"
                   >
                     <Paperclip size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuoteOpen(true)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-accent hover:bg-accent-soft disabled:opacity-50"
+                    aria-label="Cotizar prendas"
+                    title="Cotizar prendas y generar imagen para el cliente"
+                  >
+                    <Calculator size={18} />
                   </button>
                   <div className="relative flex-1">
                     {slashResults.length > 0 && (
@@ -2375,6 +2393,25 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         } : null}
         onCancel={() => setEditOpen(false)}
         onSaved={() => { setEditOpen(false); loadThread(); load(false); }}
+      />
+
+      <QuoteModal
+        open={quoteOpen}
+        onClose={() => setQuoteOpen(false)}
+        customer={{
+          id: thread?.customerId,
+          fullName: thread?.customerName,
+          whatsappNumber: thread?.whatsappNumber || (selectedId ? selectedId.split('__')[0] : ''),
+        }}
+        activeLine={whatsappLines.find((l) => l.id === activeLineId) || { label: 'Studio F' }}
+        advisor={user}
+        catalog={catalogProducts}
+        onSendQuoteImage={async (file, caption) => {
+          if (!selectedId) return;
+          const previewUrl = URL.createObjectURL(file);
+          setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
+          if (caption) setDraft(caption);
+        }}
       />
 
       <AnimatePresence>

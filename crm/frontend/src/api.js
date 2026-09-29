@@ -483,6 +483,22 @@ export async function fetchProducts() {
   return res.json();
 }
 
+export async function createQuote(payload) {
+  const res = await apiFetch('/api/quotes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al guardar la cotización');
+  return res.json();
+}
+
+export async function fetchCustomerQuotes(customerId) {
+  const res = await apiFetch(`/api/quotes/customer/${customerId}`);
+  if (!res.ok) throw new Error('Error al cargar el historial de cotizaciones');
+  return res.json();
+}
+
 export async function fetchQuickReplies(lineId) {
   const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
   const res = await apiFetch(`/api/quick-replies${params}`);
