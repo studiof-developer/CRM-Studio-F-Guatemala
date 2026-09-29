@@ -25,17 +25,24 @@ export default function QuoteModal({
     const q = search.trim();
     if (!q || q.length < 2) {
       setServerResults([]);
+      setSearching(false);
       return;
     }
 
+    setSearching(true);
     const timer = setTimeout(() => {
-      setSearching(true);
       fetchProducts(q)
         .then((res) => {
-          setServerResults(res || []);
+          if (search.trim() === q) {
+            setServerResults(Array.isArray(res) ? res : []);
+          }
         })
-        .catch(() => {})
-        .finally(() => setSearching(false));
+        .catch(() => {
+          if (search.trim() === q) setServerResults([]);
+        })
+        .finally(() => {
+          if (search.trim() === q) setSearching(false);
+        });
     }, 200);
 
     return () => clearTimeout(timer);
@@ -46,9 +53,13 @@ export default function QuoteModal({
     const q = search.trim().toLowerCase();
     if (!q || q.length < 2) return [];
 
-    // Prioriza resultados directos de la búsqueda en base de datos
-    if (serverResults.length > 0) return serverResults.slice(0, 8);
+    // Prioriza resultados directos de la base de datos que coincidan con lo escrito
+    const serverMatches = serverResults.filter(
+      (p) => (p.sku || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q)
+    );
+    if (serverMatches.length > 0) return serverMatches.slice(0, 8);
 
+    // Fallback al catálogo precargado en memoria (también filtrando estrictamente por q)
     return catalog
       .filter((p) => (p.sku || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q))
       .slice(0, 8);
@@ -73,6 +84,7 @@ export default function QuoteModal({
 
     setItems((prev) => [...prev, newItem]);
     setSearch('');
+    setServerResults([]);
     setPreviewBlobUrl(null);
   }
 
@@ -91,6 +103,7 @@ export default function QuoteModal({
     };
     setItems((prev) => [...prev, newItem]);
     setSearch('');
+    setServerResults([]);
     setPreviewBlobUrl(null);
   }
 
@@ -107,6 +120,12 @@ export default function QuoteModal({
       } else if (field === 'discountPct') {
         item.discountPct = Math.min(100, Math.max(0, Number(value) || 0));
         item.finalPrice = item.unitPrice * (1 - item.discountPct / 100);
+      } else if (field === 'finalPrice') {
+        item.finalPrice = Math.max(0, Number(value) || 0);
+        if (item.unitPrice > 0) {
+          const calculatedPct = ((item.unitPrice - item.finalPrice) / item.unitPrice) * 100;
+          item.discountPct = Math.round(Math.max(0, Math.min(100, calculatedPct)));
+        }
       } else if (field === 'name') {
         item.name = value;
       } else if (field === 'sku') {
@@ -274,32 +293,53 @@ export default function QuoteModal({
             </div>
 
             {/* Dropdown de coincidencias */}
-            {searchResults.length > 0 && (
-              <div className="absolute top-full left-0 z-20 mt-1.5 w-full rounded-xl border border-line bg-paper shadow-xl overflow-hidden divide-y divide-line-soft">
-                {searchResults.map((prod) => (
-                  <button
-                    key={prod.id}
-                    type="button"
-                    onClick={() => addItem(prod)}
-                    className="flex w-full items-center justify-between p-3 text-left hover:bg-accent-soft transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-ink">{prod.sku}</span>
-                        {prod.discount_pct > 0 && (
-                          <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
-                            -{Number(prod.discount_pct)}%
-                          </span>
-                        )}
+            {search.trim().length >= 2 && (
+              <div className="absolute top-full left-0 z-20 mt-1.5 w-full rounded-xl border border-line bg-paper shadow-xl overflow-hidden divide-y divide-line-soft max-h-72 overflow-y-auto">
+                {searching ? (
+                  <div className="flex items-center gap-2.5 p-4 text-xs text-greige-ink">
+                    <Loader2 size={16} className="animate-spin text-accent" />
+                    <span>Buscando referencia en el catálogo...</span>
+                  </div>
+                ) : searchResults.length > 0 ? (
+                  searchResults.map((prod) => (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => addItem(prod)}
+                      className="flex w-full items-center justify-between p-3 text-left hover:bg-accent-soft transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-ink">{prod.sku}</span>
+                          {Number(prod.discount_pct) > 0 && (
+                            <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
+                              -{Number(prod.discount_pct)}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-greige-ink">{prod.name} {prod.color ? `· ${prod.color}` : ''}</p>
                       </div>
-                      <p className="text-xs text-greige-ink">{prod.name} {prod.color ? `· ${prod.color}` : ''}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-sm text-ink">Q{Number(prod.price || 0).toFixed(2)}</span>
-                      <p className="text-[11px] text-greige">Stock: {prod.stock_quantity ?? '—'}</p>
-                    </div>
-                  </button>
-                ))}
+                      <div className="text-right">
+                        <span className="font-bold text-sm text-ink">Q{Number(prod.price || 0).toFixed(2)}</span>
+                        <p className="text-[11px] text-greige">Stock: {prod.stock_quantity ?? '—'}</p>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-greige-ink mb-2">
+                      No se encontró la referencia <strong className="text-ink">"{search.trim()}"</strong> en el catálogo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addCustomItem}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent hover:text-white transition-colors"
+                    >
+                      <Plus size={13} />
+                      Cotizar "{search.trim().toUpperCase()}" como personalizada
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -382,6 +422,19 @@ export default function QuoteModal({
                           value={item.discountPct}
                           onChange={(e) => updateItem(idx, 'discountPct', e.target.value)}
                           className="w-16 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-danger outline-none"
+                        />
+                      </div>
+
+                      {/* Precio Final c/u */}
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-greige uppercase">P. Final (Q)</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.finalPrice ? Number(item.finalPrice.toFixed(2)) : 0}
+                          onChange={(e) => updateItem(idx, 'finalPrice', e.target.value)}
+                          className="w-20 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-ink outline-none"
+                          title="Edita el precio final o usa el % de descuento"
                         />
                       </div>
 
