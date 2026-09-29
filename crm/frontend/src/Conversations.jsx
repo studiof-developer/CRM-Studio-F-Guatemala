@@ -645,6 +645,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const selectedIdRef = useRef(null); // read (not subscribed) inside load, so selecting a
   // conversation doesn't change load's identity and re-trigger the mount/interval effects
   // below with showLoading=true — that was what made the list flash "Cargando..." and jump.
+  selectedIdRef.current = selectedId;
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   // Loading all 1000+ threads at once was what made the list feel heavy — start with the
@@ -762,13 +763,24 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
-  const loadThread = useCallback(() => {
+  const loadThread = useCallback((overrideId) => {
     // Instagram/Messenger threads (sessionId prefixed "social:") don't live in
     // n8n_chat_histories — SocialThreadPanel below fetches and renders them on its own.
-    if (!selectedId || selectedId.startsWith('social:')) { setThread(null); return; }
-    fetchConversation(selectedId, threadLimit)
-      .then((t) => { setThread(t); setThreadError(null); })
-      .catch((err) => setThreadError(err.message));
+    const currentId = overrideId || selectedIdRef.current || selectedId;
+    if (!currentId || currentId.startsWith('social:')) { setThread(null); return; }
+    fetchConversation(currentId, threadLimit)
+      .then((t) => {
+        // Guard against race condition: only set thread if user is still on this conversation
+        if (selectedIdRef.current === currentId) {
+          setThread(t);
+          setThreadError(null);
+        }
+      })
+      .catch((err) => {
+        if (selectedIdRef.current === currentId) {
+          setThreadError(err.message);
+        }
+      });
   }, [selectedId, threadLimit]);
 
   useEffect(() => {
@@ -948,7 +960,37 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     }
   }
 
-  useLiveEvent('message_changes', loadThread);
+  useEffect(() => {
+    const unsubscribe = onLiveEvent('message_changes', (raw) => {
+      let payload;
+      try { payload = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
+      const activeId = selectedIdRef.current;
+      if (!activeId || activeId.startsWith('social:')) return;
+
+      const activePhone = activeId.split('__')[0];
+      if (payload?.session_id || payload?.phone) {
+        const eventSession = payload.session_id ? String(payload.session_id) : '';
+        const eventPhone = payload.phone ? String(payload.phone) : '';
+
+        const matchesSession = eventSession && (
+          eventSession === activeId ||
+          eventSession.startsWith(`${activePhone}__`) ||
+          activeId.startsWith(`${eventSession}__`)
+        );
+        const matchesPhone = eventPhone && (
+          eventPhone === activePhone ||
+          activeId.startsWith(eventPhone)
+        );
+
+        if (!matchesSession && !matchesPhone) {
+          // Event belongs to another conversation — keep open thread untouched
+          return;
+        }
+      }
+      loadThread();
+    });
+    return () => unsubscribe();
+  }, [loadThread]);
   // Without this, another advisor taking/resolving the ticket you have open right now
   // (or a customer's reply changing SLA state) wouldn't show up until you reselected
   // the thread or reloaded — the list picked it up, but the open detail pane didn't.
@@ -1049,7 +1091,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       }
       if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
       setPendingSends((prev) => ({ ...prev, [targetId]: (prev[targetId] ?? []).filter((p) => p.localId !== entry.localId) }));
-      if (selectedId === targetId) loadThread();
+      if (selectedIdRef.current === targetId) loadThread(targetId);
     } catch (err) {
       setPendingSends((prev) => ({
         ...prev,

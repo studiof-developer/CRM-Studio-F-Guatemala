@@ -255,19 +255,30 @@ async function findCustomerByPhone(phone, lineId) {
 // phone is known, EVERY session_id that ever mentioned it is merged into one thread —
 // keyed by phone instead of session_id. Chats where no phone has been captured yet
 // (very start of onboarding) still fall back to their raw session_id as the key.
+export async function getDefaultLineId() {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1'
+    );
+    if (rows.length && rows[0].id) return rows[0].id;
+  } catch (_) {}
+  return 2;
+}
+
+// Strictly resolves session IDs belonging only to this thread/phone
 async function resolveSessionIds(threadKey) {
-  if (PHONE_RE.test(threadKey)) {
+  const { phone } = parseThreadKey(threadKey);
+  if (phone && PHONE_RE.test(phone)) {
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
-       WHERE session_id LIKE $1 || '%'
-          OR (message->>'type' = 'human' AND trim(message->>'content') = $1)`,
-      [threadKey]
+       WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
+      [phone]
     );
     return rows.map((r) => r.session_id);
   }
   const { rows } = await pool.query(
-    `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1`,
-    [`${threadKey}%`]
+    `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
+    [threadKey]
   );
   return rows.map((r) => r.session_id);
 }
@@ -302,41 +313,31 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     }
   }
 
-  // Default to line 1 if still not resolved
-  if (!lineId) lineId = 1;
+  // Default to active line if still not resolved
+  if (!lineId) lineId = await getDefaultLineId();
 
-  // Resolve session_ids using the indexed session_id prefix scan
+  // Resolve session_ids strictly by phone or threadKey
   let sessionIds = [];
-  if (PHONE_RE.test(phone)) {
+  if (phone && PHONE_RE.test(phone)) {
     const { rows: sRows } = await pool.query(
-      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1 || '%'`,
+      `SELECT DISTINCT session_id FROM n8n_chat_histories 
+       WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
       [phone]
     );
     const allSessions = sRows.map((r) => r.session_id);
-    if (lineId === 1) {
-      sessionIds = allSessions.filter((s) => !s.includes('__line_') || s.includes('__line_1'));
-      if (!sessionIds.length) sessionIds = [`${phone}__line_1`, `${phone}__whatsapp`, phone];
-    } else {
-      sessionIds = allSessions.filter((s) => s.includes(`__line_${lineId}`));
-      if (!sessionIds.length) {
-        try {
-          const { rows: lRows } = await pool.query(
-            `SELECT DISTINCT session_id FROM n8n_chat_histories 
-             WHERE session_id LIKE $1 || '%' 
-               AND (whatsapp_number_id = $2 OR (message->'additional_kwargs'->>'whatsappNumberId')::int = $2)`,
-            [phone, lineId]
-          );
-          if (lRows.length) {
-            sessionIds = lRows.map((r) => r.session_id);
-          }
-        } catch (_) {}
-      }
-      if (!sessionIds.length) sessionIds = [`${phone}__line_${lineId}`];
+    const defaultLine = await getDefaultLineId();
+    sessionIds = allSessions.filter((s) => {
+      if (s.includes(`__line_${lineId}`)) return true;
+      if (!s.includes('__line_') && lineId === defaultLine) return true;
+      return false;
+    });
+    if (!sessionIds.length) {
+      sessionIds = [`${phone}__line_${lineId}`];
     }
   } else {
     const { rows: sRows } = await pool.query(
-      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id LIKE $1`,
-      [`${threadKey}%`]
+      `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
+      [threadKey]
     );
     sessionIds = sRows.map((r) => r.session_id);
     if (!sessionIds.length) sessionIds = [threadKey];
@@ -352,9 +353,9 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
   const messages = messagesDesc.reverse();
   const hasMoreOlder = messagesDesc.length === limit;
 
-  if (!phone && messages.length) {
-    const phoneMsg = messages.find((r) => r.message?.type === 'human' && PHONE_RE.test(String(r.message?.content).trim()));
-    phone = phoneMsg?.message?.content?.trim() ?? null;
+  // Never overwrite or guess customer phone from arbitrary text in human messages
+  if (!phone && threadKey && PHONE_RE.test(threadKey)) {
+    phone = threadKey;
   }
   const customer = phone ? (await findCustomerByPhone(phone, lineId)).customer : null;
   return { messages, customer, phone, lineId, sessionIds, hasMoreOlder };
@@ -396,7 +397,7 @@ router.post('/', async (req, res, next) => {
       );
       if (assignedLines.length) lineId = assignedLines[0].whatsapp_number_id;
     }
-    if (!lineId) lineId = 1;
+    if (!lineId) lineId = await getDefaultLineId();
 
     try {
       await whatsapp.sendTemplate(phone, OUTREACH_TEMPLATE_NAME, OUTREACH_TEMPLATE_LANG, [], undefined, undefined, undefined, lineId);
@@ -486,23 +487,16 @@ router.get('/', async (req, res, next) => {
             OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
           )
       ),
-      phone_by_session AS (
-        SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
-        FROM readable
-        WHERE message->>'type' = 'human'
-          AND trim(message->>'content') ~ '^[0-9]{7,15}$'
-        ORDER BY session_id, id ASC
+      default_line AS (
+        SELECT id FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1
       ),
-      -- Once a phone is known, it — not the raw session_id — is the thread's identity,
-      -- so every session_id that ever mentioned it collapses into one row. Production
-      -- session_ids are already the real wa_id (phone, up to full E.164 length with
-      -- country code), so that always wins over the old "first digit-looking message
-      -- in the transcript" heuristic below, which exists only for legacy test sessions
-      -- with random session_ids and would otherwise misfire on the DPI in the current
-      -- intake flow.
+      -- Group messages strictly by phone + line_id when session_id is phone-based,
+      -- or keep individual session_id for non-phone sessions. We NEVER parse message content
+      -- to guess a phone number (e.g. DPI, product SKU, order number), which previously caused
+      -- multiple customer conversations to combine into one thread.
       threaded AS (
         SELECT r.id, r.message, r.created_at,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
+               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE NULL END AS phone,
                COALESCE(
                  CASE
                    WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
@@ -510,8 +504,10 @@ router.get('/', async (req, res, next) => {
                  END,
                  CASE
                    WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]::int
-                   ELSE 1
-                 END
+                   ELSE NULL
+                 END,
+                 (SELECT id FROM default_line),
+                 1
                ) AS line_id,
                CASE
                  WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
@@ -522,13 +518,14 @@ router.get('/', async (req, res, next) => {
                      END,
                      CASE
                        WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]
-                       ELSE '1'
-                     END
+                       ELSE NULL
+                     END,
+                     (SELECT id::text FROM default_line),
+                     '1'
                    )
-                 ELSE COALESCE(p.phone, r.session_id)
+                 ELSE r.session_id
                END AS thread_key
         FROM readable r
-        LEFT JOIN phone_by_session p USING (session_id)
       ),
       last_msg AS (
         SELECT DISTINCT ON (thread_key) thread_key, phone, line_id, id, message, created_at
@@ -1160,7 +1157,7 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       `SELECT session_id FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT 1`,
       [sessionIds]
     );
-    const targetSessionId = latest[0]?.session_id || (lineId ? `${phone}__line_${lineId}` : sessionIds[0]);
+    const targetSessionId = (phone && lineId) ? `${phone}__line_${lineId}` : (latest[0]?.session_id || sessionIds[0]);
 
     const windowState = await getConversationWindow(sessionIds, phone, lineId);
 
@@ -1233,7 +1230,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       `SELECT session_id FROM n8n_chat_histories WHERE session_id = ANY($1) ORDER BY id DESC LIMIT 1`,
       [sessionIds]
     );
-    const targetSessionId = latest[0]?.session_id || (lineId ? `${phone}__line_${lineId}` : sessionIds[0]);
+    const targetSessionId = (phone && lineId) ? `${phone}__line_${lineId}` : (latest[0]?.session_id || sessionIds[0]);
 
     const kind = MIME_KIND(req.file.mimetype);
 
