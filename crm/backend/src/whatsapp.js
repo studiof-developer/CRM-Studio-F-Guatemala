@@ -208,11 +208,12 @@ export async function deleteTemplate(name, lineId) {
   return graphFetch(`${creds.wabaId}/message_templates?name=${encodeURIComponent(name)}`, { method: 'DELETE' }, creds.token);
 }
 
-export async function uploadMedia(buffer, mimeType, toPhone, lineId) {
+export async function uploadMedia(buffer, mimeType, toPhone, lineId, filename) {
   const creds = await getActiveCredentials(toPhone, lineId);
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
-  form.append('file', new Blob([buffer], { type: mimeType }));
+  const safeFilename = filename || (mimeType.startsWith('image/') ? 'image.jpg' : (mimeType.startsWith('audio/') ? 'audio.mp3' : 'document.pdf'));
+  form.append('file', new Blob([buffer], { type: mimeType }), safeFilename);
   form.append('type', mimeType);
   const { id } = await graphFetch(`${creds.phoneNumberId}/media`, { method: 'POST', body: form }, creds.token, UPLOAD_TIMEOUT_MS);
   return id;

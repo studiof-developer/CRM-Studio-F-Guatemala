@@ -3,7 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import ticketsRouter from './routes/tickets.js';
-import conversationsRouter, { recoverOrphanedSends } from './routes/conversations.js';
+import conversationsRouter, { recoverOrphanedSends, flushAllOpenQueuedMessages } from './routes/conversations.js';
 import customersRouter from './routes/customers.js';
 import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
@@ -121,8 +121,10 @@ startListener();
 // ponytail: fine on one instance — two would both sweep and could double-send the
 // same row. Needs a SELECT ... FOR UPDATE SKIP LOCKED claim before scaling out.
 setTimeout(() => {
+  flushAllOpenQueuedMessages().catch((err) => console.error('flushAllOpenQueuedMessages failed', err));
   recoverOrphanedSends().catch((err) => console.error('recoverOrphanedSends failed', err));
   setInterval(() => {
+    flushAllOpenQueuedMessages().catch((err) => console.error('flushAllOpenQueuedMessages failed', err));
     recoverOrphanedSends().catch((err) => console.error('recoverOrphanedSends failed', err));
   }, 5 * 60 * 1000);
 }, 15000);

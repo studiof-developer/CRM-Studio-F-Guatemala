@@ -71,8 +71,15 @@ const CHANNEL_FILTER_OPTIONS = [
   { value: '', label: 'Todas las redes' },
   { value: 'whatsapp', label: 'WhatsApp', icon: channelFilterIcon('whatsapp') },
   { value: 'instagram', label: 'Instagram', icon: channelFilterIcon('instagram') },
-  { value: 'messenger', label: 'Messenger', icon: channelFilterIcon('messenger') },
 ];
+
+function isSameThread(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const pA = a.split('__')[0];
+  const pB = b.split('__')[0];
+  return Boolean(pA && pB && pA === pB);
+}
 
 // Turns a message into what its quote preview should show — a document shows its
 // filename (not a generic "Adjunto"), an image shows nothing here since the preview
@@ -771,13 +778,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     fetchConversation(currentId, threadLimit)
       .then((t) => {
         // Guard against race condition: only set thread if user is still on this conversation
-        if (selectedIdRef.current === currentId) {
+        if (isSameThread(selectedIdRef.current, currentId)) {
           setThread(t);
           setThreadError(null);
         }
       })
       .catch((err) => {
-        if (selectedIdRef.current === currentId) {
+        if (isSameThread(selectedIdRef.current, currentId)) {
           setThreadError(err.message);
         }
       });
@@ -961,6 +968,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   }
 
   useEffect(() => {
+    let timer = null;
     const unsubscribe = onLiveEvent('message_changes', (raw) => {
       let payload;
       try { payload = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
@@ -968,28 +976,28 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       if (!activeId || activeId.startsWith('social:')) return;
 
       const activePhone = activeId.split('__')[0];
-      if (payload?.session_id || payload?.phone) {
-        const eventSession = payload.session_id ? String(payload.session_id) : '';
-        const eventPhone = payload.phone ? String(payload.phone) : '';
+      const eventSession = payload?.session_id ? String(payload.session_id) : '';
+      const eventPhone = payload?.phone ? String(payload.phone) : (eventSession ? eventSession.split('__')[0] : '');
 
-        const matchesSession = eventSession && (
-          eventSession === activeId ||
-          eventSession.startsWith(`${activePhone}__`) ||
-          activeId.startsWith(`${eventSession}__`)
-        );
-        const matchesPhone = eventPhone && (
-          eventPhone === activePhone ||
-          activeId.startsWith(eventPhone)
-        );
+      if (eventSession || eventPhone) {
+        const matchesSession = eventSession && isSameThread(eventSession, activeId);
+        const matchesPhone = eventPhone && eventPhone === activePhone;
 
         if (!matchesSession && !matchesPhone) {
           // Event belongs to another conversation — keep open thread untouched
           return;
         }
       }
-      loadThread();
+
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        loadThread();
+      }, 200);
     });
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, [loadThread]);
   // Without this, another advisor taking/resolving the ticket you have open right now
   // (or a customer's reply changing SLA state) wouldn't show up until you reselected
@@ -1091,7 +1099,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       }
       if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
       setPendingSends((prev) => ({ ...prev, [targetId]: (prev[targetId] ?? []).filter((p) => p.localId !== entry.localId) }));
-      if (selectedIdRef.current === targetId) loadThread(targetId);
+      if (isSameThread(selectedIdRef.current, targetId)) loadThread();
     } catch (err) {
       setPendingSends((prev) => ({
         ...prev,

@@ -107,16 +107,24 @@ async function markSendFailed(messageId, err) {
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function getConversationWindow(sessionIds, phone, lineId) {
-  if (sessionIds?.length) {
+  let lastInboundAt = null;
+  if (phone && PHONE_RE.test(phone)) {
+    const { rows } = await pool.query(
+      `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+       WHERE (session_id = $1 OR session_id LIKE $1 || '__%' OR ($2::text[] IS NOT NULL AND session_id = ANY($2)))
+         AND message->>'type' = 'human'`,
+      [phone, sessionIds?.length ? sessionIds : null]
+    );
+    lastInboundAt = rows[0]?.last_inbound_at ?? null;
+  } else if (sessionIds?.length) {
     const { rows } = await pool.query(
       `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
        WHERE session_id = ANY($1) AND message->>'type' = 'human'`,
       [sessionIds]
     );
-    const lastInboundAt = rows[0]?.last_inbound_at ?? null;
-    return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
+    lastInboundAt = rows[0]?.last_inbound_at ?? null;
   }
-  return { lastInboundAt: null, isOpen: false };
+  return { lastInboundAt, isOpen: !!lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() < WINDOW_MS };
 }
 
 // One template per dormant stretch — the advisor writing five lines into a dead chat
@@ -325,14 +333,13 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
       [phone]
     );
     const allSessions = sRows.map((r) => r.session_id);
-    const defaultLine = await getDefaultLineId();
     sessionIds = allSessions.filter((s) => {
       if (s.includes(`__line_${lineId}`)) return true;
-      if (!s.includes('__line_') && lineId === defaultLine) return true;
+      if (!s.includes('__line_')) return true;
       return false;
     });
     if (!sessionIds.length) {
-      sessionIds = [`${phone}__line_${lineId}`];
+      sessionIds = [`${phone}__line_${lineId}`, phone];
     }
   } else {
     const { rows: sRows } = await pool.query(
@@ -1289,7 +1296,7 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       sendReactivationTemplate(targetSessionId, sessionIds, phone, windowState.lastInboundAt, lineId)
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
     } else {
-      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, phone, lineId)
+      whatsapp.uploadMedia(req.file.buffer, req.file.mimetype, phone, lineId, req.file.originalname)
         .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined, lineId))
         .then((result) => handleSendResult(inserted[0].id, result))
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
@@ -1350,7 +1357,7 @@ async function deliverStoredMessage(row, phone, attachment, lineId) {
   let result;
   if (attachment) {
     const buffer = await fs.promises.readFile(attachment.file_path);
-    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type, phone, targetLineId);
+    const mediaId = await whatsapp.uploadMedia(buffer, attachment.mime_type, phone, targetLineId, attachment.filename);
     result = await whatsapp.sendMedia(phone, attachment.kind, mediaId, attachment.filename, row.message.content || undefined, targetLineId);
   } else {
     result = await whatsapp.sendText(phone, row.message.content, undefined, targetLineId);
@@ -1406,6 +1413,22 @@ export async function flushQueuedMessages(rawSessionId) {
     }
   }
   await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionIds[0]]);
+}
+
+export async function flushAllOpenQueuedMessages() {
+  try {
+    const { rows: queued } = await pool.query(
+      `SELECT DISTINCT session_id FROM n8n_chat_histories
+       WHERE message->'additional_kwargs'->>'status' = 'queued'
+         AND created_at > now() - interval '24 hours'
+       LIMIT 50`
+    );
+    for (const r of queued) {
+      await flushQueuedMessages(r.session_id).catch((e) => console.error('flushQueuedMessages failed', e));
+    }
+  } catch (err) {
+    console.error('flushAllOpenQueuedMessages error', err);
+  }
 }
 
 // Recovers sends orphaned by a restart. The real WhatsApp call happens in a background
