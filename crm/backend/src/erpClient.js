@@ -54,6 +54,10 @@ function get(path) {
   });
 }
 
+export function isErpConfigured() {
+  return Boolean(API_KEY && PINNED_FINGERPRINT);
+}
+
 export async function fetchErpCustomers() {
   const body = await get('/api/data/cliente-resumen-crm');
   return body?.data ?? [];
@@ -62,4 +66,13 @@ export async function fetchErpCustomers() {
 export async function fetchErpInventory() {
   const body = await get('/api/data/existencia');
   return body?.data ?? [];
+}
+
+export async function fetchErpPathSafe(path) {
+  try {
+    const data = await get(path);
+    return { ok: true, path, data };
+  } catch (err) {
+    return { ok: false, path, error: err.message };
+  }
 }

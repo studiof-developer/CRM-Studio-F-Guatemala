@@ -500,6 +500,13 @@ export async function fetchCustomerQuotes(customerId) {
   return res.json();
 }
 
+export async function inspectErp(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await apiFetch(`/api/products/erp-inspect${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al consultar el ERP');
+  return res.json();
+}
+
 export async function fetchQuickReplies(lineId) {
   const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
   const res = await apiFetch(`/api/quick-replies${params}`);

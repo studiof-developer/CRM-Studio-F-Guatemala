@@ -6,6 +6,7 @@ import { parse } from 'csv-parse/sync';
 import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
 import { PRODUCT_IMAGES_DIR } from '../productImageSync.js';
+import { isErpConfigured, fetchErpPathSafe } from '../erpClient.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -34,6 +35,148 @@ router.get('/', async (req, res, next) => {
     res.json(rows);
   } catch (err) { next(err); }
 });
+
+// Endpoint de diagnóstico e inspección del ERP para administradores/supervisores
+router.get('/erp-inspect', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    if (!isErpConfigured()) {
+      return res.json({
+        configured: false,
+        message: 'Las credenciales del ERP (ERP_API_KEY / ERP_CERT_FINGERPRINT) no están configuradas en este entorno.',
+      });
+    }
+
+    // 1. Si se solicita sondear múltiples endpoints candidatos
+    if (req.query.probe === 'endpoints' || req.query.testEndpoints === 'true') {
+      const candidates = [
+        '/api/data/existencia',
+        '/api/data/cliente-resumen-crm',
+        '/api/data/articulos',
+        '/api/data/articulo',
+        '/api/data/productos',
+        '/api/data/producto',
+        '/api/data/precios',
+        '/api/data/precio',
+        '/api/data/lista-precios',
+        '/api/data/listas-precios',
+        '/api/data/catalogo',
+        '/api/data/referencias',
+        '/api/data/estilos',
+        '/api/data',
+        '/api',
+      ];
+
+      const probeResults = [];
+      for (const p of candidates) {
+        const probeRes = await fetchErpPathSafe(p);
+        if (probeRes.ok) {
+          const raw = probeRes.data;
+          const rows = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : null);
+          const sample = rows ? rows[0] : raw;
+          probeResults.push({
+            path: p,
+            ok: true,
+            hasData: Boolean(rows ? rows.length : sample),
+            rowCount: rows ? rows.length : (sample ? 1 : 0),
+            columns: sample && typeof sample === 'object' ? Object.keys(sample) : [],
+            sample: sample ? [sample] : [],
+          });
+        } else {
+          probeResults.push({
+            path: p,
+            ok: false,
+            error: probeRes.error,
+          });
+        }
+      }
+
+      return res.json({
+        configured: true,
+        probedAt: new Date().toISOString(),
+        results: probeResults,
+      });
+    }
+
+    // 2. Consulta y análisis de un endpoint específico (por defecto /api/data/existencia)
+    const targetPath = (req.query.path || '/api/data/existencia').trim();
+    const erpRes = await fetchErpPathSafe(targetPath);
+
+    if (!erpRes.ok) {
+      return res.status(502).json({
+        configured: true,
+        ok: false,
+        path: targetPath,
+        error: erpRes.error,
+      });
+    }
+
+    const raw = erpRes.data;
+    const rows = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+
+    const columnsSet = new Set();
+    for (const r of rows.slice(0, 100)) {
+      if (r && typeof r === 'object') {
+        Object.keys(r).forEach((k) => columnsSet.add(k));
+      }
+    }
+    const columns = Array.from(columnsSet);
+
+    // Búsqueda de referencia o término (ej: 'S176012A' o 'S')
+    const q = req.query.q?.trim().toLowerCase();
+    const matches = [];
+    const columnMatchCounts = {};
+
+    if (q) {
+      for (const r of rows) {
+        if (!r || typeof r !== 'object') continue;
+        const matchedCols = [];
+        for (const [k, v] of Object.entries(r)) {
+          if (v !== null && v !== undefined && String(v).toLowerCase().includes(q)) {
+            matchedCols.push(k);
+            columnMatchCounts[k] = (columnMatchCounts[k] || 0) + 1;
+          }
+        }
+        if (matchedCols.length > 0) {
+          matches.push({
+            matchedColumns: matchedCols,
+            data: r,
+          });
+          if (matches.length >= 30) break;
+        }
+      }
+    }
+
+    // Análisis automático de columnas identificadoras y de precio
+    const identifierCandidates = columns.filter((c) => /id|cod|sku|ref|estilo|articulo|producto|barras/i.test(c));
+    const priceCandidates = columns.filter((c) => /precio|valor|costo|pvp|tarifa|monto/i.test(c));
+    const descriptionCandidates = columns.filter((c) => /desc|nombre|detalle|prenda/i.test(c));
+
+    res.json({
+      configured: true,
+      ok: true,
+      path: targetPath,
+      totalRows: rows.length,
+      columns,
+      fieldAnalysis: {
+        identifierCandidates,
+        priceCandidates,
+        descriptionCandidates,
+      },
+      search: q
+        ? {
+            query: req.query.q,
+            totalFound: matches.length,
+            columnMatchCounts,
+            matches,
+          }
+        : null,
+      sampleRows: rows.slice(0, 2),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // Serves a file straight out of the SFTP drop-off folder (see productImageSync.js) —
 // path.basename strips any directory component a crafted filename might carry, so this

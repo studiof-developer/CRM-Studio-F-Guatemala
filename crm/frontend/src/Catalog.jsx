@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, PackageX, Search, ImageOff } from 'lucide-react';
+import { Upload, PackageX, Search, ImageOff, Database } from 'lucide-react';
 import { fetchProducts, importProducts, productImageUrl } from './api.js';
 import Badge from './components/Badge.jsx';
 import Pagination from './components/Pagination.jsx';
 import Select from './components/Select.jsx';
 import { Button } from './components/ui.jsx';
+import ErpInspectModal from './components/ErpInspectModal.jsx';
 
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 50];
 
@@ -18,6 +19,7 @@ export default function Catalog() {
   const [category, setCategory] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [showErpModal, setShowErpModal] = useState(false);
   const fileInput = useRef(null);
 
   function load() {
@@ -95,7 +97,10 @@ export default function Catalog() {
               {products.length} productos · lo que el agente ofrece viene de aquí.
             </p>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setShowErpModal(true)}>
+              <Database size={16} /> Diagnóstico ERP
+            </Button>
             <input ref={fileInput} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
             <Button onClick={() => fileInput.current.click()} disabled={importing}>
               <Upload size={16} /> {importing ? 'Importando…' : 'Importar CSV'}
@@ -213,6 +218,7 @@ export default function Catalog() {
         />
       </div>
       </div>
+      {showErpModal && <ErpInspectModal onClose={() => setShowErpModal(false)} />}
     </div>
   );
 }
