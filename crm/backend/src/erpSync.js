@@ -24,7 +24,7 @@ async function bulkUpsert(table, columns, conflictColumn, updateColumns, rows, m
     }).join(',');
     await pool.query(
       `INSERT INTO ${table} (${columns.join(',')}) VALUES ${placeholders}
-       ON CONFLICT (${conflictColumn}) DO UPDATE SET ${updateColumns.map((c) => `${c} = EXCLUDED.${c}`).join(', ')}`,
+       ON CONFLICT (${conflictColumn}) DO UPDATE SET ${updateColumns.map((c) => c.includes('=') ? c : `${c} = EXCLUDED.${c}`).join(', ')}`,
       values
     );
   }
@@ -79,6 +79,8 @@ async function syncErpInventory() {
     const skuKey = r.CodBarras || `${r.Referencia}_${r.Talla || 'U'}_${r.Color || r.ColorSF || 'U'}`;
     let p = bySku.get(skuKey);
     if (!p) {
+      const priceVal = Number(r.Precio || r.PrecioVenta || r.PrecioPublico || r.PrecioLista || r.Valor || r.PVP || r.PrecioFinal || r.PrecioUnitario);
+      const price = Number.isFinite(priceVal) && priceVal > 0 ? priceVal : null;
       p = {
         sku: skuKey,
         reference: r.Referencia || null,
@@ -89,6 +91,7 @@ async function syncErpInventory() {
         line: r.Linea || null,
         size: r.Talla || null,
         color: r.Color || r.ColorSF || null,
+        price,
         stock: 0,
       };
       bySku.set(skuKey, p);
@@ -101,9 +104,12 @@ async function syncErpInventory() {
     'products',
     ['sku', 'reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'price', 'discount_pct', 'stock_quantity', 'active'],
     'sku',
-    ['reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'stock_quantity'],
+    [
+      'reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'stock_quantity',
+      'price = COALESCE(EXCLUDED.price, products.price)',
+    ],
     products,
-    (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, null, 0, p.stock, true]
+    (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, p.price, 0, p.stock, true]
   );
   return products.length;
 }

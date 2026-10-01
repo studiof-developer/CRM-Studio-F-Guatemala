@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { X, Search, Database, RefreshCw, CheckCircle2, AlertCircle, ListFilter, Server, Image } from 'lucide-react';
-import { inspectErp, triggerSyncImages, triggerSyncErp } from '../api.js';
+import { inspectErp, triggerSyncImages, triggerSyncErp, productImageUrl } from '../api.js';
 import { Button } from './ui.jsx';
 
 export default function ErpInspectModal({ onClose }) {
   const [query, setQuery] = useState('S740866');
+  const [endpointPath, setEndpointPath] = useState('/api/data/existencia');
   const [loading, setLoading] = useState(false);
   const [probing, setProbing] = useState(false);
   const [syncingImages, setSyncingImages] = useState(false);
@@ -14,12 +15,13 @@ export default function ErpInspectModal({ onClose }) {
   const [probeResult, setProbeResult] = useState(null);
   const [error, setError] = useState(null);
 
-  async function handleSearch(e) {
-    if (e) e.preventDefault();
+  async function handleSearch(e, customPath) {
+    if (e && e.preventDefault) e.preventDefault();
     setLoading(true);
     setError(null);
+    const path = (customPath || endpointPath || '/api/data/existencia').trim();
     try {
-      const data = await inspectErp({ q: query.trim() });
+      const data = await inspectErp({ q: query.trim(), path });
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -69,20 +71,30 @@ export default function ErpInspectModal({ onClose }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Controls */}
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <form onSubmit={handleSearch} className="flex flex-1 items-center gap-2">
+            <form onSubmit={handleSearch} className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="relative flex-1">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Ej. S176012A o letra S..."
+                  placeholder="Referencia (ej. S740866, S740954A)..."
                   className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none transition focus:border-primary"
+                />
+              </div>
+              <div className="w-full sm:w-56">
+                <input
+                  type="text"
+                  value={endpointPath}
+                  onChange={(e) => setEndpointPath(e.target.value)}
+                  placeholder="/api/data/existencia"
+                  className="w-full rounded-lg border border-border bg-background py-2 px-3 font-mono text-xs outline-none transition focus:border-primary"
+                  title="Endpoint o vista del ERP a consultar"
                 />
               </div>
               <Button type="submit" disabled={loading}>
                 {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-                Consultar en ERP
+                Consultar
               </Button>
             </form>
 
@@ -192,9 +204,15 @@ export default function ErpInspectModal({ onClose }) {
                 {probeResult.results.map((res) => (
                   <div
                     key={res.path}
-                    className={`rounded-lg border p-3 text-xs ${
+                    onClick={() => {
+                      if (res.ok && res.hasData) {
+                        setEndpointPath(res.path);
+                        handleSearch(null, res.path);
+                      }
+                    }}
+                    className={`rounded-lg border p-3 text-xs transition ${
                       res.ok && res.hasData
-                        ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                        ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-500 hover:shadow-xs'
                         : 'border-border bg-muted/20 opacity-75'
                     }`}
                   >
@@ -205,7 +223,7 @@ export default function ErpInspectModal({ onClose }) {
                           ? 'bg-emerald-600 text-white'
                           : 'bg-muted text-muted-foreground'
                       }`}>
-                        {res.ok ? (res.hasData ? `${res.rowCount} filas` : '200 OK (vacío)') : 'No disponible'}
+                        {res.ok ? (res.hasData ? `${res.rowCount} filas (clic para ver)` : '200 OK (vacío)') : 'No disponible'}
                       </span>
                     </div>
                     {res.columns && res.columns.length > 0 && (
@@ -287,7 +305,7 @@ export default function ErpInspectModal({ onClose }) {
                   {result.images.match ? (
                     <div className="flex items-center gap-4 rounded-xl border border-emerald-300 bg-emerald-50/50 p-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
                       <img
-                        src={result.images.match.url}
+                        src={productImageUrl(result.images.match.url)}
                         alt={result.images.match.filename}
                         className="h-20 w-20 rounded-lg object-cover border border-border shadow-sm bg-white"
                       />

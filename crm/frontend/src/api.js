@@ -313,10 +313,12 @@ export function attachmentDownloadUrl(id) {
   return `${attachmentUrl(id)}?download=1`;
 }
 
-// products.image_url already comes back as an API-relative path (e.g.
-// /api/products/images/12345.jpg) — this just adds the host, same as attachmentUrl above.
 export function productImageUrl(imageUrl) {
-  return imageUrl ? `${API_BASE}${imageUrl}` : null;
+  if (!imageUrl) return null;
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
+  const base = (API_BASE || '').replace(/\/+$/, '');
+  const p = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+  return `${base}${p}`;
 }
 
 export async function fetchCampaignTemplates(lineId) {

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Trash2, X, Calculator, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
 import { generateQuoteCardBlob } from '../lib/quoteImageGenerator.js';
-import { createQuote, fetchProducts } from '../api.js';
+import { createQuote, fetchProducts, productImageUrl } from '../api.js';
 import { showSuccess, showError } from './Toast.jsx';
 
 export default function QuoteModal({
@@ -317,7 +317,7 @@ export default function QuoteModal({
                       <div className="flex items-center gap-3 min-w-0">
                         {prod.image_url ? (
                           <img
-                            src={prod.image_url}
+                            src={productImageUrl(prod.image_url)}
                             alt=""
                             className="h-11 w-11 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs"
                           />
@@ -399,7 +399,7 @@ export default function QuoteModal({
                     <div className="flex items-center gap-2.5 min-w-[200px] flex-1">
                       {item.imageUrl ? (
                         <img
-                          src={item.imageUrl}
+                          src={productImageUrl(item.imageUrl)}
                           alt=""
                           className="h-10 w-10 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs"
                         />
