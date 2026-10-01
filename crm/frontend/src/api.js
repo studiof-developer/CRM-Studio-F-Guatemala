@@ -507,6 +507,18 @@ export async function inspectErp(params = {}) {
   return res.json();
 }
 
+export async function triggerSyncImages() {
+  const res = await apiFetch('/api/products/sync-images', { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al sincronizar fotos');
+  return res.json();
+}
+
+export async function triggerSyncErp() {
+  const res = await apiFetch('/api/products/sync-erp', { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al sincronizar ERP');
+  return res.json();
+}
+
 export async function fetchQuickReplies(lineId) {
   const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
   const res = await apiFetch(`/api/quick-replies${params}`);

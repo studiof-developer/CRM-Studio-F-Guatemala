@@ -53,16 +53,19 @@ export default function QuoteModal({
     const q = search.trim().toLowerCase();
     if (!q || q.length < 2) return [];
 
+    const matchesFilter = (p) =>
+      (p.reference || '').toLowerCase().includes(q) ||
+      (p.sku || '').toLowerCase().includes(q) ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.color || '').toLowerCase().includes(q) ||
+      (p.barcode || '').toLowerCase().includes(q);
+
     // Prioriza resultados directos de la base de datos que coincidan con lo escrito
-    const serverMatches = serverResults.filter(
-      (p) => (p.sku || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q)
-    );
-    if (serverMatches.length > 0) return serverMatches.slice(0, 8);
+    const serverMatches = serverResults.filter(matchesFilter);
+    if (serverMatches.length > 0) return serverMatches.slice(0, 10);
 
     // Fallback al catálogo precargado en memoria (también filtrando estrictamente por q)
-    return catalog
-      .filter((p) => (p.sku || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q))
-      .slice(0, 8);
+    return catalog.filter(matchesFilter).slice(0, 10);
   }, [search, serverResults, catalog]);
 
   function addItem(product) {
@@ -72,10 +75,13 @@ export default function QuoteModal({
 
     const newItem = {
       productId: product.id,
-      sku: product.sku,
+      sku: product.reference || product.sku,
+      reference: product.reference || null,
+      barcode: product.barcode || null,
       name: product.name,
       size: product.size || '',
       color: product.color || '',
+      imageUrl: product.image_url || null,
       unitPrice,
       discountPct,
       finalPrice,
@@ -306,20 +312,40 @@ export default function QuoteModal({
                       key={prod.id}
                       type="button"
                       onClick={() => addItem(prod)}
-                      className="flex w-full items-center justify-between p-3 text-left hover:bg-accent-soft transition-colors"
+                      className="flex w-full items-center justify-between p-3 text-left hover:bg-accent-soft transition-colors gap-3"
                     >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-ink">{prod.sku}</span>
-                          {Number(prod.discount_pct) > 0 && (
-                            <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
-                              -{Number(prod.discount_pct)}%
+                      <div className="flex items-center gap-3 min-w-0">
+                        {prod.image_url ? (
+                          <img
+                            src={prod.image_url}
+                            alt=""
+                            className="h-11 w-11 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs"
+                          />
+                        ) : (
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-black/5 dark:bg-white/5 text-greige">
+                            <ImageIcon size={18} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-ink truncate">
+                              {prod.reference || prod.sku}
                             </span>
-                          )}
+                            {prod.reference && prod.sku && prod.sku !== prod.reference && (
+                              <span className="text-[10px] font-mono text-greige truncate">({prod.sku})</span>
+                            )}
+                            {Number(prod.discount_pct) > 0 && (
+                              <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger shrink-0">
+                                -{Number(prod.discount_pct)}%
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-greige-ink truncate">
+                            {prod.name} {prod.color ? `· ${prod.color}` : ''} {prod.size ? `· Talla ${prod.size}` : ''}
+                          </p>
                         </div>
-                        <p className="text-xs text-greige-ink">{prod.name} {prod.color ? `· ${prod.color}` : ''}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <span className="font-bold text-sm text-ink">Q{Number(prod.price || 0).toFixed(2)}</span>
                         <p className="text-[11px] text-greige">Stock: {prod.stock_quantity ?? '—'}</p>
                       </div>
@@ -370,21 +396,30 @@ export default function QuoteModal({
               <div className="rounded-xl border border-line bg-paper overflow-hidden shadow-xs divide-y divide-line-soft">
                 {items.map((item, idx) => (
                   <div key={idx} className="flex flex-wrap items-center justify-between gap-3 p-3.5 hover:bg-black/[0.01]">
-                    <div className="min-w-[180px] flex-1">
-                      <input
-                        type="text"
-                        value={item.sku}
-                        onChange={(e) => updateItem(idx, 'sku', e.target.value)}
-                        className="font-bold text-xs text-ink bg-transparent outline-none w-full"
-                        placeholder="SKU"
-                      />
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) => updateItem(idx, 'name', e.target.value)}
-                        className="text-xs text-greige-ink bg-transparent outline-none w-full"
-                        placeholder="Nombre de prenda"
-                      />
+                    <div className="flex items-center gap-2.5 min-w-[200px] flex-1">
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt=""
+                          className="h-10 w-10 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs"
+                        />
+                      ) : null}
+                      <div className="flex-1 min-w-0">
+                        <input
+                          type="text"
+                          value={item.sku}
+                          onChange={(e) => updateItem(idx, 'sku', e.target.value)}
+                          className="font-bold text-xs text-ink bg-transparent outline-none w-full"
+                          placeholder="Referencia / SKU"
+                        />
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItem(idx, 'name', e.target.value)}
+                          className="text-xs text-greige-ink bg-transparent outline-none w-full truncate"
+                          placeholder="Nombre de prenda"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">

@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { X, Search, Database, RefreshCw, CheckCircle2, AlertCircle, ListFilter, Server } from 'lucide-react';
-import { inspectErp } from '../api.js';
+import { X, Search, Database, RefreshCw, CheckCircle2, AlertCircle, ListFilter, Server, Image } from 'lucide-react';
+import { inspectErp, triggerSyncImages, triggerSyncErp } from '../api.js';
 import { Button } from './ui.jsx';
 
 export default function ErpInspectModal({ onClose }) {
-  const [query, setQuery] = useState('S176012A');
+  const [query, setQuery] = useState('S740866');
   const [loading, setLoading] = useState(false);
   const [probing, setProbing] = useState(false);
+  const [syncingImages, setSyncingImages] = useState(false);
+  const [syncingErp, setSyncingErp] = useState(false);
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState(null);
   const [result, setResult] = useState(null);
   const [probeResult, setProbeResult] = useState(null);
   const [error, setError] = useState(null);
@@ -88,6 +91,68 @@ export default function ErpInspectModal({ onClose }) {
               Probar Endpoints
             </Button>
           </div>
+
+          {/* Sync actions bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs">
+            <span className="text-muted-foreground font-medium">Acciones bajo demanda en servidor:</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setSyncingImages(true);
+                  setError(null);
+                  try {
+                    await triggerSyncImages();
+                    setSyncSuccessMsg('¡Sincronización de fotos SFTP iniciada! Enlazando fotos a productos.');
+                    setTimeout(handleSearch, 1500);
+                  } catch (e) {
+                    setError(e.message);
+                  } finally {
+                    setSyncingImages(false);
+                  }
+                }}
+                disabled={syncingImages}
+              >
+                <Image size={13} className={syncingImages ? 'animate-spin' : ''} />
+                {syncingImages ? 'Sincronizando fotos...' : 'Sincronizar Fotos SFTP'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setSyncingErp(true);
+                  setError(null);
+                  try {
+                    await triggerSyncErp();
+                    setSyncSuccessMsg('¡Sincronización de inventario ERP iniciada en segundo plano!');
+                  } catch (e) {
+                    setError(e.message);
+                  } finally {
+                    setSyncingErp(false);
+                  }
+                }}
+                disabled={syncingErp}
+              >
+                <RefreshCw size={13} className={syncingErp ? 'animate-spin' : ''} />
+                {syncingErp ? 'Sincronizando ERP...' : 'Sincronizar Inventario ERP'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Sync success notice */}
+          {syncSuccessMsg && (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} />
+                <span>{syncSuccessMsg}</span>
+              </div>
+              <button onClick={() => setSyncSuccessMsg(null)} className="text-muted-foreground hover:text-foreground">
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Error notice */}
           {error && (
@@ -205,6 +270,50 @@ export default function ErpInspectModal({ onClose }) {
                   })}
                 </div>
               </div>
+
+              {/* Matching SFTP Photo */}
+              {result.images && (
+                <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Image size={16} className="text-primary" />
+                      Foto del producto (SFTP / product-images):
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {result.images.totalFilesOnServer} fotos en servidor SFTP
+                    </span>
+                  </div>
+
+                  {result.images.match ? (
+                    <div className="flex items-center gap-4 rounded-xl border border-emerald-300 bg-emerald-50/50 p-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                      <img
+                        src={result.images.match.url}
+                        alt={result.images.match.filename}
+                        className="h-20 w-20 rounded-lg object-cover border border-border shadow-sm bg-white"
+                      />
+                      <div className="text-xs space-y-1">
+                        <p className="font-semibold text-emerald-800 dark:text-emerald-300">
+                          ¡Foto encontrada por coincidencia de nombre/referencia!
+                        </p>
+                        <p className="font-mono text-muted-foreground">{result.images.match.filename}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Puntaje de similitud en cadena:{' '}
+                          <span className="font-bold text-foreground">{result.images.match.score} pts</span>
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                      No se encontró ninguna foto en el SFTP cuyo nombre coincida con "{query}".
+                      {result.images.sampleFiles && result.images.sampleFiles.length > 0 && (
+                        <p className="mt-1.5 font-mono text-[11px] text-muted-foreground/80">
+                          Nombres de muestra en SFTP: {result.images.sampleFiles.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Matches found */}
               {result.search && (

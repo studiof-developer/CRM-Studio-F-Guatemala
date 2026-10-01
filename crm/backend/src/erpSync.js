@@ -70,24 +70,28 @@ async function syncErpInventory() {
   const rows = await fetchErpInventory();
 
   // One existencia row per sucursal — collapsed here into one row per sellable item
-  // (CodBarras, the real per-size-per-color barcode), summing available stock across
+  // (CodBarras or Referencia+Talla+Color), summing available stock across
   // every sucursal that isn't the defects warehouse. Name/line/size/color are the same
   // across every row for a given CodBarras, so the first one seen is as good as any.
   const bySku = new Map();
   for (const r of rows) {
-    if (!r.CodBarras) continue;
-    let p = bySku.get(r.CodBarras);
+    if (!r.CodBarras && !r.Referencia) continue;
+    const skuKey = r.CodBarras || `${r.Referencia}_${r.Talla || 'U'}_${r.Color || r.ColorSF || 'U'}`;
+    let p = bySku.get(skuKey);
     if (!p) {
       p = {
-        sku: r.CodBarras,
-        name: r.DescripcionArticulo || r.NombreTallaColor || r.CodBarras,
+        sku: skuKey,
+        reference: r.Referencia || null,
+        barcode: r.CodBarras || null,
+        erp_article_id: Number(r.idArticulo) || null,
+        name: r.DescripcionArticulo || r.NombreTallaColor || r.Referencia || skuKey,
         category: r.DescripTipoPrenda || 'Sin categoría',
         line: r.Linea || null,
         size: r.Talla || null,
-        color: r.Color || null,
+        color: r.Color || r.ColorSF || null,
         stock: 0,
       };
-      bySku.set(r.CodBarras, p);
+      bySku.set(skuKey, p);
     }
     if (isSellableSucursal(r.Sucursal)) p.stock += Number(r.ExistenciaDisponible) || 0;
   }
@@ -95,11 +99,11 @@ async function syncErpInventory() {
   const products = [...bySku.values()];
   await bulkUpsert(
     'products',
-    ['sku', 'name', 'category', 'line', 'size', 'color', 'price', 'discount_pct', 'stock_quantity', 'active'],
+    ['sku', 'reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'price', 'discount_pct', 'stock_quantity', 'active'],
     'sku',
-    ['name', 'category', 'line', 'size', 'color', 'stock_quantity'],
+    ['reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'stock_quantity'],
     products,
-    (p) => [p.sku, p.name, p.category, p.line, p.size, p.color, null, 0, p.stock, true]
+    (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, null, 0, p.stock, true]
   );
   return products.length;
 }

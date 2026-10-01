@@ -5,7 +5,7 @@ import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
-import { PRODUCT_IMAGES_DIR } from '../productImageSync.js';
+import { PRODUCT_IMAGES_DIR, listImageFiles, findBestImageMatch, syncProductImages } from '../productImageSync.js';
 import { isErpConfigured, fetchErpPathSafe } from '../erpClient.js';
 
 const router = Router();
@@ -18,18 +18,30 @@ router.get('/', async (req, res, next) => {
     const q = req.query.q?.trim();
     if (q) {
       const { rows } = await pool.query(
-        `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
+        `SELECT id, sku, reference, barcode, erp_article_id, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
          FROM products
-         WHERE sku ILIKE $1 OR name ILIKE $1 OR color ILIKE $1
+         WHERE sku ILIKE $1 OR reference ILIKE $1 OR barcode ILIKE $1 OR name ILIKE $1 OR color ILIKE $1
          ORDER BY id DESC
          LIMIT 50`,
         [`%${q}%`]
       );
+
+      // Si algún producto no tiene foto vinculada aún, busca coincidencia en tiempo real
+      for (const row of rows) {
+        if (!row.image_url) {
+          const matched = await findBestImageMatch(row);
+          if (matched) {
+            row.image_url = matched.url;
+            pool.query('UPDATE products SET image_url = $1 WHERE id = $2', [matched.url, row.id]).catch(() => {});
+          }
+        }
+      }
+
       return res.json(rows);
     }
 
     const { rows } = await pool.query(
-      `SELECT id, sku, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
+      `SELECT id, sku, reference, barcode, erp_article_id, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
        FROM products ORDER BY id DESC LIMIT 500`
     );
     res.json(rows);
@@ -151,6 +163,13 @@ router.get('/erp-inspect', requireRole('admin', 'supervisor'), async (req, res, 
     const priceCandidates = columns.filter((c) => /precio|valor|costo|pvp|tarifa|monto/i.test(c));
     const descriptionCandidates = columns.filter((c) => /desc|nombre|detalle|prenda/i.test(c));
 
+    // Verificación de imágenes SFTP para la búsqueda
+    const imageFiles = await listImageFiles();
+    let bestImage = null;
+    if (q) {
+      bestImage = await findBestImageMatch({ reference: q, sku: q });
+    }
+
     res.json({
       configured: true,
       ok: true,
@@ -161,6 +180,11 @@ router.get('/erp-inspect', requireRole('admin', 'supervisor'), async (req, res, 
         identifierCandidates,
         priceCandidates,
         descriptionCandidates,
+      },
+      images: {
+        totalFilesOnServer: imageFiles.length,
+        match: bestImage,
+        sampleFiles: imageFiles.slice(0, 8),
       },
       search: q
         ? {
@@ -177,6 +201,43 @@ router.get('/erp-inspect', requireRole('admin', 'supervisor'), async (req, res, 
   }
 });
 
+// Busca la imagen más similar para una referencia/color en tiempo real
+router.get('/images/lookup', async (req, res, next) => {
+  try {
+    const ref = (req.query.ref || req.query.q || '').trim();
+    if (!ref) return res.status(400).json({ error: 'ref or q is required' });
+    const match = await findBestImageMatch({
+      reference: ref,
+      sku: req.query.sku,
+      barcode: req.query.barcode,
+      color: req.query.color,
+    });
+    res.json({ ref, match });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sincronización manual de imágenes en segundo plano
+router.post('/sync-images', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    syncProductImages().catch((err) => console.error('Error in manual syncProductImages:', err));
+    res.json({ ok: true, message: 'Sincronización de fotos iniciada' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sincronización manual del ERP en segundo plano
+router.post('/sync-erp', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const { runErpSync } = await import('../erpSync.js');
+    runErpSync().catch((err) => console.error('Error in manual runErpSync:', err));
+    res.json({ ok: true, message: 'Sincronización de ERP iniciada' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Serves a file straight out of the SFTP drop-off folder (see productImageSync.js) —
 // path.basename strips any directory component a crafted filename might carry, so this
