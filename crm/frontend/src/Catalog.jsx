@@ -22,20 +22,54 @@ export default function Catalog() {
   const [showErpModal, setShowErpModal] = useState(false);
   const fileInput = useRef(null);
 
+  const [allCategories, setAllCategories] = useState([]);
+  const searchTimer = useRef(null);
+
   function load() {
     setLoading(true);
     fetchProducts()
-      .then(setProducts)
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setProducts(list);
+        setAllCategories([...new Set(list.map((p) => p.category).filter(Boolean))].sort());
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }
 
+  // Carga inicial
   useEffect(() => { load(); }, []);
 
-  const categories = useMemo(
-    () => [...new Set(products.map((p) => p.category))].sort(),
-    [products]
-  );
+  // Búsqueda en servidor con debounce para consultar referencias o SKUs más allá de los primeros 500
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      // Si se limpió la búsqueda, volver al catálogo general
+      load();
+      return;
+    }
+
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setLoading(true);
+      fetchProducts(q)
+        .then((res) => {
+          setProducts(Array.isArray(res) ? res : []);
+          setPage(1);
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
+    }, 300);
+
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [search]);
+
+  const categories = useMemo(() => {
+    const fromCurrent = products.map((p) => p.category).filter(Boolean);
+    return [...new Set([...allCategories, ...fromCurrent])].sort();
+  }, [products, allCategories]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -43,7 +77,9 @@ export default function Catalog() {
       if (category !== 'all' && p.category !== category) return false;
       if (!q) return true;
       return (
+        (p.reference ?? '').toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
+        (p.barcode ?? '').toLowerCase().includes(q) ||
         p.name.toLowerCase().includes(q) ||
         (p.color ?? '').toLowerCase().includes(q)
       );
@@ -114,7 +150,7 @@ export default function Catalog() {
             <input
               value={search}
               onChange={(e) => updateSearch(e.target.value)}
-              placeholder="Buscar por SKU, nombre o color…"
+              placeholder="Buscar por Referencia (ej. S740866), SKU, nombre o color…"
               className="w-full rounded-lg border border-border py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary"
             />
           </div>
@@ -150,7 +186,7 @@ export default function Catalog() {
           <thead className="border-b border-border bg-muted text-xs text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Foto</th>
-              <th className="px-4 py-3 font-medium">SKU</th>
+              <th className="px-4 py-3 font-medium">Referencia / SKU</th>
               <th className="px-4 py-3 font-medium">Nombre</th>
               <th className="px-4 py-3 font-medium">Talla</th>
               <th className="px-4 py-3 font-medium">Color</th>
@@ -170,20 +206,39 @@ export default function Catalog() {
               <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/50">
                 <td className="px-4 py-3">
                   {p.image_url ? (
-                    <img
-                      src={productImageUrl(p.image_url)}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-10 w-10 rounded-lg border border-border object-cover"
-                    />
+                    <a
+                      href={productImageUrl(p.image_url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Ver foto en tamaño completo"
+                      className="inline-block transition-transform hover:scale-110"
+                    >
+                      <img
+                        src={productImageUrl(p.image_url)}
+                        alt={p.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-10 w-10 rounded-lg border border-border object-cover"
+                      />
+                    </a>
                   ) : (
-                    <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground" title="Sin imagen asignada">
                       <ImageOff size={16} />
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
+                <td className="px-4 py-3">
+                  {p.reference ? (
+                    <div>
+                      <span className="font-semibold text-foreground font-mono text-xs block">{p.reference}</span>
+                      {p.sku && p.sku !== p.reference && (
+                        <span className="font-mono text-[11px] text-muted-foreground block">{p.sku}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="font-mono text-xs">{p.sku}</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{p.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.size}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.color}</td>

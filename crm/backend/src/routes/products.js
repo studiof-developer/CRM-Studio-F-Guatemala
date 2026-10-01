@@ -22,7 +22,7 @@ router.get('/', async (req, res, next) => {
          FROM products
          WHERE sku ILIKE $1 OR reference ILIKE $1 OR barcode ILIKE $1 OR name ILIKE $1 OR color ILIKE $1
          ORDER BY id DESC
-         LIMIT 50`,
+         LIMIT 100`,
         [`%${q}%`]
       );
 
