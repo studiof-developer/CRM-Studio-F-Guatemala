@@ -113,8 +113,8 @@ async function getConversationWindow(sessionIds, phone, lineId) {
     const { rows } = await pool.query(
       `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
        WHERE (
-         session_id LIKE $1 || '__line_' || $2 || '%'
-         OR (whatsapp_number_id = $2 AND (session_id = $1 OR session_id LIKE $1 || '__%'))
+         session_id LIKE $1 || '__line_' || $2::text || '%'
+         OR (whatsapp_number_id = $2::int AND (session_id = $1 OR session_id LIKE $1 || '__%'))
          ${isDefault ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
        )
        AND message->>'type' = 'human'`,
@@ -368,8 +368,8 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
       `SELECT id, message, created_at, whatsapp_number_id, session_id
        FROM n8n_chat_histories
        WHERE (
-         session_id LIKE $1 || '__line_' || $2 || '%'
-         OR (whatsapp_number_id = $2 AND (session_id = $1 OR session_id LIKE $1 || '__%'))
+         session_id LIKE $1 || '__line_' || $2::text || '%'
+         OR (whatsapp_number_id = $2::int AND (session_id = $1 OR session_id LIKE $1 || '__%'))
          ${isDefaultLine ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
        )
        ORDER BY id DESC LIMIT $3`,

@@ -76,11 +76,13 @@ const CHANNEL_FILTER_OPTIONS = [
 function isSameThread(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
-  const lineA = a.includes('__line_') ? a.split('__line_')[1]?.split('__')[0] : null;
-  const lineB = b.includes('__line_') ? b.split('__line_')[1]?.split('__')[0] : null;
+  const strA = String(a);
+  const strB = String(b);
+  const lineA = strA.includes('__line_') ? strA.split('__line_')[1]?.split('__')[0] : null;
+  const lineB = strB.includes('__line_') ? strB.split('__line_')[1]?.split('__')[0] : null;
   if (lineA && lineB && lineA !== lineB) return false;
-  const pA = a.split('__')[0];
-  const pB = b.split('__')[0];
+  const pA = strA.split('__')[0];
+  const pB = strB.split('__')[0];
   return Boolean(pA && pB && pA === pB && lineA === lineB);
 }
 
@@ -776,8 +778,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const loadThread = useCallback((overrideId) => {
     // Instagram/Messenger threads (sessionId prefixed "social:") don't live in
     // n8n_chat_histories — SocialThreadPanel below fetches and renders them on its own.
-    const currentId = overrideId || selectedIdRef.current || selectedId;
-    if (!currentId || currentId.startsWith('social:')) { setThread(null); return; }
+    const rawId = overrideId || selectedIdRef.current || selectedId;
+    if (!rawId) { setThread(null); return; }
+    const currentId = String(rawId);
+    if (currentId.startsWith('social:')) { setThread(null); return; }
     fetchConversation(currentId, threadLimit)
       .then((t) => {
         // Guard against race condition: only set thread if user is still on this conversation
@@ -975,8 +979,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     const unsubscribe = onLiveEvent('message_changes', (raw) => {
       let payload;
       try { payload = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
-      const activeId = selectedIdRef.current;
-      if (!activeId || activeId.startsWith('social:')) return;
+      const rawActive = selectedIdRef.current;
+      if (!rawActive) return;
+      const activeId = String(rawActive);
+      if (activeId.startsWith('social:')) return;
 
       const activePhone = activeId.split('__')[0];
       const eventSession = payload?.session_id ? String(payload.session_id) : '';
@@ -1583,7 +1589,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       <div className={`min-w-0 flex-1 flex-col bg-black/[0.015] dark:bg-white/[0.02] ${
         singleThreadMode ? 'flex' : selectedId ? 'flex' : 'hidden md:flex'
       }`}>
-        {selectedId?.startsWith('social:') && (
+        {(selectedId ? String(selectedId).startsWith('social:') : false) && (
           <SocialThreadPanel
             key={selectedId}
             contactId={selected?.socialContactId}
@@ -1594,7 +1600,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             onCustomerChanged={() => load(false)}
           />
         )}
-        {!thread && !selectedId?.startsWith('social:') && (
+        {!thread && !(selectedId ? String(selectedId).startsWith('social:') : false) && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-greige-ink">
             {threadError ? (
               <>
