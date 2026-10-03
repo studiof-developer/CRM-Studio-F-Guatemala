@@ -11,6 +11,7 @@ import {
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
   fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers, fetchProducts,
+  createSale, fetchCustomerSales, fetchCustomerQuotes,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -156,6 +157,8 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
   const [editOpen, setEditOpen] = useState(false);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
+  const [saleAmount, setSaleAmount] = useState('');
+  const [saleNotes, setSaleNotes] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -205,18 +208,31 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
 
   async function handleMarkPaid() {
     if (!info?.customerId || !paidMethod) return;
+    const numAmount = Number(saleAmount);
+    if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
+      showError('Por favor ingresa un monto válido en Quetzales');
+      return;
+    }
     setActionBusy(true);
     try {
-      await updateCustomerTags(info.customerId, { paidLocked: true, paidMethod });
+      await createSale({
+        customerId: info.customerId,
+        amount: numAmount,
+        paymentMethod: paidMethod,
+        notes: saleNotes.trim() || null,
+        markCustomerPaid: true,
+      });
       loadInfo();
       onCustomerChanged?.();
-      showSuccess('Cliente marcado como Pagado');
+      showSuccess(`Venta de Q ${numAmount.toFixed(2)} registrada exitosamente`);
+      setConfirmPaidOpen(false);
+      setPaidMethod('');
+      setSaleAmount('');
+      setSaleNotes('');
     } catch (err) {
       showError(err.message);
     } finally {
       setActionBusy(false);
-      setConfirmPaidOpen(false);
-      setPaidMethod('');
     }
   }
 
@@ -375,15 +391,47 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
 
       <ConfirmDialog
         open={confirmPaidOpen}
-        title="Marcar como Pagado"
-        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. Indica el medio de pago:"
+        title="Marcar como Pagado y Registrar Venta"
+        message="Esto marca al cliente como Pagado de forma permanente y registra la venta en Quetzales a tu nombre:"
         confirmLabel="Marcar como Pagado"
         busy={actionBusy}
-        confirmDisabled={!paidMethod}
+        confirmDisabled={!paidMethod || !saleAmount || Number(saleAmount) <= 0}
         onConfirm={handleMarkPaid}
-        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
+        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); setSaleAmount(''); setSaleNotes(''); }}
       >
-        <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Medio de pago *</label>
+            <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Monto de la venta en Quetzales (Q) *</label>
+            <div className="relative flex items-center">
+              <span className="pointer-events-none absolute left-3 text-sm font-semibold text-greige-ink">Q</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={saleAmount}
+                onChange={(e) => setSaleAmount(e.target.value)}
+                className="w-full rounded-xl border border-line bg-paper py-2 pl-8 pr-3 text-sm font-medium text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Notas / Referencia (opcional)</label>
+            <input
+              type="text"
+              placeholder="Ej. Prenda / Factura..."
+              value={saleNotes}
+              onChange={(e) => setSaleNotes(e.target.value)}
+              className="w-full rounded-xl border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        </div>
       </ConfirmDialog>
 
       <EditCustomerModal
@@ -545,6 +593,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   const textareaRef = useRef(null);
   const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
+  const [saleAmount, setSaleAmount] = useState('');
+  const [saleNotes, setSaleNotes] = useState('');
+  const [customerSales, setCustomerSales] = useState([]);
+  const [latestQuoteAmount, setLatestQuoteAmount] = useState(null);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatBusy, setNewChatBusy] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState('');
@@ -564,6 +616,30 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   useEffect(() => {
     fetchProducts().then(setCatalogProducts).catch(() => {});
   }, []);
+
+  // Carga ventas y cotizaciones del cliente activo
+  useEffect(() => {
+    if (thread?.customerId) {
+      fetchCustomerSales(thread.customerId).then(setCustomerSales).catch(() => setCustomerSales([]));
+      fetchCustomerQuotes(thread.customerId).then((quotes) => {
+        if (quotes && quotes.length > 0) {
+          setLatestQuoteAmount(quotes[0].grandTotal);
+        } else {
+          setLatestQuoteAmount(null);
+        }
+      }).catch(() => setLatestQuoteAmount(null));
+    } else {
+      setCustomerSales([]);
+      setLatestQuoteAmount(null);
+    }
+  }, [thread?.customerId]);
+
+  function openSaleModal() {
+    if (latestQuoteAmount && (!saleAmount || saleAmount === '')) {
+      setSaleAmount(String(latestQuoteAmount));
+    }
+    setConfirmPaidOpen(true);
+  }
 
   // Re-fetch quick replies whenever the active thread changes so the list is scoped to
   // that conversation's WhatsApp line (global replies + that line's branded replies).
@@ -1296,18 +1372,34 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
   async function handleMarkPaid() {
     if (!thread?.customerId || !paidMethod) return;
+    const numAmount = Number(saleAmount);
+    if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
+      showError('Por favor ingresa un monto válido en Quetzales');
+      return;
+    }
     setActionBusy(true);
     try {
-      await updateCustomerTags(thread.customerId, { paidLocked: true, paidMethod });
+      await createSale({
+        customerId: thread.customerId,
+        ticketId: thread.ticketId,
+        amount: numAmount,
+        paymentMethod: paidMethod,
+        notes: saleNotes.trim() || null,
+        whatsappNumberId: thread.whatsappNumberId,
+        markCustomerPaid: true,
+      });
       await loadThread();
       load(false);
-      showSuccess('Cliente marcado como Pagado');
+      fetchCustomerSales(thread.customerId).then(setCustomerSales).catch(() => {});
+      showSuccess(`Venta de Q ${numAmount.toFixed(2)} registrada exitosamente`);
+      setConfirmPaidOpen(false);
+      setPaidMethod('');
+      setSaleAmount('');
+      setSaleNotes('');
     } catch (err) {
       showError(err.message);
     } finally {
       setActionBusy(false);
-      setConfirmPaidOpen(false);
-      setPaidMethod('');
     }
   }
 
@@ -1802,10 +1894,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => { setPaidMethod(thread.paymentSuggestionMethod || ''); setConfirmPaidOpen(true); }}
+                    onClick={() => { setPaidMethod(thread.paymentSuggestionMethod || ''); openSaleModal(); }}
                     className="rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
                   >
-                    Marcar como Pagado
+                    Marcar como Pagado y Registrar Venta
                   </button>
                   <button
                     type="button"
@@ -2276,13 +2368,38 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                           })),
                         ]}
                       />
-                      {!thread.paidLocked && (
+                      {!thread.paidLocked ? (
                         <button
-                          onClick={() => setConfirmPaidOpen(true)}
-                          className="mt-1 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
+                          onClick={openSaleModal}
+                          className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
                         >
-                          Marcar como Pagado (permanente)
+                          <CircleDollarSign size={13} />
+                          Marcar como Pagado y Registrar Venta (Q)
                         </button>
+                      ) : (
+                        <button
+                          onClick={openSaleModal}
+                          className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-line bg-secondary px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-muted"
+                        >
+                          <CircleDollarSign size={13} />
+                          + Registrar nueva venta (Q)
+                        </button>
+                      )}
+                      {customerSales.length > 0 && (
+                        <div className="mt-2.5 rounded-xl border border-success-bg/60 bg-success-bg/25 p-2.5 text-xs">
+                          <div className="flex items-center justify-between font-semibold text-success">
+                            <span>Ventas registradas ({customerSales.length})</span>
+                            <span>Q {customerSales.reduce((sum, s) => sum + Number(s.amount), 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="mt-1.5 flex max-h-32 flex-col divide-y divide-success/15 overflow-y-auto">
+                            {customerSales.map((s) => (
+                              <div key={s.id} className="flex items-center justify-between py-1 text-[11px] text-greige-ink">
+                                <span>{new Date(s.createdAt).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })} · {s.advisorName}</span>
+                                <span className="font-semibold text-ink">Q {Number(s.amount).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
@@ -2383,15 +2500,58 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
 
       <ConfirmDialog
         open={confirmPaidOpen}
-        title="Marcar como Pagado"
-        message="Esto marca al cliente como Pagado de forma permanente — no se puede deshacer. Indica el medio de pago:"
-        confirmLabel="Marcar como Pagado"
+        title={thread?.paidLocked ? 'Registrar Venta Adicional' : 'Marcar como Pagado y Registrar Venta'}
+        message={thread?.paidLocked
+          ? 'Registra el monto de la venta en Quetzales atribuida a tu asesoría:'
+          : 'Esto marca al cliente como Pagado de forma permanente y registra la venta en Quetzales a tu nombre:'}
+        confirmLabel={thread?.paidLocked ? 'Registrar Venta' : 'Marcar como Pagado'}
         busy={actionBusy}
-        confirmDisabled={!paidMethod}
+        confirmDisabled={!paidMethod || !saleAmount || Number(saleAmount) <= 0}
         onConfirm={handleMarkPaid}
-        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); }}
+        onCancel={() => { setConfirmPaidOpen(false); setPaidMethod(''); setSaleAmount(''); setSaleNotes(''); }}
       >
-        <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Medio de pago *</label>
+            <Select value={paidMethod} onChange={setPaidMethod} placeholder="Selecciona el medio de pago…" options={PAID_METHOD_OPTIONS} />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Monto de la venta en Quetzales (Q) *</label>
+            <div className="relative flex items-center">
+              <span className="pointer-events-none absolute left-3 text-sm font-semibold text-greige-ink">Q</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={saleAmount}
+                onChange={(e) => setSaleAmount(e.target.value)}
+                className="w-full rounded-xl border border-line bg-paper py-2 pl-8 pr-3 text-sm font-medium text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            {latestQuoteAmount && (
+              <button
+                type="button"
+                onClick={() => setSaleAmount(String(latestQuoteAmount))}
+                className="mt-1 text-left text-[11px] font-semibold text-accent hover:underline"
+              >
+                Usar monto de cotización: Q {Number(latestQuoteAmount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+              </button>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-greige-ink">Notas / Referencia (opcional)</label>
+            <input
+              type="text"
+              placeholder="Ej. Prenda S740954A / Factura..."
+              value={saleNotes}
+              onChange={(e) => setSaleNotes(e.target.value)}
+              className="w-full rounded-xl border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        </div>
       </ConfirmDialog>
 
       <ConfirmDialog

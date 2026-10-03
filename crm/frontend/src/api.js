@@ -797,3 +797,32 @@ export async function updateCompanyBrands(companyId, brandIds) {
   return res.json();
 }
 
+export async function createSale(payload) {
+  const res = await apiFetch('/api/sales', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al registrar la venta');
+  return res.json();
+}
+
+export async function fetchCustomerSales(customerId) {
+  const res = await apiFetch(`/api/sales/customer/${customerId}`);
+  if (!res.ok) throw new Error('Error al cargar ventas del cliente');
+  return res.json();
+}
+
+export async function fetchSalesByAdvisor(filters = {}) {
+  const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v != null && v !== '')).toString();
+  const res = await apiFetch(`/api/sales/by-advisor${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las métricas de ventas por asesor');
+  return res.json();
+}
+
+export async function deleteSale(saleId) {
+  const res = await apiFetch(`/api/sales/${saleId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la venta');
+  return res.json();
+}
+

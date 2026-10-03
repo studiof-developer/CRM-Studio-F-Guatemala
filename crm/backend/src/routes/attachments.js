@@ -18,7 +18,7 @@ import { getSetting } from './settings.js';
 // and must NOT overwrite whatever they just set — the caller still treats that as
 // "handled" (skip the suggestion banner), just without logging a confirmation that
 // didn't actually happen.
-async function confirmAutoPayment(customerId, paidMethod, detailNote) {
+async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = null) {
   const { rows: updated } = await pool.query(
     `UPDATE customers AS c SET paid_locked = true, paid_method = $2, manual_status = 'pagado',
        payment_suggested_at = NULL, payment_suggestion_reason = NULL, payment_suggestion_method = NULL,
@@ -32,6 +32,41 @@ async function confirmAutoPayment(customerId, paidMethod, detailNote) {
     // (customers.js), which only sets paid_locked and was leaving the Pipeline card
     // sitting in whatever column it was already in.
     logBusinessAction({ fullName: 'Sistema (OCR)', id: null }, customerId, 'customer_marked_paid', detailNote);
+
+    if (amount && Number(amount) > 0) {
+      const { rows: tRows } = await pool.query(
+        `SELECT t.id, t.assigned_advisor, t.whatsapp_number_id, u.id AS advisor_user_id
+         FROM tickets t
+         LEFT JOIN users u ON u.full_name = t.assigned_advisor OR u.username = t.assigned_advisor
+         WHERE t.customer_id = $1
+         ORDER BY (t.status = 'resuelto') ASC, t.id DESC LIMIT 1`,
+        [customerId]
+      );
+      const ticket = tRows[0];
+      const advisorName = ticket?.assigned_advisor || 'Sistema (OCR)';
+      const advisorId = ticket?.advisor_user_id || null;
+
+      await pool.query(
+        `INSERT INTO sales (customer_id, ticket_id, advisor_id, advisor_name, amount, payment_method, notes, whatsapp_number_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          customerId,
+          ticket?.id || null,
+          advisorId,
+          advisorName,
+          Number(amount),
+          paidMethod,
+          'Confirmado automáticamente por OCR',
+          ticket?.whatsapp_number_id || null,
+        ]
+      );
+      logBusinessAction(
+        { fullName: 'Sistema (OCR)', id: null },
+        customerId,
+        'sale_recorded',
+        `Q${Number(amount).toFixed(2)} (${paidMethod}) atribuido a ${advisorName} (OCR)`
+      );
+    }
   }
 }
 
@@ -185,7 +220,12 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
 
     if (receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
       const paidMethod = guessPaidMethod(ocrText);
-      await confirmAutoPayment(customerId, paidMethod, `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`);
+      await confirmAutoPayment(
+        customerId,
+        paidMethod,
+        `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`,
+        expectedAmount
+      );
       autoConfirmed = true;
     } else {
       const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
@@ -206,8 +246,10 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
         if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
           const paidMethod = guessPaidMethod(ocrText);
           await confirmAutoPayment(
-            customerId, paidMethod,
-            `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`
+            customerId,
+            paidMethod,
+            `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`,
+            expectedAmount
           );
           autoConfirmed = true;
         }

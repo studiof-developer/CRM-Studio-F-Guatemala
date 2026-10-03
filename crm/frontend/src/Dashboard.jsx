@@ -23,6 +23,7 @@ Chart.register(
 import { Users, LifeBuoy, Timer, CheckCircle2, UserPlus, CircleDollarSign, Headset, AlertTriangle } from 'lucide-react';
 import { fetchDashboard } from './api.js';
 import Badge from './components/Badge.jsx';
+import SalesAdvisorDashboard from './components/SalesAdvisorDashboard.jsx';
 import { PAID_METHOD_LABELS } from './lib/paymentMethods.js';
 
 const PAID_METHOD_COLORS = { tarjeta: '#4338ca', efectivo: '#15803d', transferencia: '#b45309', deposito: '#0891b2' };
@@ -252,7 +253,14 @@ export default function Dashboard() {
       </div>
 
       <div className="px-4 pb-8 md:px-8">
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <SalesAdvisorDashboard />
+
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-ink">Métricas Operativas del CRM</h2>
+          <p className="text-xs text-muted-foreground">Volumen de tickets, tiempos de respuesta y embudo del pipeline.</p>
+        </div>
+
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} featured />
         <MetricCard icon={UserPlus} label="Registros esta semana" value={kpis.registrosSemana} />
         <MetricCard icon={CircleDollarSign} label="Clientes marcados como Pagado" value={kpis.clientesPagados} />

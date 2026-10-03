@@ -202,7 +202,7 @@ router.patch('/:id/tags', async (req, res, next) => {
     if (!existing.length) return res.status(404).json({ error: 'not found' });
     const before = existing[0];
 
-    const { manualStatus, paidLocked, paidMethod, dismissPaymentSuggestion } = req.body ?? {};
+    const { manualStatus, paidLocked, paidMethod, dismissPaymentSuggestion, saleAmount, saleNotes, ticketId, quoteId } = req.body ?? {};
     if (manualStatus !== undefined && manualStatus !== null && !VALID_TEMPERATURES.includes(manualStatus)) {
       return res.status(400).json({ error: 'invalid manualStatus' });
     }
@@ -221,17 +221,6 @@ router.patch('/:id/tags', async (req, res, next) => {
 
     const { rows } = await pool.query(
       `UPDATE customers AS c SET
-         -- Reads the row's OWN current paid_locked (not just $3, this one request's
-         -- flag) — once a customer is paid_locked, an explicit attempt to drag them
-         -- backward into an earlier temperature (frio/tibio/caliente/pqrs) gets pinned
-         -- back to 'pagado' instead — manual_status silently drifting away from 'pagado'
-         -- was the exact "Pipeline card sitting in the wrong column" bug this originally
-         -- closed. "despacho" (2026-09-11) is the one deliberate forward exception once
-         -- paid — an advisor moving a paid order into it is real progress, not drift, so
-         -- it's let through instead of forced back. And when THIS request isn't touching
-         -- manual_status at all ($1 false — e.g. just dismissing a payment suggestion),
-         -- the current value is left alone rather than re-forced to 'pagado' — otherwise
-         -- an unrelated PATCH after being moved to despacho would silently revert it.
          manual_status = CASE
            WHEN $1 AND (c.paid_locked OR COALESCE($3, false)) THEN (CASE WHEN $2 = 'despacho' THEN 'despacho' ELSE 'pagado' END)
            WHEN c.paid_locked OR COALESCE($3, false) THEN COALESCE(c.manual_status, 'pagado')
@@ -258,6 +247,47 @@ router.patch('/:id/tags', async (req, res, next) => {
     }
     if (paidLocked === true && !before.paid_locked) {
       logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
+    }
+
+    // Si se especificó un monto de venta, registrarlo en la tabla sales
+    const numAmount = Number(saleAmount);
+    if (!isNaN(numAmount) && numAmount > 0) {
+      let resolvedTicketId = ticketId || null;
+      let resolvedLineId = null;
+      if (!resolvedTicketId) {
+        const { rows: tRows } = await pool.query(
+          `SELECT id, whatsapp_number_id FROM tickets WHERE customer_id = $1 ORDER BY (status = 'resuelto') ASC, id DESC LIMIT 1`,
+          [req.params.id]
+        );
+        if (tRows.length) {
+          resolvedTicketId = tRows[0].id;
+          resolvedLineId = tRows[0].whatsapp_number_id;
+        }
+      }
+      const advisorId = req.user?.id || null;
+      const advisorName = req.user?.fullName || req.user?.username || 'Asesor';
+
+      await pool.query(
+        `INSERT INTO sales (customer_id, ticket_id, advisor_id, advisor_name, amount, payment_method, quote_id, notes, whatsapp_number_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          req.params.id,
+          resolvedTicketId,
+          advisorId,
+          advisorName,
+          numAmount,
+          paidMethod || rows[0]?.paid_method || null,
+          quoteId || null,
+          saleNotes || null,
+          resolvedLineId,
+        ]
+      );
+      logBusinessAction(
+        req.user,
+        Number(req.params.id),
+        'sale_recorded',
+        `Q${numAmount.toFixed(2)} (${paidMethod || rows[0]?.paid_method}) por ${advisorName}`
+      );
     }
 
     res.json(rows[0]);

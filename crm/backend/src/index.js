@@ -24,6 +24,7 @@ import agentToolsRouter from './routes/agentTools.js';
 import settingsRouter from './routes/settings.js';
 import socialWebhookRouter from './routes/socialWebhook.js';
 import socialRouter from './routes/social.js';
+import salesRouter from './routes/sales.js';
 import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
@@ -60,6 +61,7 @@ app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRout
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 app.use('/api/quick-replies', requireAuth, quickRepliesRouter);
 app.use('/api/quotes', requireAuth, quotesRouter);
+app.use('/api/sales', requireAuth, salesRouter);
 app.use('/api/whatsapp-numbers', requireAuth, requireRole('admin', 'supervisor'), whatsappNumbersRouter);
 app.use('/api/brands', requireAuth, requireRole('admin'), brandsRouter);
 app.use('/api/companies', requireAuth, requireRole('admin'), companiesRouter);
