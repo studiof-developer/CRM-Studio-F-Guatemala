@@ -24,6 +24,7 @@ const PERIOD_OPTIONS = [
   { value: 'ayer', label: 'Ayer' },
   { value: 'esta_semana', label: 'Esta semana' },
   { value: 'este_mes', label: 'Este mes' },
+  { value: 'mes_anterior', label: 'Mes anterior' },
   { value: 'personalizado', label: 'Personalizado' },
 ];
 

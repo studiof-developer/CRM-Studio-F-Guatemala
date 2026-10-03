@@ -15,6 +15,9 @@ function buildSalesFilter(period, from, to, lineId, params = []) {
     clauses.push(`s.created_at >= (date_trunc('week', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
   } else if (period === 'este_mes') {
     clauses.push(`s.created_at >= (date_trunc('month', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+  } else if (period === 'mes_anterior') {
+    clauses.push(`s.created_at >= (date_trunc('month', (now() AT TIME ZONE 'America/Guatemala') - interval '1 month') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`s.created_at < (date_trunc('month', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
   } else if (period === 'personalizado' && from) {
     params.push(from);
     clauses.push(`s.created_at >= ($${params.length}::date AT TIME ZONE 'America/Guatemala')`);
