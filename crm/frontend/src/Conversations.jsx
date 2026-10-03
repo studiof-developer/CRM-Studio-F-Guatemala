@@ -751,6 +751,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
   // the first-open scroll-to-unread effect below wait for it instead of racing it.
   const [listLoaded, setListLoaded] = useState(false);
   const load = useCallback(async (showLoading = true) => {
+    if (singleThreadMode) {
+      setListLoaded(true);
+      return;
+    }
     if (showLoading) setLoading(true);
     setError(null);
     try {

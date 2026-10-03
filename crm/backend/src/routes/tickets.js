@@ -289,9 +289,18 @@ router.get('/pipeline', async (req, res, next) => {
                t.updated_at AS stage_since,
                COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
-               COALESCE(t.awaiting_reply, c.awaiting_reply) AS awaiting_reply,
+               CASE
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                 ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+               END AS awaiting_reply,
                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
                COALESCE(t.last_message, c.last_message) AS last_message,
+               CASE
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                 ELSE false
+               END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -384,6 +393,7 @@ router.get('/pipeline', async (req, res, next) => {
         assignedAdvisor: r.assigned_advisor,
         lastMessage: r.last_customer_message,
         awaitingReply: r.awaiting_reply === true,
+        lastMessageByAdvisor: r.last_message_by_advisor === true,
         unreadCount: Number(r.unread_count),
         stageSince: r.stage_since,
         lastMessageAt: r.last_customer_message_at,
@@ -453,9 +463,18 @@ router.get('/pipeline/card', async (req, res, next) => {
                t.updated_at AS stage_since,
                COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
-               COALESCE(t.awaiting_reply, c.awaiting_reply) AS awaiting_reply,
+               CASE
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                 ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+               END AS awaiting_reply,
                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
                COALESCE(t.last_message, c.last_message) AS last_message,
+               CASE
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                 ELSE false
+               END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -505,6 +524,7 @@ router.get('/pipeline/card', async (req, res, next) => {
         assignedAdvisor: r.assigned_advisor,
         lastMessage: r.last_customer_message,
         awaitingReply: r.awaiting_reply === true,
+        lastMessageByAdvisor: r.last_message_by_advisor === true,
         unreadCount,
         stageSince: r.stage_since,
         lastMessageAt: r.last_customer_message_at,

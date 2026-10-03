@@ -248,7 +248,7 @@ async function findCustomerByPhone(phone, lineId) {
      ) t ON true
      LEFT JOIN LATERAL (
        SELECT * FROM erp_customers
-       WHERE right(c.whatsapp_number, 8) IN (telefono, celular)
+       WHERE (telefono = right(c.whatsapp_number, 8) OR celular = right(c.whatsapp_number, 8))
        ORDER BY venta_neta_total DESC NULLS LAST LIMIT 1
      ) e ON true
      WHERE c.whatsapp_number = $1`,
@@ -1127,6 +1127,60 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id, created_at`,
       [targetSessionId, JSON.stringify(message), lineId]
     );
+
+    if (phone) {
+      pool.query(
+        `UPDATE tickets SET
+           last_message = '📎 Adjunto',
+           last_message_at = now(),
+           awaiting_reply = false,
+           status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
+           assigned_advisor = COALESCE(assigned_advisor, $1),
+           first_response_at = COALESCE(first_response_at, now()),
+           updated_at = now()
+         WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $2)
+           AND (whatsapp_number_id = $3 OR ($3 = 1 AND whatsapp_number_id IS NULL))
+           AND status != 'resuelto'`,
+        [req.user.fullName, phone, lineId || 1]
+      ).catch((e) => console.error('Error updating ticket on advisor attachment send:', e));
+
+      pool.query(
+        `UPDATE customers SET
+           last_message = '📎 Adjunto',
+           last_message_at = now(),
+           awaiting_reply = false
+         WHERE whatsapp_number = $1`,
+        [phone]
+      ).catch((e) => console.error('Error updating customer on advisor attachment send:', e));
+    }
+
+    // Directly advance pipeline stage and update ticket preview so advisor replies are instantly reflected
+    if (phone) {
+      pool.query(
+        `UPDATE tickets SET
+           last_message = $1,
+           last_message_at = now(),
+           awaiting_reply = false,
+           status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
+           assigned_advisor = COALESCE(assigned_advisor, $2),
+           first_response_at = COALESCE(first_response_at, now()),
+           updated_at = now()
+         WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $3)
+           AND (whatsapp_number_id = $4 OR ($4 = 1 AND whatsapp_number_id IS NULL))
+           AND status != 'resuelto'`,
+        [content.trim().slice(0, 255), req.user.fullName, phone, lineId || 1]
+      ).catch((e) => console.error('Error updating ticket on advisor send:', e));
+
+      pool.query(
+        `UPDATE customers SET
+           last_message = $1,
+           last_message_at = now(),
+           awaiting_reply = false
+         WHERE whatsapp_number = $2`,
+        [content.trim().slice(0, 255), phone]
+      ).catch((e) => console.error('Error updating customer on advisor send:', e));
+    }
+
     res.status(201).json({ id: inserted[0].id, createdAt: inserted[0].created_at, ...message });
 
     // The advisor's confirmation shouldn't wait on WhatsApp's network round-trip —

@@ -274,7 +274,9 @@ export default function MarketingPipeline({ onOpenConversation }) {
                     <p className="text-xs text-muted-foreground">{card.whatsappNumber}</p>
                     {(card.previewMessage ?? card.lastMessage) && (
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                        {!card.awaitingReply && <span className="font-medium text-ink">Tú: </span>}
+                        {Boolean(card.lastMessageByAdvisor || (!card.awaitingReply && card.lastMessageAt && card.lastCustomerMessageAt && new Date(card.lastMessageAt) > new Date(card.lastCustomerMessageAt))) && (
+                        <span className="font-medium text-ink">Tú: </span>
+                      )}
                         {card.previewMessage ?? card.lastMessage}
                       </p>
                     )}

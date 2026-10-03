@@ -837,7 +837,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                         <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                           {/* awaitingReply false means the preview is OUR most recent message, not the
                               customer's — without this prefix it reads as if the customer said it. */}
-                          {!card.awaitingReply && <span className="font-medium text-ink">Tú: </span>}
+                          {key !== 'pendiente' && Boolean(card.lastMessageByAdvisor || (!card.awaitingReply && card.lastMessageAt && card.lastCustomerMessageAt && new Date(card.lastMessageAt) > new Date(card.lastCustomerMessageAt))) && (
+                            <span className="font-medium text-ink">Tú: </span>
+                          )}
                           {card.previewMessage ?? card.lastMessage}
                         </p>
                       )}
