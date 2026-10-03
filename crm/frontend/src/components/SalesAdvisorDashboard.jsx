@@ -3,10 +3,10 @@ import * as XLSX from 'xlsx';
 import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
-  FileSpreadsheet, Filter, ChevronDown, ChevronUp
+  FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale } from '../api.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 
@@ -37,6 +37,25 @@ export default function SalesAdvisorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTransactions, setShowTransactions] = useState(false);
+  const [editingSaleId, setEditingSaleId] = useState(null);
+  const [editAmountVal, setEditAmountVal] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+
+  async function handleSaveAmount(saleId) {
+    const num = Number(editAmountVal);
+    if (isNaN(num) || num < 0) return;
+    setEditBusy(true);
+    try {
+      await updateSale(saleId, { amount: num });
+      setEditingSaleId(null);
+      setEditAmountVal('');
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setEditBusy(false);
+    }
+  }
 
   const chartCanvasRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -496,11 +515,67 @@ export default function SalesAdvisorDashboard() {
                           {t.advisorName}
                         </td>
                         <td className="py-2.5">
-                          <p className="font-medium text-ink">{t.customerName}</p>
+                          <a
+                            href={`/conversations?phone=${t.customerPhone}`}
+                            className="font-medium text-ink hover:text-accent hover:underline flex items-center gap-1"
+                          >
+                            <span>{t.customerName}</span>
+                            <ArrowRight size={10} className="text-greige-ink" />
+                          </a>
                           <p className="text-[11px] text-greige-ink">{t.customerPhone}</p>
                         </td>
                         <td className="py-2.5 font-bold text-success whitespace-nowrap">
-                          Q {Number(t.amount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                          {editingSaleId === t.id ? (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleSaveAmount(t.id);
+                              }}
+                              className="flex items-center gap-1"
+                            >
+                              <span className="text-xs font-semibold text-greige-ink">Q</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                autoFocus
+                                value={editAmountVal}
+                                onChange={(e) => setEditAmountVal(e.target.value)}
+                                className="w-20 rounded border border-accent bg-paper px-1.5 py-0.5 text-xs font-bold text-ink focus:outline-none"
+                              />
+                              <button
+                                type="submit"
+                                disabled={editBusy}
+                                className="rounded p-1 text-success hover:bg-success-bg"
+                              >
+                                <Check size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingSaleId(null)}
+                                className="rounded p-1 text-greige-ink hover:bg-muted"
+                              >
+                                <X size={13} />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-1.5 group">
+                              <span className={Number(t.amount) === 0 ? 'text-warn font-semibold' : ''}>
+                                Q {Number(t.amount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSaleId(t.id);
+                                  setEditAmountVal(String(t.amount || ''));
+                                }}
+                                title="Editar monto en Quetzales"
+                                className="rounded p-0.5 text-greige-ink transition-opacity hover:text-accent group-hover:opacity-100"
+                              >
+                                <Pencil size={11} />
+                              </button>
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 whitespace-nowrap">
                           <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-greige-ink">

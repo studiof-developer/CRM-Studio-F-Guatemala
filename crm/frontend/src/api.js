@@ -820,6 +820,16 @@ export async function fetchSalesByAdvisor(filters = {}) {
   return res.json();
 }
 
+export async function updateSale(saleId, payload) {
+  const res = await apiFetch(`/api/sales/${saleId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al actualizar la venta');
+  return res.json();
+}
+
 export async function deleteSale(saleId) {
   const res = await apiFetch(`/api/sales/${saleId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la venta');

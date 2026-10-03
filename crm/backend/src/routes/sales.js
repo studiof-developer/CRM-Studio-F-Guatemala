@@ -341,6 +341,68 @@ router.get('/by-advisor', async (req, res, next) => {
   }
 });
 
+// PATCH /api/sales/:id
+// Permite actualizar el monto o medio de pago de una venta
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const { rows: existing } = await pool.query(`SELECT * FROM sales WHERE id = $1`, [req.params.id]);
+    if (!existing.length) return res.status(404).json({ error: 'Venta no encontrada' });
+    const sale = existing[0];
+
+    const { amount, paymentMethod, notes, advisorName } = req.body ?? {};
+
+    const updates = [];
+    const values = [];
+
+    if (amount !== undefined) {
+      const num = Number(amount);
+      if (isNaN(num) || num < 0) return res.status(400).json({ error: 'Monto inválido' });
+      values.push(num);
+      updates.push(`amount = $${values.length}`);
+    }
+    if (paymentMethod !== undefined) {
+      values.push(paymentMethod);
+      updates.push(`payment_method = $${values.length}`);
+    }
+    if (notes !== undefined) {
+      values.push(notes);
+      updates.push(`notes = $${values.length}`);
+    }
+    if (advisorName !== undefined && (req.user.role === 'admin' || req.user.role === 'supervisor')) {
+      values.push(advisorName);
+      updates.push(`advisor_name = $${values.length}`);
+    }
+
+    if (!updates.length) return res.status(400).json({ error: 'Nada para actualizar' });
+
+    updates.push(`updated_at = now()`);
+    values.push(req.params.id);
+
+    const { rows } = await pool.query(
+      `UPDATE sales SET ${updates.join(', ')} WHERE id = $${values.length} RETURNING *`,
+      values
+    );
+
+    logBusinessAction(
+      req.user,
+      sale.customer_id,
+      'sale_updated',
+      `Venta #${sale.id} actualizada: Q${Number(rows[0].amount).toFixed(2)} por ${req.user.fullName || req.user.username}`
+    );
+
+    res.json({
+      id: rows[0].id,
+      amount: Number(rows[0].amount),
+      paymentMethod: rows[0].payment_method,
+      notes: rows[0].notes,
+      advisorName: rows[0].advisor_name,
+      updatedAt: rows[0].updated_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/sales/:id
 // Permite eliminar una venta registrada por error (admin, supervisor o el mismo asesor en las primeras 2 horas)
 router.delete('/:id', async (req, res, next) => {
