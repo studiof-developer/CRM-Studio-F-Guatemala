@@ -1,32 +1,16 @@
--- Migration 017: Isolate ticket messages, activity and dormancy strictly per WhatsApp line
--- Prevents messages on Line 2 (Basshert) from reviving or contaminating Line 1 (Studio F) tickets
+-- Migration 018: Clean up Line 2 false last_messages, ensure lightning-fast triggers and clean unread counts
 
--- 1. Add line-scoped activity columns to tickets table
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_message TEXT;
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_customer_message_at TIMESTAMPTZ;
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_customer_message TEXT;
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS awaiting_reply BOOLEAN DEFAULT false;
-ALTER TABLE tickets ADD COLUMN IF NOT EXISTS has_unread BOOLEAN DEFAULT false;
-
-CREATE INDEX IF NOT EXISTS idx_tickets_line_last_msg_at ON tickets(whatsapp_number_id, last_message_at DESC);
-CREATE INDEX IF NOT EXISTS idx_tickets_line_last_cust_msg_at ON tickets(whatsapp_number_id, last_customer_message_at DESC);
-
--- 2. Fast lightweight backfill from customers table for Studio F / Line 1 (takes < 50ms, zero locking)
-UPDATE tickets t
+-- 1. Reset corrupted last_message on Line 2 tickets so they don't share Débora's "Gracias"
+UPDATE tickets
 SET
-  last_message = c.last_message,
-  last_message_at = c.last_message_at,
-  last_customer_message_at = c.last_customer_message_at,
-  last_customer_message = c.last_customer_message,
-  awaiting_reply = COALESCE(c.awaiting_reply, false),
-  has_unread = COALESCE(c.has_unread, false)
-FROM customers c
-WHERE t.customer_id = c.id
-  AND t.last_message IS NULL
-  AND (t.whatsapp_number_id = 1 OR t.whatsapp_number_id IS NULL);
+  last_message = NULL,
+  last_message_at = NULL,
+  last_customer_message = NULL,
+  last_customer_message_at = NULL,
+  has_unread = false
+WHERE whatsapp_number_id = 2;
 
--- 3. Replace update_customer_last_message trigger to update ONLY the ticket for the line that received/sent the message
+-- 2. Ensure update_customer_last_message trigger isolates updates strictly per line and phone
 CREATE OR REPLACE FUNCTION update_customer_last_message() RETURNS TRIGGER AS $$
 DECLARE
   v_phone TEXT;
@@ -62,7 +46,6 @@ BEGIN
   END IF;
 
   -- Update ONLY the ticket for THIS line (v_line_id)
-  -- Crucial: Tickets of other lines are NEVER updated or revived by this message!
   UPDATE tickets SET
     last_message = v_preview,
     last_message_at = NEW.created_at,
@@ -101,7 +84,7 @@ CREATE TRIGGER trg_update_customer_last_message
 BEFORE INSERT ON n8n_chat_histories
 FOR EACH ROW EXECUTE FUNCTION update_customer_last_message();
 
--- 4. Replace advance_pipeline_stage_from_advisor_message trigger to update ONLY tickets of the matching line
+-- 3. Ensure advance_pipeline_stage_from_advisor_message trigger updates ONLY tickets of the matching line
 CREATE OR REPLACE FUNCTION advance_pipeline_stage_from_advisor_message() RETURNS TRIGGER AS $$
 DECLARE
   v_phone TEXT;

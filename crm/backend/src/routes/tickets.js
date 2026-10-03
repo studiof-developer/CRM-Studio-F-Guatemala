@@ -346,8 +346,7 @@ router.get('/pipeline', async (req, res, next) => {
              CASE WHEN paged.channel = 'whatsapp' THEN (
                SELECT count(*) FROM n8n_chat_histories h
                WHERE (
-                 (paged.whatsapp_number_id = 2 AND (h.session_id LIKE paged.whatsapp_number || '__line_2%' OR h.whatsapp_number_id = 2))
-                 OR ((paged.whatsapp_number_id = 1 OR paged.whatsapp_number_id IS NULL) AND (h.session_id LIKE paged.whatsapp_number || '__line_1%' OR (h.session_id LIKE paged.whatsapp_number || '%' AND h.session_id NOT LIKE '%__line_2%' AND (h.whatsapp_number_id IS NULL OR h.whatsapp_number_id = 1))))
+                 h.session_id LIKE paged.whatsapp_number || '%' AND ((paged.whatsapp_number_id = 2 AND (h.session_id LIKE '%__line_2%' OR h.whatsapp_number_id = 2)) OR ((paged.whatsapp_number_id = 1 OR paged.whatsapp_number_id IS NULL) AND (h.session_id NOT LIKE '%__line_2%' AND (h.whatsapp_number_id IS NULL OR h.whatsapp_number_id = 1))))
                )
                  AND h.message->>'type' = 'human'
                  AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = paged.whatsapp_number), 0)

@@ -500,13 +500,13 @@ router.get('/', async (req, res, next) => {
     const { rows } = skipWhatsapp ? { rows: [] } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         SELECT h.session_id, h.id, h.message, h.created_at,
-               COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id LIKE '%__line_2%' THEN 2 ELSE 1 END) AS line_id,
+               COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id ~ '__line_[0-9]+' THEN (regexp_match(h.session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) AS line_id,
                split_part(h.session_id, '__', 1) AS raw_phone
         FROM n8n_chat_histories h
         WHERE h.message->>'type' IN ('human', 'ai')
           AND (
             coalesce(h.message->>'content', '') <> ''
-            OR (h.message->'additional_kwargs'->>'hasAttachment')::boolean IS TRUE
+            OR (h.message->'additional_kwargs'->>'hasAttachment') = 'true'
             OR (h.message->'additional_kwargs'->>'fileUrl') IS NOT NULL
             OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
           )
@@ -722,7 +722,7 @@ router.get('/unread-count', async (req, res, next) => {
       LEFT JOIN conversation_reads cr ON cr.phone = split_part(h.session_id, '__', 1)
       WHERE h.message->>'type' = 'human'
         AND h.id > COALESCE(cr.last_read_message_id, 0)
-        ${isAsesor ? `AND COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id LIKE '%__line_2%' THEN 2 ELSE 1 END) = ANY($1)` : ''}
+        ${isAsesor ? `AND COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id ~ '__line_[0-9]+' THEN (regexp_match(h.session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) = ANY($1)` : ''}
     `, isAsesor ? [allowedLineIds] : []));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
