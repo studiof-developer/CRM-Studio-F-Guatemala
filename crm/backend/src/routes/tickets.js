@@ -284,11 +284,14 @@ router.get('/pipeline', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               c.has_unread AS customer_has_unread, c.channel,
+               COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
-               GREATEST(t.updated_at, c.updated_at) AS stage_since,
-               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
-               c.last_message_at, c.last_message,
+               t.updated_at AS stage_since,
+               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
+               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
+               COALESCE(t.awaiting_reply, c.awaiting_reply) AS awaiting_reply,
+               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+               COALESCE(t.last_message, c.last_message) AS last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -342,7 +345,10 @@ router.get('/pipeline', async (req, res, next) => {
       SELECT paged.*,
              CASE WHEN paged.channel = 'whatsapp' THEN (
                SELECT count(*) FROM n8n_chat_histories h
-               WHERE h.session_id LIKE paged.whatsapp_number || '%'
+               WHERE (
+                 (paged.whatsapp_number_id = 2 AND (h.session_id LIKE paged.whatsapp_number || '__line_2%' OR h.whatsapp_number_id = 2))
+                 OR ((paged.whatsapp_number_id = 1 OR paged.whatsapp_number_id IS NULL) AND (h.session_id LIKE paged.whatsapp_number || '__line_1%' OR (h.session_id LIKE paged.whatsapp_number || '%' AND h.session_id NOT LIKE '%__line_2%' AND (h.whatsapp_number_id IS NULL OR h.whatsapp_number_id = 1))))
+               )
                  AND h.message->>'type' = 'human'
                  AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = paged.whatsapp_number), 0)
              ) ELSE (
@@ -443,11 +449,14 @@ router.get('/pipeline/card', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               c.has_unread AS customer_has_unread, c.channel,
+               COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
-               GREATEST(t.updated_at, c.updated_at) AS stage_since,
-               c.last_customer_message_at, c.last_customer_message, c.awaiting_reply,
-               c.last_message_at, c.last_message,
+               t.updated_at AS stage_since,
+               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
+               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
+               COALESCE(t.awaiting_reply, c.awaiting_reply) AS awaiting_reply,
+               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+               COALESCE(t.last_message, c.last_message) AS last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -656,9 +665,11 @@ router.get('/pipeline/export', async (req, res, next) => {
         SELECT t.status AS ticket_status, c.id AS customer_id, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                c.full_name, c.whatsapp_number,
-               GREATEST(t.updated_at, c.updated_at) AS stage_since,
-               c.last_customer_message_at, c.last_customer_message,
-               c.last_message_at, c.last_message,
+               t.updated_at AS stage_since,
+               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
+               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
+               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+               COALESCE(t.last_message, c.last_message) AS last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -835,9 +846,10 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
       pool.query(`
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
-                 GREATEST(t.updated_at, c.updated_at) AS stage_since,
-                 c.has_unread AS customer_has_unread, c.created_at AS customer_created_at,
-                 c.last_customer_message_at, c.last_message_at,
+                 t.updated_at AS stage_since,
+                 COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.created_at AS customer_created_at,
+                 COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
+                 COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
           WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${statsLineSql}
