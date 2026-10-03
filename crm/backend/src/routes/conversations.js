@@ -108,7 +108,20 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function getConversationWindow(sessionIds, phone, lineId) {
   let lastInboundAt = null;
-  if (phone && PHONE_RE.test(phone)) {
+  if (phone && PHONE_RE.test(phone) && lineId) {
+    const isDefault = Number(lineId) === 1;
+    const { rows } = await pool.query(
+      `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
+       WHERE (
+         session_id LIKE $1 || '__line_' || $2 || '%'
+         OR (whatsapp_number_id = $2 AND (session_id = $1 OR session_id LIKE $1 || '__%'))
+         ${isDefault ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
+       )
+       AND message->>'type' = 'human'`,
+      [phone, Number(lineId)]
+    );
+    lastInboundAt = rows[0]?.last_inbound_at ?? null;
+  } else if (phone && PHONE_RE.test(phone)) {
     const { rows } = await pool.query(
       `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
        WHERE (session_id = $1 OR session_id LIKE $1 || '__%' OR ($2::text[] IS NOT NULL AND session_id = ANY($2)))
@@ -275,14 +288,21 @@ export async function getDefaultLineId() {
 
 // Strictly resolves session IDs belonging only to this thread/phone
 async function resolveSessionIds(threadKey) {
-  const { phone } = parseThreadKey(threadKey);
+  const { phone, lineId } = parseThreadKey(threadKey);
   if (phone && PHONE_RE.test(phone)) {
+    const isDefault = Number(lineId) === 1;
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
        WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
       [phone]
     );
-    return rows.map((r) => r.session_id);
+    const all = rows.map((r) => r.session_id);
+    if (!lineId) return all;
+    return all.filter((s) => {
+      if (s.includes(`__line_${lineId}`)) return true;
+      if (isDefault && !s.includes('__line_')) return true;
+      return false;
+    });
   }
   const { rows } = await pool.query(
     `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
@@ -324,9 +344,11 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
   // Default to active line if still not resolved
   if (!lineId) lineId = await getDefaultLineId();
 
-  // Resolve session_ids strictly by phone or threadKey
+  // Resolve session_ids strictly by phone and lineId
   let sessionIds = [];
+  let messagesDesc = [];
   if (phone && PHONE_RE.test(phone)) {
+    const isDefaultLine = Number(lineId) === 1;
     const { rows: sRows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories 
        WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
@@ -335,12 +357,25 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     const allSessions = sRows.map((r) => r.session_id);
     sessionIds = allSessions.filter((s) => {
       if (s.includes(`__line_${lineId}`)) return true;
-      if (!s.includes('__line_')) return true;
+      if (isDefaultLine && !s.includes('__line_')) return true;
       return false;
     });
     if (!sessionIds.length) {
-      sessionIds = [`${phone}__line_${lineId}`, phone];
+      sessionIds = isDefaultLine ? [`${phone}__line_${lineId}`, phone] : [`${phone}__line_${lineId}`];
     }
+
+    const { rows } = await pool.query(
+      `SELECT id, message, created_at, whatsapp_number_id, session_id
+       FROM n8n_chat_histories
+       WHERE (
+         session_id LIKE $1 || '__line_' || $2 || '%'
+         OR (whatsapp_number_id = $2 AND (session_id = $1 OR session_id LIKE $1 || '__%'))
+         ${isDefaultLine ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
+       )
+       ORDER BY id DESC LIMIT $3`,
+      [phone, Number(lineId), limit]
+    );
+    messagesDesc = rows;
   } else {
     const { rows: sRows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
@@ -348,15 +383,17 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     );
     sessionIds = sRows.map((r) => r.session_id);
     if (!sessionIds.length) sessionIds = [threadKey];
+
+    const { rows } = await pool.query(
+      `SELECT id, message, created_at, whatsapp_number_id, session_id
+       FROM n8n_chat_histories
+       WHERE session_id = ANY($1)
+       ORDER BY id DESC LIMIT $2`,
+      [sessionIds, limit]
+    );
+    messagesDesc = rows;
   }
 
-  const { rows: messagesDesc } = await pool.query(
-    `SELECT id, message, created_at, whatsapp_number_id, session_id
-     FROM n8n_chat_histories
-     WHERE session_id = ANY($1)
-     ORDER BY id DESC LIMIT $2`,
-    [sessionIds, limit]
-  );
   const messages = messagesDesc.reverse();
   const hasMoreOlder = messagesDesc.length === limit;
 
@@ -486,7 +523,7 @@ router.get('/', async (req, res, next) => {
         -- empty content field, and excluding it meant a customer who sent only a photo
         -- never bumped the thread's position, never raised its unread badge and never
         -- showed in the preview — the advisor had no signal anything had arrived.
-        SELECT h.session_id, h.id, h.message, h.created_at
+        SELECT h.session_id, h.id, h.message, h.created_at, h.whatsapp_number_id
         FROM n8n_chat_histories h
         WHERE h.message->>'type' IN ('human', 'ai')
           AND (
@@ -505,6 +542,7 @@ router.get('/', async (req, res, next) => {
         SELECT r.id, r.message, r.created_at,
                CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE NULL END AS phone,
                COALESCE(
+                 r.whatsapp_number_id,
                  CASE
                    WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
                    ELSE NULL
@@ -519,6 +557,7 @@ router.get('/', async (req, res, next) => {
                CASE
                  WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
                    split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
+                     r.whatsapp_number_id::text,
                      CASE
                        WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
                        ELSE NULL
@@ -737,7 +776,7 @@ router.get('/unread-count', async (req, res, next) => {
     const cacheKey = isAsesor ? `unread-count:${req.user.id}` : 'unread-count';
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH readable AS (
-        SELECT h.session_id, h.id, h.message
+        SELECT h.session_id, h.id, h.message, h.whatsapp_number_id
         FROM n8n_chat_histories h
         WHERE h.message->>'type' IN ('human', 'ai')
           AND (
@@ -756,6 +795,7 @@ router.get('/unread-count', async (req, res, next) => {
         SELECT r.id, r.message,
                CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
                COALESCE(
+                 r.whatsapp_number_id,
                  CASE
                    WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
                    ELSE NULL
@@ -768,6 +808,7 @@ router.get('/unread-count', async (req, res, next) => {
                CASE
                  WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
                    split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
+                     r.whatsapp_number_id::text,
                      CASE
                        WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
                        ELSE NULL

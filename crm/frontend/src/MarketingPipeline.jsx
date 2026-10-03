@@ -284,7 +284,7 @@ export default function MarketingPipeline({ onOpenConversation }) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => onOpenConversation?.(card.whatsappNumber)}
+                        onClick={() => onOpenConversation?.(card.whatsappNumber, card.whatsappNumberId)}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
                         Ir al chat

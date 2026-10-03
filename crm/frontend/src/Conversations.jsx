@@ -76,9 +76,12 @@ const CHANNEL_FILTER_OPTIONS = [
 function isSameThread(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
+  const lineA = a.includes('__line_') ? a.split('__line_')[1]?.split('__')[0] : null;
+  const lineB = b.includes('__line_') ? b.split('__line_')[1]?.split('__')[0] : null;
+  if (lineA && lineB && lineA !== lineB) return false;
   const pA = a.split('__')[0];
   const pB = b.split('__')[0];
-  return Boolean(pA && pB && pA === pB);
+  return Boolean(pA && pB && pA === pB && lineA === lineB);
 }
 
 // Turns a message into what its quote preview should show — a document shows its

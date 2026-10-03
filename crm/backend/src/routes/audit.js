@@ -159,7 +159,7 @@ router.get('/unanswered', async (req, res, next) => {
          CASE WHEN t.status IS NULL OR t.status = 'esperando_asesor' THEN 'unattended' ELSE 'cold' END AS category
        FROM customers c
        LEFT JOIN LATERAL (
-         SELECT status FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
+         SELECT status, whatsapp_number_id FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
        ) t ON true
        WHERE c.last_customer_message_at >= $1::timestamptz AND c.last_customer_message_at < $2::timestamptz
          AND c.last_customer_message_at <= now() - interval '24 hours'
@@ -172,6 +172,7 @@ router.get('/unanswered', async (req, res, next) => {
     );
     res.json(rows.map((r) => ({
       phone: r.phone,
+      whatsappNumberId: r.whatsapp_number_id,
       customerId: r.customer_id,
       fullName: r.full_name,
       lastMessageAt: r.last_customer_message_at,

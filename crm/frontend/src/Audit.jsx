@@ -425,7 +425,7 @@ function UnansweredTab({ onOpenConversation }) {
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={() => onOpenConversation?.(r.phone)}
+                        onClick={() => onOpenConversation?.(r.phone, r.whatsappNumberId)}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
                         Ir al chat
