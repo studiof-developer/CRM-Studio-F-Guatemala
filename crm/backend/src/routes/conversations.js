@@ -107,33 +107,19 @@ async function markSendFailed(messageId, err) {
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function getConversationWindow(sessionIds, phone, lineId) {
-  let lastInboundAt = null;
-  if (phone && PHONE_RE.test(phone) && lineId) {
+  let targetSessions = sessionIds;
+  if (!targetSessions?.length && phone && PHONE_RE.test(phone)) {
     const isDefault = Number(lineId) === 1;
-    const { rows } = await pool.query(
-      `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-       WHERE (
-         session_id LIKE $1 || '__line_' || $2::text || '%'
-         OR (whatsapp_number_id = $2::int AND (session_id = $1 OR session_id LIKE $1 || '__%'))
-         ${isDefault ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
-       )
-       AND message->>'type' = 'human'`,
-      [phone, Number(lineId)]
-    );
-    lastInboundAt = rows[0]?.last_inbound_at ?? null;
-  } else if (phone && PHONE_RE.test(phone)) {
-    const { rows } = await pool.query(
-      `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
-       WHERE (session_id = $1 OR session_id LIKE $1 || '__%' OR ($2::text[] IS NOT NULL AND session_id = ANY($2)))
-         AND message->>'type' = 'human'`,
-      [phone, sessionIds?.length ? sessionIds : null]
-    );
-    lastInboundAt = rows[0]?.last_inbound_at ?? null;
-  } else if (sessionIds?.length) {
+    const lineSession = lineId ? `${phone}__line_${lineId}` : phone;
+    targetSessions = isDefault ? [lineSession, phone] : [lineSession];
+  }
+
+  let lastInboundAt = null;
+  if (targetSessions?.length) {
     const { rows } = await pool.query(
       `SELECT max(created_at) AS last_inbound_at FROM n8n_chat_histories
        WHERE session_id = ANY($1) AND message->>'type' = 'human'`,
-      [sessionIds]
+      [targetSessions]
     );
     lastInboundAt = rows[0]?.last_inbound_at ?? null;
   }
@@ -367,13 +353,9 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     const { rows } = await pool.query(
       `SELECT id, message, created_at, whatsapp_number_id, session_id
        FROM n8n_chat_histories
-       WHERE (
-         session_id LIKE $1 || '__line_' || $2::text || '%'
-         OR (whatsapp_number_id = $2::int AND (session_id = $1 OR session_id LIKE $1 || '__%'))
-         ${isDefaultLine ? `OR (session_id = $1 AND (whatsapp_number_id IS NULL OR whatsapp_number_id = 1) AND session_id NOT LIKE '%__line_%')` : ''}
-       )
-       ORDER BY id DESC LIMIT $3`,
-      [phone, Number(lineId), limit]
+       WHERE session_id = ANY($1)
+       ORDER BY id DESC LIMIT $2`,
+      [sessionIds, limit]
     );
     messagesDesc = rows;
   } else {
@@ -517,58 +499,23 @@ router.get('/', async (req, res, next) => {
     const skipWhatsapp = channel && channel !== 'whatsapp';
     const { rows } = skipWhatsapp ? { rows: [] } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
-        -- Skip tool-call/tool-result rows (empty content, raw JSON) — only real
-        -- human/assistant messages count here. Empty content alone can't be the test
-        -- though: a photo or document sent with no caption is a real message with an
-        -- empty content field, and excluding it meant a customer who sent only a photo
-        -- never bumped the thread's position, never raised its unread badge and never
-        -- showed in the preview — the advisor had no signal anything had arrived.
-        SELECT h.session_id, h.id, h.message, h.created_at, h.whatsapp_number_id
+        SELECT h.session_id, h.id, h.message, h.created_at,
+               COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id LIKE '%__line_2%' THEN 2 ELSE 1 END) AS line_id,
+               split_part(h.session_id, '__', 1) AS raw_phone
         FROM n8n_chat_histories h
         WHERE h.message->>'type' IN ('human', 'ai')
           AND (
             coalesce(h.message->>'content', '') <> ''
+            OR (h.message->'additional_kwargs'->>'hasAttachment')::boolean IS TRUE
+            OR (h.message->'additional_kwargs'->>'fileUrl') IS NOT NULL
             OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
           )
       ),
-      default_line AS (
-        SELECT id FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1
-      ),
-      -- Group messages strictly by phone + line_id when session_id is phone-based,
-      -- or keep individual session_id for non-phone sessions. We NEVER parse message content
-      -- to guess a phone number (e.g. DPI, product SKU, order number), which previously caused
-      -- multiple customer conversations to combine into one thread.
       threaded AS (
-        SELECT r.id, r.message, r.created_at,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE NULL END AS phone,
-               COALESCE(
-                 r.whatsapp_number_id,
-                 CASE
-                   WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
-                   ELSE NULL
-                 END,
-                 CASE
-                   WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]::int
-                   ELSE NULL
-                 END,
-                 (SELECT id FROM default_line),
-                 1
-               ) AS line_id,
+        SELECT r.id, r.message, r.created_at, r.line_id,
+               CASE WHEN r.raw_phone ~ '^[0-9]{7,15}$' THEN r.raw_phone ELSE NULL END AS phone,
                CASE
-                 WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
-                   split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
-                     r.whatsapp_number_id::text,
-                     CASE
-                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
-                       ELSE NULL
-                     END,
-                     CASE
-                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]
-                       ELSE NULL
-                     END,
-                     (SELECT id::text FROM default_line),
-                     '1'
-                   )
+                 WHEN r.raw_phone ~ '^[0-9]{7,15}$' THEN r.raw_phone || '__line_' || r.line_id::text
                  ELSE r.session_id
                END AS thread_key
         FROM readable r
@@ -578,14 +525,6 @@ router.get('/', async (req, res, next) => {
         FROM threaded
         ORDER BY thread_key, id DESC
       ),
-      counts AS (
-        SELECT thread_key, count(*) AS message_count
-        FROM threaded
-        GROUP BY thread_key
-      ),
-      -- Read state is shared across the whole team (one watermark per phone, not per
-      -- advisor) — whoever opens the thread first marks it read for everyone, same as
-      -- a shared support inbox. Counts only customer messages newer than that watermark.
       unread_counts AS (
         SELECT th.thread_key, count(*) AS unread_count
         FROM threaded th
@@ -593,7 +532,8 @@ router.get('/', async (req, res, next) => {
         WHERE th.message->>'type' = 'human' AND th.id > COALESCE(cr.last_read_message_id, 0)
         GROUP BY th.thread_key
       )
-      SELECT l.thread_key, l.line_id, l.id AS last_id, l.message, l.created_at, cnt.message_count,
+      SELECT l.thread_key, l.line_id, l.id AS last_id, l.message, l.created_at,
+             1 AS message_count,
              l.phone, c.full_name, c.zone, c.paid_locked, c.payment_suggested_at, t.status AS ticket_status,
              t.assigned_advisor,
              t.brand_name, t.branch_name, t.line_label, t.company_name,
@@ -602,7 +542,6 @@ router.get('/', async (req, res, next) => {
              COALESCE(uc.unread_count, 0) AS unread_count,
              att.kind AS last_attachment_kind, att.filename AS last_attachment_filename
       FROM last_msg l
-      JOIN counts cnt USING (thread_key)
       LEFT JOIN unread_counts uc USING (thread_key)
       -- So the preview can name the file when the last message is an attachment with
       -- no caption, instead of rendering an empty line.
@@ -775,63 +714,15 @@ router.get('/unread-count', async (req, res, next) => {
     }
     const cacheKey = isAsesor ? `unread-count:${req.user.id}` : 'unread-count';
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
-      WITH readable AS (
-        SELECT h.session_id, h.id, h.message, h.whatsapp_number_id
-        FROM n8n_chat_histories h
-        WHERE h.message->>'type' IN ('human', 'ai')
-          AND (
-            coalesce(h.message->>'content', '') <> ''
-            OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id)
-          )
-      ),
-      phone_by_session AS (
-        SELECT DISTINCT ON (session_id) session_id, trim(message->>'content') AS phone
-        FROM readable
-        WHERE message->>'type' = 'human'
-          AND trim(message->>'content') ~ '^[0-9]{7,15}$'
-        ORDER BY session_id, id ASC
-      ),
-      threaded AS (
-        SELECT r.id, r.message,
-               CASE WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN split_part(r.session_id, '__', 1) ELSE p.phone END AS phone,
-               COALESCE(
-                 r.whatsapp_number_id,
-                 CASE
-                   WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN (r.message->'additional_kwargs'->>'whatsappNumberId')::int
-                   ELSE NULL
-                 END,
-                 CASE
-                   WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]::int
-                   ELSE 1
-                 END
-               ) AS line_id,
-               CASE
-                 WHEN split_part(r.session_id, '__', 1) ~ '^[0-9]{7,15}$' THEN
-                   split_part(r.session_id, '__', 1) || '__line_' || COALESCE(
-                     r.whatsapp_number_id::text,
-                     CASE
-                       WHEN (r.message->'additional_kwargs'->>'whatsappNumberId') ~ '^[0-9]+$' THEN r.message->'additional_kwargs'->>'whatsappNumberId'
-                       ELSE NULL
-                     END,
-                     CASE
-                       WHEN r.session_id ~ '__line_[0-9]+' THEN (regexp_match(r.session_id, '__line_([0-9]+)'))[1]
-                       ELSE '1'
-                     END
-                   )
-                 ELSE COALESCE(p.phone, r.session_id)
-               END AS thread_key
-        FROM readable r
-        LEFT JOIN phone_by_session p USING (session_id)
-      )
-      SELECT count(*)::int AS count FROM (
-        SELECT th.thread_key
-        FROM threaded th
-        LEFT JOIN conversation_reads cr ON cr.phone = th.phone
-        WHERE th.message->>'type' = 'human'
-          AND th.id > COALESCE(cr.last_read_message_id, 0)
-          ${isAsesor ? `AND th.line_id = ANY($1)` : ''}
-        GROUP BY th.thread_key
-      ) unread
+      SELECT count(DISTINCT CASE 
+        WHEN h.session_id LIKE '%__line_%' THEN h.session_id
+        ELSE split_part(h.session_id, '__', 1) || '__line_1'
+      END)::int AS count
+      FROM n8n_chat_histories h
+      LEFT JOIN conversation_reads cr ON cr.phone = split_part(h.session_id, '__', 1)
+      WHERE h.message->>'type' = 'human'
+        AND h.id > COALESCE(cr.last_read_message_id, 0)
+        ${isAsesor ? `AND COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id LIKE '%__line_2%' THEN 2 ELSE 1 END) = ANY($1)` : ''}
     `, isAsesor ? [allowedLineIds] : []));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
