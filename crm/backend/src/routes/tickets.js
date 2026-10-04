@@ -211,12 +211,7 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
   // even applied across a whole bucket (thousands of rows) before pagination, unlike
   // a full unread COUNT per row would be.
   const unreadOnlyClause = unreadOnly === 'true'
-    ? ` AND EXISTS (
-          SELECT 1 FROM n8n_chat_histories h
-          WHERE h.session_id LIKE whatsapp_number || '%'
-            AND h.message->>'type' = 'human'
-            AND h.id > COALESCE((SELECT last_read_message_id FROM conversation_reads WHERE phone = whatsapp_number), 0)
-        )`
+    ? ' AND customer_has_unread = true'
     : '';
   return { orderExpr, dateClause, unreadOnlyClause, trimmedQ, periodStartIso, periodEndIso };
 }
@@ -285,6 +280,8 @@ router.get('/pipeline', async (req, res, next) => {
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                CASE
+                 WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  ELSE COALESCE(t.has_unread, c.has_unread, false)
@@ -465,6 +462,8 @@ router.get('/pipeline/card', async (req, res, next) => {
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                CASE
+                 WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  ELSE COALESCE(t.has_unread, c.has_unread, false)
@@ -879,6 +878,8 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                  t.updated_at AS stage_since,
                  CASE
+                 WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
                  ELSE COALESCE(t.has_unread, c.has_unread, false)

@@ -346,6 +346,13 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // report — with thousands of active conversations, message_changes alone fires often
   // enough that this was visibly "cada segundos" mid-scroll).
   const loadColumn = useCallback(async (key, sort, limit = PAGE_SIZE) => {
+    if (unreadOnly && key === 'pendiente') {
+      setColumns((prev) => ({
+        ...prev,
+        [key]: { ...prev[key], cards: [], total: 0, newTotal: 0, continuingTotal: 0, newTodayTotal: 0, unreadTotal: 0, offset: 0, loading: false },
+      }));
+      return;
+    }
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
       const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
@@ -541,7 +548,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // The single number the period filter is actually for — "cuántos entraron hoy",
   // not "go add up the 7 column headers yourself". Sums whatever's currently visible:
   // every column, or just the one onlyColumn has narrowed to.
-  const visibleColumnKeys = COLUMN_ORDER.filter((key) => searching || !onlyColumn || key === onlyColumn);
+  const visibleColumnKeys = COLUMN_ORDER.filter((key) => {
+    if (unreadOnly && key === 'pendiente') return false;
+    return searching || !onlyColumn || key === onlyColumn;
+  });
   const grandTotal = visibleColumnKeys.reduce((sum, key) => sum + (columns[key]?.total ?? 0), 0);
   const periodLabel = searching ? 'Búsqueda' : PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ?? '';
   // Nuevas (el primer contacto de ese cliente cae dentro del periodo elegido) vs
