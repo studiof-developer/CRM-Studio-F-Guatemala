@@ -782,7 +782,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 {cards.map((card) => {
                   const overdue = key === 'pendiente'
                     ? minutesSince(card.stageSince) > slaMinutes
-                    : AWAITING_REPLY_COLUMNS.has(key) && card.awaitingReply && card.lastMessageAt
+                    : AWAITING_REPLY_COLUMNS.has(key) && card.awaitingReply && !card.lastMessageByAdvisor && card.lastMessageAt
                       && minutesSince(card.lastMessageAt) > awaitingReplyOverdueMinutes;
                   const unreadCount = card.unreadCount ?? 0;
                   const hasUnread = unreadCount > 0;

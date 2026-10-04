@@ -284,23 +284,29 @@ router.get('/pipeline', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.channel,
+               CASE
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
+                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+               END AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                t.updated_at AS stage_since,
                COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
                CASE
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                 ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
-               END AS awaiting_reply,
-               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-               COALESCE(t.last_message, c.last_message) AS last_message,
-               CASE
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
-                 ELSE false
-               END AS last_message_by_advisor,
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
+                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
+                  ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+                END AS awaiting_reply,
+                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+                COALESCE(t.last_message, c.last_message) AS last_message,
+                CASE
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN true
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                  ELSE false
+                END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -458,23 +464,29 @@ router.get('/pipeline/card', async (req, res, next) => {
       WITH temped AS (
         SELECT t.id AS ticket_id, t.status AS ticket_status, t.assigned_advisor, t.whatsapp_number_id,
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
-               COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.channel,
+               CASE
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
+                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+               END AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                t.updated_at AS stage_since,
                COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
                CASE
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                 ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
-               END AS awaiting_reply,
-               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-               COALESCE(t.last_message, c.last_message) AS last_message,
-               CASE
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
-                 ELSE false
-               END AS last_message_by_advisor,
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
+                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
+                  ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+                END AS awaiting_reply,
+                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+                COALESCE(t.last_message, c.last_message) AS last_message,
+                CASE
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN true
+                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                  ELSE false
+                END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -866,7 +878,11 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
                  t.updated_at AS stage_since,
-                 COALESCE(t.has_unread, c.has_unread) AS customer_has_unread, c.created_at AS customer_created_at,
+                 CASE
+                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
+                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
+                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+               END AS customer_has_unread, c.created_at AS customer_created_at,
                  COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                  COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
