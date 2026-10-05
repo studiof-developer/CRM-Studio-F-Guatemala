@@ -2023,19 +2023,11 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                                       here — showing it twice back to back reads as one duplicated,
                                       overlapping photo. The card below still renders it as the
                                       full attachment. */}
-                                  {(m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url) && !m.attachment ? (
-                                    <img
-                                      src={m.additional_kwargs.referral.thumbnail_url || m.additional_kwargs.referral.image_url}
-                                      alt=""
-                                      loading="lazy"
-                                      decoding="async"
-                                      className="aspect-square w-full object-cover"
-                                    />
-                                  ) : (
-                                    <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/15' : 'bg-black/5 dark:bg-white/10'}`}>
-                                      <Megaphone size={22} />
-                                    </span>
-                                  )}
+                                  <ReferralThumbnail
+                                    referral={m.additional_kwargs.referral}
+                                    hasAttachment={Boolean(m.attachment)}
+                                    outgoing={outgoing}
+                                  />
                                   <div className="px-3 py-2.5">
                                     <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white' : 'text-accent'}`}>
                                       <Megaphone size={12} />
@@ -2666,6 +2658,49 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function isMetaUrlExpired(urlStr) {
+  if (!urlStr) return true;
+  try {
+    const url = new URL(urlStr);
+    const oe = url.searchParams.get('oe');
+    if (oe) {
+      const expMs = parseInt(oe, 16) * 1000;
+      if (!isNaN(expMs) && Date.now() > expMs) {
+        return true;
+      }
+    }
+  } catch {
+    // If not a parseable URL, don't fail
+  }
+  return false;
+}
+
+function ReferralThumbnail({ referral, hasAttachment, outgoing }) {
+  const rawUrl = referral?.thumbnail_url || referral?.image_url;
+  const isExpired = !rawUrl || isMetaUrlExpired(rawUrl);
+  const [loadFailed, setLoadFailed] = useState(isExpired);
+
+  if (hasAttachment || loadFailed || !rawUrl) {
+    return (
+      <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/15' : 'bg-black/5 dark:bg-white/10'}`}>
+        <Megaphone size={22} />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={rawUrl}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setLoadFailed(true)}
+      className="aspect-square w-full object-cover"
+    />
   );
 }
 
