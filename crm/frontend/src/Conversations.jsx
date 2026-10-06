@@ -1688,9 +1688,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         {(selectedId ? String(selectedId).startsWith('social:') : false) && (
           <SocialThreadPanel
             key={selectedId}
-            contactId={selected?.socialContactId}
+            contactId={selected?.socialContactId || (selectedId ? Number(String(selectedId).replace('social:', '')) : null)}
             channel={selected?.channel}
-            name={selected?.customerName || `Contacto de ${CHANNEL_LABELS[selected?.channel] ?? ''}`.trim()}
+            name={selected?.customerName || (selected?.channel ? `Contacto de ${CHANNEL_LABELS[selected.channel] ?? ''}`.trim() : 'Contacto')}
             singleThreadMode={singleThreadMode}
             onBack={() => setSelectedId(null)}
             onCustomerChanged={() => load(false)}

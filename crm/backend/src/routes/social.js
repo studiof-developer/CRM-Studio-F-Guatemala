@@ -169,7 +169,18 @@ router.post('/contacts/:id/messages', async (req, res, next) => {
       const result = await send(externalId, body.trim());
       externalMessageId = result?.message_id ?? null;
     } catch (err) {
-      return res.status(502).json({ error: err.message });
+      console.error(`[social send error] provider=${provider} recipient=${externalId}:`, err);
+      let friendlyError = err.message;
+      try {
+        const jsonMatch = err.message.match(/\{.*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed?.error?.message) {
+            friendlyError = `Meta: ${parsed.error.message}`;
+          }
+        }
+      } catch {}
+      return res.status(502).json({ error: friendlyError });
     }
 
     const { rows } = await pool.query(
