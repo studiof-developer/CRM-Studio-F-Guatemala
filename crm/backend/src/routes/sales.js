@@ -437,4 +437,84 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/sales/daily-breakdown
+// Retorna un análisis consolidado día por día comparando ventas de Leydi vs Aura
+router.get('/daily-breakdown', async (req, res, next) => {
+  try {
+    const { from = '2026-09-01', to = '2026-10-31', lineId } = req.query;
+
+    const params = [from, to];
+    let lineClause = '';
+    if (lineId) {
+      params.push(Number(lineId));
+      lineClause = `AND s.whatsapp_number_id = $${params.length}`;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT
+         date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
+         COUNT(*) FILTER (WHERE s.advisor_name ILIKE '%Leydi%')::int AS leydi_ventas,
+         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name ILIKE '%Leydi%'), 0)::numeric(10,2) AS leydi_monto,
+         COUNT(*) FILTER (WHERE s.advisor_name ILIKE '%Aura%')::int AS aura_ventas,
+         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name ILIKE '%Aura%'), 0)::numeric(10,2) AS aura_monto,
+         COUNT(*) FILTER (WHERE s.advisor_name NOT ILIKE '%Leydi%' AND s.advisor_name NOT ILIKE '%Aura%')::int AS otros_ventas,
+         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name NOT ILIKE '%Leydi%' AND s.advisor_name NOT ILIKE '%Aura%'), 0)::numeric(10,2) AS otros_monto,
+         COUNT(*)::int AS total_ventas,
+         COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_monto
+       FROM sales s
+       WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
+         AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
+         ${lineClause}
+       GROUP BY day
+       ORDER BY day ASC`,
+      params
+    );
+
+    let totalLeydiVentas = 0;
+    let totalLeydiMonto = 0;
+    let totalAuraVentas = 0;
+    let totalAuraMonto = 0;
+    let totalVentas = 0;
+    let totalMonto = 0;
+
+    const daily = rows.map((r) => {
+      const lV = Number(r.leydi_ventas);
+      const lM = Number(r.leydi_monto);
+      const aV = Number(r.aura_ventas);
+      const aM = Number(r.aura_monto);
+      const tV = Number(r.total_ventas);
+      const tM = Number(r.total_monto);
+
+      totalLeydiVentas += lV;
+      totalLeydiMonto += lM;
+      totalAuraVentas += aV;
+      totalAuraMonto += aM;
+      totalVentas += tV;
+      totalMonto += tM;
+
+      return {
+        day: r.day,
+        leydi: { ventas: lV, monto: lM },
+        aura: { ventas: aV, monto: aM },
+        otros: { ventas: Number(r.otros_ventas), monto: Number(r.otros_monto) },
+        total: { ventas: tV, monto: tM },
+      };
+    });
+
+    res.json({
+      from,
+      to,
+      summary: {
+        totalVentas,
+        totalMonto,
+        leydi: { ventas: totalLeydiVentas, monto: totalLeydiMonto },
+        aura: { ventas: totalAuraVentas, monto: totalAuraMonto },
+      },
+      daily,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

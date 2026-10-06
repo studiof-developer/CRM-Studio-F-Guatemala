@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
+import { autoRecordSale } from '../salesAttribution.js';
 import { requireRole } from '../auth.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { fetchAdSpend } from '../metaAds.js';
@@ -1147,6 +1148,13 @@ router.patch('/:id', async (req, res, next) => {
     );
     if (status && status !== before.status) {
       logBusinessAction(req.user, before.customer_id, 'ticket_status_changed', `${TICKET_STATUS_LABELS[before.status] ?? before.status} → ${TICKET_STATUS_LABELS[status] ?? status}`);
+      if (status === 'pagado' || status === 'despacho') {
+        autoRecordSale({
+          customerId: before.customer_id,
+          ticketId: req.params.id,
+          user: req.user,
+        }).catch((e) => console.error('autoRecordSale on ticket move failed:', e));
+      }
     }
     res.json(rows[0]);
   } catch (err) { next(err); }

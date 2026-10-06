@@ -836,3 +836,10 @@ export async function deleteSale(saleId) {
   return res.json();
 }
 
+export async function fetchDailySalesBreakdown(filters = {}) {
+  const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v != null && v !== '')).toString();
+  const res = await apiFetch(`/api/sales/daily-breakdown${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el desglose diario de ventas');
+  return res.json();
+}
+

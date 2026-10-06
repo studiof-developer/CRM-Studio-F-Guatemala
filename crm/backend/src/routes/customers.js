@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
+import { autoRecordSale } from '../salesAttribution.js';
 
 const router = Router();
 
@@ -245,49 +246,18 @@ router.patch('/:id/tags', async (req, res, next) => {
       const toLabel = manualStatus ? (TEMP_LABELS[manualStatus] ?? manualStatus) : 'Automático';
       logBusinessAction(req.user, Number(req.params.id), 'customer_status_changed', `${fromLabel} → ${toLabel}`);
     }
-    if (paidLocked === true && !before.paid_locked) {
-      logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
-    }
-
-    // Si se especificó un monto de venta, registrarlo en la tabla sales
-    const numAmount = Number(saleAmount);
-    if (!isNaN(numAmount) && numAmount > 0) {
-      let resolvedTicketId = ticketId || null;
-      let resolvedLineId = null;
-      if (!resolvedTicketId) {
-        const { rows: tRows } = await pool.query(
-          `SELECT id, whatsapp_number_id FROM tickets WHERE customer_id = $1 ORDER BY (status = 'resuelto') ASC, id DESC LIMIT 1`,
-          [req.params.id]
-        );
-        if (tRows.length) {
-          resolvedTicketId = tRows[0].id;
-          resolvedLineId = tRows[0].whatsapp_number_id;
-        }
+    if ((paidLocked === true && !before.paid_locked) || manualStatus === 'pagado' || manualStatus === 'despacho') {
+      if (paidLocked === true && !before.paid_locked) {
+        logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
       }
-      const advisorId = req.user?.id || null;
-      const advisorName = req.user?.fullName || req.user?.username || 'Asesor';
-
-      await pool.query(
-        `INSERT INTO sales (customer_id, ticket_id, advisor_id, advisor_name, amount, payment_method, quote_id, notes, whatsapp_number_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          req.params.id,
-          resolvedTicketId,
-          advisorId,
-          advisorName,
-          numAmount,
-          paidMethod || rows[0]?.paid_method || null,
-          quoteId || null,
-          saleNotes || null,
-          resolvedLineId,
-        ]
-      );
-      logBusinessAction(
-        req.user,
-        Number(req.params.id),
-        'sale_recorded',
-        `Q${numAmount.toFixed(2)} (${paidMethod || rows[0]?.paid_method}) por ${advisorName}`
-      );
+      autoRecordSale({
+        customerId: req.params.id,
+        ticketId,
+        user: req.user,
+        paymentMethod: paidMethod || rows[0]?.paid_method || null,
+        amount: saleAmount,
+        notes: saleNotes,
+      }).catch((e) => console.error('autoRecordSale failed:', e));
     }
 
     res.json(rows[0]);
