@@ -128,6 +128,9 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
     );
     res.json(rows.map((r) => {
       let attachment = null;
+      let story = null;
+      let referral = null;
+
       if (r.attachment_id) {
         attachment = {
           id: r.attachment_id,
@@ -136,25 +139,67 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
           mimeType: r.attachment_mime_type,
           sizeBytes: r.attachment_size_bytes,
         };
-      } else if (r.raw_payload) {
+      }
+
+      if (r.raw_payload) {
         try {
           const p = typeof r.raw_payload === 'string' ? JSON.parse(r.raw_payload) : r.raw_payload;
-          const att = p?.message?.attachments?.[0];
-          if (att?.payload?.url) {
-            attachment = {
-              id: null,
-              kind: att.type || 'image',
-              url: att.payload.url,
-              filename: 'adjunto',
+
+          // 1. Check for story reply or mention
+          const replyStory = p?.message?.reply_to?.story;
+          const mentionStory = p?.message?.story?.mention;
+          if (replyStory) {
+            story = {
+              id: replyStory.id || null,
+              url: replyStory.url || null,
+              type: 'reply',
+              title: 'Respondió a tu historia',
             };
+          } else if (mentionStory) {
+            story = {
+              id: mentionStory.id || null,
+              url: mentionStory.link || null,
+              type: 'mention',
+              title: 'Te mencionó en una historia',
+            };
+          }
+
+          // 2. Check for referral (Meta Ads / Instagram Ads / Shortlink)
+          const ref = p?.referral || p?.postback?.referral;
+          if (ref) {
+            referral = {
+              ad_id: ref.ad_id || null,
+              source: ref.source || null,
+              headline: ref.ads_context_data?.ad_title || ref.ad_title || 'Publicidad de Meta',
+              body: ref.ref || ref.ads_context_data?.ad_body || null,
+              image_url: ref.ads_context_data?.photo_url || ref.ads_context_data?.video_url || null,
+              source_url: ref.ads_context_data?.photo_url || null,
+            };
+          }
+
+          // 3. Fallback for incoming attachment if not yet saved to message_attachments
+          if (!attachment) {
+            const att = p?.message?.attachments?.[0];
+            if (att?.payload?.url) {
+              const attType = (att.type || 'image').toLowerCase();
+              attachment = {
+                id: null,
+                kind: attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image',
+                url: att.payload.url,
+                filename: attType === 'share' ? 'Publicación compartida' : 'adjunto',
+              };
+            }
           }
         } catch {}
       }
+
       return {
         id: r.id,
         direction: r.direction,
         body: r.body,
         attachment,
+        story,
+        referral,
         createdAt: r.created_at,
       };
     }));

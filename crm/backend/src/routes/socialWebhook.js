@@ -71,9 +71,9 @@ router.post('/', async (req, res) => {
         || (igBusinessId && entry.id === igBusinessId);
       for (const event of entry.messaging ?? []) {
         // Delivery/read receipts and echoes of our own sent messages also arrive on this
-        // same webhook — only a real inbound message (sender != page, has message)
-        // is something to store here.
-        if (!event.message || event.message.is_echo) continue;
+        // same webhook — only inbound messages or postbacks need to be stored here.
+        if (event.delivery || event.read || event.message?.is_echo) continue;
+
         const externalId = event.sender?.id;
         if (!externalId) continue;
 
@@ -81,10 +81,24 @@ router.post('/', async (req, res) => {
           ? 'instagram'
           : 'messenger';
 
-        let text = event.message.text;
-        if (!text && event.message.attachments?.length) {
-          const first = event.message.attachments[0];
-          text = `[${(first.type || 'archivo').toUpperCase()}]`;
+        // Extract text from message, postback or referral
+        let text = event.message?.text || event.postback?.title || event.postback?.payload || null;
+        const attachments = event.message?.attachments || [];
+        const isStoryReply = Boolean(event.message?.reply_to?.story);
+        const storyUrl = event.message?.reply_to?.story?.url || event.message?.story?.mention?.link;
+
+        if (!text) {
+          if (isStoryReply) {
+            text = 'Respondió a tu historia';
+          } else if (event.message?.story?.mention) {
+            text = 'Te mencionó en una historia';
+          } else if (attachments.length) {
+            const first = attachments[0];
+            const typeStr = (first.type || 'archivo').toLowerCase();
+            text = typeStr === 'share' ? 'Compartió una publicación' : `[${typeStr.toUpperCase()}]`;
+          } else if (event.referral) {
+            text = 'Inició conversación desde un anuncio';
+          }
         }
 
         const { rows } = await pool.query(
@@ -100,14 +114,15 @@ router.post('/', async (req, res) => {
         const { rows: msgRows } = await pool.query(
           `INSERT INTO social_messages (contact_id, direction, body, raw_payload, external_message_id)
            VALUES ($1, 'in', $2, $3, $4) RETURNING id, created_at`,
-          [contact.id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
+          [contact.id, text ?? null, JSON.stringify(event), event.message?.mid ?? event.postback?.mid ?? null]
         );
+        const socialMsgId = msgRows[0]?.id;
 
         // Broadcast immediately for instant arrival in CRM (<100ms)
         broadcast('social_message_changes', JSON.stringify({
           contactId: contact.id,
           provider: contact.provider,
-          messageId: msgRows[0]?.id,
+          messageId: socialMsgId,
         }));
         broadcast('message_changes', JSON.stringify({
           session_id: `social:${contact.id}`,
@@ -115,6 +130,64 @@ router.post('/', async (req, res) => {
         }));
 
         await ensureCustomerAndTicket(contact, contact.provider, text);
+
+        // Background download for media attachments and story images to prevent ephemeral CDN link expiration
+        const mediaToDownload = [];
+        if (storyUrl) {
+          mediaToDownload.push({ url: storyUrl, kind: 'image', filename: 'historia.jpg', isStory: true });
+        }
+        for (const att of attachments) {
+          const directUrl = att.payload?.url;
+          if (directUrl) {
+            const attType = (att.type || 'image').toLowerCase();
+            const kind = attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image';
+            const filename = kind === 'video' ? 'video.mp4' : kind === 'audio' ? 'audio.mp3' : 'imagen.jpg';
+            mediaToDownload.push({ url: directUrl, kind, filename, isStory: false });
+          }
+        }
+
+        if (mediaToDownload.length && socialMsgId) {
+          (async () => {
+            try {
+              for (const item of mediaToDownload) {
+                const res = await fetch(item.url, { signal: AbortSignal.timeout(15000) });
+                if (!res.ok) continue;
+                const buffer = Buffer.from(await res.arrayBuffer());
+                let finalBuffer = buffer;
+                let storedMime = res.headers.get('content-type') || (item.kind === 'image' ? 'image/jpeg' : 'application/octet-stream');
+
+                if (item.kind === 'image') {
+                  const compressed = await compressImageBuffer(buffer).catch(() => null);
+                  if (compressed) {
+                    finalBuffer = compressed;
+                    storedMime = 'image/jpeg';
+                  }
+                }
+
+                const savedId = await saveAttachment({
+                  n8nMessageId: null,
+                  kind: item.kind,
+                  filename: item.filename,
+                  mimeType: storedMime,
+                  buffer: finalBuffer,
+                });
+
+                await pool.query(
+                  `UPDATE message_attachments SET social_message_id = $1 WHERE id = $2`,
+                  [socialMsgId, savedId]
+                );
+
+                broadcast('social_message_changes', JSON.stringify({
+                  contactId: contact.id,
+                  provider: contact.provider,
+                  messageId: socialMsgId,
+                }));
+              }
+            } catch (dlErr) {
+              console.warn('[socialWebhook] media download in background failed:', dlErr.message);
+            }
+          })();
+        }
 
         // Fetch display name in the background if not yet set
         if (!contact.display_name) {
