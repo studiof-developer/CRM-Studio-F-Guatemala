@@ -16,7 +16,7 @@ SELECT
     t.assigned_advisor,
     'Asesor'
   ) AS advisor_name,
-  COALESCE(q.total, ocr_msg.ocr_amount, 0) AS amount,
+  COALESCE(q.grand_total, ocr_msg.ocr_amount, 0) AS amount,
   COALESCE(a.details, c.paid_method, 'transferencia') AS payment_method,
   'Atribuido automáticamente por registro de pago' AS notes,
   t.whatsapp_number_id,
@@ -37,7 +37,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) u ON true
 LEFT JOIN LATERAL (
-  SELECT total
+  SELECT grand_total
   FROM quotes q
   WHERE q.customer_id = a.customer_id
     AND q.created_at <= a.accessed_at + interval '1 day'
@@ -56,7 +56,11 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) adv_msg ON true
 LEFT JOIN LATERAL (
-  SELECT (h.message->'additional_kwargs'->>'ocrAmount')::numeric AS ocr_amount
+  SELECT CASE
+    WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
+    THEN (h.message->'additional_kwargs'->>'ocrAmount')::numeric
+    ELSE 0
+  END AS ocr_amount
   FROM n8n_chat_histories h
   WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
     AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
@@ -83,7 +87,7 @@ SELECT
     t.assigned_advisor,
     'Asesor'
   ) AS advisor_name,
-  COALESCE(q.total, ocr_msg.ocr_amount, 0) AS amount,
+  COALESCE(q.grand_total, ocr_msg.ocr_amount, 0) AS amount,
   COALESCE(c.paid_method, 'transferencia') AS payment_method,
   'Atribuido automáticamente por estado pagado' AS notes,
   t.whatsapp_number_id,
@@ -109,7 +113,11 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) adv_msg ON true
 LEFT JOIN LATERAL (
-  SELECT (h.message->'additional_kwargs'->>'ocrAmount')::numeric AS ocr_amount
+  SELECT CASE
+    WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
+    THEN (h.message->'additional_kwargs'->>'ocrAmount')::numeric
+    ELSE 0
+  END AS ocr_amount
   FROM n8n_chat_histories h
   WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
     AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
@@ -118,7 +126,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) ocr_msg ON true
 LEFT JOIN LATERAL (
-  SELECT total
+  SELECT grand_total
   FROM quotes q
   WHERE q.customer_id = c.id AND q.created_at >= '2026-09-01T00:00:00-06:00'
   ORDER BY id DESC

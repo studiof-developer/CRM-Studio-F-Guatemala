@@ -130,16 +130,20 @@ export async function autoRecordSale({
     if (isNaN(numAmount) || numAmount <= 0) {
       // Check for quotes
       const { rows: qRows } = await pool.query(
-        `SELECT id, total FROM quotes WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`,
+        `SELECT id, grand_total FROM quotes WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`,
         [customerId]
       );
-      if (qRows.length && Number(qRows[0].total) > 0) {
-        numAmount = Number(qRows[0].total);
+      if (qRows.length && Number(qRows[0].grand_total) > 0) {
+        numAmount = Number(qRows[0].grand_total);
         resolvedQuoteId = qRows[0].id;
       } else if (customer.whatsapp_number) {
         // Check for OCR receipt amount
         const { rows: ocrRows } = await pool.query(
-          `SELECT (h.message->'additional_kwargs'->>'ocrAmount')::numeric AS ocr_amount
+          `SELECT CASE
+             WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
+             THEN (h.message->'additional_kwargs'->>'ocrAmount')::numeric
+             ELSE 0
+           END AS ocr_amount
            FROM n8n_chat_histories h
            WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
              AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
