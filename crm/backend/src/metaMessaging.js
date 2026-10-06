@@ -48,8 +48,9 @@ async function graphFetch(path, options, token) {
 // psid/igsid came from (Meta routes it correctly as long as the token has access to
 // both, which a single Page token does — the Instagram professional account messages
 // through its linked Page).
-async function sendViaMessagesApi(recipientId, text, token) {
-  return graphFetch('me/messages', {
+async function sendViaMessagesApi(recipientId, text, token, pageId = null) {
+  const endpoint = pageId ? `${pageId}/messages` : 'me/messages';
+  return graphFetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -63,13 +64,13 @@ async function sendViaMessagesApi(recipientId, text, token) {
 export async function sendMessengerText(psid, text) {
   const creds = await getSocialCredentials();
   if (!creds) throw new Error('Redes sociales no está configurado — completa Configuración > Redes sociales');
-  return sendViaMessagesApi(psid, text, creds.token);
+  return sendViaMessagesApi(psid, text, creds.token, creds.pageId);
 }
 
 export async function sendInstagramText(igsid, text) {
   const creds = await getSocialCredentials();
   if (!creds) throw new Error('Redes sociales no está configurado — completa Configuración > Redes sociales');
-  return sendViaMessagesApi(igsid, text, creds.token);
+  return sendViaMessagesApi(igsid, text, creds.token, creds.pageId);
 }
 
 // Looks up user profile for Instagram (IGSID) or Facebook Messenger (PSID).

@@ -162,11 +162,16 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
   const [actionBusy, setActionBusy] = useState(false);
 
   const load = useCallback(() => {
-    if (!contactId) return;
-    fetchSocialMessages(contactId).then((rows) => { setMessages(rows); setError(null); }).catch((err) => setError(err.message));
+    if (!contactId || isNaN(contactId)) {
+      setMessages([]);
+      return;
+    }
+    fetchSocialMessages(contactId)
+      .then((rows) => { setMessages(rows || []); setError(null); })
+      .catch((err) => { setError(err.message); setMessages([]); });
   }, [contactId]);
   const loadInfo = useCallback(() => {
-    if (!contactId) return;
+    if (!contactId || isNaN(contactId)) return;
     fetchSocialContact(contactId).then(setInfo).catch(() => {});
   }, [contactId]);
 
@@ -236,7 +241,8 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
     }
   }
 
-  const currentName = info?.customerName || name;
+  const currentChannel = channel || info?.channel || 'instagram';
+  const currentName = info?.customerName || name || (currentChannel ? `Contacto de ${CHANNEL_LABELS[currentChannel] ?? currentChannel}` : 'Contacto');
 
   return (
     <>
@@ -250,10 +256,10 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
             <ArrowLeft size={18} />
           </span>
         )}
-        <Avatar channel={channel} name={currentName} size={36} />
+        <Avatar channel={currentChannel} name={currentName} size={36} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{currentName}</p>
-          <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
+          <p className="text-xs text-greige-ink">{CHANNEL_LABELS[currentChannel] ?? currentChannel}</p>
         </div>
         <Info
           role="button"
@@ -299,7 +305,7 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Responder por ${CHANNEL_LABELS[channel] ?? channel}…`}
+              placeholder={`Responder por ${CHANNEL_LABELS[currentChannel] ?? currentChannel}…`}
               className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
             />
             <button
@@ -331,9 +337,9 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
               </div>
             </div>
             <div className="flex flex-col items-center text-center">
-              <Avatar channel={channel} name={currentName} size={64} />
+              <Avatar channel={currentChannel} name={currentName} size={64} />
               <p className="mt-3 text-sm font-semibold text-ink">{currentName || 'Sin nombre'}</p>
-              <p className="text-xs text-greige-ink">{CHANNEL_LABELS[channel] ?? channel}</p>
+              <p className="text-xs text-greige-ink">{CHANNEL_LABELS[currentChannel] ?? currentChannel}</p>
               <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                 {info.temperature && (() => {
                   const { label, icon: Icon, iconBg, iconText } = TEMP_META[info.temperature];
@@ -1688,7 +1694,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         {(selectedId ? String(selectedId).startsWith('social:') : false) && (
           <SocialThreadPanel
             key={selectedId}
-            contactId={selected?.socialContactId || (selectedId ? Number(String(selectedId).replace('social:', '')) : null)}
+            contactId={selected?.socialContactId || (selectedId ? Number(String(selectedId).match(/social:(\d+)/)?.[1] || NaN) : null)}
             channel={selected?.channel}
             name={selected?.customerName || (selected?.channel ? `Contacto de ${CHANNEL_LABELS[selected.channel] ?? ''}`.trim() : 'Contacto')}
             singleThreadMode={singleThreadMode}

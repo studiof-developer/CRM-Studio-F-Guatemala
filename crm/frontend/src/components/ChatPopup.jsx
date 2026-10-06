@@ -11,7 +11,7 @@ import Conversations from '../Conversations.jsx';
 // so nothing (draft text, thread scroll position, presence target) leaks from one
 // popup open to the next.
 export default function ChatPopup({ phone, lineId, user, onClose }) {
-  const sessionId = lineId ? `${phone}__line_${lineId}` : phone;
+  const sessionId = (phone && String(phone).startsWith('social:')) ? phone : (lineId ? `${phone}__line_${lineId}` : phone);
 
   useEffect(() => {
     if (!phone) return;

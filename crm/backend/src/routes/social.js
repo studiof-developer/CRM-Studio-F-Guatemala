@@ -127,10 +127,10 @@ router.get('/contacts/:id', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT sc.display_name, sc.provider, t.status AS ticket_status, t.assigned_advisor,
-              c.id AS customer_id, ${EFFECTIVE_STATUS_SQL} AS temperature, c.manual_status,
+              c.id AS customer_id, COALESCE(${EFFECTIVE_STATUS_SQL}, 'frio') AS temperature, c.manual_status,
               c.paid_locked, c.paid_method
        FROM social_contacts sc
-       JOIN customers c ON c.id = sc.customer_id
+       LEFT JOIN customers c ON c.id = sc.customer_id
        LEFT JOIN LATERAL (
          SELECT status, assigned_advisor FROM tickets WHERE customer_id = c.id
          ORDER BY created_at DESC LIMIT 1
