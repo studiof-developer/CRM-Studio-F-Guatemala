@@ -138,7 +138,7 @@ LEFT JOIN LATERAL (
   WHERE u.full_name = adv_msg.advisor_name OR u.full_name = t.assigned_advisor
   LIMIT 1
 ) u ON true
-WHERE (c.paid_locked = true OR c.manual_status IN ('pagado', 'despacho') OR t.status IN ('pagado', 'despacho'))
+WHERE (c.paid_locked = true OR c.manual_status IN ('pagado', 'despacho'))
   AND COALESCE(adv_msg.last_advisor_msg_at, c.updated_at) >= '2026-09-01T00:00:00-06:00'
   AND NOT EXISTS (
     SELECT 1 FROM sales s
