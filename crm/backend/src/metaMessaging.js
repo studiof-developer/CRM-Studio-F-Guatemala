@@ -73,6 +73,29 @@ export async function sendInstagramText(igsid, text) {
   return sendViaMessagesApi(igsid, text, creds.token, creds.pageId);
 }
 
+export async function sendSocialAttachment({ recipientId, fileBuffer, filename, mimeType }) {
+  const creds = await getSocialCredentials();
+  if (!creds) throw new Error('Redes sociales no está configurado — completa Configuración > Redes sociales');
+
+  const form = new FormData();
+  form.append('recipient', JSON.stringify({ id: recipientId }));
+  const type = mimeType.startsWith('image/') ? 'image' : (mimeType.startsWith('audio/') ? 'audio' : 'file');
+  form.append('message', JSON.stringify({
+    attachment: {
+      type,
+      payload: { is_reusable: true }
+    }
+  }));
+  const blob = new Blob([fileBuffer], { type: mimeType });
+  form.append('filedata', blob, filename || 'archivo');
+
+  const endpoint = creds.pageId ? `${creds.pageId}/messages` : 'me/messages';
+  return graphFetch(endpoint, {
+    method: 'POST',
+    body: form,
+  }, creds.token);
+}
+
 // Looks up user profile for Instagram (IGSID) or Facebook Messenger (PSID).
 // NOTE: Meta Graph API node types have strictly incompatible fields:
 // - Instagram IGSID supports: name, username, profile_pic (never first_name/last_name)

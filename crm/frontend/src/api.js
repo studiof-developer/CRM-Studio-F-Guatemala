@@ -655,12 +655,23 @@ export async function fetchSocialMessages(contactId) {
   return res.json();
 }
 
-export async function sendSocialMessage(contactId, body) {
-  const res = await apiFetch(`/api/social/contacts/${contactId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body }),
-  });
+export async function sendSocialMessage(contactId, body, file = null) {
+  let res;
+  if (file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (body) formData.append('body', body);
+    res = await apiFetch(`/api/social/contacts/${contactId}/messages`, {
+      method: 'POST',
+      body: formData,
+    });
+  } else {
+    res = await apiFetch(`/api/social/contacts/${contactId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    });
+  }
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al enviar el mensaje');
   return res.json();
 }

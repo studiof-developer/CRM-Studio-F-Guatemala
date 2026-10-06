@@ -15,6 +15,7 @@ import { saveAttachment } from '../attachmentStorage.js';
 import { compressImageBuffer } from '../imageCompression.js';
 import { compressPdfBuffer } from '../pdfCompression.js';
 import { processInboundImageOcr, updateMessageStatus } from './attachments.js';
+import { broadcast } from '../events.js';
 
 const router = Router();
 
@@ -96,30 +97,43 @@ router.post('/', async (req, res) => {
         );
         const contact = rows[0];
 
-        // Fetch display name if not yet set
-        if (!contact.display_name) {
-          try {
-            const profile = await fetchProfileName(externalId, contact.provider);
-            if (profile?.displayName) {
-              contact.display_name = profile.displayName;
-              contact.profile_pic_url = profile.profilePicUrl ?? contact.profile_pic_url;
-              await pool.query(
-                `UPDATE social_contacts SET display_name = $1, profile_pic_url = COALESCE($2, profile_pic_url) WHERE id = $3`,
-                [contact.display_name, contact.profile_pic_url, contact.id]
-              );
-            }
-          } catch (err) {
-            console.error('social webhook: profile name lookup failed', err);
-          }
-        }
-
-        await pool.query(
+        const { rows: msgRows } = await pool.query(
           `INSERT INTO social_messages (contact_id, direction, body, raw_payload, external_message_id)
-           VALUES ($1, 'in', $2, $3, $4)`,
+           VALUES ($1, 'in', $2, $3, $4) RETURNING id, created_at`,
           [contact.id, text ?? null, JSON.stringify(event), event.message.mid ?? null]
         );
 
+        // Broadcast immediately for instant arrival in CRM (<100ms)
+        broadcast('social_message_changes', JSON.stringify({
+          contactId: contact.id,
+          provider: contact.provider,
+          messageId: msgRows[0]?.id,
+        }));
+        broadcast('message_changes', JSON.stringify({
+          session_id: `social:${contact.id}`,
+          phone: `social:${contact.id}`,
+        }));
+
         await ensureCustomerAndTicket(contact, contact.provider, text);
+
+        // Fetch display name in the background if not yet set
+        if (!contact.display_name) {
+          fetchProfileName(externalId, contact.provider).then(async (profile) => {
+            if (profile?.displayName) {
+              await pool.query(
+                `UPDATE social_contacts SET display_name = $1, profile_pic_url = COALESCE($2, profile_pic_url) WHERE id = $3`,
+                [profile.displayName, profile.profilePicUrl, contact.id]
+              );
+              if (contact.customer_id) {
+                await pool.query(
+                  `UPDATE customers SET full_name = $1 WHERE id = $2 AND (full_name IS NULL OR full_name = '' OR full_name LIKE 'Contacto de %')`,
+                  [profile.displayName, contact.customer_id]
+                );
+              }
+              broadcast('social_message_changes', JSON.stringify({ contactId: contact.id, provider: contact.provider }));
+            }
+          }).catch((err) => console.warn('background fetchProfileName failed:', err.message));
+        }
       }
     }
   } catch (err) {

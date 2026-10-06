@@ -145,12 +145,20 @@ function describeQuoted(msg, from) {
 // through the giant WhatsApp-specific `thread` state above, so this never risks that
 // component's revenue-critical JSX. Polls instead of using live SSE — the webhook
 // receiver doesn't broadcast an event yet, fine for this traffic volume.
-function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack, onCustomerChanged }) {
+function SocialThreadPanel({
+  contactId, channel, name, singleThreadMode, onBack, onCustomerChanged,
+  catalogProducts = [], user, whatsappLines = []
+}) {
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const [stagedFiles, setStagedFiles] = useState([]);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   const [info, setInfo] = useState(null);
   const [infoOpen, setInfoOpen] = useState(isDesktopViewport());
@@ -160,6 +168,10 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
   const [saleAmount, setSaleAmount] = useState('');
   const [saleNotes, setSaleNotes] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
+  const [customerSales, setCustomerSales] = useState([]);
+
+  const [quickReplies, setQuickReplies] = useState([]);
+  const [slashIndex, setSlashIndex] = useState(0);
 
   const load = useCallback(() => {
     if (!contactId || isNaN(contactId)) {
@@ -170,6 +182,7 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
       .then((rows) => { setMessages(rows || []); setError(null); })
       .catch((err) => { setError(err.message); setMessages([]); });
   }, [contactId]);
+
   const loadInfo = useCallback(() => {
     if (!contactId || isNaN(contactId)) return;
     fetchSocialContact(contactId).then(setInfo).catch(() => {});
@@ -177,23 +190,126 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
 
   useEffect(() => { setMessages(null); load(); }, [load]);
   useEffect(() => { setInfo(null); loadInfo(); }, [loadInfo]);
+
+  // Real-time live update via SSE (instant arrival in <100ms)
   useEffect(() => {
-    const id = setInterval(load, 8000);
+    const unsubscribe = onLiveEvent('social_message_changes', (raw) => {
+      let payload;
+      try { payload = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
+      if (Number(payload?.contactId) === Number(contactId)) {
+        load();
+        loadInfo();
+      }
+    });
+    return () => unsubscribe();
+  }, [contactId, load, loadInfo]);
+
+  // Fast fallback polling (3s instead of 8s)
+  useEffect(() => {
+    const id = setInterval(load, 3000);
     return () => clearInterval(id);
   }, [load]);
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }); }, [messages]);
 
+  // Load sales when customerId is available
+  useEffect(() => {
+    if (info?.customerId) {
+      fetchCustomerSales(info.customerId).then(setCustomerSales).catch(() => setCustomerSales([]));
+    } else {
+      setCustomerSales([]);
+    }
+  }, [info?.customerId]);
+
+  // Load quick replies for slash commands
+  useEffect(() => {
+    fetchQuickReplies().then(setQuickReplies).catch(() => {});
+  }, []);
+
+  const slashMatch = /^\/(\S*)$/.exec(draft);
+  const slashResults = slashMatch
+    ? quickReplies.filter((q) => q.shortcut.startsWith(slashMatch[1].toLowerCase())).slice(0, 8)
+    : [];
+
+  function applyQuickReply(item) {
+    setDraft(item.content);
+    setSlashIndex(0);
+  }
+
+  function handleDraftKeyDown(e) {
+    if (slashResults.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex((i) => (i + 1) % slashResults.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applyQuickReply(slashResults[slashIndex] ?? slashResults[0]);
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        setDraft('');
+      }
+      return;
+    }
+    if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }
+
+  function handleFileSelected(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const additions = files.map((file) => ({
+      file,
+      id: `${Date.now()}-${Math.random()}`,
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
+    setStagedFiles((prev) => [...prev, ...additions]);
+    e.target.value = '';
+  }
+
   async function handleSend(e) {
-    e.preventDefault();
+    e?.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    const files = [...stagedFiles];
+    if ((!text && !files.length) || sending) return;
+
+    // Optimistic UI - message bubble appears INSTANTLY (0 ms)
+    const tempId = `opt-${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      direction: 'out',
+      body: text,
+      createdAt: new Date().toISOString(),
+      pending: true,
+      attachment: files.length ? {
+        id: null,
+        kind: files[0].file.type.startsWith('image/') ? 'image' : 'document',
+        filename: files[0].file.name,
+        url: files[0].previewUrl,
+      } : null,
+    };
+    setMessages((prev) => [...(prev || []), optimisticMsg]);
+    setDraft('');
+    setStagedFiles([]);
+
     setSending(true);
     try {
-      await sendSocialMessage(contactId, text);
-      setDraft('');
+      if (files.length > 0) {
+        for (const sf of files) {
+          await sendSocialMessage(contactId, text, sf.file);
+        }
+      } else {
+        await sendSocialMessage(contactId, text);
+      }
       load();
     } catch (err) {
       showError(err.message);
+      setMessages((prev) => (prev || []).filter((m) => m.id !== tempId));
+      setDraft(text);
     } finally {
       setSending(false);
     }
@@ -281,6 +397,11 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
             {messages?.length === 0 && <p className="py-8 text-center text-sm text-greige-ink">Sin mensajes todavía.</p>}
             {messages?.map((m) => {
               const outgoing = m.direction === 'out';
+              const att = m.attachment;
+              const isImg = att && (att.kind === 'image' || att.mimeType?.startsWith('image/') || att.url?.match(/\.(jpeg|jpg|gif|png|webp)/i));
+              const isAudio = att && (att.kind === 'audio' || att.mimeType?.startsWith('audio/'));
+              const fileSrc = att ? (att.url || (att.id ? attachmentUrl(att.id) : null)) : null;
+
               return (
                 <div key={m.id} className={`flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
                   <div
@@ -290,9 +411,40 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
                         : 'rounded-2xl rounded-tl-sm border border-line-soft bg-paper text-ink shadow-sm dark:bg-white/[0.08]'
                     }`}
                   >
+                    {isImg && fileSrc && (
+                      <div className="relative mb-1 overflow-hidden rounded-lg">
+                        <img
+                          src={fileSrc}
+                          alt={att.filename || 'Imagen adjunta'}
+                          onClick={() => setLightboxUrl(fileSrc)}
+                          className="max-h-60 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
+                        />
+                      </div>
+                    )}
+                    {isAudio && fileSrc && (
+                      <audio src={fileSrc} controls className="mb-1 w-64 max-w-full" />
+                    )}
+                    {att && !isImg && !isAudio && fileSrc && (
+                      <a
+                        href={att.id ? attachmentDownloadUrl(att.id) : fileSrc}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 ${
+                          outgoing ? 'bg-white/10' : 'bg-black/[0.04] dark:bg-white/[0.06]'
+                        }`}
+                      >
+                        <FileText size={20} className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium">{att.filename || 'Documento'}</p>
+                          {att.sizeBytes && <p className={`text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>{Math.ceil(att.sizeBytes / 1024)} KB</p>}
+                        </div>
+                        <Download size={14} className="shrink-0" />
+                      </a>
+                    )}
                     {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
-                    <span className={`mt-1 block text-right text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
+                    <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
                       {formatBubbleTime(m.createdAt)}
+                      {m.pending && <Clock size={10} className="animate-spin" />}
                     </span>
                   </div>
                 </div>
@@ -301,21 +453,94 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-paper p-3">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Responder por ${CHANNEL_LABELS[currentChannel] ?? currentChannel}…`}
-              className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
-            />
-            <button
-              type="submit"
-              disabled={sending || !draft.trim()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              <Send size={16} />
-            </button>
-          </form>
+          {/* Staged files preview strip */}
+          {stagedFiles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-line bg-paper px-3 pt-2">
+              {stagedFiles.map((sf) => (
+                <div key={sf.id} className="relative flex items-center gap-1.5 rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] p-1.5 pr-2">
+                  {sf.previewUrl ? (
+                    <img src={sf.previewUrl} alt="" className="h-10 w-10 rounded object-cover" />
+                  ) : (
+                    <FileText size={20} className="text-greige-ink" />
+                  )}
+                  <span className="max-w-[120px] truncate text-xs">{sf.file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStagedFiles((prev) => prev.filter((f) => f.id !== sf.id))}
+                    className="ml-1 rounded-full p-0.5 text-greige hover:bg-black/10 dark:hover:bg-white/10"
+                    aria-label="Quitar archivo"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="relative border-t border-line bg-paper p-3">
+            {/* Quick replies slash menu */}
+            {slashResults.length > 0 && (
+              <div className="absolute bottom-full left-3 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-paper shadow-lg z-20">
+                {slashResults.map((item, i) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onMouseDown={(e) => { e.preventDefault(); applyQuickReply(item); }}
+                    onMouseEnter={() => setSlashIndex(i)}
+                    className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors ${
+                      i === slashIndex ? 'bg-accent-soft' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <span className="font-semibold text-accent">/{item.shortcut}</span>
+                    <span className="truncate text-greige-ink">{item.content}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleSend} className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,audio/*,.pdf,.doc,.docx"
+                className="hidden"
+                onChange={handleFileSelected}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
+                aria-label="Adjuntar archivo"
+                title="Adjuntar archivo"
+              >
+                <Paperclip size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuoteOpen(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-greige transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.08] hover:text-accent hover:bg-accent-soft disabled:opacity-50"
+                aria-label="Cotizar prendas"
+                title="Cotizar prendas y generar imagen para el cliente"
+              >
+                <Calculator size={18} />
+              </button>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleDraftKeyDown}
+                placeholder={`Responder por ${CHANNEL_LABELS[currentChannel] ?? currentChannel}…`}
+                className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
+              />
+              <button
+                type="submit"
+                disabled={sending || (!draft.trim() && !stagedFiles.length)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+              >
+                <Send size={16} />
+              </button>
+            </form>
+          </div>
         </div>
 
         {infoOpen && info && (
@@ -340,6 +565,11 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
               <Avatar channel={currentChannel} name={currentName} size={64} />
               <p className="mt-3 text-sm font-semibold text-ink">{currentName || 'Sin nombre'}</p>
               <p className="text-xs text-greige-ink">{CHANNEL_LABELS[currentChannel] ?? currentChannel}</p>
+              {info.externalId && (
+                <p className="flex items-center gap-1 text-xs text-greige-ink mt-0.5">
+                  ID: {info.externalId}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                 {info.temperature && (() => {
                   const { label, icon: Icon, iconBg, iconText } = TEMP_META[info.temperature];
@@ -375,13 +605,68 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
                   })),
                 ]}
               />
-              {!info.paidLocked && (
+              {!info.paidLocked ? (
                 <button
                   onClick={() => setConfirmPaidOpen(true)}
-                  className="mt-1 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
+                  className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-success-bg bg-success-bg/50 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success-bg"
                 >
-                  Marcar como Pagado (permanente)
+                  <CircleDollarSign size={13} />
+                  Marcar como Pagado y Registrar Venta (Q)
                 </button>
+              ) : (
+                <button
+                  onClick={() => setConfirmPaidOpen(true)}
+                  className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-line bg-secondary px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-muted"
+                >
+                  <CircleDollarSign size={13} />
+                  + Registrar nueva venta (Q)
+                </button>
+              )}
+
+              {customerSales.length > 0 && (
+                <div className="mt-2.5 rounded-xl border border-success-bg/60 bg-success-bg/25 p-2.5 text-xs">
+                  <div className="flex items-center justify-between font-semibold text-success">
+                    <span>Ventas registradas ({customerSales.length})</span>
+                    <span>Q {customerSales.reduce((sum, s) => sum + Number(s.amount), 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="mt-1.5 flex max-h-32 flex-col divide-y divide-success/15 overflow-y-auto">
+                    {customerSales.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between py-1 text-[11px] text-greige-ink">
+                        <span>{new Date(s.createdAt).toLocaleDateString('es-GT', { day: '2-digit', month: 'short' })} · {s.advisorName}</span>
+                        <span className="font-semibold text-ink">Q {Number(s.amount).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-4 border-t border-line-soft pt-5">
+              <InfoRow icon={MapPin} label="Departamento" value={info.department || '—'} />
+              <InfoRow icon={MapPin} label="Municipio" value={info.municipio || '—'} />
+              <InfoRow icon={MapPin} label="Dirección" value={info.address || '—'} />
+              <InfoRow icon={ShoppingBag} label="Línea preferida" value={info.preferredLine || '—'} />
+              <InfoRow icon={ShoppingBag} label="Talla" value={info.preferredSize || '—'} />
+              <InfoRow icon={CircleDollarSign} label="Compras totales" value={info.purchaseFrequency ?? '—'} />
+
+              {info.optedOutCampaigns && (
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs">
+                  <span className="font-medium text-danger">⛔ Excluido de difusiones</span>
+                  {(user?.role === 'admin' || user?.role === 'supervisor') && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await updateCustomerOptOut(info.customerId, false);
+                          loadInfo();
+                          showSuccess('Cliente reactivado en difusiones');
+                        } catch (err) { showError(err.message); }
+                      }}
+                      className="shrink-0 rounded-md bg-white/70 px-2 py-1 font-semibold text-danger hover:bg-white"
+                    >
+                      Reactivar
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -397,9 +682,11 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
 
       <ConfirmDialog
         open={confirmPaidOpen}
-        title="Marcar como Pagado y Registrar Venta"
-        message="Esto marca al cliente como Pagado de forma permanente y registra la venta en Quetzales a tu nombre:"
-        confirmLabel="Marcar como Pagado"
+        title={info?.paidLocked ? 'Registrar Venta Adicional' : 'Marcar como Pagado y Registrar Venta'}
+        message={info?.paidLocked
+          ? 'Registra el monto de la venta en Quetzales atribuida a tu asesoría:'
+          : 'Esto marca al cliente como Pagado de forma permanente y registra la venta en Quetzales a tu nombre:'}
+        confirmLabel={info?.paidLocked ? 'Registrar Venta' : 'Marcar como Pagado'}
         busy={actionBusy}
         confirmDisabled={!paidMethod || !saleAmount || Number(saleAmount) <= 0}
         onConfirm={handleMarkPaid}
@@ -442,10 +729,68 @@ function SocialThreadPanel({ contactId, channel, name, singleThreadMode, onBack,
 
       <EditCustomerModal
         open={editOpen}
-        customer={info?.customerId ? { id: info.customerId, full_name: info.customerName } : null}
+        customer={info?.customerId ? {
+          id: info.customerId,
+          full_name: info.customerName,
+          dpi: info.dpi,
+          email: info.email,
+          department: info.department,
+          municipio: info.municipio,
+          address: info.address,
+          preferred_line: info.preferredLine,
+          preferred_size: info.preferredSize,
+          birth_date: info.birthDate,
+        } : null}
         onCancel={() => setEditOpen(false)}
         onSaved={() => { setEditOpen(false); loadInfo(); onCustomerChanged?.(); }}
       />
+
+      <QuoteModal
+        open={quoteOpen}
+        onClose={() => setQuoteOpen(false)}
+        customer={{
+          id: info?.customerId,
+          fullName: currentName,
+          whatsappNumber: `social:${contactId}`,
+        }}
+        activeLine={whatsappLines?.find((l) => l.id === 1) || { label: 'Studio F' }}
+        advisor={user}
+        catalog={catalogProducts}
+        onSendQuoteImage={async (file, caption) => {
+          const previewUrl = URL.createObjectURL(file);
+          setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
+          if (caption) setDraft(caption);
+        }}
+      />
+
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-6"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="Cerrar"
+            >
+              <X size={20} />
+            </button>
+            <motion.img
+              initial={{ scale: 0.96 }}
+              animate={{ scale: 1 }}
+              src={lightboxUrl}
+              alt="Imagen ampliada"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -1700,6 +2045,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             singleThreadMode={singleThreadMode}
             onBack={() => setSelectedId(null)}
             onCustomerChanged={() => load(false)}
+            catalogProducts={catalogProducts}
+            user={user}
+            whatsappLines={whatsappLines}
           />
         )}
         {!thread && !(selectedId ? String(selectedId).startsWith('social:') : false) && (
