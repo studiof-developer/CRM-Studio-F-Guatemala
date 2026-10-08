@@ -4,7 +4,7 @@ import { pool } from '../db.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { compressImageBuffer } from '../imageCompression.js';
 import { compressPdfBuffer } from '../pdfCompression.js';
-import { cleanSessionId, findConversationThread } from './conversations.js';
+import { cleanSessionId, findConversationThread, getDefaultLineId } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
 import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
@@ -117,20 +117,70 @@ inboundRouter.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'mimeType not allowed' });
     }
 
-    const { sessionIds } = await findConversationThread(phone);
-    const sessionId = sessionIds?.[0] ?? `${phone}__whatsapp`;
+    // Resolve line ID safely so attachments land in the exact same line/thread as text
+    let lineId = req.body.lineId || req.body.whatsapp_number_id || req.body.whatsappNumberId || null;
+    if (!lineId && (req.body.phoneNumberId || req.body.phone_number_id)) {
+      const pId = String(req.body.phoneNumberId || req.body.phone_number_id).trim();
+      const { rows } = await pool.query('SELECT id FROM whatsapp_numbers WHERE phone_number_id = $1 LIMIT 1', [pId]);
+      if (rows.length) lineId = rows[0].id;
+    }
+    if (!lineId) {
+      // Check customer's most recent active open ticket
+      const { rows: tRows } = await pool.query(
+        `SELECT t.whatsapp_number_id FROM tickets t
+         JOIN customers c ON c.id = t.customer_id
+         WHERE c.whatsapp_number = $1 AND t.status != 'resuelto' AND t.whatsapp_number_id IS NOT NULL
+         ORDER BY t.updated_at DESC, t.id DESC LIMIT 1`,
+        [phone]
+      );
+      if (tRows.length && tRows[0].whatsapp_number_id) {
+        lineId = tRows[0].whatsapp_number_id;
+      }
+    }
+    if (!lineId) {
+      // Check customer's most recent message with a line
+      const { rows: hRows } = await pool.query(
+        `SELECT whatsapp_number_id, session_id FROM n8n_chat_histories
+         WHERE (session_id = $1 OR session_id LIKE $1 || '__%')
+           AND (whatsapp_number_id IS NOT NULL OR session_id ~ '__line_[0-9]+')
+         ORDER BY id DESC LIMIT 1`,
+        [phone]
+      );
+      if (hRows.length) {
+        if (hRows[0].whatsapp_number_id) {
+          lineId = hRows[0].whatsapp_number_id;
+        } else if (hRows[0].session_id?.includes('__line_')) {
+          const match = hRows[0].session_id.match(/__line_([0-9]+)/);
+          if (match) lineId = parseInt(match[1], 10);
+        }
+      }
+    }
+    if (!lineId) {
+      lineId = await getDefaultLineId();
+    }
+
+    const sessionId = `${phone}__line_${lineId}`;
 
     const message = {
       type: 'human',
       content: caption ?? '',
-      additional_kwargs: { ...(wamid ? { wamid } : {}), ...(replyToWamid ? { replyToWamid } : {}), ...(referral ? { referral } : {}) },
+      additional_kwargs: {
+        ...(wamid ? { wamid } : {}),
+        ...(replyToWamid ? { replyToWamid } : {}),
+        ...(referral ? { referral } : {}),
+        whatsappNumberId: lineId,
+      },
       response_metadata: {},
     };
     const { rows: inserted } = await pool.query(
-      `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
-      [sessionId, JSON.stringify(message)]
+      `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id`,
+      [sessionId, JSON.stringify(message), lineId]
     );
     const inboundMessageId = inserted[0].id;
+    await pool.query(
+      `SELECT pg_notify('message_changes', json_build_object('session_id', $1::text, 'phone', $2::text)::text)`,
+      [sessionId, phone]
+    );
 
     // Never re-sent anywhere by us — this copy only ever gets read back for the CRM's
     // own display, so it's always safe to compress it before it even hits disk. Most

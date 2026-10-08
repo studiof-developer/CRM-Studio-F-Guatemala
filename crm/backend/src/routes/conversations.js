@@ -276,7 +276,8 @@ export async function getDefaultLineId() {
 async function resolveSessionIds(threadKey) {
   const { phone, lineId } = parseThreadKey(threadKey);
   if (phone && PHONE_RE.test(phone)) {
-    const isDefault = Number(lineId) === 1;
+    const defaultLineId = await getDefaultLineId();
+    const isDefault = Number(lineId) === Number(defaultLineId);
     const { rows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories
        WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
@@ -318,8 +319,8 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     const { rows: tRows } = await pool.query(
       `SELECT t.whatsapp_number_id FROM tickets t
        JOIN customers c ON c.id = t.customer_id
-       WHERE c.whatsapp_number = $1
-       ORDER BY t.created_at DESC LIMIT 1`,
+       WHERE c.whatsapp_number = $1 AND t.status != 'resuelto' AND t.whatsapp_number_id IS NOT NULL
+       ORDER BY t.updated_at DESC, t.id DESC LIMIT 1`,
       [phone]
     );
     if (tRows.length && tRows[0].whatsapp_number_id) {
@@ -334,7 +335,8 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
   let sessionIds = [];
   let messagesDesc = [];
   if (phone && PHONE_RE.test(phone)) {
-    const isDefaultLine = Number(lineId) === 1;
+    const defaultLineId = await getDefaultLineId();
+    const isDefaultLine = Number(lineId) === Number(defaultLineId);
     const { rows: sRows } = await pool.query(
       `SELECT DISTINCT session_id FROM n8n_chat_histories 
        WHERE session_id = $1 OR session_id LIKE $1 || '__%'`,
@@ -353,9 +355,9 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     const { rows } = await pool.query(
       `SELECT id, message, created_at, whatsapp_number_id, session_id
        FROM n8n_chat_histories
-       WHERE session_id = ANY($1)
-       ORDER BY id DESC LIMIT $2`,
-      [sessionIds, limit]
+       WHERE session_id = ANY($1) OR (whatsapp_number_id = $2 AND (session_id = $3 OR session_id LIKE $3 || '__%'))
+       ORDER BY id DESC LIMIT $4`,
+      [sessionIds, Number(lineId), phone, limit]
     );
     messagesDesc = rows;
   } else {

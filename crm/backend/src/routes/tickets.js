@@ -305,7 +305,7 @@ router.get('/pipeline', async (req, res, next) => {
                   ELSE false
                 END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -487,7 +487,7 @@ router.get('/pipeline/card', async (req, res, next) => {
                   ELSE false
                 END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -701,7 +701,7 @@ router.get('/pipeline/export', async (req, res, next) => {
                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
                COALESCE(t.last_message, c.last_message) AS last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label,
-               ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+               ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
         JOIN customers c ON c.id = t.customer_id
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
@@ -886,7 +886,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
                END AS customer_has_unread, c.created_at AS customer_created_at,
                  COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
                  COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-                 ROW_NUMBER() OVER (PARTITION BY t.customer_id, COALESCE(t.whatsapp_number_id, 1) ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
+                 ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
           WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${statsLineSql}
         ),
