@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Loader2, Download, RefreshCw, CheckCircle2, Search, Clock, ChevronLeft, ChevronRight, Mail, LayoutGrid } from 'lucide-react';
-import { fetchPipelineColumn, fetchPipelineExport } from './api.js';
+import { fetchPipelineColumn, fetchPipelineExport, fetchWhatsappNumbers } from './api.js';
 import Select from './components/Select.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 import { formatWait } from './lib/sla.js';
@@ -50,6 +50,8 @@ function emptyColumns() {
 // helpers HandoffQueue.jsx uses — see lib/pipelinePeriod.js.
 export default function MarketingPipeline({ onOpenConversation }) {
   const [columns, setColumns] = useState(emptyColumns);
+  const [lines, setLines] = useState([]);
+  const [selectedLine, setSelectedLine] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
@@ -63,6 +65,10 @@ export default function MarketingPipeline({ onOpenConversation }) {
   const [error, setError] = useState(null);
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
+
+  useEffect(() => {
+    fetchWhatsappNumbers().then(setLines).catch(() => {});
+  }, []);
 
   const [periodPreset, setPeriodPreset] = useState('todo');
   const todayStr = guatemalaToday();
@@ -97,20 +103,20 @@ export default function MarketingPipeline({ onOpenConversation }) {
   const loadColumn = useCallback(async (key) => {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const { cards, total } = await fetchPipelineColumn(key, { offset: 0, limit: PAGE_SIZE, dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       setColumns((prev) => ({ ...prev, [key]: { cards, total, offset: cards.length, loading: false } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, selectedLine]);
 
   const loadMore = useCallback(async (key) => {
     const col = columnsRef.current[key];
     if (col.loading || col.cards.length >= col.total) return;
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
-      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       setColumns((prev) => ({
         ...prev,
         [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
@@ -119,7 +125,7 @@ export default function MarketingPipeline({ onOpenConversation }) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
     }
-  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly]);
+  }, [dateFrom, dateTo, sinceTs, untilTs, searching, debouncedSearch, unreadOnly, selectedLine]);
 
   const reloadAll = useCallback(() => {
     for (const key of MARKETING_COLUMN_ORDER) loadColumn(key);
@@ -135,7 +141,7 @@ export default function MarketingPipeline({ onOpenConversation }) {
   async function exportColumn(key) {
     setExportingKey(key);
     try {
-      const rows = await fetchPipelineExport(key, { dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly });
+      const rows = await fetchPipelineExport(key, { dormant: true, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
       if (!rows.length) { showError('No hay nadie inactivo en esta columna con los filtros actuales'); return; }
       const meta = metaFor(key);
       const headers = ['Cliente', 'Teléfono', 'Sin responder desde', 'Último mensaje'];
@@ -179,6 +185,18 @@ export default function MarketingPipeline({ onOpenConversation }) {
             className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
           />
         </div>
+
+        {lines.length > 0 && (
+          <Select
+            value={selectedLine}
+            onChange={setSelectedLine}
+            options={[
+              { value: '', label: 'Todas las líneas' },
+              ...lines.map((l) => ({ value: String(l.id), label: l.label || `Línea ${l.id}` })),
+            ]}
+            className="w-44 shrink-0"
+          />
+        )}
 
         <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
 

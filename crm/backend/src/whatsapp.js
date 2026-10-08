@@ -53,7 +53,13 @@ export async function getActiveCredentials(toPhone, lineId) {
       return { id: rows[0].id, wabaId: rows[0].waba_id, phoneNumberId: rows[0].phone_number_id, token };
     } catch (err) {
       console.error(`Failed to decrypt token for line ${rows[0].id}:`, err);
+      if (wId) {
+        throw new Error(`No se pudo descifrar el token de acceso para la línea seleccionada (ID: ${rows[0].id})`);
+      }
     }
+  }
+  if (wId) {
+    throw new Error(`La línea seleccionada (ID: ${wId}) no existe o no tiene token configurado en Configuración.`);
   }
   if (ENV_TOKEN && ENV_PHONE_NUMBER_ID) {
     return { id: null, wabaId: ENV_WABA_ID ?? null, phoneNumberId: ENV_PHONE_NUMBER_ID, token: ENV_TOKEN };

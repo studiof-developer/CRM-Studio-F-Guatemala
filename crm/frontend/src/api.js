@@ -328,8 +328,9 @@ export async function fetchCampaignTemplates(lineId) {
   return res.json();
 }
 
-export async function fetchTemplatesManage() {
-  const res = await apiFetch('/api/campaigns/templates/manage');
+export async function fetchTemplatesManage(lineId) {
+  const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
+  const res = await apiFetch(`/api/campaigns/templates/manage${params}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las plantillas');
   return res.json();
 }
@@ -344,8 +345,9 @@ export async function createWhatsappTemplate(data) {
   return res.json();
 }
 
-export async function deleteWhatsappTemplate(name) {
-  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+export async function deleteWhatsappTemplate(name, lineId) {
+  const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
+  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}${params}`, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
 }
 
@@ -358,10 +360,11 @@ export async function uploadCampaignHeaderMedia(file, lineId) {
   return res.json();
 }
 
-export async function searchCampaignAudience(temperature, q) {
+export async function searchCampaignAudience(temperature, q, lineId) {
   const params = new URLSearchParams();
   if (temperature) params.set('temperature', temperature);
   if (q) params.set('q', q);
+  if (lineId) params.set('lineId', lineId);
   const res = await apiFetch(`/api/campaigns/audience?${params.toString()}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al buscar clientes');
   return res.json();

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow, RefreshCw } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
@@ -202,9 +202,17 @@ function DifusionTab() {
               {detail.recipients.map((r, i) => {
                 const meta = STATUS_META[r.status] ?? STATUS_META.sent;
                 return (
-                  <div key={i} className="flex items-center justify-between gap-3 rounded-lg bg-black/[0.02] dark:bg-white/[0.03] px-3 py-2 text-sm">
-                    <span className="truncate text-ink">{r.customerName || r.phone}</span>
-                    <span className={`shrink-0 text-xs font-medium ${meta.className}`} title={r.statusError || ''}>{meta.label}</span>
+                  <div key={i} className="flex flex-col gap-1 rounded-lg bg-black/[0.02] dark:bg-white/[0.03] px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate font-medium text-ink">{r.customerName || r.phone}</span>
+                      <span className={`shrink-0 text-xs font-medium ${meta.className}`}>{meta.label}</span>
+                    </div>
+                    {r.customerName && <span className="text-[11px] text-greige-ink">{r.phone}</span>}
+                    {r.status === 'failed' && r.statusError && (
+                      <span className="text-[11px] text-danger break-words" title={r.statusError}>
+                        Motivo: {r.statusError}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -268,18 +276,22 @@ function NewCampaignModal({ onClose, onSent }) {
   useEffect(() => {
     if (!temperature) { setAudienceCount(null); return; }
     let cancelled = false;
-    searchCampaignAudience(temperature).then((rows) => { if (!cancelled) setAudienceCount(rows.length); }).catch(() => {});
+    searchCampaignAudience(temperature, '', lineId ? Number(lineId) : undefined)
+      .then((rows) => { if (!cancelled) setAudienceCount(rows.length); })
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [temperature]);
+  }, [temperature, lineId]);
 
   useEffect(() => {
     if (!manualQuery.trim()) { setManualResults([]); return; }
     let cancelled = false;
     const t = setTimeout(() => {
-      searchCampaignAudience('', manualQuery.trim()).then((rows) => { if (!cancelled) setManualResults(rows); }).catch(() => {});
+      searchCampaignAudience('', manualQuery.trim(), lineId ? Number(lineId) : undefined)
+        .then((rows) => { if (!cancelled) setManualResults(rows); })
+        .catch(() => {});
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [manualQuery]);
+  }, [manualQuery, lineId]);
 
   const template = templates?.find((t) => `${t.name}__${t.language}` === templateKey);
   const pickedIds = new Set(manualPicked.map((p) => p.id));
@@ -481,7 +493,8 @@ function NewCampaignModal({ onClose, onSent }) {
 
           {/* Step 2: pick a template (only shown once a line is selected) */}
           {lineId && (
-          <>$([char]10)          <div>
+            <>
+              <div>
             <label className="mb-1.5 block text-xs font-medium text-greige-ink">Plantilla de Meta</label>
             {templatesError && <p className="text-xs text-danger">{templatesError}</p>}
             {!templatesError && !templates && <p className="text-xs text-greige-ink">Cargando plantillas de WhatsApp Manager…</p>}
@@ -733,6 +746,8 @@ function detectParamCount(bodyText) {
 }
 
 function TemplatesTab() {
+  const [lines, setLines] = useState([]);
+  const [selectedLine, setSelectedLine] = useState('');
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState(null);
@@ -742,10 +757,23 @@ function TemplatesTab() {
   const [confirmDeleteName, setConfirmDeleteName] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    fetchTemplatesManage().then(setTemplates).catch((err) => setListError(err.message)).finally(() => setLoading(false));
+  useEffect(() => {
+    fetchWhatsappNumbers().then((wns) => {
+      setLines(wns);
+      if (wns.length > 0) setSelectedLine(String(wns[0].id));
+    }).catch(() => {});
   }, []);
+
+  const load = useCallback(() => {
+    if (!selectedLine) return;
+    setLoading(true);
+    setListError(null);
+    fetchTemplatesManage(selectedLine ? Number(selectedLine) : undefined)
+      .then(setTemplates)
+      .catch((err) => setListError(err.message))
+      .finally(() => setLoading(false));
+  }, [selectedLine]);
+
   useEffect(() => { load(); }, [load]);
 
   const paramCount = detectParamCount(form.bodyText);
@@ -756,7 +784,13 @@ function TemplatesTab() {
     setFormError(null);
     try {
       const bodyExamples = Array.from({ length: paramCount }, (_, i) => form.examples[i + 1] ?? '');
-      await createWhatsappTemplate({ name: form.name, category: form.category, bodyText: form.bodyText, bodyExamples });
+      await createWhatsappTemplate({
+        name: form.name,
+        category: form.category,
+        bodyText: form.bodyText,
+        bodyExamples,
+        lineId: selectedLine ? Number(selectedLine) : undefined,
+      });
       setForm(EMPTY_TEMPLATE_FORM);
       load();
       showSuccess('Plantilla enviada a revisión de Meta');
@@ -770,7 +804,7 @@ function TemplatesTab() {
   async function handleDelete() {
     setDeleting(true);
     try {
-      await deleteWhatsappTemplate(confirmDeleteName);
+      await deleteWhatsappTemplate(confirmDeleteName, selectedLine ? Number(selectedLine) : undefined);
       load();
       showSuccess('Plantilla eliminada');
     } catch (err) {
@@ -794,9 +828,31 @@ function TemplatesTab() {
           </span>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft pb-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-greige-ink">Línea de WhatsApp:</label>
+            {lines.length > 0 && (
+              <Select
+                value={selectedLine}
+                onChange={setSelectedLine}
+                options={lines.map((l) => ({ value: String(l.id), label: l.label || `Línea ${l.id}` }))}
+                className="w-48"
+              />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={load}
+            className="flex items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-greige-ink shadow-sm transition-colors hover:text-ink"
+          >
+            <RefreshCw size={12} /> Actualizar
+          </button>
+        </div>
+
         {listError && <p className="text-sm text-danger">{listError}</p>}
+        {loading && <p className="py-6 text-center text-sm text-greige-ink">Cargando plantillas de Meta…</p>}
         {!loading && !listError && templates.length === 0 && (
-          <p className="py-6 text-center text-sm text-greige-ink">Sin plantillas todavía.</p>
+          <p className="py-6 text-center text-sm text-greige-ink">Sin plantillas todavía en esta línea.</p>
         )}
 
         <ul className="flex flex-col gap-2">
@@ -827,7 +883,9 @@ function TemplatesTab() {
 
       <section className="h-fit rounded-2xl border border-line bg-paper p-4 md:p-6">
         <h2 className="text-lg font-semibold text-ink">Nueva plantilla</h2>
-        <p className="mt-1 text-xs text-greige-ink">Solo texto por ahora (sin encabezado, botones ni pie).</p>
+        <p className="mt-1 text-xs text-greige-ink">
+          Línea: <strong className="text-ink">{lines.find((l) => String(l.id) === selectedLine)?.label || 'Línea seleccionada'}</strong> · Solo texto por ahora (sin encabezado, botones ni pie).
+        </p>
 
         <form onSubmit={handleCreate} className="mt-4">
           <label className="mb-1.5 block text-sm font-medium text-ink">Nombre</label>

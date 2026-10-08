@@ -1138,71 +1138,42 @@ router.post('/:sessionId/messages', async (req, res, next) => {
       [targetSessionId, JSON.stringify(message), lineId]
     );
 
-    if (phone) {
-      pool.query(
-        `UPDATE tickets SET
-           last_message = '📎 Adjunto',
-           last_message_at = now(),
-           awaiting_reply = false,
-           status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
-           assigned_advisor = COALESCE(assigned_advisor, $1),
-           first_response_at = COALESCE(first_response_at, now()),
-           updated_at = now()
-         WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $2)
-           AND (whatsapp_number_id = $3 OR ($3 = 1 AND whatsapp_number_id IS NULL))
-           AND status != 'resuelto'`,
-        [req.user.fullName, phone, lineId || 1]
-      ).catch((e) => console.error('Error updating ticket on advisor attachment send:', e));
-
-      pool.query(
-        `UPDATE customers SET
-           last_message = '📎 Adjunto',
-           last_message_at = now(),
-           awaiting_reply = false,
-           has_unread = false
-         WHERE whatsapp_number = $1`,
-        [phone]
-      ).catch((e) => console.error('Error updating customer on advisor attachment send:', e));
-
-      pool.query(
-        `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
-         ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
-        [phone, inserted[0].id]
-      ).catch((e) => console.error('Error updating conversation_reads on advisor attachment send:', e));
-    }
-
     // Directly advance pipeline stage and update ticket preview so advisor replies are instantly reflected
     if (phone) {
-      pool.query(
-        `UPDATE tickets SET
-           last_message = $1,
-           last_message_at = now(),
-           awaiting_reply = false,
-           status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
-           assigned_advisor = COALESCE(assigned_advisor, $2),
-           first_response_at = COALESCE(first_response_at, now()),
-           updated_at = now()
-         WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $3)
-           AND (whatsapp_number_id = $4 OR ($4 = 1 AND whatsapp_number_id IS NULL))
-           AND status != 'resuelto'`,
-        [content.trim().slice(0, 255), req.user.fullName, phone, lineId || 1]
-      ).catch((e) => console.error('Error updating ticket on advisor send:', e));
+      try {
+        await pool.query(
+          `UPDATE tickets SET
+             last_message = $1,
+             last_message_at = now(),
+             awaiting_reply = false,
+             status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
+             assigned_advisor = COALESCE(assigned_advisor, $2),
+             first_response_at = COALESCE(first_response_at, now()),
+             updated_at = now()
+           WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $3)
+             AND (whatsapp_number_id = $4 OR ($4 = 1 AND whatsapp_number_id IS NULL))
+             AND status != 'resuelto'`,
+          [content.trim().slice(0, 255), req.user.fullName, phone, lineId || 1]
+        );
 
-      pool.query(
-        `UPDATE customers SET
-           last_message = $1,
-           last_message_at = now(),
-           awaiting_reply = false,
-           has_unread = false
-         WHERE whatsapp_number = $2`,
-        [content.trim().slice(0, 255), phone]
-      ).catch((e) => console.error('Error updating customer on advisor send:', e));
+        await pool.query(
+          `UPDATE customers SET
+             last_message = $1,
+             last_message_at = now(),
+             awaiting_reply = false,
+             has_unread = false
+           WHERE whatsapp_number = $2`,
+          [content.trim().slice(0, 255), phone]
+        );
 
-      pool.query(
-        `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
-         ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
-        [phone, inserted[0].id]
-      ).catch((e) => console.error('Error updating conversation_reads on advisor send:', e));
+        await pool.query(
+          `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+           ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+          [phone, inserted[0].id]
+        );
+      } catch (err) {
+        console.error('Error updating ticket/customer state on advisor send:', err);
+      }
     }
 
     res.status(201).json({ id: inserted[0].id, createdAt: inserted[0].created_at, ...message });

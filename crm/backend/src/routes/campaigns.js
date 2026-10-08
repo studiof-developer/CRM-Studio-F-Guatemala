@@ -42,8 +42,14 @@ function firstName(fullName) {
 // (regular conversation stays open); campaign sends are already tagged with campaignId,
 // so this only ever scans that (small, indexed) subset of the table, not all of it.
 // Admin-editable (Configuración > General) — 42h is just the fallback default.
-async function getCooldownMap() {
+async function getCooldownMap(lineId) {
   const cooldownHours = await getSetting('broadcast_cooldown_hours', 42);
+  const params = [cooldownHours];
+  let lineClause = '';
+  if (lineId) {
+    params.push(lineId);
+    lineClause = `AND COALESCE(whatsapp_number_id, CASE WHEN session_id ~ '__line_[0-9]+' THEN (regexp_match(session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) = $2`;
+  }
   const { rows } = await pool.query(
     `SELECT split_part(session_id, '__', 1) AS phone, max(created_at) AS last_sent
      FROM n8n_chat_histories
@@ -52,8 +58,9 @@ async function getCooldownMap() {
        -- never reached the customer, so it shouldn't block a retry for the cooldown.
        AND coalesce(message->'additional_kwargs'->>'status', '') <> 'failed'
        AND created_at > now() - make_interval(hours => $1::int)
+       ${lineClause}
      GROUP BY phone`,
-    [cooldownHours]
+    params
   );
   const map = new Map();
   for (const r of rows) {
@@ -143,7 +150,7 @@ function sequentialParamCount(text) {
 // endpoint only submits the request, it can't make Meta approve it faster.
 router.post('/templates', requireRole('admin'), async (req, res, next) => {
   try {
-    const { name, category, bodyText, bodyExamples } = req.body ?? {};
+    const { name, category, bodyText, bodyExamples, lineId } = req.body ?? {};
     if (!TEMPLATE_NAME_RE.test(name ?? '')) {
       return res.status(400).json({ error: 'El nombre solo puede tener minúsculas, números y guion bajo (_), sin espacios.' });
     }
@@ -165,6 +172,7 @@ router.post('/templates', requireRole('admin'), async (req, res, next) => {
     const result = await whatsapp.createTemplate({
       name, category, language: 'es', bodyText: text,
       bodyExample: paramCount ? examples : undefined,
+      lineId: lineId ? Number(lineId) : undefined,
     });
     logBusinessAction(req.user, null, 'whatsapp_template_created', `${name} (${category}, ${paramCount} variable${paramCount === 1 ? '' : 's'})`);
     res.status(201).json(result);
@@ -173,7 +181,8 @@ router.post('/templates', requireRole('admin'), async (req, res, next) => {
 
 router.delete('/templates/:name', requireRole('admin'), async (req, res, next) => {
   try {
-    await whatsapp.deleteTemplate(req.params.name);
+    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
+    await whatsapp.deleteTemplate(req.params.name, lineId);
     logBusinessAction(req.user, null, 'whatsapp_template_deleted', req.params.name);
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -201,7 +210,7 @@ router.post('/header-media', upload.single('file'), async (req, res, next) => {
 // Powers both "cuántos hay disponibles" before sending and the manual add-by-search box.
 router.get('/audience', async (req, res, next) => {
   try {
-    const { temperature, q } = req.query;
+    const { temperature, q, lineId } = req.query;
     if (temperature && !VALID_TEMPERATURES.includes(temperature)) {
       return res.status(400).json({ error: 'invalid temperature' });
     }
@@ -212,6 +221,22 @@ router.get('/audience', async (req, res, next) => {
       params.push(`%${q.trim().toLowerCase()}%`);
       clauses.push(`(lower(c.full_name) LIKE $${params.length} OR c.whatsapp_number LIKE $${params.length})`);
     }
+    const parsedLineId = lineId ? Number(lineId) : null;
+    if (parsedLineId) {
+      params.push(parsedLineId);
+      clauses.push(`(
+        EXISTS (
+          SELECT 1 FROM tickets t 
+          WHERE t.customer_id = c.id 
+            AND (t.whatsapp_number_id = $${params.length} OR ($${params.length} = 1 AND t.whatsapp_number_id IS NULL))
+        )
+        OR EXISTS (
+          SELECT 1 FROM n8n_chat_histories h 
+          WHERE split_part(h.session_id, '__', 1) = c.whatsapp_number 
+            AND (h.whatsapp_number_id = $${params.length} OR h.session_id LIKE '%__line_' || $${params.length})
+        )
+      )`);
+    }
     const { rows } = await pool.query(
       `SELECT c.id, c.full_name, c.whatsapp_number, (${EFFECTIVE_STATUS_SQL}) AS temperature
        FROM customers c
@@ -220,7 +245,7 @@ router.get('/audience', async (req, res, next) => {
        LIMIT 200`,
       params
     );
-    const cooldown = await getCooldownMap();
+    const cooldown = await getCooldownMap(parsedLineId);
     // The temperature-only pool (no q) is what feeds the "X disponibles" count — that
     // count needs to already exclude cooldown numbers, since POST / backfills around
     // them too. A manual name/phone search (q) keeps a cooling-down person visible but
@@ -422,20 +447,25 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
       `UPDATE tickets t SET status = 'difusion_enviada', updated_at = now()
        FROM customers c
        WHERE t.customer_id = $1 AND c.id = t.customer_id
+         AND (t.whatsapp_number_id = $2 OR ($2 = 1 AND t.whatsapp_number_id IS NULL))
          AND t.status IN ('esperando_asesor', 'en_atencion')
          AND COALESCE(c.manual_status, '') <> 'despacho'`,
-      [customer.id]
+      [customer.id, lineId || 1]
     );
   }
 
-  const { sessionIds } = await findConversationThread(customer.whatsapp_number);
-  const sessionId = sessionIds?.[0] ?? customer.whatsapp_number;
+  const { sessionIds } = await findConversationThread(customer.whatsapp_number, { lineId });
+  const sessionId = (lineId && customer.whatsapp_number)
+    ? `${customer.whatsapp_number}__line_${lineId}`
+    : (sessionIds?.[0] ?? customer.whatsapp_number);
+
   const message = {
     type: 'ai',
     content: renderBody(bodyTemplate, name, extraParams),
     additional_kwargs: {
       sentBy: 'campaign',
       campaignId: String(campaignId),
+      whatsappNumberId: lineId ?? 1,
       // Persisted so a later retry (which only has the message row, not the original
       // request) re-sends with the SAME per-recipient value instead of falling back to
       // repeating the name for {{2}}+.
@@ -446,8 +476,8 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
     tool_calls: [],
   };
   const { rows } = await pool.query(
-    `INSERT INTO n8n_chat_histories (session_id, message) VALUES ($1, $2::jsonb) RETURNING id`,
-    [sessionId, JSON.stringify(message)]
+    `INSERT INTO n8n_chat_histories (session_id, message, whatsapp_number_id) VALUES ($1, $2::jsonb, $3) RETURNING id`,
+    [sessionId, JSON.stringify(message), lineId ?? 1]
   );
 
   // A broadcast reaching someone is us writing to THEM — there's nothing left for staff
@@ -457,13 +487,16 @@ async function sendToRecipient(campaignId, customer, templateName, templateLangu
   // conversations.js already does when a thread is opened, just triggered by the send
   // instead — catches the thread up through this very message.
   if (sentWamid) {
-    pool.query(
-      `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
-       ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
-      [customer.whatsapp_number, rows[0].id]
-    )
-      .then(() => pool.query(`SELECT pg_notify('read_changes', $1)`, [customer.whatsapp_number]))
-      .catch((err) => console.error(`campaign ${campaignId} mark-read for ${customer.whatsapp_number} failed:`, err));
+    try {
+      await pool.query(
+        `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+         ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+        [customer.whatsapp_number, rows[0].id]
+      );
+      await pool.query(`SELECT pg_notify('read_changes', $1)`, [customer.whatsapp_number]);
+    } catch (readErr) {
+      console.error(`campaign ${campaignId} mark-read for ${customer.whatsapp_number} failed:`, readErr);
+    }
   }
 
   if (headerAttachment) {
@@ -504,9 +537,10 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
       `UPDATE tickets t SET status = 'difusion_enviada', updated_at = now()
        FROM customers c
        WHERE c.whatsapp_number = $1 AND c.id = t.customer_id
+         AND (t.whatsapp_number_id = $2 OR ($2 = 1 AND t.whatsapp_number_id IS NULL))
          AND t.status IN ('esperando_asesor', 'en_atencion')
          AND COALESCE(c.manual_status, '') <> 'despacho'`,
-      [phone]
+      [phone, lineId || 1]
     );
   }
 
@@ -519,11 +553,12 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
     additional_kwargs: {
       sentBy: 'campaign',
       campaignId: prev.additional_kwargs?.campaignId,
+      whatsappNumberId: lineId ?? prev.additional_kwargs?.whatsappNumberId ?? 1,
       ...(extraParams.length ? { extraParams } : {}),
       ...(sentWamid ? { wamid: sentWamid } : { status: 'failed', statusError: error }),
     },
   };
-  await pool.query(`UPDATE n8n_chat_histories SET message = $2::jsonb WHERE id = $1`, [messageId, JSON.stringify(message)]);
+  await pool.query(`UPDATE n8n_chat_histories SET message = $2::jsonb, whatsapp_number_id = COALESCE(whatsapp_number_id, $3) WHERE id = $1`, [messageId, JSON.stringify(message), lineId ?? 1]);
   // session_id (not the row id) is what listener.js reads to flush anything an advisor
   // had queued for this same customer, same as every other message-mutating route.
   await pool.query(`SELECT pg_notify('message_changes', json_build_object('session_id', $1::text)::text)`, [sessionId]);
@@ -531,13 +566,16 @@ async function retryRecipient(messageId, sessionId, phone, fullName, templateNam
   // Same mark-as-read reasoning as sendToRecipient above — a retry landing is the send
   // finally reaching them.
   if (sentWamid) {
-    pool.query(
-      `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
-       ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
-      [phone, messageId]
-    )
-      .then(() => pool.query(`SELECT pg_notify('read_changes', $1)`, [phone]))
-      .catch((err) => console.error(`campaign retry mark-read for ${phone} failed:`, err));
+    try {
+      await pool.query(
+        `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+         ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+        [phone, messageId]
+      );
+      await pool.query(`SELECT pg_notify('read_changes', $1)`, [phone]);
+    } catch (readErr) {
+      console.error(`campaign retry mark-read for ${phone} failed:`, readErr);
+    }
   }
 
   return !!sentWamid;
@@ -636,7 +674,7 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'El archivo subido ya no está disponible — vuelve a subirlo e intenta de nuevo' });
     }
 
-    const cooldown = await getCooldownMap();
+    const cooldown = await getCooldownMap(lineId);
     const skippedCooldown = [];
 
     let audience = [];
@@ -644,6 +682,23 @@ router.post('/', async (req, res, next) => {
       // Excluded in SQL, before the LIMIT, so a number in cooldown gets skipped over in
       // favor of the next eligible one in the same order — not just a shorter batch.
       const cooldownPhones = [...cooldown.keys()];
+      const queryParams = [temperature, count && count > 0 ? count : 100000, cooldownPhones];
+      let lineClause = '';
+      if (lineId) {
+        queryParams.push(lineId);
+        lineClause = `AND (
+          EXISTS (
+            SELECT 1 FROM tickets t 
+            WHERE t.customer_id = c.id 
+              AND (t.whatsapp_number_id = $4 OR ($4 = 1 AND t.whatsapp_number_id IS NULL))
+          )
+          OR EXISTS (
+            SELECT 1 FROM n8n_chat_histories h 
+            WHERE split_part(h.session_id, '__', 1) = c.whatsapp_number 
+              AND (h.whatsapp_number_id = $4 OR h.session_id LIKE '%__line_' || $4)
+          )
+        )`;
+      }
       const { rows } = await pool.query(
         `SELECT c.id, c.full_name, c.whatsapp_number
          FROM customers c
@@ -654,9 +709,10 @@ router.post('/', async (req, res, next) => {
          WHERE (${EFFECTIVE_STATUS_SQL}) = $1
            AND NOT (c.whatsapp_number = ANY($3::text[]))
            AND c.opted_out_campaigns = false
+           ${lineClause}
          ORDER BY act.last_seen ${sortOrder} NULLS LAST
          LIMIT $2`,
-        [temperature, count && count > 0 ? count : 100000, cooldownPhones]
+        queryParams
       );
       audience = rows;
     }
