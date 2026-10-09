@@ -269,7 +269,7 @@ export async function getDefaultLineId() {
     );
     if (rows.length && rows[0].id) return rows[0].id;
   } catch (_) {}
-  return 2;
+  return 1;
 }
 
 // Strictly resolves session IDs belonging only to this thread/phone
