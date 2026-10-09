@@ -881,9 +881,20 @@ function MessageTicks({ status, statusError, onRetry, retrying }) {
   // reaching Meta's API (confirmed 2026-08-31) otherwise left it stuck until someone
   // retyped the whole message from scratch, so this is a one-click way to just try again.
   if (status === 'failed') {
+    const isPayment = /pago|payment|suspendid|restringid|131042|131056/i.test(statusError || '');
     return (
-      <span title={statusError || 'No se pudo enviar por WhatsApp'} className="flex items-center gap-1 font-semibold text-red-200">
-        <AlertTriangle size={11} /> no se envió
+      <span
+        title={statusError || 'No se pudo enviar por WhatsApp (clic para ver detalle)'}
+        onClick={(e) => {
+          e.stopPropagation();
+          showError(statusError || 'No se pudo enviar por WhatsApp');
+        }}
+        className={`flex items-center gap-1 font-semibold cursor-pointer ${
+          isPayment ? 'text-amber-300' : 'text-red-200'
+        }`}
+      >
+        <AlertTriangle size={11} className={isPayment ? 'text-amber-400' : 'text-red-300'} />
+        <span>{isPayment ? 'cuenta suspendida por falta de pago' : 'no se envió'}</span>
         {onRetry && (
           <button
             type="button"
@@ -2324,6 +2335,28 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     Descartar
                   </button>
                 </div>
+              </div>
+            )}
+
+            {messages.some((m) =>
+              m.additional_kwargs?.status === 'failed' &&
+              /pago|payment|suspendid|restringid|131042|131056/i.test(m.additional_kwargs?.statusError || '')
+            ) && (
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                  <span>
+                    <strong>Cuenta de WhatsApp suspendida en Meta por falta de pago o límite alcanzado.</strong> Los mensajes no saldrán hasta procesar el cobro pendiente.
+                  </span>
+                </div>
+                <a
+                  href="https://business.facebook.com/latest/billing_hub"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded bg-amber-600 px-3 py-1 font-semibold text-white shadow-sm hover:bg-amber-500 transition-colors"
+                >
+                  Pagar en Meta Business Suite
+                </a>
               </div>
             )}
 

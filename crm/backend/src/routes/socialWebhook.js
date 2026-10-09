@@ -304,8 +304,9 @@ async function handleWhatsAppWebhook(body) {
         for (const st of value.statuses) {
           const wamid = st.id;
           const status = st.status;
+          const errCode = st.errors?.[0]?.code || null;
           const errorMsg = st.errors?.[0]?.message || st.errors?.[0]?.title || null;
-          await updateMessageStatus({ wamid, status, error: errorMsg }).catch((err) =>
+          await updateMessageStatus({ wamid, status, error: errorMsg, code: errCode }).catch((err) =>
             console.error('WhatsApp status update error', err)
           );
         }

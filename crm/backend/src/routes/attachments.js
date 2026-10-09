@@ -342,9 +342,18 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
 // never arrived — so it bypasses the rank check and always wins.
 export const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
 
-export async function updateMessageStatus({ wamid, status, error }) {
+export async function updateMessageStatus({ wamid, status, error, code }) {
   if (!wamid || !(STATUS_RANK[status] || status === 'failed')) {
     return { updated: false };
+  }
+
+  let finalError = String(error ?? '').trim();
+  if (status === 'failed') {
+    if (code === 131042 || code === 131056 || /131042|131056|payment|pago|credit limit|facturaci[oó]n|restringid/i.test(finalError)) {
+      finalError = 'Cuenta suspendida en Meta por falta de pago o límite alcanzado. Paga en Meta Business Suite.';
+    } else if (!finalError) {
+      finalError = 'WhatsApp reportó que el mensaje no se pudo entregar';
+    }
   }
 
   const { rows } = status === 'failed'
@@ -355,7 +364,7 @@ export async function updateMessageStatus({ wamid, status, error }) {
                '{additional_kwargs,statusError}', to_jsonb($2::text))
          WHERE message->'additional_kwargs'->>'wamid' = $1
          RETURNING session_id`,
-        [wamid, (String(error ?? '').trim() || 'WhatsApp reportó que el mensaje no se pudo entregar').slice(0, 500)]
+        [wamid, finalError.slice(0, 500)]
       )
     : await pool.query(
         `UPDATE n8n_chat_histories

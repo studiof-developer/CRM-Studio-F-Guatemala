@@ -85,7 +85,11 @@ async function markSendFailed(messageId, err) {
   // Store the reason too — without it, diagnosing "why didn't this arrive" means
   // digging through container logs that may already have rotated away. Meta's error
   // bodies are verbose, so keep just enough to identify the cause.
-  const reason = String(err?.message ?? err).slice(0, 500);
+  const rawReason = String(err?.message ?? err).slice(0, 500);
+  let reason = rawReason;
+  if (/131042|131056|payment|pago|credit limit|facturaci[oó]n|restringid/i.test(rawReason)) {
+    reason = 'Cuenta suspendida en Meta por falta de pago o límite alcanzado. Paga en Meta Business Suite.';
+  }
   const { rows } = await pool.query(
     `UPDATE n8n_chat_histories
      SET message = jsonb_set(
