@@ -259,16 +259,42 @@ function SocialThreadPanel({
     }
   }
 
-  function handleFileSelected(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  function stageSocialFiles(files) {
     const additions = files.map((file) => ({
       file,
-      id: `${Date.now()}-${Math.random()}`,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
     }));
     setStagedFiles((prev) => [...prev, ...additions]);
+  }
+
+  function handleFileSelected(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    stageSocialFiles(files);
     e.target.value = '';
+  }
+
+  function handleSocialPaste(e) {
+    const clipboardFiles = Array.from(e.clipboardData?.files || []);
+    if (clipboardFiles.length > 0) {
+      e.preventDefault();
+      stageSocialFiles(clipboardFiles);
+      return;
+    }
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const pasted = [];
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) pasted.push(file);
+      }
+    }
+    if (pasted.length > 0) {
+      e.preventDefault();
+      stageSocialFiles(pasted);
+    }
   }
 
   async function handleSend(e) {
@@ -588,7 +614,12 @@ function SocialThreadPanel({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleDraftKeyDown}
-                placeholder={`Responder por ${CHANNEL_LABELS[currentChannel] ?? currentChannel}…`}
+                onPaste={handleSocialPaste}
+                placeholder={
+                  stagedFiles.length
+                    ? 'Agrega un mensaje (opcional)… Enter para enviar'
+                    : `Responder por ${CHANNEL_LABELS[currentChannel] ?? currentChannel}…`
+                }
                 className="flex-1 rounded-full border border-line bg-black/[0.03] dark:bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent focus:bg-paper"
               />
               <button
@@ -1760,20 +1791,27 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     if (files.length) stageFiles(files);
   }
 
-  // Lets an advisor Ctrl+V a copied screenshot/image straight into the chat,
-  // same as WhatsApp Web — no need to save it to disk first just to attach it.
+  // Lets an advisor Ctrl+V a copied screenshot, image, or document (PDF, Excel, Word...)
+  // straight into the chat, same as WhatsApp Web — no need to save it to disk first.
   function handlePaste(e) {
+    const clipboardFiles = Array.from(e.clipboardData?.files || []);
+    if (clipboardFiles.length > 0) {
+      e.preventDefault();
+      stageFiles(clipboardFiles);
+      return;
+    }
     const items = e.clipboardData?.items;
     if (!items) return;
+    const pasted = [];
     for (const item of items) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
+      if (item.kind === 'file') {
         const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          stageFiles([file]);
-        }
-        return;
+        if (file) pasted.push(file);
       }
+    }
+    if (pasted.length > 0) {
+      e.preventDefault();
+      stageFiles(pasted);
     }
   }
 
