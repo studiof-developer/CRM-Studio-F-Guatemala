@@ -2338,7 +2338,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               </div>
             )}
 
-            {messages.some((m) =>
+            {thread.messages?.some((m) =>
               m.additional_kwargs?.status === 'failed' &&
               /pago|payment|suspendid|restringid|131042|131056/i.test(m.additional_kwargs?.statusError || '')
             ) && (
