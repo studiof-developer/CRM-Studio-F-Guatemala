@@ -179,7 +179,11 @@ function SocialThreadPanel({
       return;
     }
     fetchSocialMessages(contactId)
-      .then((rows) => { setMessages(rows || []); setError(null); })
+      .then((rows) => {
+        console.log('[SocialThreadPanel] Loaded messages:', rows);
+        setMessages(rows || []);
+        setError(null);
+      })
       .catch((err) => { setError(err.message); setMessages([]); });
   }, [contactId]);
 
@@ -463,7 +467,7 @@ function SocialThreadPanel({
                         <div className="px-3 py-2.5">
                           <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white/80' : 'text-accent'}`}>
                             <Megaphone size={12} />
-                            Anuncio de {currentChannel === 'instagram' ? 'Instagram' : 'Facebook'}
+                            {m.referral.source === 'FACEBOOK_SHARE' ? 'Publicación de Facebook' : `Anuncio de ${currentChannel === 'instagram' ? 'Instagram' : 'Facebook'}`}
                           </p>
                           <p className={`text-sm font-semibold leading-snug ${outgoing ? 'text-white' : 'text-ink'}`}>
                             {m.referral.headline || 'Publicidad de Meta'}

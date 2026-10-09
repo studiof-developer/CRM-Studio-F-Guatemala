@@ -4,7 +4,14 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db.js';
-import { sendMessengerText, sendInstagramText, sendSocialAttachment, fetchProfileName } from '../metaMessaging.js';
+import {
+  sendMessengerText,
+  sendInstagramText,
+  sendSocialAttachment,
+  fetchProfileName,
+  fetchMessageMediaFromGraph,
+  fetchAdCreative,
+} from '../metaMessaging.js';
 import { logBusinessAction } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
@@ -111,7 +118,7 @@ router.post('/sync-profiles', async (req, res, next) => {
 router.get('/contacts/:id/messages', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT sm.id, sm.direction, sm.body, sm.raw_payload, sm.created_at,
+      `SELECT sm.id, sm.direction, sm.body, sm.raw_payload, sm.external_message_id, sm.created_at,
               ma.id AS attachment_id, ma.kind AS attachment_kind, ma.filename AS attachment_filename,
               ma.mime_type AS attachment_mime_type, ma.size_bytes AS attachment_size_bytes
        FROM social_messages sm
@@ -135,6 +142,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
           direction: r.direction,
           body: r.body,
           raw_payload: r.raw_payload,
+          external_message_id: r.external_message_id,
           createdAt: r.created_at,
           attachments: [],
         });
@@ -150,7 +158,15 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
       }
     }
 
-    res.json(Array.from(messagesMap.values()).map((msg) => {
+    const messagesList = Array.from(messagesMap.values());
+    console.log(`[social messages] contactId=${req.params.id} count=${messagesList.length}:`, messagesList.map((m) => ({
+      id: m.id,
+      extId: m.external_message_id,
+      body: m.body,
+      rawKeys: m.raw_payload ? Object.keys(typeof m.raw_payload === 'string' ? JSON.parse(m.raw_payload) : m.raw_payload) : null,
+    })));
+
+    const enrichedMessages = await Promise.all(messagesList.map(async (msg) => {
       let story = null;
       let referral = null;
       let attachments = [...msg.attachments];
@@ -179,7 +195,6 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
           }
 
           // 2. Check for referral (Meta Ads / Messenger Ads / Instagram Ads / Shortlink)
-          // Crucial: In Messenger message events, referral is in event.message.referral!
           const ref = p?.message?.referral || p?.referral || p?.postback?.referral;
           if (ref) {
             const photoUrl = ref.ads_context_data?.photo_url
@@ -193,7 +208,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
 
             referral = {
               ad_id: ref.ad_id || null,
-              source: ref.source || null,
+              source: ref.source || 'ADS',
               headline: ref.ads_context_data?.ad_title || ref.ad_title || 'Publicidad de Meta',
               body: ref.ref || ref.ads_context_data?.ad_body || null,
               image_url: photoUrl,
@@ -201,24 +216,80 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
             };
           }
 
-          // 3. Fallback for incoming attachments from payload if not yet saved to message_attachments
+          // 3. Check for shares (Facebook Post share, photo share, catalog product share)
+          const shareItem = p?.message?.shares?.[0] || p?.shares?.[0];
+          if (shareItem) {
+            const sharePic = shareItem?.picture || shareItem?.image_url || shareItem?.thumbnail_url;
+            if (!referral && (sharePic || shareItem?.link)) {
+              referral = {
+                ad_id: shareItem.id || null,
+                source: 'FACEBOOK_SHARE',
+                headline: shareItem.name || 'Publicación compartida',
+                body: shareItem.description || null,
+                image_url: sharePic || null,
+                source_url: shareItem.link || null,
+              };
+            }
+          }
+
+          // 4. Fallback for incoming attachments from payload (images, carousels, catalog products, generic templates)
           if (attachments.length === 0) {
             const rawAtts = p?.message?.attachments || [];
             for (const att of rawAtts) {
               const attType = (att.type || 'image').toLowerCase();
               let directUrl = att.payload?.url || att.url;
-              if (!directUrl && att.payload?.elements?.[0]?.image_url) {
-                directUrl = att.payload.elements[0].image_url;
+              const el = att.payload?.elements?.[0];
+              if (!directUrl && el) {
+                directUrl = el.image_url || el.picture || el.thumbnail_url;
               }
+              if (!directUrl && att.payload?.product) {
+                directUrl = att.payload.product.image_url || att.payload.product.picture;
+              }
+              if (!directUrl && att.payload?.picture) {
+                directUrl = att.payload.picture;
+              }
+              if (!directUrl && att.payload?.image_url) {
+                directUrl = att.payload.image_url;
+              }
+
               if (directUrl) {
                 attachments.push({
                   id: null,
                   kind: attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image',
                   url: directUrl,
-                  filename: attType === 'share' ? 'Publicación compartida' : (attType === 'fallback' ? 'Contenido compartido' : 'adjunto'),
+                  filename: att.title || el?.title || (attType === 'share' ? 'Publicación compartida' : (attType === 'fallback' ? 'Contenido compartido' : 'adjunto')),
                 });
               }
             }
+          }
+        } catch {}
+      }
+
+      // If referral has ad_id but image_url is missing, fetch ad creative from Graph API
+      if (referral?.ad_id && !referral.image_url) {
+        try {
+          const adCreative = await fetchAdCreative(referral.ad_id);
+          if (adCreative?.imageUrl) {
+            referral.image_url = adCreative.imageUrl;
+            if (!referral.headline && adCreative.title) referral.headline = adCreative.title;
+            if (!referral.body && adCreative.body) referral.body = adCreative.body;
+          }
+        } catch {}
+      }
+
+      // If inbound message has no media or referral, but has external_message_id, query Graph API for attachments/shares
+      if (msg.direction === 'in' && !referral && attachments.length === 0 && msg.external_message_id) {
+        try {
+          const graphMedia = await fetchMessageMediaFromGraph(msg.external_message_id);
+          if (graphMedia?.imageUrl) {
+            referral = {
+              ad_id: null,
+              source: 'FACEBOOK_POST',
+              headline: graphMedia.title || 'Referencia de Facebook',
+              body: null,
+              image_url: graphMedia.imageUrl,
+              source_url: graphMedia.link || null,
+            };
           }
         } catch {}
       }
@@ -240,9 +311,12 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
         attachments,
         story,
         referral,
+        rawPayload: msg.raw_payload,
         createdAt: msg.createdAt,
       };
     }));
+
+    res.json(enrichedMessages);
   } catch (err) { next(err); }
 });
 

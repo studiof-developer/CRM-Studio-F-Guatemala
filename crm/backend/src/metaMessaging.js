@@ -184,7 +184,7 @@ export async function testSocialConnection() {
     const subResult = await graphFetch(`${creds.pageId}/subscribed_apps`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscribed_fields: ['messages', 'messaging_postbacks'] }),
+      body: JSON.stringify({ subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_referrals', 'message_reactions'] }),
     }, creds.token);
     subscribed = subResult?.success === true;
   } catch (err) {
@@ -204,3 +204,55 @@ export async function testSocialConnection() {
     subscribed,
   };
 }
+
+// Queries Meta Graph API for attachments, shares or story associated with a message
+export async function fetchMessageMediaFromGraph(messageId) {
+  if (!messageId) return null;
+  const creds = await getSocialCredentials();
+  if (!creds?.token) return null;
+  try {
+    const data = await graphFetch(`${messageId}?fields=id,message,attachments,shares,story`, { method: 'GET' }, creds.token);
+    let imageUrl = null;
+    let title = null;
+    let link = null;
+
+    // 1. Check attachments
+    const att = data?.attachments?.data?.[0];
+    if (att?.image_data?.url) {
+      imageUrl = att.image_data.url;
+      title = att.name || null;
+    }
+
+    // 2. Check shares (Facebook post / photo / catalog item)
+    const share = data?.shares?.data?.[0];
+    if (!imageUrl && (share?.picture || share?.link)) {
+      imageUrl = share.picture || null;
+      title = share.name || share.description || null;
+      link = share.link || null;
+    }
+
+    return { imageUrl, title, link, raw: data };
+  } catch (err) {
+    console.warn(`[metaMessaging] fetchMessageMediaFromGraph failed for ${messageId}:`, err.message);
+    return null;
+  }
+}
+
+// Queries Meta Graph API for the ad creative image if referral ad_id was provided
+export async function fetchAdCreative(adId) {
+  if (!adId) return null;
+  const creds = await getSocialCredentials();
+  if (!creds?.token) return null;
+  try {
+    const data = await graphFetch(`${adId}?fields=id,name,creative{id,name,title,body,image_url,thumbnail_url}`, { method: 'GET' }, creds.token);
+    const cr = data?.creative;
+    const imageUrl = cr?.image_url || cr?.thumbnail_url || null;
+    const title = cr?.title || cr?.name || data?.name || null;
+    const body = cr?.body || null;
+    return { imageUrl, title, body };
+  } catch (err) {
+    console.warn(`[metaMessaging] fetchAdCreative failed for ${adId}:`, err.message);
+    return null;
+  }
+}
+
