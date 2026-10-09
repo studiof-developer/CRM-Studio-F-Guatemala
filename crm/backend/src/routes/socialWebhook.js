@@ -86,6 +86,7 @@ router.post('/', async (req, res) => {
         const attachments = event.message?.attachments || [];
         const isStoryReply = Boolean(event.message?.reply_to?.story);
         const storyUrl = event.message?.reply_to?.story?.url || event.message?.story?.mention?.link;
+        const referral = event.message?.referral || event.referral || event.postback?.referral || null;
 
         if (!text) {
           if (isStoryReply) {
@@ -96,7 +97,7 @@ router.post('/', async (req, res) => {
             const first = attachments[0];
             const typeStr = (first.type || 'archivo').toLowerCase();
             text = typeStr === 'share' ? 'Compartió una publicación' : `[${typeStr.toUpperCase()}]`;
-          } else if (event.referral) {
+          } else if (referral) {
             text = 'Inició conversación desde un anuncio';
           }
         }
@@ -131,13 +132,25 @@ router.post('/', async (req, res) => {
 
         await ensureCustomerAndTicket(contact, contact.provider, text);
 
-        // Background download for media attachments and story images to prevent ephemeral CDN link expiration
+        // Background download for media attachments, ad images and story images to prevent ephemeral CDN link expiration
         const mediaToDownload = [];
         if (storyUrl) {
           mediaToDownload.push({ url: storyUrl, kind: 'image', filename: 'historia.jpg', isStory: true });
         }
+        const refPhoto = referral?.ads_context_data?.photo_url
+          || referral?.ads_context_data?.image_url
+          || referral?.photo_url
+          || referral?.image_url
+          || referral?.thumbnail_url
+          || referral?.ads_context_data?.thumbnail_url;
+        if (refPhoto) {
+          mediaToDownload.push({ url: refPhoto, kind: 'image', filename: 'anuncio.jpg', isStory: false });
+        }
         for (const att of attachments) {
-          const directUrl = att.payload?.url;
+          let directUrl = att.payload?.url || att.url;
+          if (!directUrl && att.payload?.elements?.[0]?.image_url) {
+            directUrl = att.payload.elements[0].image_url;
+          }
           if (directUrl) {
             const attType = (att.type || 'image').toLowerCase();
             const kind = attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image';
@@ -150,7 +163,13 @@ router.post('/', async (req, res) => {
           (async () => {
             try {
               for (const item of mediaToDownload) {
-                const res = await fetch(item.url, { signal: AbortSignal.timeout(15000) });
+                const res = await fetch(item.url, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                  },
+                  signal: AbortSignal.timeout(15000),
+                });
                 if (!res.ok) continue;
                 const buffer = Buffer.from(await res.arrayBuffer());
                 let finalBuffer = buffer;

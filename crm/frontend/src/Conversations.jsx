@@ -423,10 +423,7 @@ function SocialThreadPanel({
             {messages?.length === 0 && <p className="py-8 text-center text-sm text-greige-ink">Sin mensajes todavía.</p>}
             {messages?.map((m) => {
               const outgoing = m.direction === 'out';
-              const att = m.attachment;
-              const isImg = att && (att.kind === 'image' || att.mimeType?.startsWith('image/') || att.url?.match(/\.(jpeg|jpg|gif|png|webp)/i));
-              const isAudio = att && (att.kind === 'audio' || att.mimeType?.startsWith('audio/'));
-              const fileSrc = att ? (att.url || (att.id ? attachmentUrl(att.id) : null)) : null;
+              const rawAttachments = m.attachments?.length ? m.attachments : (m.attachment ? [m.attachment] : []);
 
               return (
                 <div key={m.id} className={`flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
@@ -439,26 +436,40 @@ function SocialThreadPanel({
                   >
                     {m.referral && (
                       <div className="mb-2 w-64 max-w-full overflow-hidden rounded-xl border border-line-soft bg-black/[0.03] dark:bg-white/[0.05]">
-                        {m.referral.image_url && (
-                          <img
-                            src={m.referral.image_url}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            referrerPolicy="no-referrer"
-                            className="aspect-square w-full object-cover"
-                          />
+                        {m.referral.image_url ? (
+                          <div
+                            className="relative cursor-pointer group"
+                            onClick={() => setLightboxUrl(m.referral.image_url)}
+                          >
+                            <img
+                              src={m.referral.image_url}
+                              alt="Anuncio"
+                              loading="lazy"
+                              decoding="async"
+                              referrerPolicy="no-referrer"
+                              className="aspect-square w-full object-cover rounded-t-xl transition-opacity hover:opacity-95"
+                            />
+                            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                              <span className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium backdrop-blur-sm">
+                                Ver completa
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`flex aspect-video w-full items-center justify-center ${outgoing ? 'bg-white/10' : 'bg-black/5 dark:bg-white/10'}`}>
+                            <Megaphone size={24} className={outgoing ? 'text-white/70' : 'text-accent'} />
+                          </div>
                         )}
                         <div className="px-3 py-2.5">
-                          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
+                          <p className={`mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${outgoing ? 'text-white/80' : 'text-accent'}`}>
                             <Megaphone size={12} />
-                            Anuncio de {channel === 'instagram' ? 'Instagram' : 'Facebook'}
+                            Anuncio de {currentChannel === 'instagram' ? 'Instagram' : 'Facebook'}
                           </p>
-                          <p className="text-sm font-semibold leading-snug text-ink">
+                          <p className={`text-sm font-semibold leading-snug ${outgoing ? 'text-white' : 'text-ink'}`}>
                             {m.referral.headline || 'Publicidad de Meta'}
                           </p>
                           {m.referral.body && (
-                            <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-greige-ink">
+                            <p className={`mt-0.5 line-clamp-2 text-xs leading-snug ${outgoing ? 'text-white/80' : 'text-greige-ink'}`}>
                               {m.referral.body}
                             </p>
                           )}
@@ -473,7 +484,7 @@ function SocialThreadPanel({
                             <Camera size={11} />
                           </span>
                           <span className="text-xs font-semibold text-ink">
-                            {m.story.title || 'Historia de Instagram'}
+                            {m.story.title || (currentChannel === 'instagram' ? 'Historia de Instagram' : 'Historia de Facebook')}
                           </span>
                         </div>
                         {m.story.url && (
@@ -496,36 +507,59 @@ function SocialThreadPanel({
                       </div>
                     )}
 
-                    {isImg && fileSrc && (
-                      <div className="relative mb-1 overflow-hidden rounded-lg">
-                        <img
-                          src={fileSrc}
-                          alt={att.filename || 'Imagen adjunta'}
-                          onClick={() => setLightboxUrl(fileSrc)}
-                          className="max-h-60 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
-                        />
-                      </div>
-                    )}
-                    {isAudio && fileSrc && (
-                      <audio src={fileSrc} controls className="mb-1 w-64 max-w-full" />
-                    )}
-                    {att && !isImg && !isAudio && fileSrc && (
-                      <a
-                        href={att.id ? attachmentDownloadUrl(att.id) : fileSrc}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 ${
-                          outgoing ? 'bg-white/10' : 'bg-black/[0.04] dark:bg-white/[0.06]'
-                        }`}
-                      >
-                        <FileText size={20} className="shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium">{att.filename || 'Documento'}</p>
-                          {att.sizeBytes && <p className={`text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>{Math.ceil(att.sizeBytes / 1024)} KB</p>}
+                    {rawAttachments.map((att, attIdx) => {
+                      const isImg = att && (
+                        att.kind === 'image' ||
+                        att.mimeType?.startsWith('image/') ||
+                        att.url?.match(/\.(jpe?g|png|webp|gif)($|\?)/i) ||
+                        (!att.mimeType && !att.kind && !att.url?.toLowerCase().includes('.pdf') && !att.filename?.toLowerCase().endsWith('.pdf'))
+                      );
+                      const isAudio = att && (att.kind === 'audio' || att.mimeType?.startsWith('audio/'));
+                      const fileSrc = att ? (att.url || (att.id ? attachmentUrl(att.id) : null)) : null;
+
+                      if (!fileSrc) return null;
+
+                      return (
+                        <div key={att.id || attIdx} className="mb-1">
+                          {isImg && (
+                            <div className="relative overflow-hidden rounded-lg">
+                              <img
+                                src={fileSrc}
+                                alt={att.filename || 'Imagen adjunta'}
+                                onClick={() => setLightboxUrl(fileSrc)}
+                                referrerPolicy="no-referrer"
+                                className="max-h-60 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
+                              />
+                            </div>
+                          )}
+                          {isAudio && (
+                            <audio src={fileSrc} controls className="w-64 max-w-full" />
+                          )}
+                          {!isImg && !isAudio && (
+                            <a
+                              href={att.id ? attachmentDownloadUrl(att.id) : fileSrc}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 ${
+                                outgoing ? 'bg-white/10' : 'bg-black/[0.04] dark:bg-white/[0.06]'
+                              }`}
+                            >
+                              <FileText size={20} className="shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium">{att.filename || 'Documento'}</p>
+                                {att.sizeBytes && (
+                                  <p className={`text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
+                                    {Math.ceil(att.sizeBytes / 1024)} KB
+                                  </p>
+                                )}
+                              </div>
+                              <Download size={14} className="shrink-0" />
+                            </a>
+                          )}
                         </div>
-                        <Download size={14} className="shrink-0" />
-                      </a>
-                    )}
+                      );
+                    })}
+
                     {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                     <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outgoing ? 'text-white/85' : 'text-greige'}`}>
                       {formatBubbleTime(m.createdAt)}
@@ -875,6 +909,7 @@ function SocialThreadPanel({
               animate={{ scale: 1 }}
               src={lightboxUrl}
               alt="Imagen ampliada"
+              referrerPolicy="no-referrer"
               className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />

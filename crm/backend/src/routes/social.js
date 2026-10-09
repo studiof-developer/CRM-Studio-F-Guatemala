@@ -126,26 +126,40 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
       `UPDATE customers SET has_unread = false WHERE id = (SELECT customer_id FROM social_contacts WHERE id = $1)`,
       [req.params.id]
     );
-    res.json(rows.map((r) => {
-      let attachment = null;
-      let story = null;
-      let referral = null;
-
+    // Group rows by message ID to cleanly support multiple attachments per message
+    const messagesMap = new Map();
+    for (const r of rows) {
+      if (!messagesMap.has(r.id)) {
+        messagesMap.set(r.id, {
+          id: r.id,
+          direction: r.direction,
+          body: r.body,
+          raw_payload: r.raw_payload,
+          createdAt: r.created_at,
+          attachments: [],
+        });
+      }
       if (r.attachment_id) {
-        attachment = {
+        messagesMap.get(r.id).attachments.push({
           id: r.attachment_id,
           kind: r.attachment_kind,
           filename: r.attachment_filename,
           mimeType: r.attachment_mime_type,
           sizeBytes: r.attachment_size_bytes,
-        };
+        });
       }
+    }
 
-      if (r.raw_payload) {
+    res.json(Array.from(messagesMap.values()).map((msg) => {
+      let story = null;
+      let referral = null;
+      let attachments = [...msg.attachments];
+
+      if (msg.raw_payload) {
         try {
-          const p = typeof r.raw_payload === 'string' ? JSON.parse(r.raw_payload) : r.raw_payload;
+          const p = typeof msg.raw_payload === 'string' ? JSON.parse(msg.raw_payload) : msg.raw_payload;
 
-          // 1. Check for story reply or mention
+          // 1. Check for story reply or mention (Instagram & Facebook stories)
           const replyStory = p?.message?.reply_to?.story;
           const mentionStory = p?.message?.story?.mention;
           if (replyStory) {
@@ -164,43 +178,69 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
             };
           }
 
-          // 2. Check for referral (Meta Ads / Instagram Ads / Shortlink)
-          const ref = p?.referral || p?.postback?.referral;
+          // 2. Check for referral (Meta Ads / Messenger Ads / Instagram Ads / Shortlink)
+          // Crucial: In Messenger message events, referral is in event.message.referral!
+          const ref = p?.message?.referral || p?.referral || p?.postback?.referral;
           if (ref) {
+            const photoUrl = ref.ads_context_data?.photo_url
+              || ref.ads_context_data?.image_url
+              || ref.ads_context_data?.video_url
+              || ref.photo_url
+              || ref.image_url
+              || ref.thumbnail_url
+              || ref.ads_context_data?.thumbnail_url
+              || null;
+
             referral = {
               ad_id: ref.ad_id || null,
               source: ref.source || null,
               headline: ref.ads_context_data?.ad_title || ref.ad_title || 'Publicidad de Meta',
               body: ref.ref || ref.ads_context_data?.ad_body || null,
-              image_url: ref.ads_context_data?.photo_url || ref.ads_context_data?.video_url || null,
-              source_url: ref.ads_context_data?.photo_url || null,
+              image_url: photoUrl,
+              source_url: photoUrl,
             };
           }
 
-          // 3. Fallback for incoming attachment if not yet saved to message_attachments
-          if (!attachment) {
-            const att = p?.message?.attachments?.[0];
-            if (att?.payload?.url) {
+          // 3. Fallback for incoming attachments from payload if not yet saved to message_attachments
+          if (attachments.length === 0) {
+            const rawAtts = p?.message?.attachments || [];
+            for (const att of rawAtts) {
               const attType = (att.type || 'image').toLowerCase();
-              attachment = {
-                id: null,
-                kind: attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image',
-                url: att.payload.url,
-                filename: attType === 'share' ? 'Publicación compartida' : 'adjunto',
-              };
+              let directUrl = att.payload?.url || att.url;
+              if (!directUrl && att.payload?.elements?.[0]?.image_url) {
+                directUrl = att.payload.elements[0].image_url;
+              }
+              if (directUrl) {
+                attachments.push({
+                  id: null,
+                  kind: attType === 'video' ? 'video' : attType === 'audio' ? 'audio' : 'image',
+                  url: directUrl,
+                  filename: attType === 'share' ? 'Publicación compartida' : (attType === 'fallback' ? 'Contenido compartido' : 'adjunto'),
+                });
+              }
             }
           }
         } catch {}
       }
 
+      // If an ad image was persisted locally for this message, link it to referral.image_url
+      if (referral && attachments.length > 0) {
+        const savedAdImg = attachments.find((a) => a.filename === 'anuncio.jpg');
+        if (savedAdImg?.id) {
+          referral.image_url = `/api/attachments/${savedAdImg.id}/content`;
+          attachments = attachments.filter((a) => a.id !== savedAdImg.id);
+        }
+      }
+
       return {
-        id: r.id,
-        direction: r.direction,
-        body: r.body,
-        attachment,
+        id: msg.id,
+        direction: msg.direction,
+        body: msg.body,
+        attachment: attachments[0] || null,
+        attachments,
         story,
         referral,
-        createdAt: r.created_at,
+        createdAt: msg.createdAt,
       };
     }));
   } catch (err) { next(err); }
