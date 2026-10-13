@@ -872,7 +872,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
       statsLineSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${bucketParams.length}`;
     }
 
-    const [buckets, byHour, responseDelay] = await Promise.all([
+    const [buckets, byHour, responseDelay, activeToday] = await Promise.all([
       pool.query(`
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
@@ -927,8 +927,16 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
       pool.query(`
         SELECT round(avg(extract(epoch FROM (t.first_response_at - t.created_at)))/60) AS avg_min
         FROM tickets t JOIN customers c ON c.id = t.customer_id
-        WHERE t.first_response_at IS NOT NULL ${responseDateClause}
       `, responseParams),
+      // Conversaciones totales que tuvieron actividad humana hoy (nuevas + recurrentes)
+      pool.query(`
+        SELECT 
+          count(DISTINCT split_part(h.session_id, '__', 1)) AS active_today_total,
+          count(DISTINCT split_part(h.session_id, '__', 1)) FILTER (WHERE h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS pauta_today_total
+        FROM n8n_chat_histories h
+        WHERE h.message->>'type' = 'human'
+          AND (h.created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')
+      `),
     ]);
 
     // Zero-fill every bucket/hour a GROUP BY silently drops instead of returning it as
@@ -1035,6 +1043,8 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
     res.json({
       buckets: bucketStats,
       newToday,
+      activeTodayTotal: Number(activeToday.rows[0]?.active_today_total || 0),
+      pautaTodayTotal: Number(activeToday.rows[0]?.pauta_today_total || 0),
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
       conversionCost,

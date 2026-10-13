@@ -195,7 +195,30 @@ export default function StatsModal({ open, onClose, lineId }) {
                         iconBg="bg-accent-soft"
                         iconText="text-accent"
                         icon={Calendar}
+                        sub={data.activeTodayTotal ? `${data.newToday} clientes nuevos · ${Math.max(0, data.activeTodayTotal - data.newToday)} recurrentes (${data.activeTodayTotal} conversaciones totales hoy en WhatsApp)` : undefined}
                       />
+                      {data.activeTodayTotal > 0 && (
+                        <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
+                          <div className="flex items-center justify-between">
+                            <span>Conversaciones hoy:</span>
+                            <span className="font-semibold text-ink">{data.activeTodayTotal}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>• Nuevos clientes:</span>
+                            <span className="font-semibold text-accent">{data.newToday}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>• Recurrentes activos:</span>
+                            <span className="font-semibold text-ink">{Math.max(0, data.activeTodayTotal - data.newToday)}</span>
+                          </div>
+                          {data.pautaTodayTotal > 0 && (
+                            <div className="flex items-center justify-between border-t border-line/60 pt-1 text-purple-600 dark:text-purple-400">
+                              <span>• Por Anuncios Meta:</span>
+                              <span className="font-bold">{data.pautaTodayTotal}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <StatCard
                         label="No leídos"
                         value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
