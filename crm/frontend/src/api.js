@@ -370,6 +370,13 @@ export async function searchCampaignAudience(temperature, q, lineId) {
   return res.json();
 }
 
+export async function fetchMetaStrategy(lineId) {
+  const params = lineId ? `?lineId=${lineId}` : '';
+  const res = await apiFetch(`/api/campaigns/meta-strategy${params}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar estrategia de Meta');
+  return res.json();
+}
+
 export async function fetchCampaigns() {
   const res = await apiFetch('/api/campaigns');
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las campañas');

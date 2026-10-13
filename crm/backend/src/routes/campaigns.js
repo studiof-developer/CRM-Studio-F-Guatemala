@@ -10,6 +10,7 @@ import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
+import { fetchMessageCost } from '../whatsappPricing.js';
 
 const router = Router();
 // Was capped at a flat 5MB back when a header could only ever be an IMAGE (WhatsApp's own
@@ -88,6 +89,87 @@ const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT'];
 function getHeaderFormat(template) {
   return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
 }
+
+router.get('/meta-strategy', async (req, res, next) => {
+  try {
+    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
+    const creds = await whatsapp.getActiveCredentials(undefined, lineId).catch(() => null);
+
+    let phoneInfo = null;
+    if (creds?.phoneNumberId && creds?.token) {
+      phoneInfo = await whatsapp.verifyNumber(creds.phoneNumberId, creds.token, creds.wabaId).catch((err) => {
+        return { error: err.message };
+      });
+    }
+
+    // Estadísticas de 24 horas y 30 días en el CRM
+    const { rows: statsRows } = await pool.query(
+      `SELECT
+         COUNT(DISTINCT split_part(session_id, '__', 1)) FILTER (WHERE created_at > now() - interval '24 hours' AND message->'additional_kwargs'->>'campaignId' IS NOT NULL) AS outbound_24h_unique,
+         COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours' AND message->'additional_kwargs'->>'campaignId' IS NOT NULL) AS outbound_24h_total,
+         COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours' AND message->'additional_kwargs'->>'campaignId' IS NOT NULL AND coalesce(message->'additional_kwargs'->>'status','') = 'failed') AS outbound_24h_failed,
+         COUNT(DISTINCT split_part(session_id, '__', 1)) FILTER (WHERE created_at > now() - interval '30 days') AS total_active_contacts_30d
+       FROM n8n_chat_histories`
+    );
+
+    // Conteo de base por temperaturas (Frío, Tibio, Caliente)
+    const { rows: audiencePool } = await pool.query(
+      `SELECT 
+         (${EFFECTIVE_STATUS_SQL}) AS temperature,
+         COUNT(*) AS count
+       FROM customers c
+       WHERE c.opted_out_campaigns = false
+       GROUP BY temperature`
+    );
+
+    const poolByTemp = {};
+    for (const r of audiencePool) {
+      if (r.temperature) poolByTemp[r.temperature] = Number(r.count);
+    }
+
+    // Cooldown actual configurado
+    const cooldownHours = await getSetting('broadcast_cooldown_hours', 42);
+
+    res.json({
+      configured: Boolean(creds),
+      phoneNumberId: creds?.phoneNumberId ?? null,
+      wabaId: creds?.wabaId ?? null,
+      qualityRating: phoneInfo?.quality_rating ?? 'UNKNOWN',
+      verifiedName: phoneInfo?.verified_name ?? null,
+      displayPhoneNumber: phoneInfo?.display_phone_number ?? null,
+      codeVerificationStatus: phoneInfo?.code_verification_status ?? null,
+      cooldownHours,
+      stats: {
+        outbound24hUnique: Number(statsRows[0]?.outbound_24h_unique || 0),
+        outbound24hTotal: Number(statsRows[0]?.outbound_24h_total || 0),
+        outbound24hFailed: Number(statsRows[0]?.outbound_24h_failed || 0),
+        totalActiveContacts30d: Number(statsRows[0]?.total_active_contacts_30d || 0),
+      },
+      audiences: {
+        en_atencion: poolByTemp.en_atencion || 0,
+        cotizacion: poolByTemp.cotizacion || 0,
+        medio_pago: poolByTemp.medio_pago || 0,
+      },
+      officialLimits: {
+        tier1: 1000,
+        tier2: 10000,
+        tier3: 100000,
+        tier4: 'Ilimitado',
+        currentTierEstimated: 'Tier 1 (1,000 / día) o Tier 2 según WABA',
+        crmSafeSpeed: '350 ms / mensaje (~2.8 mensajes por segundo)',
+      },
+      pricing: {
+        marketingUsd: 0.0740,
+        utilityUsd: 0.0200,
+        serviceUsd: 0.0000,
+        ctwaUsd: 0.0000,
+        trmCopEst: 4000,
+        marketingCop: 296,
+        utilityCop: 80,
+      }
+    });
+  } catch (err) { next(err); }
+});
 
 router.get('/templates', async (req, res, next) => {
   try {

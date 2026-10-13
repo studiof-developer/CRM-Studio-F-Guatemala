@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow, RefreshCw } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow, RefreshCw, ShieldCheck } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
+import MetaStrategyTab from './MetaStrategyTab.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
@@ -58,6 +59,7 @@ export default function Campaigns({ user, onOpenConversation }) {
           {[
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
+            { key: 'metaStrategy', label: 'Estrategia Meta & Costos', icon: ShieldCheck },
             ...(isAdmin ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -76,6 +78,7 @@ export default function Campaigns({ user, onOpenConversation }) {
       <div className="px-4 pb-8 md:px-8">
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
+        {tab === 'metaStrategy' && <MetaStrategyTab />}
         {tab === 'templates' && isAdmin && <TemplatesTab />}
       </div>
     </div>
