@@ -217,7 +217,7 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
   const { rows: gated } = await pool.query(
     `SELECT c.id AS customer_id
      FROM customers c
-     WHERE c.whatsapp_number = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'`,
+     WHERE c.whatsapp_number = $1`,
     [phone]
   );
 
@@ -296,6 +296,17 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
           'payment_ocr_no_match',
           `Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}"${ocrAmount != null ? ` (monto detectado: Q${ocrAmount})` : ''}`
         );
+
+        // Auto-record sale with status 'revisar' or quoted amount so the sale is not lost
+        if (expectedAmount && expectedAmount > 0) {
+          await autoRecordSale({
+            customerId,
+            user: { fullName: 'Sistema (OCR)', id: null },
+            paymentMethod: guessPaidMethod(ocrText) || 'transferencia',
+            amount: expectedAmount,
+            notes: suggestionReason,
+          }).catch((e) => console.error('autoRecordSale on unconfirmed receipt failed:', e));
+        }
       }
     }
   } else {

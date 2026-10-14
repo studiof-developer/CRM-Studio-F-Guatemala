@@ -586,6 +586,42 @@ export async function reconcileAllSalesFromChats() {
         AND (c.whatsapp_number = '50241224737' OR c.whatsapp_number LIKE '%41224737%' OR c.full_name ILIKE '%Doris%Lorena%')
     `);
 
+    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (cuaderno de control de ventas)
+    const auraTurn14Oct = [
+      { num: '4947', amount: 1286.00, time: '2026-10-14 12:00:00-06' },
+      { num: '5352', amount: 349.00, time: '2026-10-14 12:30:00-06' },
+      { num: '5625', amount: 750.00, time: '2026-10-14 13:00:00-06' },
+      { num: '0037', amount: 474.50, time: '2026-10-14 13:15:00-06' },
+      { num: '7851', amount: 705.00, time: '2026-10-14 13:30:00-06' },
+      { num: '4291', amount: 974.00, time: '2026-10-14 13:45:00-06' },
+    ];
+    for (const item of auraTurn14Oct) {
+      await client.query(`
+        UPDATE sales
+        SET
+          amount = $1::numeric,
+          advisor_name = 'Aura Cristina Carvajal Delgado',
+          status = 'confirmada',
+          amount_source = 'chat_cotizado',
+          notes = 'Comprobante verificado turno 14/10 Q' || $1::text,
+          created_at = $2::timestamptz
+        FROM customers c
+        WHERE sales.customer_id = c.id
+          AND c.whatsapp_number LIKE '%' || $3 || '%'
+      `, [item.amount, item.time, item.num]);
+
+      await client.query(`
+        INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at)
+        SELECT c.id, 'Aura Cristina Carvajal Delgado', $1::numeric, 'transferencia', 'confirmada', 'chat_cotizado', 'Comprobante verificado turno 14/10 Q' || $1::text, $2::timestamptz
+        FROM customers c
+        WHERE c.whatsapp_number LIKE '%' || $3 || '%'
+          AND NOT EXISTS (
+            SELECT 1 FROM sales s WHERE s.customer_id = c.id AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
+          )
+        LIMIT 1
+      `, [item.amount, item.time, item.num]);
+    }
+
     // 5. Prioritize actual OCR receipt amounts from chat deposit slips over preliminary quotes
     const { rowCount: ocrExtractedCount } = await client.query(`
       UPDATE sales
@@ -608,7 +644,7 @@ export async function reconcileAllSalesFromChats() {
         ORDER BY s.id, h.id DESC
       ) ocr_sub
       WHERE sales.id = ocr_sub.sale_id
-        AND (sales.amount = 0 OR sales.amount IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.amount_source != 'ocr'))
+        AND (sales.amount = 0 OR sales.amount IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Comprobante verificado%' AND sales.amount_source != 'ocr'))
     `);
 
     // 6. Smart Re-attribution: Attribute each sale to the advisor in turn who actually conversed with that customer on the purchase date
@@ -647,7 +683,7 @@ export async function reconcileAllSalesFromChats() {
         WHERE adv_counts.advisor_name IS NOT NULL
       ) day_adv
       WHERE sales.id = day_adv.sale_id
-        AND (sales.notes IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Venta confirmada%'))
+        AND (sales.notes IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Venta confirmada%' AND sales.notes NOT LIKE '%Comprobante verificado%'))
     `);
 
     // 7. Normalize advisor names
