@@ -324,7 +324,7 @@ router.get('/pipeline', async (req, res, next) => {
       -- recent one — every resuelto ticket stays, since a customer legitimately buying
       -- more than once over time is real history, not a duplicate.
       deduped AS (
-        SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+        SELECT * FROM temped WHERE ticket_rn = 1
       ),
       -- bucket_total and friends counted here, over the whole (small — tickets/
       -- customers, not messages) date-filtered set, before narrowing to just this one
@@ -495,14 +495,11 @@ router.get('/pipeline/card', async (req, res, next) => {
         LEFT JOIN companies comp ON brnd.company_id = comp.id
         WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1 ${linesClause(req.user, 't')} ${lineFilterSql}
       ),
-      deduped AS (SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1)
+      deduped AS (SELECT * FROM temped WHERE ticket_rn = 1)
       SELECT *, ${BUCKET_CASE_SQL} AS bucket
       FROM deduped
       WHERE true ${dateClause} ${unreadOnlyClause} ${dormancyClause}
-      -- Prefer this customer's current active ticket; only fall back to a resuelto one
-      -- (their most recent) if that's genuinely all they have — same "which single card
-      -- represents them right now" priority the board itself applies via BUCKET_CASE_SQL.
-      ORDER BY (ticket_status = 'resuelto') ASC, ticket_id DESC
+      ORDER BY ticket_id DESC
       LIMIT 1
     `, params);
 
@@ -710,7 +707,7 @@ router.get('/pipeline/export', async (req, res, next) => {
       ),
       -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
       deduped AS (
-        SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+        SELECT * FROM temped WHERE ticket_rn = 1
       ),
       totaled AS (
         SELECT *, ${BUCKET_CASE_SQL} AS bucket
@@ -893,7 +890,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
         -- happen before bucket_total/unread_total are counted, or a duplicate would
         -- inflate those the same way it inflates the board itself.
         deduped AS (
-          SELECT * FROM temped WHERE ticket_status = 'resuelto' OR ticket_rn = 1
+          SELECT * FROM temped WHERE ticket_rn = 1
         ),
         -- Same dormancy exclusion the advisor board itself applies (dormant absent —
         -- this popup is scoped to the advisor Pipeline, never Marketing's dormant view)

@@ -77,7 +77,8 @@ function emptyColumns() {
 // because that's wherever the custom order happened to end.
 function mergeDisplayOrder(customOrder) {
   if (!customOrder) return COLUMN_ORDER;
-  const result = customOrder.map((c) => c.key);
+  const validCustom = customOrder.filter((c) => c && COLUMN_ORDER.includes(c.key));
+  const result = validCustom.map((c) => c.key);
   for (const key of COLUMN_ORDER) {
     if (result.includes(key)) continue;
     const idx = COLUMN_ORDER.indexOf(key);
@@ -88,7 +89,7 @@ function mergeDisplayOrder(customOrder) {
     }
     result.splice(insertAt, 0, key);
   }
-  return result;
+  return result.filter((key) => COLUMN_ORDER.includes(key));
 }
 
 export default function HandoffQueue({ user, onOpenConversation }) {
@@ -139,7 +140,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   useEffect(() => {
     fetchSettings().then((rows) => {
       const pipelineValue = rows.find((r) => r.key === 'pipeline_columns')?.value;
-      if (Array.isArray(pipelineValue)) setPipelineColumns(pipelineValue);
+      if (Array.isArray(pipelineValue)) {
+        setPipelineColumns(pipelineValue.filter((c) => c && COLUMN_ORDER.includes(c.key)));
+      }
       const slaValue = rows.find((r) => r.key === 'sla_minutes')?.value;
       if (Number.isFinite(slaValue)) setSlaMinutes(slaValue);
       const awaitingValue = rows.find((r) => r.key === 'awaiting_reply_overdue_minutes')?.value;
@@ -148,9 +151,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   }, []);
   const displayOrder = mergeDisplayOrder(pipelineColumns);
   function metaFor(key) {
-    const cfg = pipelineColumns?.find((c) => c.key === key) ?? DEFAULT_COLUMN_META[key];
+    const cfg = pipelineColumns?.find((c) => c.key === key) ?? DEFAULT_COLUMN_META[key] ?? { label: key, icon: 'Clock', color: 'info' };
     return {
-      label: cfg.label,
+      label: cfg.label || key,
       icon: PIPELINE_ICON_MAP[cfg.icon] ?? CheckCircle2,
       ...(PIPELINE_COLOR_CLASSES[cfg.color] ?? PIPELINE_COLOR_CLASSES.info),
     };
@@ -510,11 +513,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     });
 
     try {
-      if (targetColumn === 'resuelto') {
-        await updateTicket(drag.ticketId, { status: 'resuelto' });
-      } else {
-        await updateCustomerTags(drag.customerId, { manualStatus: TEMPERATURE_FOR_COLUMN[targetColumn] });
-      }
+      await updateCustomerTags(drag.customerId, { manualStatus: TEMPERATURE_FOR_COLUMN[targetColumn] });
       reloadAll();
     } catch (err) {
       showError(err.message);
@@ -744,8 +743,8 @@ export default function HandoffQueue({ user, onOpenConversation }) {
         {displayOrder.filter((key) => searching || !onlyColumn || key === onlyColumn).map((key) => {
           const meta = metaFor(key);
           const Icon = meta.icon;
-          const col = columns[key];
-          const cards = col.cards.filter(matches);
+          const col = columns[key] || emptyColumn(key);
+          const cards = (col.cards || []).filter(matches);
           const isDropTarget = DROP_TARGETS.has(key);
           return (
             <div

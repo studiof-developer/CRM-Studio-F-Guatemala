@@ -438,7 +438,18 @@ function PipelineTab() {
       const s = all.find((r) => r.key === 'pipeline_columns');
       // Falls back to today's real board (db/init/042 seeds this same shape) rather
       // than an empty editor if the setting was somehow never saved.
-      setRows(s?.value ?? COLUMN_ORDER.map((key) => ({ key, ...DEFAULT_COLUMN_META[key] })));
+      let list = s?.value;
+      if (Array.isArray(list)) {
+        list = list.filter((r) => r && COLUMN_ORDER.includes(r.key));
+        for (const key of COLUMN_ORDER) {
+          if (!list.some((r) => r.key === key)) {
+            list.push({ key, ...DEFAULT_COLUMN_META[key] });
+          }
+        }
+      } else {
+        list = COLUMN_ORDER.map((key) => ({ key, ...DEFAULT_COLUMN_META[key] }));
+      }
+      setRows(list);
       setUpdatedAt(s?.updatedAt ?? null);
     }).catch((err) => showError(err.message));
   }, []);

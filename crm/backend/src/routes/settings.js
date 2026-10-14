@@ -152,7 +152,11 @@ router.get('/', async (req, res, next) => {
         // A secret's real (encrypted) value never round-trips back out — just whether
         // one is currently set, same as whatsapp_numbers never returning the plaintext
         // token, only tokenLast4.
-        value: spec.secret ? Boolean(stored?.value) : (stored?.value ?? null),
+        value: spec.secret
+          ? Boolean(stored?.value)
+          : (key === 'pipeline_columns' && Array.isArray(stored?.value)
+              ? stored.value.filter((col) => col && PIPELINE_COLUMNS.includes(col.key))
+              : (stored?.value ?? null)),
         updatedAt: stored?.updated_at ?? null,
       };
     }));
