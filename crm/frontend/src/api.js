@@ -882,3 +882,10 @@ export async function fetchDailySalesBreakdown(filters = {}) {
   return res.json();
 }
 
+export async function syncSalesFromChats() {
+  const res = await apiFetch('/api/sales/sync-from-chats', { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al sincronizar ventas desde chats');
+  return res.json();
+}
+
+

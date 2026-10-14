@@ -4,10 +4,10 @@ import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
   FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check,
-  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink
+  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, syncSalesFromChats } from '../api.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 
@@ -114,6 +114,10 @@ export default function SalesAdvisorDashboard() {
   const [dailyData, setDailyData] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyError, setDailyError] = useState(null);
+
+  // Estado para sincronización profunda de chats
+  const [syncingChats, setSyncingChats] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   async function handleSaveAmount(saleId) {
     const num = Number(editAmountVal);
@@ -348,6 +352,23 @@ export default function SalesAdvisorDashboard() {
     }
   }, [activeTab, loadDailyData]);
 
+  async function handleSyncFromChats() {
+    if (syncingChats) return;
+    setSyncingChats(true);
+    setSyncResult(null);
+    try {
+      const res = await syncSalesFromChats();
+      setSyncResult(res);
+      loadData();
+      loadDailyData();
+      setTimeout(() => setSyncResult(null), 10000);
+    } catch (err) {
+      alert(err.message || 'Error al sincronizar ventas desde chats');
+    } finally {
+      setSyncingChats(false);
+    }
+  }
+
   function exportDailyToExcel() {
     if (!dailyData || !dailyData.daily || dailyData.daily.length === 0) return;
 
@@ -439,6 +460,23 @@ export default function SalesAdvisorDashboard() {
         </button>
       </div>
 
+      {syncResult && (
+        <div className="mb-5 flex items-center justify-between rounded-2xl border border-success/30 bg-success/10 p-3.5 text-xs text-success">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={18} className="shrink-0 text-success" />
+            <div>
+              <p className="font-bold text-ink">¡Sincronización de chats y ventas completada con éxito!</p>
+              <p className="mt-0.5 text-[11px] text-greige-ink">
+                Ventas re-atribuidas a la asesora activa del chat: <strong>{syncResult.reattributedCount ?? 0}</strong> &bull; Montos corregidos (&le; Q10,000): <strong>{syncResult.cappedCount ?? 0}</strong> &bull; Cotizaciones en chat asociadas: <strong>{syncResult.priceExtractedCount ?? 0}</strong>
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setSyncResult(null)} className="rounded-lg p-1 text-greige-ink hover:bg-black/5 hover:text-ink">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {activeTab === 'daily' ? (
         <div>
           {/* Header & Filtros Comparativa Diaria */}
@@ -516,6 +554,16 @@ export default function SalesAdvisorDashboard() {
                 className="flex items-center justify-center rounded-xl border border-line bg-paper p-2 text-greige-ink transition-colors hover:bg-muted hover:text-ink disabled:opacity-50"
               >
                 <RefreshCw size={14} className={dailyLoading ? 'animate-spin' : ''} />
+              </button>
+
+              <button
+                onClick={handleSyncFromChats}
+                disabled={syncingChats}
+                title="Re-analiza todos los chats de WhatsApp para atribuir ventas a la asesora que atendió y corregir montos"
+                className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white disabled:opacity-50"
+              >
+                <Sparkles size={13} className={syncingChats ? 'animate-spin' : ''} />
+                <span>{syncingChats ? 'Analizando...' : 'Re-analizar chats'}</span>
               </button>
 
               <button
@@ -776,6 +824,17 @@ export default function SalesAdvisorDashboard() {
             className="flex items-center justify-center rounded-xl border border-line bg-paper p-2 text-greige-ink transition-colors hover:bg-muted hover:text-ink disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          {/* Botón Re-analizar chats */}
+          <button
+            onClick={handleSyncFromChats}
+            disabled={syncingChats}
+            title="Re-analiza todos los chats de WhatsApp para atribuir ventas a la asesora que atendió y corregir montos"
+            className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white disabled:opacity-50"
+          >
+            <Sparkles size={13} className={syncingChats ? 'animate-spin' : ''} />
+            <span>{syncingChats ? 'Analizando...' : 'Re-analizar chats'}</span>
           </button>
 
           {/* Botón Copiar resumen para WhatsApp */}

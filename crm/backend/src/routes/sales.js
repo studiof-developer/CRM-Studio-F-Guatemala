@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logBusinessAction } from '../auditLog.js';
+import { reconcileAllSalesFromChats } from '../salesAttribution.js';
 
 const router = Router();
 
@@ -579,6 +580,33 @@ router.get('/daily-breakdown', async (req, res, next) => {
           .sort((a, b) => b.monto - a.monto),
       },
       daily,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/sales/sync-from-chats
+// Re-analiza todos los historiales de chats, corrige montos irreales (> Q10,000)
+// y atribuye cada venta a la asesora que realmente atendió al cliente en el chat.
+router.post('/sync-from-chats', async (req, res, next) => {
+  try {
+    const result = await reconcileAllSalesFromChats();
+    logBusinessAction(pool, {
+      userId: req.user?.id || null,
+      userName: req.user?.fullName || 'system',
+      userRole: req.user?.role || 'admin',
+      action: 'reconcile_sales_from_chats',
+      targetType: 'sales',
+      targetId: 'all',
+      details: result,
+      ipAddress: req.ip,
+    }).catch((e) => console.error('logBusinessAction error:', e));
+
+    res.json({
+      success: true,
+      message: 'Ventas y chats sincronizados y re-atribuidos exitosamente.',
+      ...result,
     });
   } catch (err) {
     next(err);

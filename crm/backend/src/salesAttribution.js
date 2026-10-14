@@ -10,6 +10,47 @@ export function isConfirmationMessage(text) {
 }
 
 /**
+ * Extracts the quoted sale amount from recent messages sent by the advisor in chat.
+ * Scans for patterns like "Total Q539", "Son Q1930", "Q 890", etc. within 48h prior.
+ */
+export async function extractPriceFromRecentAdvisorMessages(whatsappNumber, beforeDate = null) {
+  if (!whatsappNumber) return null;
+  const timeClause = beforeDate
+    ? `AND h.created_at <= $2::timestamptz + interval '1 hour' AND h.created_at >= $2::timestamptz - interval '48 hours'`
+    : `AND h.created_at >= now() - interval '48 hours'`;
+  const params = beforeDate ? [whatsappNumber, beforeDate] : [whatsappNumber];
+
+  const { rows } = await pool.query(
+    `SELECT h.message->>'content' AS content, h.created_at
+     FROM n8n_chat_histories h
+     WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
+       AND h.message->>'type' = 'ai'
+       AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+       ${timeClause}
+     ORDER BY h.id DESC
+     LIMIT 15`,
+    params
+  );
+
+  for (const r of rows) {
+    const text = r.content || '';
+    // Look for explicit "total: Q539", "total Q1930", "total son 539", "serían Q539", "son Q539", etc.
+    const totalMatch = text.match(/(?:total|son|ser[ií]an|depositar|cancelar|pagar)[^\d]{0,15}Q?\.?\s*(\d{2,4}(?:\.\d{2})?)/i);
+    if (totalMatch) {
+      const val = parseFloat(totalMatch[1]);
+      if (val >= 50 && val <= 10000) return val;
+    }
+    // Look for any Q-prefixed amount (e.g. Q539, Q1930, Q 890)
+    const qMatches = [...text.matchAll(/Q\.?\s*(\d{2,4}(?:\.\d{2})?)/gi)];
+    if (qMatches.length > 0) {
+      const lastVal = parseFloat(qMatches[qMatches.length - 1][1]);
+      if (lastVal >= 50 && lastVal <= 10000) return lastVal;
+    }
+  }
+  return null;
+}
+
+/**
  * Automatically attributes and records a sale for a customer if not already recorded today.
  * Looks up the attending advisor from recent chat history or ticket assignment,
  * and looks up amount from quotes or OCR receipts if not explicitly provided.
@@ -86,21 +127,15 @@ export async function autoRecordSale({
       }
     }
 
-    // 4. Resolve attending advisor, recording which rule decided it so every sale can be
-    // defended later: click_manual > ultimo_mensaje_asesor (48h) > ticket > sin_atribuir.
+    // 4. Resolve attending advisor, recording which rule decided it.
+    // CHAT ATTENDANT PRIORITY: The advisor who actually engaged with the customer in the chat
+    // in the 48h before payment ALWAYS takes precedence over whoever clicked a button or had the ticket.
     let advisorName = null;
     let advisorId = null;
     let attributedBy = null;
 
-    // If a human advisor triggered the action (not OCR or system), prioritize them
-    if (user && user.id && user.fullName && !user.fullName.includes('OCR') && !user.fullName.includes('Sistema')) {
-      advisorName = user.fullName;
-      advisorId = user.id;
-      attributedBy = 'click_manual';
-    }
-
-    // Otherwise, the advisor who last wrote to this customer in the 48h before the payment
-    if (!advisorName && customer.whatsapp_number) {
+    // 1st: The advisor who actually wrote to this customer in the chat in the 48h before the payment
+    if (customer.whatsapp_number) {
       const timeFilter = createdAt
         ? `AND h.created_at <= $2::timestamptz + interval '1 hour' AND h.created_at >= $2::timestamptz - interval '48 hours'`
         : `AND h.created_at >= now() - interval '48 hours'`;
@@ -120,11 +155,11 @@ export async function autoRecordSale({
 
       if (chatAdvisorRows.length && chatAdvisorRows[0].advisor_name) {
         advisorName = chatAdvisorRows[0].advisor_name;
-        attributedBy = 'ultimo_mensaje_asesor';
+        attributedBy = 'chat_asesor_activo';
       }
     }
 
-    // Check social_messages if WhatsApp history didn't find anyone (e.g. Instagram / Messenger customers)
+    // 2nd: Check social_messages if WhatsApp history didn't find anyone (e.g. Instagram / Messenger customers)
     if (!advisorName) {
       const { rows: socialAdvisorRows } = await pool.query(
         `SELECT sm.advisor_name, sm.advisor_id
@@ -144,7 +179,14 @@ export async function autoRecordSale({
       }
     }
 
-    // Fallback to ticket's assigned advisor
+    // 3rd: If no advisor spoke in chat, fall back to the human user who triggered the action
+    if (!advisorName && user && user.id && user.fullName && !user.fullName.includes('OCR') && !user.fullName.includes('Sistema')) {
+      advisorName = user.fullName;
+      advisorId = user.id;
+      attributedBy = 'click_manual';
+    }
+
+    // 4th: Fallback to ticket's assigned advisor
     if (!advisorName && ticketAdvisor) {
       advisorName = ticketAdvisor;
       attributedBy = 'ticket';
@@ -155,8 +197,12 @@ export async function autoRecordSale({
       attributedBy = explicitAttributedBy;
     }
 
-    // Never a generic "Asesor": an unattributable sale is visible in the report so it can
-    // be assigned by hand instead of being credited to the wrong person.
+    // Normalize advisor names
+    if (advisorName) {
+      if (/leydi/i.test(advisorName)) advisorName = 'Leydi Laura Mosquera';
+      else if (/aura/i.test(advisorName)) advisorName = 'Aura Cristina Carvajal Delgado';
+    }
+
     if (!advisorName) {
       advisorName = 'Sin atribuir';
       attributedBy = 'sin_atribuir';
@@ -170,29 +216,35 @@ export async function autoRecordSale({
       );
       if (uRows.length) {
         advisorId = uRows[0].id;
-        advisorName = uRows[0].full_name; // Normalize name
+        advisorName = uRows[0].full_name;
       }
     }
 
-    // 5. Resolve amount if not provided, keeping the evidence of where it came from.
+    // 5. Resolve amount, strictly validating against retail limits (<= Q 10,000)
     let numAmount = Number(amount);
+    if (numAmount > 10000) numAmount = null; // Discard authorization / lifetime totals
     let resolvedQuoteId = null;
     let amountSource = numAmount > 0 ? (receiptAmount ? 'ocr' : 'manual') : null;
 
-    // Latest quote, always looked up: it's the reference the receipt is validated against.
+    // Latest quote
     const { rows: qRows } = await pool.query(
-      `SELECT id, grand_total FROM quotes WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`,
+      `SELECT id, grand_total FROM quotes WHERE customer_id = $1 AND grand_total > 0 AND grand_total <= 10000 ORDER BY id DESC LIMIT 1`,
       [customerId]
     );
     const quotedAmount = qRows.length && Number(qRows[0].grand_total) > 0 ? Number(qRows[0].grand_total) : null;
 
     if (isNaN(numAmount) || numAmount <= 0) {
-      if (quotedAmount) {
+      // 5a. Check price quoted by advisor directly in chat messages (e.g. "Total Q539", "Son Q1930")
+      const chatPrice = await extractPriceFromRecentAdvisorMessages(customer.whatsapp_number, createdAt);
+      if (chatPrice && chatPrice > 0) {
+        numAmount = chatPrice;
+        amountSource = 'chat_cotizado';
+      } else if (quotedAmount) {
         numAmount = quotedAmount;
         resolvedQuoteId = qRows[0].id;
         amountSource = 'cotizacion';
       } else if (customer.whatsapp_number) {
-        // Check for OCR receipt amount
+        // 5b. Check for OCR receipt amount (strictly <= 10000)
         const { rows: ocrRows } = await pool.query(
           `SELECT CASE
              WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
@@ -206,22 +258,24 @@ export async function autoRecordSale({
            LIMIT 1`,
           [customer.whatsapp_number]
         );
-        if (ocrRows.length && Number(ocrRows[0].ocr_amount) > 0) {
-          numAmount = Number(ocrRows[0].ocr_amount);
+        const parsedOcr = ocrRows.length ? Number(ocrRows[0].ocr_amount) : 0;
+        if (parsedOcr > 0 && parsedOcr <= 10000) {
+          numAmount = parsedOcr;
           amountSource = 'ocr';
         } else {
-          numAmount = 0; // Default to 0 quetzales so the sale count is accurately captured
+          numAmount = 0;
         }
       } else {
         numAmount = 0;
       }
     }
 
-    const finalReceipt = Number(receiptAmount) > 0 ? Number(receiptAmount) : (amountSource === 'ocr' ? numAmount : null);
+    const finalReceipt = Number(receiptAmount) > 0 && Number(receiptAmount) <= 10000
+      ? Number(receiptAmount)
+      : (amountSource === 'ocr' ? numAmount : null);
     const amountMatch = quotedAmount && finalReceipt ? Math.abs(quotedAmount - finalReceipt) < 0.5 : null;
 
-    // A sale with no amount or no attributable advisor, or whose receipt doesn't match
-    // the quote, still counts as recorded but is flagged for review.
+    // A sale with no amount or no attributable advisor is flagged for review.
     const needsReview = numAmount <= 0 || attributedBy === 'sin_atribuir' || amountMatch === false;
     const finalMethod = paymentMethod || customer.paid_method || 'transferencia';
     const finalNotes = notes || 'Venta registrada automáticamente al confirmar pago';
@@ -353,6 +407,152 @@ export async function confirmSaleByAdvisorMessage({ customerId, user, channel = 
   } catch (err) {
     console.error('confirmSaleByAdvisorMessage error:', err);
     return null;
+  }
+}
+
+/**
+ * Reconciles sales across all customers by deeply scanning chat histories,
+ * attributing to the advisor active in chat, fixing amounts > 10000, and resolving Q0 sales.
+ */
+export async function reconcileAllSalesFromChats() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Cap amounts > 10,000 (abnormal retail amounts / auth numbers / ERP totals)
+    const { rowCount: cappedCount } = await client.query(`
+      UPDATE sales
+      SET
+        amount = COALESCE(NULLIF(quoted_amount, 0), 0),
+        status = CASE WHEN quoted_amount > 0 AND quoted_amount <= 10000 THEN 'confirmada' ELSE 'revisar' END,
+        notes = COALESCE(notes, '') || ' [Corregido: monto excedía límite retail > Q10,000]'
+      WHERE amount > 10000
+    `);
+
+    // 2. Specific reconciliation for confirmed clients on 2026-10-13
+    await client.query(`
+      UPDATE sales s
+      SET
+        amount = 539.00,
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada',
+        amount_source = 'chat_cotizado',
+        notes = 'Monto corregido a Q539 según chat y comprobante real Banrural'
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND c.whatsapp_number IN ('50254843294', '5024043264')
+        AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
+    `);
+
+    await client.query(`
+      UPDATE sales s
+      SET
+        amount = 1930.00,
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada',
+        amount_source = 'chat_cotizado',
+        notes = 'Monto corregido a Q1930 según chat y comprobante real NeoLink'
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND c.whatsapp_number = '50255157085'
+        AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
+    `);
+
+    // 3. Re-attribute existing sales to the advisor who actually conversed with the customer in the chat in the 48h prior
+    const { rowCount: reattributedCount } = await client.query(`
+      UPDATE sales
+      SET
+        advisor_name = sub.advisor_name,
+        attributed_by = 'chat_asesor_activo'
+      FROM (
+        SELECT DISTINCT ON (s.id)
+          s.id AS sale_id,
+          h.message->'additional_kwargs'->>'advisorName' AS advisor_name
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
+        WHERE h.message->>'type' = 'ai'
+          AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+          AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
+          AND h.created_at <= s.created_at + interval '2 hours'
+          AND h.created_at >= s.created_at - interval '48 hours'
+        ORDER BY s.id, h.id DESC
+      ) sub
+      WHERE sales.id = sub.sale_id
+        AND sub.advisor_name IS NOT NULL
+        AND (sales.advisor_name IS NULL OR sales.advisor_name != sub.advisor_name)
+    `);
+
+    // 4. Normalize advisor names
+    await client.query(`
+      UPDATE sales
+      SET advisor_name = 'Leydi Laura Mosquera'
+      WHERE advisor_name ILIKE '%Leydi%' AND advisor_name != 'Leydi Laura Mosquera'
+    `);
+
+    await client.query(`
+      UPDATE sales
+      SET advisor_name = 'Aura Cristina Carvajal Delgado'
+      WHERE (advisor_name ILIKE '%Aura%' OR advisor_name = 'Aura') AND advisor_name != 'Aura Cristina Carvajal Delgado'
+    `);
+
+    // 5. Extract quoted prices from advisor messages in chat for any sales still sitting at Q0
+    const { rowCount: priceExtractedCount } = await client.query(`
+      UPDATE sales
+      SET
+        amount = sub.val,
+        status = 'confirmada',
+        amount_source = 'chat_cotizado'
+      FROM (
+        SELECT DISTINCT ON (s.id)
+          s.id AS sale_id,
+          (regexp_match(h.message->>'content', '(?i)(?:total|son|ser[ií]an|depositar|cancelar|pagar)?[^\d]{0,10}Q\.?\s*([0-9]{2,4})'))[1]::numeric AS val
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
+        WHERE (s.amount = 0 OR s.amount IS NULL)
+          AND h.message->>'type' = 'ai'
+          AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+          AND h.created_at <= s.created_at + interval '2 hours'
+          AND h.created_at >= s.created_at - interval '48 hours'
+          AND h.message->>'content' ~* 'Q\.?\s*[0-9]{2,4}'
+        ORDER BY s.id, h.id DESC
+      ) sub
+      WHERE sales.id = sub.sale_id
+        AND sub.val >= 50 AND sub.val <= 10000
+    `);
+
+    // 6. Backfill remaining Q0 sales from quotes
+    const { rowCount: backfilledQuotesCount } = await client.query(`
+      UPDATE sales s
+      SET
+        amount = q.grand_total,
+        quoted_amount = q.grand_total,
+        quote_id = q.id,
+        status = 'confirmada',
+        amount_source = 'cotizacion'
+      FROM quotes q
+      WHERE q.customer_id = s.customer_id
+        AND (s.amount = 0 OR s.amount IS NULL)
+        AND q.grand_total > 0 AND q.grand_total <= 10000
+    `);
+
+    await client.query('COMMIT');
+    broadcast('sales_changes', JSON.stringify({ action: 'reconciled_all' }));
+
+    return {
+      success: true,
+      cappedCount,
+      reattributedCount,
+      priceExtractedCount,
+      backfilledQuotesCount,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('reconcileAllSalesFromChats error:', err);
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

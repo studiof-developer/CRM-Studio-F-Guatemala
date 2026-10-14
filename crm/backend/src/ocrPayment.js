@@ -85,19 +85,26 @@ export function receiptContainsAmount(ocrText, expectedAmount, extraKeywords = [
 // case a single receipt's total quote doesn't match on its own — a customer who split
 // one payment across two transactions (attachments.js sums recent receipts by phone
 // before giving up on that order).
-const MONTO_AMOUNT_RE = /(?:monto|por\s+un\s+valor\s+de)[^\d]{0,25}(\d[\d.,]*\d|\d)/i;
+const MONTO_AMOUNT_RE = /(?:monto|por\s+un\s+valor\s+de|total|importe|valor)[^\d]{0,25}(?:Q\.?\s*)?(\d[\d.,]*\d|\d)/i;
 export function extractReceiptAmount(ocrText, extraKeywords = []) {
   if (!ocrText || !matchesReceiptKeywords(ocrText, extraKeywords)) return null;
   const labeled = ocrText.match(MONTO_AMOUNT_RE);
-  if (labeled) return parseAmount(labeled[1]);
-  // No explicit "Monto" label — prefer a number that looks like a currency amount (has
-  // cents, e.g. "899.00" or "2,668.00") over a bare integer. Reference/audit/
-  // authorization codes on a real receipt are usually long bare integers that would
-  // otherwise swamp the actual total under a plain "biggest number wins" heuristic.
-  const decimals = (ocrText.match(/\d[\d.,]*[.,]\d{2}\b/g) ?? []).map(parseAmount).filter((n) => Number.isFinite(n) && n > 0);
+  if (labeled) {
+    const val = parseAmount(labeled[1]);
+    if (val > 0 && val <= 10000) return val;
+  }
+  // No explicit "Monto" label — prefer numbers with decimals or preceded by Q.
+  // Cap at 10,000 Q (retail limit) to avoid mistaking bank authorization codes
+  // (e.g. 91161), account numbers or document references for amounts.
+  const decimals = (ocrText.match(/(?:Q\.?\s*)?\d[\d.,]*[.,]\d{2}\b/g) ?? [])
+    .map(parseAmount)
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 10000);
   if (decimals.length) return Math.max(...decimals);
-  const numbers = (ocrText.match(/\d[\d.,]*/g) ?? []).map(parseAmount).filter((n) => Number.isFinite(n) && n > 0);
-  return numbers.length ? Math.max(...numbers) : null;
+
+  const qNumbers = (ocrText.match(/Q\.?\s*\d[\d.,]*/gi) ?? [])
+    .map(parseAmount)
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 10000);
+  return qNumbers.length ? Math.max(...qNumbers) : null;
 }
 
 // Same bare keyword match db/init/032's SQL trigger already uses for the same
