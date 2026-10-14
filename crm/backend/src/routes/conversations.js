@@ -8,6 +8,7 @@ import * as whatsapp from '../whatsapp.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { compressStoredAttachment } from '../attachmentCompression.js';
 import { broadcast } from '../events.js';
+import { isConfirmationMessage, confirmSaleByAdvisorMessage } from '../salesAttribution.js';
 
 // WhatsApp's own per-type caps (not ours) — checked again per-kind below, once we know
 // the file's mimetype. Multer's limit has to be a single outer bound before that, so it
@@ -1175,6 +1176,21 @@ router.post('/:sessionId/messages', async (req, res, next) => {
            ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
           [phone, inserted[0].id]
         );
+
+        if (isConfirmationMessage(content)) {
+          const { rows: cRows } = await pool.query(
+            `SELECT id FROM customers WHERE whatsapp_number = $1`,
+            [phone]
+          );
+          if (cRows.length) {
+            confirmSaleByAdvisorMessage({
+              customerId: cRows[0].id,
+              user: req.user,
+              channel: 'whatsapp',
+              notes: 'Confirmado por mensaje: ' + content.trim().slice(0, 80),
+            }).catch((e) => console.error('confirmSaleByAdvisorMessage error:', e));
+          }
+        }
       } catch (err) {
         console.error('Error updating ticket/customer state on advisor send:', err);
       }
@@ -1285,6 +1301,21 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
         .then((mediaId) => whatsapp.sendMedia(phone, kind, mediaId, req.file.originalname, caption || undefined, lineId))
         .then((result) => handleSendResult(inserted[0].id, result))
         .catch((err) => markSendFailed(inserted[0].id, err).catch((e) => console.error('markSendFailed failed', e)));
+    }
+
+    if (phone && caption && isConfirmationMessage(caption)) {
+      pool.query(`SELECT id FROM customers WHERE whatsapp_number = $1`, [phone])
+        .then(({ rows: cRows }) => {
+          if (cRows.length) {
+            confirmSaleByAdvisorMessage({
+              customerId: cRows[0].id,
+              user: req.user,
+              channel: 'whatsapp',
+              notes: 'Confirmado por comprobante/mensaje: ' + caption.trim().slice(0, 80),
+            }).catch((e) => console.error('confirmSaleByAdvisorMessage error:', e));
+          }
+        })
+        .catch((e) => console.error('confirmSaleByAdvisorMessage customer lookup error:', e));
     }
   } catch (err) { next(err); }
 });

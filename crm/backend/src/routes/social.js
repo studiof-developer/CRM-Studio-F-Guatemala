@@ -18,6 +18,7 @@ import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js';
 import { MIME_KIND } from './conversations.js';
 import { broadcast } from '../events.js';
+import { isConfirmationMessage, confirmSaleByAdvisorMessage } from '../salesAttribution.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -559,10 +560,13 @@ router.post('/contacts/:id/messages', upload.single('file'), async (req, res, ne
       return res.status(502).json({ error: friendlyError });
     }
 
+    const advisorId = req.user?.id ?? null;
+    const advisorName = req.user?.fullName ?? null;
+
     const { rows } = await pool.query(
-      `INSERT INTO social_messages (contact_id, direction, body, external_message_id)
-       VALUES ($1, 'out', $2, $3) RETURNING id, created_at`,
-      [req.params.id, body || (hasFile ? `[${req.file.originalname}]` : ''), externalMessageId]
+      `INSERT INTO social_messages (contact_id, direction, body, external_message_id, advisor_id, advisor_name)
+       VALUES ($1, 'out', $2, $3, $4, $5) RETURNING id, created_at`,
+      [req.params.id, body || (hasFile ? `[${req.file.originalname}]` : ''), externalMessageId, advisorId, advisorName]
     );
     const messageId = rows[0].id;
 
@@ -590,6 +594,16 @@ router.post('/contacts/:id/messages', upload.single('file'), async (req, res, ne
          WHERE customer_id = $1 AND status != 'resuelto'`,
         [customerId, req.user?.fullName ?? null, body || (hasFile ? `[Archivo]` : '')]
       );
+
+      // Si el asesor envía un mensaje de confirmación de compra (ej. "gracias por su compra", etc.)
+      if (body && isConfirmationMessage(body)) {
+        confirmSaleByAdvisorMessage({
+          customerId,
+          user: req.user,
+          channel: provider || 'social',
+          notes: `Confirmado por mensaje en ${provider || 'social'}: "${body.slice(0, 80)}"`,
+        }).catch((err) => console.warn('[confirmSaleByAdvisorMessage social error]', err.message));
+      }
     }
 
     broadcast('social_message_changes', JSON.stringify({

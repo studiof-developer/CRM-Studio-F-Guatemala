@@ -1,5 +1,13 @@
 import { pool } from './db.js';
 import { logBusinessAction } from './auditLog.js';
+import { broadcast } from './events.js';
+
+export const CONFIRMATION_PHRASES_REGEX = /\b(gracias\s+por\s+(su|tu)\s+compra|pago\s+(recibido|confirmado|verificado|acreditado)|comprobante\s+(recibido|verificado|confirmado)|pedido\s+(confirmado|registrado)|hemos\s+recibido\s+(su|tu)\s+pago|confirmamos\s+(su|tu)\s+pago|ya\s+qued[oó]\s+registrad[ao]|pago\s+con\s+[eé]xito|muchas\s+gracias\s+por\s+(su|tu)\s+pago)\b/i;
+
+export function isConfirmationMessage(text) {
+  if (!text || typeof text !== 'string') return false;
+  return CONFIRMATION_PHRASES_REGEX.test(text.trim());
+}
 
 /**
  * Automatically attributes and records a sale for a customer if not already recorded today.
@@ -16,6 +24,7 @@ export async function autoRecordSale({
   createdAt = null,
   receiptAmount = null,
   channel = null,
+  attributedBy: explicitAttributedBy = null,
 }) {
   if (!customerId) return null;
 
@@ -115,10 +124,35 @@ export async function autoRecordSale({
       }
     }
 
+    // Check social_messages if WhatsApp history didn't find anyone (e.g. Instagram / Messenger customers)
+    if (!advisorName) {
+      const { rows: socialAdvisorRows } = await pool.query(
+        `SELECT sm.advisor_name, sm.advisor_id
+         FROM social_contacts sc
+         JOIN social_messages sm ON sm.contact_id = sc.id
+         WHERE sc.customer_id = $1
+           AND sm.direction = 'out'
+           AND sm.advisor_name IS NOT NULL
+           AND sm.created_at >= now() - interval '48 hours'
+         ORDER BY sm.id DESC LIMIT 1`,
+        [customerId]
+      );
+      if (socialAdvisorRows.length) {
+        advisorName = socialAdvisorRows[0].advisor_name;
+        advisorId = socialAdvisorRows[0].advisor_id;
+        attributedBy = 'social_mensaje_asesor';
+      }
+    }
+
     // Fallback to ticket's assigned advisor
     if (!advisorName && ticketAdvisor) {
       advisorName = ticketAdvisor;
       attributedBy = 'ticket';
+    }
+
+    // If caller specified an explicit rule (e.g. 'mensaje_confirmacion'), preserve it
+    if (explicitAttributedBy) {
+      attributedBy = explicitAttributedBy;
     }
 
     // Never a generic "Asesor": an unattributable sale is visible in the report so it can
@@ -238,3 +272,87 @@ export async function autoRecordSale({
     return null;
   }
 }
+
+/**
+ * Automatically validates and confirms a sale when an attending advisor sends
+ * a purchase confirmation / thank-you phrase ("gracias por su compra", "pago recibido", etc.)
+ */
+export async function confirmSaleByAdvisorMessage({ customerId, user, channel = 'whatsapp', notes = null }) {
+  if (!customerId || !user?.fullName) return null;
+
+  try {
+    // 1. Mark customer as paid if not already paid_locked
+    const { rows: custRows } = await pool.query(
+      `SELECT id, paid_locked, manual_status FROM customers WHERE id = $1`,
+      [customerId]
+    );
+    if (!custRows.length) return null;
+    const cust = custRows[0];
+
+    if (!cust.paid_locked) {
+      await pool.query(
+        `UPDATE customers SET
+           paid_locked = true,
+           manual_status = 'pagado',
+           payment_suggested_at = NULL,
+           payment_suggestion_reason = NULL,
+           payment_suggestion_method = NULL,
+           updated_at = now()
+         WHERE id = $1`,
+        [customerId]
+      );
+    }
+
+    // 2. Check if a sale was already recorded today in 'revisar' status
+    const { rows: todaySales } = await pool.query(
+      `SELECT id, status FROM sales
+       WHERE customer_id = $1
+         AND date_trunc('day', created_at AT TIME ZONE 'America/Guatemala') = date_trunc('day', now() AT TIME ZONE 'America/Guatemala')
+       ORDER BY id DESC LIMIT 1`,
+      [customerId]
+    );
+
+    if (todaySales.length && todaySales[0].status === 'revisar') {
+      const saleId = todaySales[0].id;
+      const { rows: updated } = await pool.query(
+        `UPDATE sales SET
+           status = 'confirmada',
+           advisor_id = COALESCE($2, advisor_id),
+           advisor_name = COALESCE($3, advisor_name),
+           attributed_by = 'mensaje_confirmacion',
+           confirmed_at = now(),
+           updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [saleId, user.id || null, user.fullName]
+      );
+      broadcast('sales_changes', JSON.stringify({ saleId }));
+      return updated[0];
+    }
+
+    // 3. Otherwise, record a new confirmed sale attributed to this advisor
+    const sale = await autoRecordSale({
+      customerId,
+      user,
+      notes: notes || 'Confirmado por mensaje de asesor (gracias por su compra)',
+      channel,
+      attributedBy: 'mensaje_confirmacion',
+    });
+
+    if (sale?.id) {
+      // Ensure status is confirmada and advisor is explicitly set
+      await pool.query(
+        `UPDATE sales SET status = 'confirmada', advisor_id = COALESCE($2, advisor_id),
+                advisor_name = COALESCE($3, advisor_name), attributed_by = 'mensaje_confirmacion'
+         WHERE id = $1`,
+        [sale.id, user.id || null, user.fullName]
+      );
+      broadcast('sales_changes', JSON.stringify({ saleId: sale.id }));
+    }
+
+    return sale;
+  } catch (err) {
+    console.error('confirmSaleByAdvisorMessage error:', err);
+    return null;
+  }
+}
+

@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx';
 import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
-  FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check
+  FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check,
+  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown } from '../api.js';
@@ -48,6 +49,46 @@ const DAILY_RANGE_OPTIONS = [
   { value: 'personalizado', label: 'Personalizado' },
 ];
 
+function renderChannelBadge(channel) {
+  const ch = String(channel || 'whatsapp').toLowerCase();
+  if (ch === 'instagram') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-purple-500/15 via-pink-500/15 to-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400">
+        Instagram
+      </span>
+    );
+  }
+  if (ch === 'messenger') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+        Messenger
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+      WhatsApp
+    </span>
+  );
+}
+
+function renderStatusBadge(status) {
+  if (status === 'revisar') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-bold text-warn" title="Monto en Q0 o requiere validación de comprobante">
+        <AlertCircle size={10} />
+        Por revisar
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-[10px] font-bold text-success">
+      <CheckCircle2 size={10} />
+      Confirmada
+    </span>
+  );
+}
+
 export default function SalesAdvisorDashboard() {
   const [activeTab, setActiveTab] = useState('ranking'); // 'ranking' | 'daily'
   const [period, setPeriod] = useState('hoy');
@@ -62,6 +103,9 @@ export default function SalesAdvisorDashboard() {
   const [editingSaleId, setEditingSaleId] = useState(null);
   const [editAmountVal, setEditAmountVal] = useState('');
   const [editBusy, setEditBusy] = useState(false);
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [selectedAdvisorDetail, setSelectedAdvisorDetail] = useState(null);
+  const [advisorDetailFilter, setAdvisorDetailFilter] = useState('todas');
 
   // Estados para la comparativa diaria Leydi vs Aura
   const [dailyRange, setDailyRange] = useState('sep_oct');
@@ -76,7 +120,7 @@ export default function SalesAdvisorDashboard() {
     if (isNaN(num) || num < 0) return;
     setEditBusy(true);
     try {
-      await updateSale(saleId, { amount: num });
+      await updateSale(saleId, { amount: num, status: num > 0 ? 'confirmada' : 'revisar' });
       setEditingSaleId(null);
       setEditAmountVal('');
       loadData();
@@ -85,6 +129,55 @@ export default function SalesAdvisorDashboard() {
     } finally {
       setEditBusy(false);
     }
+  }
+
+  async function handleUpdateSaleStatus(saleId, newStatus) {
+    try {
+      await updateSale(saleId, { status: newStatus });
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function copySummaryToClipboard() {
+    if (!salesData) return;
+    const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label || period;
+    const dateStr = period === 'personalizado' ? `${from} al ${to}` : guatemalaToday();
+    const sum = salesData.summary || { totalQuetzales: 0, totalVentas: 0, totalClientes: 0, ticketPromedio: 0 };
+    const advs = salesData.advisors || [];
+
+    let text = `📊 *REPORTE DE VENTAS POR ASESORAS*\n`;
+    text += `🗓 *Período:* ${periodLabel} (${dateStr})\n`;
+    text += `💰 *Total Vendido:* Q ${Number(sum.totalQuetzales || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}\n`;
+    text += `🛍 *Total Ventas:* ${sum.totalVentas} órdenes cerradas\n`;
+    text += `👥 *Clientes Únicos:* ${sum.totalClientes}\n`;
+    text += `🎯 *Ticket Promedio:* Q ${Number(sum.ticketPromedio || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}\n\n`;
+
+    text += `🏆 *RANKING DE VENTAS:*\n`;
+    if (advs.length === 0) {
+      text += `_Sin ventas registradas en este período_\n`;
+    } else {
+      advs.forEach((a) => {
+        const medal = a.rank === 1 ? '🥇' : a.rank === 2 ? '🥈' : a.rank === 3 ? '🥉' : '▫️';
+        text += `${medal} *${a.advisorName}*: ${a.cantidadVentas} ventas | *Q ${Number(a.totalQuetzales || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}* (${a.porcentajeDelTotal}%)\n`;
+      });
+    }
+
+    if (salesData.paymentMethods && salesData.paymentMethods.length > 0) {
+      text += `\n💳 *MEDIOS DE PAGO:*\n`;
+      salesData.paymentMethods.forEach((m) => {
+        const label = PAID_METHOD_LABELS[m.method] || m.method;
+        text += `• ${label}: ${m.count} ventas (Q ${Number(m.totalQuetzales || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })})\n`;
+      });
+    }
+
+    text += `\n_Reporte generado en CRM Studio F_`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 2500);
+    });
   }
 
   const chartCanvasRef = useRef(null);
@@ -685,6 +778,17 @@ export default function SalesAdvisorDashboard() {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
 
+          {/* Botón Copiar resumen para WhatsApp */}
+          <button
+            onClick={copySummaryToClipboard}
+            disabled={!salesData}
+            title="Copiar resumen para WhatsApp listo para pegar"
+            className="flex items-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-[#20ba5a] active:scale-95 disabled:opacity-50"
+          >
+            {copiedSummary ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copiedSummary ? '¡Copiado!' : 'Copiar para WhatsApp'}</span>
+          </button>
+
           {/* Botón Exportar a Excel */}
           <button
             onClick={exportToExcel}
@@ -797,7 +901,8 @@ export default function SalesAdvisorDashboard() {
                       <th className="pb-2 text-right">Total Vendido (Q)</th>
                       <th className="pb-2 text-right">Ticket Prom.</th>
                       <th className="pb-2 text-center">Por revisar</th>
-                      <th className="pb-2 pr-2 text-right">Part. %</th>
+                      <th className="pb-2 text-right">Part. %</th>
+                      <th className="pb-2 pr-2 text-center">Detalle</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line/60">
@@ -814,7 +919,18 @@ export default function SalesAdvisorDashboard() {
                             )}
                           </td>
                           <td className="py-3 font-semibold text-ink">
-                            {a.advisorName}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAdvisorDetail(a);
+                                setAdvisorDetailFilter('todas');
+                              }}
+                              className="group flex items-center gap-1.5 text-left font-semibold text-ink hover:text-accent transition-colors"
+                              title="Ver todas las ventas de este asesor"
+                            >
+                              <span>{a.advisorName}</span>
+                              <Eye size={12} className="opacity-0 group-hover:opacity-100 text-accent transition-opacity" />
+                            </button>
                           </td>
                           <td className="py-3 text-center">
                             <span className="rounded-full bg-secondary px-2 py-0.5 font-medium text-ink">
@@ -832,26 +948,45 @@ export default function SalesAdvisorDashboard() {
                           </td>
                           <td className="py-3 text-center">
                             {a.porRevisar > 0 ? (
-                              <span
-                                className="rounded-full bg-warn/15 px-2 py-0.5 font-semibold text-warn"
-                                title="Ventas con monto en Q0, sin asesora clara o cuyo comprobante no coincide con la cotización"
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedAdvisorDetail(a);
+                                  setAdvisorDetailFilter('revisar');
+                                }}
+                                className="rounded-full bg-warn/15 px-2 py-0.5 font-semibold text-warn hover:bg-warn/25 transition-colors cursor-pointer"
+                                title="Clic para filtrar ventas por revisar de este asesor"
                               >
                                 {a.porRevisar}
-                              </span>
+                              </button>
                             ) : (
                               <span className="text-greige">—</span>
                             )}
                           </td>
-                          <td className="py-3 pr-2 text-right">
+                          <td className="py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <span className="font-semibold text-ink">{a.porcentajeDelTotal}%</span>
-                              <div className="h-1.5 w-12 overflow-hidden rounded-full bg-line">
+                              <div className="h-1.5 w-10 overflow-hidden rounded-full bg-line">
                                 <div
                                   className="h-full bg-success"
                                   style={{ width: `${Math.min(100, a.porcentajeDelTotal)}%` }}
                                 />
                               </div>
                             </div>
+                          </td>
+                          <td className="py-3 pr-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAdvisorDetail(a);
+                                setAdvisorDetailFilter('todas');
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-semibold text-greige-ink hover:border-accent hover:text-accent transition-colors shadow-2xs"
+                              title="Ver detalle transaccional de este asesor"
+                            >
+                              <Eye size={12} />
+                              <span>Ver</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -917,9 +1052,11 @@ export default function SalesAdvisorDashboard() {
                   <thead>
                     <tr className="border-b border-line text-[11px] uppercase tracking-wider text-greige-ink">
                       <th className="pb-2">Fecha y Hora</th>
+                      <th className="pb-2">Canal</th>
                       <th className="pb-2">Asesor</th>
                       <th className="pb-2">Cliente</th>
                       <th className="pb-2">Monto (Q)</th>
+                      <th className="pb-2">Estado</th>
                       <th className="pb-2">Medio</th>
                       <th className="pb-2">Notas / Prenda</th>
                     </tr>
@@ -931,6 +1068,9 @@ export default function SalesAdvisorDashboard() {
                           {new Date(t.createdAt).toLocaleDateString('es-GT', {
                             day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Guatemala'
                           })}
+                        </td>
+                        <td className="py-2.5 whitespace-nowrap">
+                          {renderChannelBadge(t.channel)}
                         </td>
                         <td className="py-2.5 font-semibold text-ink whitespace-nowrap">
                           {t.advisorName}
@@ -999,6 +1139,9 @@ export default function SalesAdvisorDashboard() {
                           )}
                         </td>
                         <td className="py-2.5 whitespace-nowrap">
+                          {renderStatusBadge(t.status)}
+                        </td>
+                        <td className="py-2.5 whitespace-nowrap">
                           <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-greige-ink">
                             {PAID_METHOD_LABELS[t.paymentMethod] || t.paymentMethod}
                           </span>
@@ -1016,6 +1159,223 @@ export default function SalesAdvisorDashboard() {
         )}
       </div>
       </>
+      )}
+
+      {/* Modal de Detalle Transaccional por Asesora */}
+      {selectedAdvisorDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-line bg-surface shadow-2xl flex flex-col">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-line p-5 bg-paper/30">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/15 text-accent font-bold text-lg">
+                  {selectedAdvisorDetail.advisorName.charAt(0)}
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-ink">
+                      Ventas de {selectedAdvisorDetail.advisorName}
+                    </h3>
+                    <span className="rounded-full bg-success-bg px-2.5 py-0.5 text-xs font-bold text-success">
+                      Q {selectedAdvisorDetail.totalQuetzales.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-greige-ink">
+                    {selectedAdvisorDetail.cantidadVentas} ventas cerradas ({selectedAdvisorDetail.clientesVendidos} clientes) • Ticket prom: Q {selectedAdvisorDetail.ticketPromedio.toLocaleString('es-GT', { minimumFractionDigits: 2 })} • {selectedAdvisorDetail.porcentajeDelTotal}% del total
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAdvisorDetail(null)}
+                className="rounded-xl p-2 text-greige-ink hover:bg-muted hover:text-ink transition-colors"
+                title="Cerrar ventana"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filtros dentro del Modal */}
+            <div className="flex flex-wrap items-center justify-between border-b border-line bg-paper/60 px-5 py-2.5 gap-2">
+              <div className="flex items-center gap-2">
+                {['todas', 'revisar', 'confirmada'].map((f) => {
+                  const count = (transactions || []).filter(
+                    (t) => t.advisorName === selectedAdvisorDetail.advisorName && (f === 'todas' || t.status === f)
+                  ).length;
+                  const labels = { todas: 'Todas', revisar: 'Por revisar', confirmada: 'Confirmadas' };
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setAdvisorDetailFilter(f)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                        advisorDetailFilter === f
+                          ? 'bg-ink text-paper shadow-xs'
+                          : 'text-greige-ink hover:text-ink hover:bg-paper'
+                      }`}
+                    >
+                      {labels[f]} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-[11px] text-greige-ink">
+                Período: <strong>{PERIOD_OPTIONS.find((p) => p.value === period)?.label || period}</strong>
+              </span>
+            </div>
+
+            {/* Lista de Transacciones de esta asesora */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {(() => {
+                const advisorTransactions = (transactions || []).filter(
+                  (t) =>
+                    t.advisorName === selectedAdvisorDetail.advisorName &&
+                    (advisorDetailFilter === 'todas' || t.status === advisorDetailFilter)
+                );
+
+                if (advisorTransactions.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-greige-ink">
+                      <ShoppingBag size={28} className="mb-2 opacity-40" />
+                      <p className="text-xs font-medium">No hay ventas en esta categoría para este período.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-line text-[11px] uppercase tracking-wider text-greige-ink">
+                          <th className="pb-2">Fecha</th>
+                          <th className="pb-2">Canal</th>
+                          <th className="pb-2">Cliente</th>
+                          <th className="pb-2">Monto (Q)</th>
+                          <th className="pb-2">Cotizado / Recibo</th>
+                          <th className="pb-2">Estado</th>
+                          <th className="pb-2">Medio</th>
+                          <th className="pb-2 pr-2 text-right">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line/60">
+                        {advisorTransactions.map((t) => (
+                          <tr key={t.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+                            <td className="py-2.5 text-greige-ink whitespace-nowrap">
+                              {new Date(t.createdAt).toLocaleDateString('es-GT', {
+                                day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Guatemala'
+                              })}
+                            </td>
+                            <td className="py-2.5 whitespace-nowrap">
+                              {renderChannelBadge(t.channel)}
+                            </td>
+                            <td className="py-2.5">
+                              <a
+                                href={`/conversations?phone=${t.customerPhone}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-semibold text-ink hover:text-accent hover:underline flex items-center gap-1"
+                              >
+                                <span>{t.customerName}</span>
+                                <ExternalLink size={10} className="text-greige-ink" />
+                              </a>
+                              <p className="text-[11px] text-greige-ink">{t.customerPhone}</p>
+                            </td>
+                            <td className="py-2.5 font-bold text-success whitespace-nowrap">
+                              {editingSaleId === t.id ? (
+                                <form
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleSaveAmount(t.id);
+                                  }}
+                                  className="flex items-center gap-1"
+                                >
+                                  <span className="text-xs font-semibold text-greige-ink">Q</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    autoFocus
+                                    value={editAmountVal}
+                                    onChange={(e) => setEditAmountVal(e.target.value)}
+                                    className="w-20 rounded border border-accent bg-paper px-1.5 py-0.5 text-xs font-bold text-ink focus:outline-none"
+                                  />
+                                  <button
+                                    type="submit"
+                                    disabled={editBusy}
+                                    className="rounded p-1 text-success hover:bg-success-bg"
+                                  >
+                                    <Check size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingSaleId(null)}
+                                    className="rounded p-1 text-greige-ink hover:bg-muted"
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </form>
+                              ) : (
+                                <div className="flex items-center gap-1.5 group">
+                                  <span className={Number(t.amount) === 0 ? 'text-warn font-semibold' : ''}>
+                                    Q {Number(t.amount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingSaleId(t.id);
+                                      setEditAmountVal(String(t.amount || ''));
+                                    }}
+                                    title="Editar monto"
+                                    className="rounded p-0.5 text-greige-ink transition-opacity hover:text-accent group-hover:opacity-100"
+                                  >
+                                    <Pencil size={11} />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 text-greige-ink text-[11px] whitespace-nowrap">
+                              {t.quotedAmount || t.receiptAmount ? (
+                                <div className="flex flex-col">
+                                  {t.quotedAmount && <span>Cotizado: Q {t.quotedAmount.toFixed(2)}</span>}
+                                  {t.receiptAmount && <span>Recibo OCR: Q {t.receiptAmount.toFixed(2)}</span>}
+                                </div>
+                              ) : (
+                                <span>—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 whitespace-nowrap">
+                              {renderStatusBadge(t.status)}
+                            </td>
+                            <td className="py-2.5 whitespace-nowrap">
+                              <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-greige-ink">
+                                {PAID_METHOD_LABELS[t.paymentMethod] || t.paymentMethod}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-2 text-right whitespace-nowrap">
+                              {t.status === 'revisar' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSaleStatus(t.id, 'confirmada')}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-success-bg px-2 py-1 text-[11px] font-bold text-success hover:bg-success hover:text-white transition-colors cursor-pointer"
+                                  title="Marcar como confirmada"
+                                >
+                                  <Check size={11} />
+                                  <span>Confirmar</span>
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-greige-ink">OK</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

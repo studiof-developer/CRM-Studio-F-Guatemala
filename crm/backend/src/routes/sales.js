@@ -293,6 +293,12 @@ router.get('/by-advisor', async (req, res, next) => {
          s.ticket_id,
          s.whatsapp_number_id,
          s.created_at,
+         s.status,
+         s.amount_source,
+         s.quoted_amount,
+         s.receipt_amount,
+         s.amount_match,
+         s.channel,
          c.full_name AS customer_name,
          c.whatsapp_number AS customer_phone
        FROM sales s
@@ -337,6 +343,12 @@ router.get('/by-advisor', async (req, res, next) => {
         customerName: t.customer_name || t.customer_phone,
         customerPhone: t.customer_phone,
         whatsappNumberId: t.whatsapp_number_id,
+        status: t.status || 'confirmada',
+        amountSource: t.amount_source || 'manual',
+        quotedAmount: t.quoted_amount ? Number(t.quoted_amount) : null,
+        receiptAmount: t.receipt_amount ? Number(t.receipt_amount) : null,
+        amountMatch: t.amount_match,
+        channel: t.channel || 'whatsapp',
         createdAt: t.created_at,
       })),
       generatedAt: new Date().toISOString(),
@@ -354,7 +366,7 @@ router.patch('/:id', async (req, res, next) => {
     if (!existing.length) return res.status(404).json({ error: 'Venta no encontrada' });
     const sale = existing[0];
 
-    const { amount, paymentMethod, notes, advisorName } = req.body ?? {};
+    const { amount, paymentMethod, notes, advisorName, status } = req.body ?? {};
 
     const updates = [];
     const values = [];
@@ -372,6 +384,10 @@ router.patch('/:id', async (req, res, next) => {
     if (notes !== undefined) {
       values.push(notes);
       updates.push(`notes = $${values.length}`);
+    }
+    if (status !== undefined && (status === 'confirmada' || status === 'revisar')) {
+      values.push(status);
+      updates.push(`status = $${values.length}`);
     }
     if (advisorName !== undefined && (req.user.role === 'admin' || req.user.role === 'supervisor')) {
       values.push(advisorName);
@@ -401,6 +417,7 @@ router.patch('/:id', async (req, res, next) => {
       paymentMethod: rows[0].payment_method,
       notes: rows[0].notes,
       advisorName: rows[0].advisor_name,
+      status: rows[0].status,
       updatedAt: rows[0].updated_at,
     });
   } catch (err) {
@@ -440,7 +457,7 @@ router.delete('/:id', async (req, res, next) => {
 });
 
 // GET /api/sales/daily-breakdown
-// Retorna un análisis consolidado día por día comparando ventas de Leydi vs Aura
+// Retorna un análisis consolidado día por día comparando ventas de asesoras
 router.get('/daily-breakdown', async (req, res, next) => {
   try {
     const { from = '2026-09-01', to = '2026-10-31', lineId } = req.query;
@@ -452,6 +469,23 @@ router.get('/daily-breakdown', async (req, res, next) => {
       lineClause = `AND s.whatsapp_number_id = $${params.length}`;
     }
 
+    // Consulta detallada por día y asesora
+    const { rows: advisorDailyRows } = await pool.query(
+      `SELECT
+         date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
+         COALESCE(s.advisor_name, 'Sin asesor') AS advisor_name,
+         COUNT(*)::int AS ventas,
+         COALESCE(SUM(s.amount), 0)::numeric(10,2) AS monto
+       FROM sales s
+       WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
+         AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
+         ${lineClause}
+       GROUP BY day, s.advisor_name
+       ORDER BY day ASC, monto DESC`,
+      params
+    );
+
+    // Consulta global consolidada día por día
     const { rows } = await pool.query(
       `SELECT
          date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
@@ -472,12 +506,33 @@ router.get('/daily-breakdown', async (req, res, next) => {
       params
     );
 
+    // Mapeo dinámico por día
+    const dayMap = new Map();
+    for (const r of advisorDailyRows) {
+      const dayKey = r.day.toISOString ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
+      if (!dayMap.has(dayKey)) dayMap.set(dayKey, {});
+      dayMap.get(dayKey)[r.advisor_name] = {
+        ventas: Number(r.ventas),
+        monto: Number(r.monto),
+      };
+    }
+
     let totalLeydiVentas = 0;
     let totalLeydiMonto = 0;
     let totalAuraVentas = 0;
     let totalAuraMonto = 0;
     let totalVentas = 0;
     let totalMonto = 0;
+
+    const advisorTotals = {};
+
+    for (const r of advisorDailyRows) {
+      if (!advisorTotals[r.advisor_name]) {
+        advisorTotals[r.advisor_name] = { ventas: 0, monto: 0 };
+      }
+      advisorTotals[r.advisor_name].ventas += Number(r.ventas);
+      advisorTotals[r.advisor_name].monto += Number(r.monto);
+    }
 
     const daily = rows.map((r) => {
       const lV = Number(r.leydi_ventas);
@@ -494,12 +549,15 @@ router.get('/daily-breakdown', async (req, res, next) => {
       totalVentas += tV;
       totalMonto += tM;
 
+      const dayKey = r.day.toISOString ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
+
       return {
         day: r.day,
         leydi: { ventas: lV, monto: lM },
         aura: { ventas: aV, monto: aM },
         otros: { ventas: Number(r.otros_ventas), monto: Number(r.otros_monto) },
         total: { ventas: tV, monto: tM },
+        byAdvisor: dayMap.get(dayKey) || {},
       };
     });
 
@@ -511,6 +569,14 @@ router.get('/daily-breakdown', async (req, res, next) => {
         totalMonto,
         leydi: { ventas: totalLeydiVentas, monto: totalLeydiMonto },
         aura: { ventas: totalAuraVentas, monto: totalAuraMonto },
+        advisors: Object.entries(advisorTotals)
+          .map(([name, data]) => ({
+            name,
+            ventas: data.ventas,
+            monto: Number(data.monto.toFixed(2)),
+            promedio: data.ventas > 0 ? Number((data.monto / data.ventas).toFixed(2)) : 0,
+          }))
+          .sort((a, b) => b.monto - a.monto),
       },
       daily,
     });
