@@ -33,7 +33,7 @@ function linesClause(user, tableAlias = 't') {
 // (TEMPERATURE_SQL in customers.js only ever produces frio/tibio/caliente/pagado), an
 // advisor sets it themselves once a paid order starts shipping (drag, or the Estado
 // dropdown in the chat panel).
-export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'despacho', 'pqrs', 'resuelto'];
+export const PIPELINE_COLUMNS = ['pendiente', 'en_atencion', 'cotizacion', 'medio_pago', 'pagado', 'despacho', 'pqrs'];
 
 // Both temped CTEs below exclude 'bot' (never handed off to a human yet) AND
 // 'difusion_enviada' — a No atendidos contact who just got a broadcast (campaigns.js)
@@ -48,7 +48,6 @@ const HIDDEN_TICKET_STATUSES_SQL = `('bot', 'difusion_enviada')`;
 // one place so the board and the SQL CASE that mirrors it can't drift apart silently.
 const BUCKET_CASE_SQL = `
   CASE
-    WHEN ticket_status = 'resuelto' THEN 'resuelto'
     WHEN ticket_status = 'esperando_asesor' THEN 'pendiente'
     WHEN temperature = 'pqrs' THEN 'pqrs'
     WHEN temperature = 'despacho' THEN 'despacho'

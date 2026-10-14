@@ -31,16 +31,11 @@ const DEFAULT_SORT = {};
 // (enforced in moveCard below, not here) — marking someone paid otherwise stays
 // protected from casual dragging, this is the one deliberate exception (2026-09-11).
 const DRAG_SOURCES = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'pagado', 'despacho']);
-const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'resuelto', 'despacho']);
+const DROP_TARGETS = new Set(['en_atencion', 'cotizacion', 'medio_pago', 'pqrs', 'despacho']);
 
-// Pagado and despacho only ever move FORWARD — pagado into despacho, despacho into
-// resuelto. A backward or sideways drag from either is pointless (customers.js's
-// paid_locked guard would just pin manual_status back to 'pagado' server-side anyway),
-// so both the drag handler and the "Mover a" dropdown share this restriction instead of
-// one silently rejecting a move the other still offers.
+// Pagado and despacho only ever move FORWARD — pagado into despacho.
 function allowedTargetsFor(sourceKey) {
   if (sourceKey === 'pagado') return new Set(['despacho']);
-  if (sourceKey === 'despacho') return new Set(['resuelto']);
   return DROP_TARGETS;
 }
 

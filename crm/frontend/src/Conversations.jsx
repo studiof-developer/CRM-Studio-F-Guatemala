@@ -2300,22 +2300,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   </span>
                 )}
                 {thread.ticketStatus === 'en_atencion' && (
-                  <>
-                    <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                      <Headset size={12} /> Asesor en control
-                    </span>
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); setConfirmResolveOpen(true); }}
-                      className="flex items-center gap-1.5 rounded-full bg-ok/10 px-3 py-1.5 text-xs font-semibold text-ok transition-colors hover:bg-ok hover:text-white"
-                    >
-                      <CheckCircle2 size={12} /> Resolver
-                    </span>
-                  </>
-                )}
-                {thread.ticketStatus === 'resuelto' && (
-                  <span className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
-                    <CheckCircle2 size={12} /> Resuelto — puedes seguir escribiendo
+                  <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+                    <Headset size={12} /> Asesor en control
                   </span>
                 )}
                 {!thread.ticketStatus && (
