@@ -5,6 +5,8 @@
 import { pool } from './db.js';
 import { getSetting } from './routes/settings.js';
 import { decryptToken } from './tokenCrypto.js';
+import { saveAttachment } from './attachmentStorage.js';
+import { broadcast } from './events.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -184,7 +186,7 @@ export async function testSocialConnection() {
     const subResult = await graphFetch(`${creds.pageId}/subscribed_apps`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_referrals', 'message_reactions'] }),
+      body: JSON.stringify({ subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_referrals', 'message_reactions', 'message_echoes'] }),
     }, creds.token);
     subscribed = subResult?.success === true;
   } catch (err) {
@@ -231,6 +233,13 @@ export async function fetchMessageMediaFromGraph(messageId) {
       link = share.link || null;
     }
 
+    // 3. Check story
+    const story = data?.story;
+    if (!imageUrl && (story?.url || story?.mention?.link)) {
+      imageUrl = story.url || story.mention?.link || null;
+      title = story.title || 'Historia';
+    }
+
     return { imageUrl, title, link, raw: data };
   } catch (err) {
     console.warn(`[metaMessaging] fetchMessageMediaFromGraph failed for ${messageId}:`, err.message);
@@ -254,5 +263,148 @@ export async function fetchAdCreative(adId) {
     console.warn(`[metaMessaging] fetchAdCreative failed for ${adId}:`, err.message);
     return null;
   }
+}
+
+// Queries Meta Graph API for historical messages of a conversation (e.g. sent from Meta Business Suite)
+export async function syncConversationFromGraph(contactId) {
+  const creds = await getSocialCredentials();
+  if (!creds?.token) throw new Error('Credenciales de Meta no configuradas');
+
+  const { rows: contactRows } = await pool.query(
+    `SELECT id, provider, external_id, customer_id FROM social_contacts WHERE id = $1`,
+    [contactId]
+  );
+  if (!contactRows.length) throw new Error('Contacto no encontrado');
+  const contact = contactRows[0];
+  const { provider, external_id: externalId, customer_id: customerId } = contact;
+
+  const targetId = (provider === 'instagram' && creds.igBusinessId) ? creds.igBusinessId : creds.pageId;
+  if (!targetId) throw new Error('ID de página o cuenta de Instagram no disponible');
+
+  let convData = null;
+  try {
+    convData = await graphFetch(
+      `${targetId}/conversations?user_id=${externalId}&fields=id,messages.limit(50){id,message,created_time,from,to,attachments{id,mime_type,name,size,image_data,video_data,file_url}}`,
+      { method: 'GET' },
+      creds.token
+    );
+  } catch (err) {
+    console.warn(`[syncConversationFromGraph] user_id lookup failed for ${externalId}:`, err.message);
+  }
+
+  if (!convData?.data?.length) {
+    try {
+      const listData = await graphFetch(
+        `${targetId}/conversations?fields=id,participants,messages.limit(50){id,message,created_time,from,to,attachments{id,mime_type,name,size,image_data,video_data,file_url}}&limit=25`,
+        { method: 'GET' },
+        creds.token
+      );
+      const matched = listData?.data?.find((c) => c.participants?.data?.some((p) => p.id === externalId));
+      if (matched) convData = { data: [matched] };
+    } catch (listErr) {
+      console.warn(`[syncConversationFromGraph] fallback list failed:`, listErr.message);
+    }
+  }
+
+  const messages = convData?.data?.[0]?.messages?.data || [];
+  if (!messages.length) return { syncedCount: 0 };
+
+  messages.sort((a, b) => new Date(a.created_time) - new Date(b.created_time));
+
+  let inserted = 0;
+  for (const m of messages) {
+    const { rows: exists } = await pool.query(
+      `SELECT id FROM social_messages WHERE external_message_id = $1 OR (contact_id = $2 AND body = $3 AND created_at = $4::timestamptz)`,
+      [m.id, contact.id, m.message || '', m.created_time]
+    );
+    if (exists.length) continue;
+
+    const direction = m.from?.id === externalId ? 'in' : 'out';
+    const body = m.message || (m.attachments?.data?.length ? '[Archivo]' : '');
+
+    const { rows: insRows } = await pool.query(
+      `INSERT INTO social_messages (contact_id, direction, body, raw_payload, external_message_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6::timestamptz) RETURNING id`,
+      [contact.id, direction, body, JSON.stringify(m), m.id, m.created_time]
+    );
+    const newMsgId = insRows[0]?.id;
+    inserted++;
+
+    const atts = m.attachments?.data || [];
+    for (const att of atts) {
+      const attUrl = att.image_data?.url || att.video_data?.url || att.file_url;
+      if (attUrl && newMsgId) {
+        try {
+          const dlRes = await fetch(attUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Authorization': `Bearer ${creds.token}`,
+            },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (dlRes.ok) {
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            const mime = dlRes.headers.get('content-type') || att.mime_type || 'image/jpeg';
+            const kind = mime.startsWith('video/') ? 'video' : (mime.startsWith('audio/') ? 'audio' : 'image');
+            const savedId = await saveAttachment({
+              n8nMessageId: null,
+              kind,
+              filename: att.name || (kind === 'image' ? 'imagen.jpg' : 'archivo'),
+              mimeType: mime,
+              buffer: buf,
+            });
+            await pool.query(
+              `UPDATE message_attachments SET social_message_id = $1 WHERE id = $2`,
+              [newMsgId, savedId]
+            );
+          }
+        } catch (attErr) {
+          console.warn('[sync] failed to download attachment:', attErr.message);
+        }
+      }
+    }
+  }
+
+  if (inserted > 0) {
+    const latest = messages[messages.length - 1];
+    const latestDirection = latest.from?.id === externalId ? 'in' : 'out';
+    const latestText = latest.message || '[Archivo]';
+
+    await pool.query(
+      `UPDATE social_contacts SET last_message_at = GREATEST(last_message_at, $2::timestamptz),
+                                  unread_count = CASE WHEN $3 = 'out' THEN 0 ELSE social_contacts.unread_count END
+       WHERE id = $1`,
+      [contact.id, latest.created_time, latestDirection]
+    );
+
+    if (customerId) {
+      await pool.query(
+        `UPDATE customers SET last_message_at = GREATEST(last_message_at, $2::timestamptz),
+                             last_message = $3,
+                             awaiting_reply = CASE WHEN $4 = 'out' THEN false ELSE true END,
+                             has_unread = CASE WHEN $4 = 'out' THEN false ELSE has_unread END
+         WHERE id = $1`,
+        [customerId, latest.created_time, latestText, latestDirection]
+      );
+      if (latestDirection === 'out') {
+        await pool.query(
+          `UPDATE tickets SET status = 'en_atencion', awaiting_reply = false, last_message = $2, last_message_at = $3::timestamptz, updated_at = now()
+           WHERE customer_id = $1 AND status != 'resuelto'`,
+          [customerId, latestText, latest.created_time]
+        );
+      }
+    }
+
+    broadcast('social_message_changes', JSON.stringify({
+      contactId: contact.id,
+      provider: contact.provider,
+    }));
+    broadcast('message_changes', JSON.stringify({
+      session_id: `social:${contact.id}`,
+      phone: `social:${contact.id}`,
+    }));
+  }
+
+  return { syncedCount: inserted };
 }
 

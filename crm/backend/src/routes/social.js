@@ -11,6 +11,7 @@ import {
   fetchProfileName,
   fetchMessageMediaFromGraph,
   fetchAdCreative,
+  syncConversationFromGraph,
 } from '../metaMessaging.js';
 import { logBusinessAction } from '../auditLog.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
@@ -159,21 +160,41 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
     }
 
     const messagesList = Array.from(messagesMap.values());
-    console.log(`[social messages] contactId=${req.params.id} count=${messagesList.length}:`, messagesList.map((m) => ({
-      id: m.id,
-      extId: m.external_message_id,
-      body: m.body,
-      rawKeys: m.raw_payload ? Object.keys(typeof m.raw_payload === 'string' ? JSON.parse(m.raw_payload) : m.raw_payload) : null,
-    })));
+    const extMap = new Map();
+    for (const m of messagesList) {
+      if (m.external_message_id) {
+        extMap.set(m.external_message_id, m);
+      }
+    }
 
     const enrichedMessages = await Promise.all(messagesList.map(async (msg) => {
       let story = null;
       let referral = null;
+      let replyTo = null;
       let attachments = [...msg.attachments];
 
       if (msg.raw_payload) {
         try {
           const p = typeof msg.raw_payload === 'string' ? JSON.parse(msg.raw_payload) : msg.raw_payload;
+
+          // Check for quoted reply (Instagram & Messenger reply_to)
+          const replyToMid = p?.message?.reply_to?.mid;
+          if (replyToMid) {
+            const target = extMap.get(replyToMid);
+            if (target) {
+              replyTo = {
+                id: target.id,
+                body: target.body,
+                direction: target.direction,
+                author: target.direction === 'in' ? 'Cliente' : 'Asesor',
+              };
+            } else {
+              replyTo = {
+                mid: replyToMid,
+                author: 'Mensaje anterior',
+              };
+            }
+          }
 
           // 1. Check for story reply or mention (Instagram & Facebook stories)
           const replyStory = p?.message?.reply_to?.story;
@@ -303,6 +324,24 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
         }
       }
 
+      // If a story image was persisted locally for this message, link it to story.url so it never expires
+      if (attachments.length > 0) {
+        const savedStoryImg = attachments.find((a) => a.filename === 'historia.jpg');
+        if (savedStoryImg?.id) {
+          if (!story) {
+            story = {
+              id: null,
+              url: `/api/attachments/${savedStoryImg.id}/content`,
+              type: 'reply',
+              title: 'Historia referenciada',
+            };
+          } else {
+            story.url = `/api/attachments/${savedStoryImg.id}/content`;
+          }
+          attachments = attachments.filter((a) => a.id !== savedStoryImg.id);
+        }
+      }
+
       return {
         id: msg.id,
         direction: msg.direction,
@@ -311,6 +350,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
         attachments,
         story,
         referral,
+        replyTo,
         rawPayload: msg.raw_payload,
         createdAt: msg.createdAt,
       };
@@ -318,6 +358,17 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
 
     res.json(enrichedMessages);
   } catch (err) { next(err); }
+});
+
+// Sincroniza historial de mensajes de la conversación directamente desde Meta Graph API
+router.post('/contacts/:id/sync', async (req, res, next) => {
+  try {
+    const result = await syncConversationFromGraph(req.params.id);
+    res.json(result);
+  } catch (err) {
+    console.error(`[social sync error] contactId=${req.params.id}:`, err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Feeds Conversations.jsx's shared "Info del cliente" panel

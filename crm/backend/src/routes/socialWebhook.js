@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { pool } from '../db.js';
 import { getSetting } from './settings.js';
 import { decryptToken } from '../tokenCrypto.js';
-import { fetchProfileName } from '../metaMessaging.js';
+import { fetchProfileName, getSocialCredentials } from '../metaMessaging.js';
 import * as whatsapp from '../whatsapp.js';
 import { saveAttachment } from '../attachmentStorage.js';
 import { compressImageBuffer } from '../imageCompression.js';
@@ -70,16 +70,30 @@ router.post('/', async (req, res) => {
       const isInstagramEntry = body.object === 'instagram'
         || (igBusinessId && entry.id === igBusinessId);
       for (const event of entry.messaging ?? []) {
-        // Delivery/read receipts and echoes of our own sent messages also arrive on this
-        // same webhook — only inbound messages or postbacks need to be stored here.
-        if (event.delivery || event.read || event.message?.is_echo) continue;
+        // Delivery/read receipts do not contain message content to be stored
+        if (event.delivery || event.read) continue;
 
-        const externalId = event.sender?.id;
+        const isEcho = Boolean(event.message?.is_echo);
+        // For echo events (advisor replies sent via Meta Business Suite/Facebook Inbox/Instagram App),
+        // recipient is the customer and sender is the Page/Account. For inbound, sender is the customer.
+        const externalId = isEcho ? event.recipient?.id : event.sender?.id;
         if (!externalId) continue;
 
-        const provider = (isInstagramEntry || (igBusinessId && event.recipient?.id === igBusinessId))
+        const provider = (isInstagramEntry || (igBusinessId && (event.recipient?.id === igBusinessId || event.sender?.id === igBusinessId)))
           ? 'instagram'
           : 'messenger';
+
+        const extMid = event.message?.mid ?? event.postback?.mid ?? null;
+        if (extMid) {
+          const { rows: existing } = await pool.query(
+            `SELECT id FROM social_messages WHERE external_message_id = $1 LIMIT 1`,
+            [extMid]
+          );
+          if (existing.length) {
+            // Already stored in DB (e.g. sent directly from CRM composer)
+            continue;
+          }
+        }
 
         // Extract text from message, postback or referral
         let text = event.message?.text || event.postback?.title || event.postback?.payload || null;
@@ -104,18 +118,19 @@ router.post('/', async (req, res) => {
 
         const { rows } = await pool.query(
           `INSERT INTO social_contacts (provider, external_id, last_message_at, unread_count)
-           VALUES ($1, $2, now(), 1)
+           VALUES ($1, $2, now(), $3)
            ON CONFLICT (provider, external_id)
-             DO UPDATE SET last_message_at = now(), unread_count = social_contacts.unread_count + 1
+             DO UPDATE SET last_message_at = now(),
+                           unread_count = CASE WHEN $3 = 0 THEN 0 ELSE social_contacts.unread_count + 1 END
            RETURNING id, display_name, profile_pic_url, customer_id, provider`,
-          [provider, externalId]
+          [provider, externalId, isEcho ? 0 : 1]
         );
         const contact = rows[0];
 
         const { rows: msgRows } = await pool.query(
           `INSERT INTO social_messages (contact_id, direction, body, raw_payload, external_message_id)
-           VALUES ($1, 'in', $2, $3, $4) RETURNING id, created_at`,
-          [contact.id, text ?? null, JSON.stringify(event), event.message?.mid ?? event.postback?.mid ?? null]
+           VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+          [contact.id, isEcho ? 'out' : 'in', text ?? null, JSON.stringify(event), extMid]
         );
         const socialMsgId = msgRows[0]?.id;
 
@@ -130,7 +145,26 @@ router.post('/', async (req, res) => {
           phone: `social:${contact.id}`,
         }));
 
-        await ensureCustomerAndTicket(contact, contact.provider, text);
+        if (isEcho) {
+          // Advisor replied externally from Meta Business Suite / Instagram direct
+          if (contact.customer_id) {
+            await pool.query(
+              `UPDATE customers SET awaiting_reply = false, has_unread = false, last_message = $2, last_message_at = now() WHERE id = $1`,
+              [contact.customer_id, text || '[Archivo]']
+            );
+            await pool.query(
+              `UPDATE tickets SET awaiting_reply = false, has_unread = false,
+                      first_response_at = COALESCE(first_response_at, now()),
+                      status = CASE WHEN status = 'pendiente' THEN 'en_atencion' ELSE status END,
+                      last_message = $2, last_message_at = now(), updated_at = now()
+               WHERE customer_id = $1 AND status != 'resuelto'`,
+              [contact.customer_id, text || '[Archivo]']
+            );
+          }
+          broadcast('read_changes', `social:${contact.id}`);
+        } else {
+          await ensureCustomerAndTicket(contact, contact.provider, text);
+        }
 
         // Background download for media attachments, ad images and story images to prevent ephemeral CDN link expiration
         const mediaToDownload = [];
@@ -162,14 +196,22 @@ router.post('/', async (req, res) => {
         if (mediaToDownload.length && socialMsgId) {
           (async () => {
             try {
+              const creds = await getSocialCredentials().catch(() => null);
               for (const item of mediaToDownload) {
-                const res = await fetch(item.url, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                  },
+                const reqHeaders = {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                };
+                let res = await fetch(item.url, {
+                  headers: reqHeaders,
                   signal: AbortSignal.timeout(15000),
                 });
+                if (!res.ok && (res.status === 401 || res.status === 403) && creds?.token) {
+                  res = await fetch(item.url, {
+                    headers: { ...reqHeaders, Authorization: `Bearer ${creds.token}` },
+                    signal: AbortSignal.timeout(15000),
+                  });
+                }
                 if (!res.ok) continue;
                 const buffer = Buffer.from(await res.arrayBuffer());
                 let finalBuffer = buffer;

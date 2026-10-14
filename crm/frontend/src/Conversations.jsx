@@ -3,14 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Send, Headset, MessageCircle, Info, X, Paperclip, Calculator, SquarePen, Pencil, Reply, Bot, Clock,
   MapPin, ShoppingBag, CircleDollarSign, AlertTriangle, CheckCircle2, FileText, Download,
-  Megaphone, Mail, Loader2, ArrowLeft, Copy, Camera,
+  Megaphone, Mail, Loader2, ArrowLeft, Copy, Camera, RefreshCw,
 } from 'lucide-react';
 import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, updateCustomerOptOut, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
-  fetchSocialMessages, sendSocialMessage, fetchSocialContact, takeSocialContact, markSocialContactUnread, fetchWhatsappNumbers, fetchProducts,
+  fetchSocialMessages, sendSocialMessage, fetchSocialContact, takeSocialContact, markSocialContactUnread, syncSocialContact, fetchWhatsappNumbers, fetchProducts,
   createSale, fetchCustomerSales, fetchCustomerQuotes,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
@@ -169,6 +169,7 @@ function SocialThreadPanel({
   const [saleNotes, setSaleNotes] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [customerSales, setCustomerSales] = useState([]);
+  const [syncing, setSyncing] = useState(false);
 
   const [quickReplies, setQuickReplies] = useState([]);
   const [slashIndex, setSlashIndex] = useState(0);
@@ -419,6 +420,22 @@ function SocialThreadPanel({
     }
   }
 
+  async function handleSync() {
+    if (!contactId || syncing) return;
+    setSyncing(true);
+    try {
+      const res = await syncSocialContact(contactId);
+      load();
+      loadInfo();
+      onCustomerChanged?.();
+      showSuccess(res.syncedCount > 0 ? `${res.syncedCount} mensajes sincronizados` : 'Historial al día');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const currentChannel = channel || info?.channel || 'instagram';
   const currentName = info?.customerName || name || (currentChannel ? `Contacto de ${CHANNEL_LABELS[currentChannel] ?? currentChannel}` : 'Contacto');
 
@@ -450,6 +467,16 @@ function SocialThreadPanel({
         />
 
         <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={(e) => { e.stopPropagation(); handleSync(); }}
+            title="Sincronizar mensajes recientes desde Meta"
+            className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-black/[0.08] dark:hover:bg-white/[0.12] disabled:opacity-50 cursor-pointer"
+          >
+            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
           {info?.ticketStatus === 'esperando_asesor' && (
             <span
               role="button"
@@ -500,6 +527,21 @@ function SocialThreadPanel({
                         : 'rounded-2xl rounded-tl-sm border border-line-soft bg-paper text-ink shadow-sm dark:bg-white/[0.08]'
                     }`}
                   >
+                    {m.replyTo && (
+                      <div className={`mb-2 rounded-lg border-l-4 p-2 text-xs leading-snug ${
+                        outgoing
+                          ? 'border-white/80 bg-black/15 text-white/90'
+                          : 'border-accent bg-black/[0.04] text-greige-ink dark:bg-white/[0.06] dark:text-greige-soft'
+                      }`}>
+                        <div className={`font-semibold text-[10px] uppercase tracking-wider mb-0.5 ${outgoing ? 'text-white/80' : 'text-accent'}`}>
+                          {m.replyTo.author || 'Mensaje citado'}
+                        </div>
+                        <div className="line-clamp-2 italic">
+                          {m.replyTo.body || 'Mensaje citado'}
+                        </div>
+                      </div>
+                    )}
+
                     {m.referral && (
                       <div className="mb-2 w-64 max-w-full overflow-hidden rounded-xl border border-line-soft bg-black/[0.03] dark:bg-white/[0.05]">
                         {m.referral.image_url ? (
@@ -735,7 +777,7 @@ function SocialThreadPanel({
 
         {infoOpen && info && (
           <div className="fixed inset-0 z-40 overflow-y-auto bg-paper p-5 md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-line">
-            <div className="mb-5 flex items-center justify-between">
+            <div className={`mb-5 flex items-center justify-between ${singleThreadMode ? 'pr-10' : ''}`}>
               <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
               <div className="flex items-center gap-1">
                 <button
@@ -2864,7 +2906,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 // "floating window" rather than a real screen of the app, and clips its own
                 // content against the edge. On desktop it's just the third column, as before.
                 <div className="fixed inset-0 z-40 overflow-y-auto bg-paper p-5 md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-line">
-                  <div className="mb-5 flex items-center justify-between">
+                  <div className={`mb-5 flex items-center justify-between ${singleThreadMode ? 'pr-10' : ''}`}>
                     <h3 className="text-sm font-semibold text-ink">Info del cliente</h3>
                     <div className="flex items-center gap-1">
                       {thread.customerId && (

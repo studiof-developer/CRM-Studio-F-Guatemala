@@ -671,6 +671,12 @@ export async function markSocialContactUnread(contactId) {
   return res.json();
 }
 
+export async function syncSocialContact(contactId) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}/sync`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al sincronizar con Meta');
+  return res.json();
+}
+
 export async function fetchSocialMessages(contactId) {
   const res = await apiFetch(`/api/social/contacts/${contactId}/messages`);
   if (!res.ok) throw new Error('Error al cargar los mensajes');
