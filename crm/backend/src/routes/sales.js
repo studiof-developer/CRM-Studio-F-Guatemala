@@ -219,8 +219,8 @@ router.get('/by-advisor', async (req, res, next) => {
 
     const { rows: advisorRows } = await pool.query(
       `SELECT
-         s.advisor_name,
-         s.advisor_id,
+         COALESCE(NULLIF(TRIM(s.advisor_name), ''), 'Sin Asignar') AS advisor_name,
+         MAX(s.advisor_id) AS advisor_id,
          COUNT(DISTINCT s.customer_id)::int AS clientes_vendidos,
          COUNT(*)::int AS cantidad_ventas,
          COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales,
@@ -228,7 +228,7 @@ router.get('/by-advisor', async (req, res, next) => {
          COUNT(*) FILTER (WHERE s.status = 'revisar')::int AS por_revisar
        FROM sales s
        WHERE true ${advisorFilterSql}
-       GROUP BY s.advisor_name, s.advisor_id
+       GROUP BY COALESCE(NULLIF(TRIM(s.advisor_name), ''), 'Sin Asignar')
        ORDER BY total_quetzales DESC, cantidad_ventas DESC`,
       advisorParams
     );
@@ -594,16 +594,8 @@ router.get('/daily-breakdown', async (req, res, next) => {
 router.post('/sync-from-chats', async (req, res, next) => {
   try {
     const result = await reconcileAllSalesFromChats();
-    logBusinessAction(pool, {
-      userId: req.user?.id || null,
-      userName: req.user?.fullName || 'system',
-      userRole: req.user?.role || 'admin',
-      action: 'reconcile_sales_from_chats',
-      targetType: 'sales',
-      targetId: 'all',
-      details: result,
-      ipAddress: req.ip,
-    }).catch((e) => console.error('logBusinessAction error:', e));
+    const actor = req.user || { fullName: 'Sistema', id: null };
+    logBusinessAction(actor, null, 'reconcile_sales_from_chats', 'Sincronización profunda ejecutada');
 
     res.json({
       success: true,
@@ -611,7 +603,8 @@ router.post('/sync-from-chats', async (req, res, next) => {
       ...result,
     });
   } catch (err) {
-    next(err);
+    console.error('sync-from-chats error:', err);
+    res.status(500).json({ error: err.message || 'Error interno al sincronizar ventas' });
   }
 });
 
