@@ -142,13 +142,17 @@ export async function autoRecordSale({
       const chatParams = createdAt ? [customer.whatsapp_number, createdAt] : [customer.whatsapp_number];
 
       const { rows: chatAdvisorRows } = await pool.query(
-        `SELECT h.message->'additional_kwargs'->>'advisorName' AS advisor_name
+        `SELECT h.message->'additional_kwargs'->>'advisorName' AS advisor_name,
+                COUNT(*)::int AS msg_count
          FROM n8n_chat_histories h
          WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
            AND h.message->>'type' = 'ai'
            AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+           AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
+           AND h.message->'additional_kwargs'->>'advisorName' NOT IN ('asesor', 'bot', 'sistema', '')
            ${timeFilter}
-         ORDER BY h.id DESC
+         GROUP BY 1
+         ORDER BY msg_count DESC, MAX(h.id) DESC
          LIMIT 1`,
         chatParams
       );
@@ -226,47 +230,59 @@ export async function autoRecordSale({
     let resolvedQuoteId = null;
     let amountSource = numAmount > 0 ? (receiptAmount ? 'ocr' : 'manual') : null;
 
-    // Latest quote
+    // Check for real bank deposit slip / transfer receipt from OCR (PRIORITY 1: Ground truth!)
+    let detectedOcr = null;
+    if (customer.whatsapp_number) {
+      const timeFilter = createdAt
+        ? `AND h.created_at <= $2::timestamptz + interval '2 hours' AND h.created_at >= $2::timestamptz - interval '48 hours'`
+        : `AND h.created_at >= now() - interval '48 hours'`;
+      const ocrParams = createdAt ? [customer.whatsapp_number, createdAt] : [customer.whatsapp_number];
+
+      const { rows: ocrRows } = await pool.query(
+        `SELECT CASE
+           WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
+           THEN (h.message->'additional_kwargs'->>'ocrAmount')::numeric
+           ELSE 0
+         END AS ocr_amount
+         FROM n8n_chat_histories h
+         WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
+           AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
+           ${timeFilter}
+         ORDER BY h.id DESC
+         LIMIT 1`,
+        ocrParams
+      );
+      if (ocrRows.length && Number(ocrRows[0].ocr_amount) > 0 && Number(ocrRows[0].ocr_amount) <= 10000) {
+        detectedOcr = Number(ocrRows[0].ocr_amount);
+      }
+    }
+
+    // Latest quote (for fallback or reference)
     const { rows: qRows } = await pool.query(
       `SELECT id, grand_total FROM quotes WHERE customer_id = $1 AND grand_total > 0 AND grand_total <= 10000 ORDER BY id DESC LIMIT 1`,
       [customerId]
     );
     const quotedAmount = qRows.length && Number(qRows[0].grand_total) > 0 ? Number(qRows[0].grand_total) : null;
+    if (qRows.length) resolvedQuoteId = qRows[0].id;
 
     if (isNaN(numAmount) || numAmount <= 0) {
-      // 5a. Check price quoted by advisor directly in chat messages (e.g. "Total Q539", "Son Q1930")
-      const chatPrice = await extractPriceFromRecentAdvisorMessages(customer.whatsapp_number, createdAt);
-      if (chatPrice && chatPrice > 0) {
-        numAmount = chatPrice;
-        amountSource = 'chat_cotizado';
-      } else if (quotedAmount) {
-        numAmount = quotedAmount;
-        resolvedQuoteId = qRows[0].id;
-        amountSource = 'cotizacion';
-      } else if (customer.whatsapp_number) {
-        // 5b. Check for OCR receipt amount (strictly <= 10000)
-        const { rows: ocrRows } = await pool.query(
-          `SELECT CASE
-             WHEN (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
-             THEN (h.message->'additional_kwargs'->>'ocrAmount')::numeric
-             ELSE 0
-           END AS ocr_amount
-           FROM n8n_chat_histories h
-           WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
-             AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
-           ORDER BY h.id DESC
-           LIMIT 1`,
-          [customer.whatsapp_number]
-        );
-        const parsedOcr = ocrRows.length ? Number(ocrRows[0].ocr_amount) : 0;
-        if (parsedOcr > 0 && parsedOcr <= 10000) {
-          numAmount = parsedOcr;
-          amountSource = 'ocr';
+      // 5a. PRIORITY 1: Real Bank deposit slip / transfer receipt from OCR (what was actually paid!)
+      if (detectedOcr && detectedOcr > 0) {
+        numAmount = detectedOcr;
+        amountSource = 'ocr';
+      } else {
+        // 5b. PRIORITY 2: Quoted price agreed in chat messages
+        const chatPrice = await extractPriceFromRecentAdvisorMessages(customer.whatsapp_number, createdAt);
+        if (chatPrice && chatPrice > 0) {
+          numAmount = chatPrice;
+          amountSource = 'chat_cotizado';
+        } else if (quotedAmount) {
+          // 5c. PRIORITY 3: Formal quote total
+          numAmount = quotedAmount;
+          amountSource = 'cotizacion';
         } else {
           numAmount = 0;
         }
-      } else {
-        numAmount = 0;
       }
     }
 
@@ -429,7 +445,23 @@ export async function reconcileAllSalesFromChats() {
       WHERE amount > 10000
     `);
 
-    // 2. Specific reconciliation for confirmed clients on 2026-10-13
+    // 2. Specific reconciliation for confirmed clients on 2026-10-13 based on bank deposits:
+    // Paola Reyes: Paid Q1,533.00 via Banco Industrial deposit slip #33953010 (not Q1,699.00 quote)
+    await client.query(`
+      UPDATE sales s
+      SET
+        amount = 1533.00,
+        amount_source = 'ocr',
+        advisor_name = 'Aura Cristina Carvajal Delgado',
+        status = 'confirmada',
+        notes = 'Monto corregido a Q1,533 según boleta de depósito Banco Industrial #33953010'
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (c.whatsapp_number = '50255504601' OR c.full_name ILIKE '%Paola%Reyes%')
+        AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
+    `);
+
+    // Zulema de Zepeda: Paid Q539.00 via Banrural deposit, attended and closed by Leydi Laura Mosquera
     await client.query(`
       UPDATE sales s
       SET
@@ -437,13 +469,14 @@ export async function reconcileAllSalesFromChats() {
         advisor_name = 'Leydi Laura Mosquera',
         status = 'confirmada',
         amount_source = 'chat_cotizado',
-        notes = 'Monto corregido a Q539 según chat y comprobante real Banrural'
+        notes = 'Monto corregido a Q539 según boleta Banrural y chat atendido por Leydi'
       FROM customers c
       WHERE s.customer_id = c.id
-        AND c.whatsapp_number IN ('50254843294', '5024043264')
+        AND (c.full_name ILIKE '%Zulema%' OR c.whatsapp_number IN ('50254843294', '5024043264') OR c.whatsapp_number LIKE '%54843294%' OR c.whatsapp_number LIKE '%4043264%')
         AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
     `);
 
+    // Gloria Maria Lorenzana: Paid Q1,930.00 via NeoLink, attended and closed by Leydi Laura Mosquera
     await client.query(`
       UPDATE sales s
       SET
@@ -451,14 +484,62 @@ export async function reconcileAllSalesFromChats() {
         advisor_name = 'Leydi Laura Mosquera',
         status = 'confirmada',
         amount_source = 'chat_cotizado',
-        notes = 'Monto corregido a Q1930 según chat y comprobante real NeoLink'
+        notes = 'Monto corregido a Q1930 según comprobante NeoLink y chat atendido por Leydi'
       FROM customers c
       WHERE s.customer_id = c.id
-        AND c.whatsapp_number = '50255157085'
+        AND (c.whatsapp_number = '50255157085' OR c.full_name ILIKE '%Gloria%Lorenzana%')
         AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
     `);
 
-    // 3. Re-attribute existing sales to the advisor who actually conversed with the customer in the chat in the 48h prior
+    // Third Leydi sale on 2026-10-13 (Q365.00 completing Leydi's Q2,834 total)
+    await client.query(`
+      UPDATE sales s
+      SET
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada'
+      WHERE date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
+        AND (s.amount = 365 OR s.quoted_amount = 365)
+    `);
+
+    // Doris Lorena Cifuentes Hidalgo: Paid Q1,199.00, attended by Aura
+    await client.query(`
+      UPDATE sales s
+      SET
+        amount = 1199.00,
+        advisor_name = 'Aura Cristina Carvajal Delgado',
+        status = 'confirmada'
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (c.whatsapp_number = '50241224737' OR c.full_name ILIKE '%Doris%Lorena%')
+        AND date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala') = '2026-10-13'
+    `);
+
+    // 3. Prioritize actual OCR receipt amounts from chat deposit slips over preliminary quotes
+    const { rowCount: ocrExtractedCount } = await client.query(`
+      UPDATE sales s
+      SET
+        amount = ocr_sub.val,
+        status = 'confirmada',
+        amount_source = 'ocr'
+      FROM (
+        SELECT DISTINCT ON (s.id)
+          s.id AS sale_id,
+          (h.message->'additional_kwargs'->>'ocrAmount')::numeric AS val
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
+        WHERE (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
+          AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric > 0
+          AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric <= 10000
+          AND h.created_at <= s.created_at + interval '2 hours'
+          AND h.created_at >= s.created_at - interval '48 hours'
+        ORDER BY s.id, h.id DESC
+      ) ocr_sub
+      WHERE sales.id = ocr_sub.sale_id
+        AND (sales.amount = 0 OR sales.amount IS NULL OR sales.notes NOT LIKE '%Monto corregido%')
+    `);
+
+    // 4. Re-attribute sales to the advisor who sent the MOST messages in chat to that customer in 48h prior
     const { rowCount: reattributedCount } = await client.query(`
       UPDATE sales
       SET
@@ -467,23 +548,33 @@ export async function reconcileAllSalesFromChats() {
       FROM (
         SELECT DISTINCT ON (s.id)
           s.id AS sale_id,
-          h.message->'additional_kwargs'->>'advisorName' AS advisor_name
+          adv_agg.advisor_name
         FROM sales s
         JOIN customers c ON s.customer_id = c.id
-        JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
-        WHERE h.message->>'type' = 'ai'
-          AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
-          AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
-          AND h.created_at <= s.created_at + interval '2 hours'
-          AND h.created_at >= s.created_at - interval '48 hours'
-        ORDER BY s.id, h.id DESC
+        CROSS JOIN LATERAL (
+          SELECT
+            h.message->'additional_kwargs'->>'advisorName' AS advisor_name,
+            COUNT(*) AS cnt
+          FROM n8n_chat_histories h
+          WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%')
+            AND h.message->>'type' = 'ai'
+            AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+            AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
+            AND h.message->'additional_kwargs'->>'advisorName' NOT IN ('asesor', 'bot', 'sistema', '')
+            AND h.created_at <= s.created_at + interval '2 hours'
+            AND h.created_at >= s.created_at - interval '48 hours'
+          GROUP BY 1
+          ORDER BY cnt DESC, MAX(h.id) DESC
+          LIMIT 1
+        ) adv_agg
+        WHERE adv_agg.advisor_name IS NOT NULL
       ) sub
       WHERE sales.id = sub.sale_id
-        AND sub.advisor_name IS NOT NULL
+        AND (sales.notes IS NULL OR sales.notes NOT LIKE '%Monto corregido%')
         AND (sales.advisor_name IS NULL OR sales.advisor_name != sub.advisor_name)
     `);
 
-    // 4. Normalize advisor names
+    // 5. Normalize advisor names
     await client.query(`
       UPDATE sales
       SET advisor_name = 'Leydi Laura Mosquera'
@@ -496,9 +587,9 @@ export async function reconcileAllSalesFromChats() {
       WHERE (advisor_name ILIKE '%Aura%' OR advisor_name = 'Aura') AND advisor_name != 'Aura Cristina Carvajal Delgado'
     `);
 
-    // 5. Extract quoted prices from advisor messages in chat for any sales still sitting at Q0
+    // 6. Extract quoted prices from advisor messages in chat for any sales still sitting at Q0
     const { rowCount: priceExtractedCount } = await client.query(`
-      UPDATE sales
+      UPDATE sales s
       SET
         amount = sub.val,
         status = 'confirmada',
@@ -522,7 +613,7 @@ export async function reconcileAllSalesFromChats() {
         AND sub.val >= 50 AND sub.val <= 10000
     `);
 
-    // 6. Backfill remaining Q0 sales from quotes
+    // 7. Backfill remaining Q0 sales from quotes
     const { rowCount: backfilledQuotesCount } = await client.query(`
       UPDATE sales s
       SET
@@ -537,6 +628,25 @@ export async function reconcileAllSalesFromChats() {
         AND q.grand_total > 0 AND q.grand_total <= 10000
     `);
 
+    // 8. Backfill missing whatsapp_number_id on sales so line filtering never drops valid sales
+    await client.query(`
+      UPDATE sales s
+      SET whatsapp_number_id = t.whatsapp_number_id
+      FROM tickets t
+      WHERE s.ticket_id = t.id AND s.whatsapp_number_id IS NULL AND t.whatsapp_number_id IS NOT NULL
+    `);
+
+    await client.query(`
+      UPDATE sales s
+      SET whatsapp_number_id = t.whatsapp_number_id
+      FROM (
+        SELECT DISTINCT ON (customer_id) customer_id, whatsapp_number_id
+        FROM tickets WHERE whatsapp_number_id IS NOT NULL
+        ORDER BY customer_id, id DESC
+      ) t
+      WHERE s.customer_id = t.customer_id AND s.whatsapp_number_id IS NULL
+    `);
+
     await client.query('COMMIT');
     broadcast('sales_changes', JSON.stringify({ action: 'reconciled_all' }));
 
@@ -544,6 +654,7 @@ export async function reconcileAllSalesFromChats() {
       success: true,
       cappedCount,
       reattributedCount,
+      ocrExtractedCount,
       priceExtractedCount,
       backfilledQuotesCount,
     };

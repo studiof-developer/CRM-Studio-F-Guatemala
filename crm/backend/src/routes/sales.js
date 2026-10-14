@@ -33,7 +33,9 @@ function buildSalesFilter(period, from, to, lineId, params = []) {
 
   if (lineId) {
     params.push(Number(lineId));
-    clauses.push(`s.whatsapp_number_id = $${params.length}`);
+    clauses.push(`(s.whatsapp_number_id = $${params.length} OR (s.whatsapp_number_id IS NULL AND EXISTS (
+      SELECT 1 FROM tickets t WHERE t.customer_id = s.customer_id AND t.whatsapp_number_id = $${params.length}
+    )))`);
   }
 
   return clauses.length ? `AND ${clauses.join(' AND ')}` : '';

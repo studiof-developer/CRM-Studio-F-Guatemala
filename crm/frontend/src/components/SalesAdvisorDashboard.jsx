@@ -536,12 +536,12 @@ export default function SalesAdvisorDashboard() {
                 <select
                   value={lineId}
                   onChange={(e) => setLineId(e.target.value)}
-                  className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+                  className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink focus:border-accent focus:outline-none"
                 >
-                  <option value="">Todas las líneas</option>
+                  <option value="">📊 Todas las líneas (Consolidado)</option>
                   {whatsappNumbers.map((num) => (
                     <option key={num.id} value={num.id}>
-                      {num.label || num.phone_number}
+                      Línea: {num.label || num.display_phone_number || num.phone_number}
                     </option>
                   ))}
                 </select>
@@ -805,12 +805,12 @@ export default function SalesAdvisorDashboard() {
             <select
               value={lineId}
               onChange={(e) => setLineId(e.target.value)}
-              className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+              className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink focus:border-accent focus:outline-none"
             >
-              <option value="">Todas las líneas</option>
+              <option value="">📊 Todas las líneas (Consolidado)</option>
               {whatsappNumbers.map((num) => (
                 <option key={num.id} value={num.id}>
-                  {num.label || num.phone_number}
+                  Línea: {num.label || num.display_phone_number || num.phone_number}
                 </option>
               ))}
             </select>
