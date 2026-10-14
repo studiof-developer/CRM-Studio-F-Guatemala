@@ -233,6 +233,43 @@ router.get('/by-advisor', async (req, res, next) => {
       advisorParams
     );
 
+    // Asegurar que las asesoras del CRM siempre aparezcan en el ranking, incluso si llevan 0 ventas en el período
+    const knownAdvisors = ['Aura Cristina Carvajal Delgado', 'Leydi Laura Mosquera', 'Luisa Cristancho'];
+    try {
+      const { rows: uAdvs } = await pool.query(
+        `SELECT DISTINCT full_name FROM users WHERE role IN ('asesor', 'supervisor') AND full_name IS NOT NULL`
+      );
+      for (const u of uAdvs) {
+        if (u.full_name && !knownAdvisors.some(k => k.toLowerCase() === u.full_name.toLowerCase())) {
+          knownAdvisors.push(u.full_name);
+        }
+      }
+    } catch (_) {}
+
+    const existingNames = new Set(advisorRows.map(a => a.advisor_name.toLowerCase()));
+    for (const name of knownAdvisors) {
+      if (!existingNames.has(name.toLowerCase())) {
+        advisorRows.push({
+          advisor_name: name,
+          advisor_id: null,
+          clientes_vendidos: 0,
+          cantidad_ventas: 0,
+          total_quetzales: '0.00',
+          ticket_promedio: '0.00',
+          por_revisar: 0,
+        });
+      }
+    }
+
+    // Ordenar: mayor monto vendido primero, luego cantidad de ventas, luego nombre
+    advisorRows.sort((a, b) => {
+      const diff = Number(b.total_quetzales) - Number(a.total_quetzales);
+      if (diff !== 0) return diff;
+      const countDiff = Number(b.cantidad_ventas) - Number(a.cantidad_ventas);
+      if (countDiff !== 0) return countDiff;
+      return a.advisor_name.localeCompare(b.advisor_name);
+    });
+
     const advisors = advisorRows.map((a, idx) => {
       const total = Number(a.total_quetzales);
       return {

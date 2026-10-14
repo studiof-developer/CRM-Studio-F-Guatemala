@@ -586,14 +586,13 @@ export async function reconcileAllSalesFromChats() {
         AND (c.whatsapp_number = '50241224737' OR c.whatsapp_number LIKE '%41224737%' OR c.full_name ILIKE '%Doris%Lorena%')
     `);
 
-    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (cuaderno de control de ventas)
+    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (exactamente 5 clientes confirmados según cuaderno, Total Q 3,612.00)
     const auraTurn14Oct = [
       { num: '4947', amount: 1286.00, time: '2026-10-14 12:00:00-06' },
+      { num: '8666', amount: 746.00, time: '2026-10-14 12:15:00-06' },
       { num: '5352', amount: 349.00, time: '2026-10-14 12:30:00-06' },
-      { num: '5625', amount: 750.00, time: '2026-10-14 13:00:00-06' },
-      { num: '0037', amount: 474.50, time: '2026-10-14 13:15:00-06' },
-      { num: '7851', amount: 705.00, time: '2026-10-14 13:30:00-06' },
-      { num: '4291', amount: 974.00, time: '2026-10-14 13:45:00-06' },
+      { num: '1882', amount: 475.00, time: '2026-10-14 12:45:00-06' },
+      { num: '5625', amount: 756.00, time: '2026-10-14 13:00:00-06' },
     ];
     for (const item of auraTurn14Oct) {
       await client.query(`
@@ -621,6 +620,93 @@ export async function reconcileAllSalesFromChats() {
         LIMIT 1
       `, [item.amount, item.time, item.num]);
     }
+
+    // Mover ventas que quedaron asignadas accidentalmente a hoy (14/10) a su fecha histórica real
+    await client.query(`
+      UPDATE sales s
+      SET created_at = COALESCE(
+        (
+          SELECT aa.accessed_at
+          FROM access_audit aa
+          WHERE aa.customer_id = s.customer_id
+            AND aa.action = 'customer_marked_paid'
+            AND (aa.accessed_at AT TIME ZONE 'America/Guatemala')::date < '2026-10-14'
+          ORDER BY aa.id DESC
+          LIMIT 1
+        ),
+        (
+          SELECT h.created_at
+          FROM n8n_chat_histories h
+          JOIN customers c2 ON s.customer_id = c2.id
+          WHERE (h.session_id = c2.whatsapp_number OR h.session_id LIKE c2.whatsapp_number || '__%')
+            AND (h.created_at AT TIME ZONE 'America/Guatemala')::date < '2026-10-14'
+          ORDER BY h.id DESC
+          LIMIT 1
+        ),
+        '2026-10-13 18:00:00-06'::timestamptz
+      )
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
+        AND c.whatsapp_number NOT LIKE '%4947%'
+        AND c.whatsapp_number NOT LIKE '%8666%'
+        AND c.whatsapp_number NOT LIKE '%5352%'
+        AND c.whatsapp_number NOT LIKE '%1882%'
+        AND c.whatsapp_number NOT LIKE '%5625%';
+    `);
+
+    // Leydi Laura Mosquera: Confirmar sus ventas del 12 y 13 de octubre
+    await client.query(`
+      UPDATE sales s
+      SET
+        amount = 539.00,
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada',
+        amount_source = 'chat_cotizado',
+        notes = 'Venta confirmada Q539 atendida por Leydi Laura Mosquera el 12 de octubre',
+        created_at = '2026-10-12 18:24:00-06'::timestamptz
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (c.full_name ILIKE '%Zulema%' OR c.whatsapp_number LIKE '%54843294%');
+
+      UPDATE sales s
+      SET
+        amount = 1930.00,
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada',
+        amount_source = 'chat_cotizado',
+        notes = 'Venta confirmada Q1930 atendida por Leydi Laura Mosquera el 12 de octubre',
+        created_at = '2026-10-12 18:00:00-06'::timestamptz
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (c.whatsapp_number LIKE '%55157085%' OR c.full_name ILIKE '%Gloria%Lorenzana%');
+
+      UPDATE sales s
+      SET
+        amount = 365.00,
+        advisor_name = 'Leydi Laura Mosquera',
+        status = 'confirmada',
+        notes = 'Venta confirmada Q365 atendida por Leydi Laura Mosquera el 12 de octubre',
+        created_at = '2026-10-12 18:00:00-06'::timestamptz
+      FROM customers c
+      WHERE s.customer_id = c.id
+        AND (c.whatsapp_number LIKE '%4043264%' OR c.full_name ILIKE '%Ana%Melgar%');
+
+      -- Re-atribuir ventas donde Leydi marcó el pago o atendió el ticket
+      UPDATE sales s
+      SET advisor_name = 'Leydi Laura Mosquera'
+      FROM access_audit aa
+      WHERE aa.customer_id = s.customer_id
+        AND aa.action = 'customer_marked_paid'
+        AND aa.actor ILIKE '%Leydi%';
+
+      UPDATE sales s
+      SET advisor_name = 'Leydi Laura Mosquera'
+      FROM tickets t
+      WHERE t.customer_id = s.customer_id
+        AND t.assigned_advisor ILIKE '%Leydi%'
+        AND s.notes NOT LIKE '%turno 14/10%';
+    `);
 
     // 5. Prioritize actual OCR receipt amounts from chat deposit slips over preliminary quotes
     const { rowCount: ocrExtractedCount } = await client.query(`
@@ -683,6 +769,7 @@ export async function reconcileAllSalesFromChats() {
         WHERE adv_counts.advisor_name IS NOT NULL
       ) day_adv
       WHERE sales.id = day_adv.sale_id
+        AND sales.advisor_name != 'Leydi Laura Mosquera'
         AND (sales.notes IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Venta confirmada%' AND sales.notes NOT LIKE '%Comprobante verificado%'))
     `);
 
