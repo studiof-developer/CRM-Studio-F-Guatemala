@@ -16,6 +16,7 @@
 
   --paper: #ffffff;
   --paper-soft: rgba(255, 255, 255, 0.7);
+  --surface: #ffffff;
 
   --ink: #18181b;
   --greige: #71717a;
@@ -60,6 +61,7 @@
 
   --paper: #18181b; /* zinc-900 */
   --paper-soft: rgba(24, 24, 27, 0.7);
+  --surface: #18181b;
 
   --ink: #f4f4f5; /* zinc-100 */
   --greige: #a1a1aa; /* zinc-400 */
@@ -95,6 +97,7 @@
 
   --color-paper: var(--paper);
   --color-paper-soft: var(--paper-soft);
+  --color-surface: var(--surface);
 
   --color-ink: var(--ink);
   --color-greige: var(--greige);

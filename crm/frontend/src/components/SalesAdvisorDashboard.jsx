@@ -433,7 +433,7 @@ export default function SalesAdvisorDashboard() {
   const transactions = salesData?.transactions || [];
 
   return (
-    <div className="mb-8 rounded-3xl border border-line bg-surface p-5 shadow-sm md:p-6">
+    <div className="mb-8 rounded-3xl border border-line bg-paper p-5 shadow-sm md:p-6">
       {/* Selector de Pestaña Principal */}
       <div className="mb-6 flex flex-wrap items-center gap-2 border-b border-line pb-4">
         <button
@@ -1040,7 +1040,7 @@ export default function SalesAdvisorDashboard() {
                                 setSelectedAdvisorDetail(a);
                                 setAdvisorDetailFilter('todas');
                               }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-semibold text-greige-ink hover:border-accent hover:text-accent transition-colors shadow-2xs"
+                              className="inline-flex items-center gap-1 rounded-lg border border-line bg-paper px-2 py-1 text-[11px] font-semibold text-greige-ink hover:border-accent hover:text-accent transition-colors shadow-2xs"
                               title="Ver detalle transaccional de este asesor"
                             >
                               <Eye size={12} />
@@ -1222,10 +1222,10 @@ export default function SalesAdvisorDashboard() {
 
       {/* Modal de Detalle Transaccional por Asesora */}
       {selectedAdvisorDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-line bg-surface shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-line bg-paper shadow-2xl flex flex-col">
             {/* Header Modal */}
-            <div className="flex items-center justify-between border-b border-line p-5 bg-paper/30">
+            <div className="flex items-center justify-between border-b border-line p-5 bg-paper">
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/15 text-accent font-bold text-lg">
                   {selectedAdvisorDetail.advisorName.charAt(0)}
@@ -1255,7 +1255,7 @@ export default function SalesAdvisorDashboard() {
             </div>
 
             {/* Filtros dentro del Modal */}
-            <div className="flex flex-wrap items-center justify-between border-b border-line bg-paper/60 px-5 py-2.5 gap-2">
+            <div className="flex flex-wrap items-center justify-between border-b border-line bg-muted/40 px-5 py-2.5 gap-2">
               <div className="flex items-center gap-2">
                 {['todas', 'revisar', 'confirmada'].map((f) => {
                   const count = (transactions || []).filter(
@@ -1284,7 +1284,7 @@ export default function SalesAdvisorDashboard() {
             </div>
 
             {/* Lista de Transacciones de esta asesora */}
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-5 bg-paper">
               {(() => {
                 const advisorTransactions = (transactions || []).filter(
                   (t) =>
