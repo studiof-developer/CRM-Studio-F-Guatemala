@@ -363,8 +363,83 @@ router.get('/contacts/:id', async (req, res, next) => {
       birthDate: r.birth_date,
       purchaseFrequency: r.purchase_frequency,
       optedOutCampaigns: r.opted_out_campaigns ?? false,
-      enAtencion: r.ticket_status === 'en_atencion' || r.ticket_status === 'resuelto',
+      enAtencion: r.ticket_status === 'en_atencion',
     });
+  } catch (err) { next(err); }
+});
+
+router.post('/contacts/:id/take', async (req, res, next) => {
+  try {
+    const { rows: contactRows } = await pool.query(
+      `SELECT customer_id, provider FROM social_contacts WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!contactRows.length) return res.status(404).json({ error: 'not found' });
+    const { customer_id: customerId, provider } = contactRows[0];
+    if (!customerId) return res.status(400).json({ error: 'no customer linked' });
+
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM tickets WHERE customer_id = $1 AND status != 'resuelto' ORDER BY created_at DESC LIMIT 1`,
+      [customerId]
+    );
+
+    const { rows: ticketRows } = existing.length
+      ? await pool.query(
+          `UPDATE tickets SET status = 'en_atencion', assigned_advisor = $2, updated_at = now(),
+                  first_response_at = COALESCE(first_response_at, now())
+           WHERE id = $1 RETURNING id, status, assigned_advisor`,
+          [existing[0].id, req.user.fullName]
+        )
+      : await pool.query(
+          `INSERT INTO tickets (customer_id, status, handoff_reason, assigned_advisor, first_response_at)
+           VALUES ($1, 'en_atencion', 'tomado_manualmente_social', $2, now())
+           RETURNING id, status, assigned_advisor`,
+          [customerId, req.user.fullName]
+        );
+
+    broadcast('social_message_changes', JSON.stringify({ contactId: Number(req.params.id) }));
+    broadcast('message_changes', JSON.stringify({
+      session_id: `social:${req.params.id}`,
+      phone: `social:${req.params.id}`,
+    }));
+
+    res.json({ ticketId: ticketRows[0].id, ticketStatus: ticketRows[0].status, assignedAdvisor: ticketRows[0].assigned_advisor });
+  } catch (err) { next(err); }
+});
+
+router.post('/contacts/:id/mark-unread', async (req, res, next) => {
+  try {
+    const { rows: contactRows } = await pool.query(
+      `SELECT provider, customer_id FROM social_contacts WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!contactRows.length) return res.status(404).json({ error: 'not found' });
+    const { customer_id: customerId } = contactRows[0];
+
+    const { rows: unreadRows } = await pool.query(
+      `SELECT count(*) FROM social_messages
+       WHERE contact_id = $1 AND direction = 'in'
+         AND id > COALESCE((SELECT id FROM social_messages WHERE contact_id = $1 AND direction = 'out' ORDER BY created_at DESC LIMIT 1), 0)`,
+      [req.params.id]
+    );
+    const unreadCount = Math.max(1, Number(unreadRows[0]?.count ?? 1));
+
+    await pool.query(`UPDATE social_contacts SET unread_count = $2 WHERE id = $1`, [req.params.id, unreadCount]);
+    if (customerId) {
+      await pool.query(
+        `UPDATE customers SET has_unread = true, awaiting_reply = true WHERE id = $1`,
+        [customerId]
+      );
+      await pool.query(
+        `UPDATE tickets SET has_unread = true, awaiting_reply = true WHERE customer_id = $1 AND status != 'resuelto'`,
+        [customerId]
+      );
+    }
+
+    broadcast('social_message_changes', JSON.stringify({ contactId: Number(req.params.id) }));
+    broadcast('read_changes', `social:${req.params.id}`);
+
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
@@ -450,8 +525,19 @@ router.post('/contacts/:id/messages', upload.single('file'), async (req, res, ne
     await pool.query(`UPDATE social_contacts SET last_message_at = now() WHERE id = $1`, [req.params.id]);
     if (customerId) {
       await pool.query(
-        `UPDATE customers SET last_message_at = now(), last_message = $1, awaiting_reply = false WHERE id = $2`,
+        `UPDATE customers SET last_message_at = now(), last_message = $1, awaiting_reply = false, has_unread = false WHERE id = $2`,
         [body || (hasFile ? `[Archivo]` : ''), customerId]
+      );
+      await pool.query(
+        `UPDATE tickets SET status = 'en_atencion',
+                            assigned_advisor = COALESCE(assigned_advisor, $2),
+                            first_response_at = COALESCE(first_response_at, now()),
+                            last_message_at = now(),
+                            last_message = $3,
+                            awaiting_reply = false,
+                            updated_at = now()
+         WHERE customer_id = $1 AND status != 'resuelto'`,
+        [customerId, req.user?.fullName ?? null, body || (hasFile ? `[Archivo]` : '')]
       );
     }
 

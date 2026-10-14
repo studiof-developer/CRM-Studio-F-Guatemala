@@ -10,7 +10,7 @@ import {
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, updateCustomerOptOut, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
   fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
-  fetchSocialMessages, sendSocialMessage, fetchSocialContact, fetchWhatsappNumbers, fetchProducts,
+  fetchSocialMessages, sendSocialMessage, fetchSocialContact, takeSocialContact, markSocialContactUnread, fetchWhatsappNumbers, fetchProducts,
   createSale, fetchCustomerSales, fetchCustomerQuotes,
 } from './api.js';
 import { formatListTime, formatBubbleTime, groupByDay } from './lib/chatTime.js';
@@ -146,7 +146,7 @@ function describeQuoted(msg, from) {
 // component's revenue-critical JSX. Polls instead of using live SSE — the webhook
 // receiver doesn't broadcast an event yet, fine for this traffic volume.
 function SocialThreadPanel({
-  contactId, channel, name, singleThreadMode, onBack, onCustomerChanged,
+  contactId, channel, name, singleThreadMode, onBack, onClose, onCustomerChanged,
   catalogProducts = [], user, whatsappLines = []
 }) {
   const [messages, setMessages] = useState(null);
@@ -387,12 +387,46 @@ function SocialThreadPanel({
     }
   }
 
+  async function handleTake() {
+    if (!contactId) return;
+    setActionBusy(true);
+    try {
+      await takeSocialContact(contactId);
+      loadInfo();
+      load();
+      onCustomerChanged?.();
+      showSuccess('Conversación asignada');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleMarkUnread() {
+    if (!contactId) return;
+    setActionBusy(true);
+    try {
+      await markSocialContactUnread(contactId);
+      if (singleThreadMode) onClose?.();
+      else onBack?.();
+      onCustomerChanged?.();
+      showSuccess('Marcado como no leído');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   const currentChannel = channel || info?.channel || 'instagram';
   const currentName = info?.customerName || name || (currentChannel ? `Contacto de ${CHANNEL_LABELS[currentChannel] ?? currentChannel}` : 'Contacto');
 
   return (
     <>
-      <div className="flex w-full items-center gap-3 border-b border-line bg-paper px-5 py-3">
+      <div className={`flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-paper px-5 py-3 transition-colors ${
+        singleThreadMode ? 'pr-14' : ''
+      }`}>
         {!singleThreadMode && (
           <span
             role="button"
@@ -407,12 +441,40 @@ function SocialThreadPanel({
           <p className="truncate text-sm font-semibold text-ink">{currentName}</p>
           <p className="text-xs text-greige-ink">{CHANNEL_LABELS[currentChannel] ?? currentChannel}</p>
         </div>
+
         <Info
           role="button"
           size={16}
           onClick={() => setInfoOpen((v) => !v)}
           className="shrink-0 cursor-pointer text-greige hover:text-ink"
         />
+
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+          {info?.ticketStatus === 'esperando_asesor' && (
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); handleTake(); }}
+              className="flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-accent/20 transition-opacity hover:opacity-90 cursor-pointer"
+            >
+              <Headset size={12} /> {actionBusy ? '...' : 'Tomar conversación'}
+            </span>
+          )}
+          {info?.ticketStatus === 'en_atencion' && (
+            <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+              <Headset size={12} /> {info.assignedAdvisor ? `Asesor en control: ${info.assignedAdvisor}` : 'Asesor en control'}
+            </span>
+          )}
+          {messages && messages.length > 0 && messages[messages.length - 1]?.direction === 'in' && (
+            <span
+              role="button"
+              title="Marcar como no leído"
+              onClick={(e) => { e.stopPropagation(); handleMarkUnread(); }}
+              className="flex items-center gap-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-greige-ink transition-colors hover:bg-accent hover:text-white cursor-pointer"
+            >
+              <Mail size={12} /> Marcar como no leído
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -2191,6 +2253,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
             name={selected?.customerName || (selected?.channel ? `Contacto de ${CHANNEL_LABELS[selected.channel] ?? ''}`.trim() : 'Contacto')}
             singleThreadMode={singleThreadMode}
             onBack={() => setSelectedId(null)}
+            onClose={onClose}
             onCustomerChanged={() => load(false)}
             catalogProducts={catalogProducts}
             user={user}
@@ -2234,7 +2297,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 // Reserves room for ChatPopup's own close button, which sits absolutely
                 // positioned over this same top-right corner — without this, "Resolver"
                 // (the right-most pill) rendered right underneath it.
-                singleThreadMode ? 'pr-12' : ''
+                singleThreadMode ? 'pr-14' : ''
               }`}
             >
               {/* Mobile-only: WhatsApp-style back arrow to return to the chat list — hidden
@@ -2301,7 +2364,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 )}
                 {thread.ticketStatus === 'en_atencion' && (
                   <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
-                    <Headset size={12} /> Asesor en control
+                    <Headset size={12} /> {thread.assignedAdvisor ? `Asesor en control: ${thread.assignedAdvisor}` : 'Asesor en control'}
                   </span>
                 )}
                 {!thread.ticketStatus && (

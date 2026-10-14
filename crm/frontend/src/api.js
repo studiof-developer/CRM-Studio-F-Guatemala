@@ -659,6 +659,18 @@ export async function fetchSocialContact(contactId) {
   return res.json();
 }
 
+export async function takeSocialContact(contactId) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}/take`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al tomar la conversación');
+  return res.json();
+}
+
+export async function markSocialContactUnread(contactId) {
+  const res = await apiFetch(`/api/social/contacts/${contactId}/mark-unread`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al marcar como no leído');
+  return res.json();
+}
+
 export async function fetchSocialMessages(contactId) {
   const res = await apiFetch(`/api/social/contacts/${contactId}/messages`);
   if (!res.ok) throw new Error('Error al cargar los mensajes');
