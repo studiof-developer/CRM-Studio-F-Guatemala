@@ -796,6 +796,7 @@ export default function SalesAdvisorDashboard() {
                       <th className="pb-2 text-center">Ventas</th>
                       <th className="pb-2 text-right">Total Vendido (Q)</th>
                       <th className="pb-2 text-right">Ticket Prom.</th>
+                      <th className="pb-2 text-center">Por revisar</th>
                       <th className="pb-2 pr-2 text-right">Part. %</th>
                     </tr>
                   </thead>
@@ -828,6 +829,18 @@ export default function SalesAdvisorDashboard() {
                           </td>
                           <td className="py-3 text-right font-medium text-ink">
                             Q {a.ticketPromedio.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 text-center">
+                            {a.porRevisar > 0 ? (
+                              <span
+                                className="rounded-full bg-warn/15 px-2 py-0.5 font-semibold text-warn"
+                                title="Ventas con monto en Q0, sin asesora clara o cuyo comprobante no coincide con la cotización"
+                              >
+                                {a.porRevisar}
+                              </span>
+                            ) : (
+                              <span className="text-greige">—</span>
+                            )}
                           </td>
                           <td className="py-3 pr-2 text-right">
                             <div className="flex items-center justify-end gap-2">

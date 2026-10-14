@@ -9,6 +9,7 @@ import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
 import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
 import { getSetting } from './settings.js';
+import { autoRecordSale } from '../salesAttribution.js';
 
 // Shared by both the single-receipt match and the multi-receipt-sum match below —
 // re-checks paid_locked/caliente at write time instead of trusting an earlier SELECT,
@@ -34,38 +35,18 @@ async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = n
     logBusinessAction({ fullName: 'Sistema (OCR)', id: null }, customerId, 'customer_marked_paid', detailNote);
 
     if (amount && Number(amount) > 0) {
-      const { rows: tRows } = await pool.query(
-        `SELECT t.id, t.assigned_advisor, t.whatsapp_number_id, u.id AS advisor_user_id
-         FROM tickets t
-         LEFT JOIN users u ON u.full_name = t.assigned_advisor OR u.username = t.assigned_advisor
-         WHERE t.customer_id = $1
-         ORDER BY (t.status = 'resuelto') ASC, t.id DESC LIMIT 1`,
-        [customerId]
-      );
-      const ticket = tRows[0];
-      const advisorName = ticket?.assigned_advisor || 'Sistema (OCR)';
-      const advisorId = ticket?.advisor_user_id || null;
-
-      await pool.query(
-        `INSERT INTO sales (customer_id, ticket_id, advisor_id, advisor_name, amount, payment_method, notes, whatsapp_number_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          customerId,
-          ticket?.id || null,
-          advisorId,
-          advisorName,
-          Number(amount),
-          paidMethod,
-          'Confirmado automáticamente por OCR',
-          ticket?.whatsapp_number_id || null,
-        ]
-      );
-      logBusinessAction(
-        { fullName: 'Sistema (OCR)', id: null },
+      // Same attribution engine as the manual path: advisor who last wrote to the customer
+      // in the 48h before the receipt (not just the ticket's assigned advisor, which is
+      // empty whenever nobody pressed "Tomar conversación"), and the receipt is validated
+      // against the latest quote.
+      await autoRecordSale({
         customerId,
-        'sale_recorded',
-        `Q${Number(amount).toFixed(2)} (${paidMethod}) atribuido a ${advisorName} (OCR)`
-      );
+        user: { fullName: 'Sistema (OCR)', id: null },
+        paymentMethod: paidMethod,
+        amount: Number(amount),
+        receiptAmount: Number(amount),
+        notes: 'Confirmado automáticamente por OCR',
+      });
     }
   }
 }

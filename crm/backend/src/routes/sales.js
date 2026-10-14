@@ -221,7 +221,8 @@ router.get('/by-advisor', async (req, res, next) => {
          COUNT(DISTINCT s.customer_id)::int AS clientes_vendidos,
          COUNT(*)::int AS cantidad_ventas,
          COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales,
-         ROUND(COALESCE(AVG(s.amount), 0), 2)::numeric(10,2) AS ticket_promedio
+         ROUND(COALESCE(AVG(s.amount), 0), 2)::numeric(10,2) AS ticket_promedio,
+         COUNT(*) FILTER (WHERE s.status = 'revisar')::int AS por_revisar
        FROM sales s
        WHERE true ${advisorFilterSql}
        GROUP BY s.advisor_name, s.advisor_id
@@ -239,6 +240,7 @@ router.get('/by-advisor', async (req, res, next) => {
         cantidadVentas: Number(a.cantidad_ventas),
         totalQuetzales: total,
         ticketPromedio: Number(a.ticket_promedio),
+        porRevisar: Number(a.por_revisar),
         porcentajeDelTotal: grandTotal > 0 ? Number(((total / grandTotal) * 100).toFixed(1)) : 0,
       };
     });

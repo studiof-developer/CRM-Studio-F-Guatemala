@@ -246,7 +246,12 @@ router.patch('/:id/tags', async (req, res, next) => {
       const toLabel = manualStatus ? (TEMP_LABELS[manualStatus] ?? manualStatus) : 'Automático';
       logBusinessAction(req.user, Number(req.params.id), 'customer_status_changed', `${fromLabel} → ${toLabel}`);
     }
-    if ((paidLocked === true && !before.paid_locked) || manualStatus === 'pagado' || manualStatus === 'despacho') {
+    // A sale is recorded only on the real transition INTO paid. Moving a paid customer to
+    // "despacho" (or re-saving "pagado") is logistics, not a new sale, and used to credit
+    // a duplicate sale to whoever moved the card.
+    const wasPaid = before.paid_locked || before.manual_status === 'pagado' || before.manual_status === 'despacho';
+    const becamePaid = (paidLocked === true && !before.paid_locked) || manualStatus === 'pagado';
+    if (becamePaid && !wasPaid) {
       if (paidLocked === true && !before.paid_locked) {
         logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
       }
