@@ -880,6 +880,33 @@ export async function reconcileAllSalesFromChats() {
       WHERE sales.customer_id = t.customer_id AND sales.whatsapp_number_id IS NULL;
     `);
 
+    // 11. Sincronizar estado en todos los clientes compradores a "despacho" y paid_locked = true
+    const { rowCount: syncedCustomersCount } = await client.query(`
+      UPDATE customers
+      SET paid_locked = true,
+          manual_status = CASE WHEN manual_status = 'pqrs' THEN 'pqrs' ELSE 'despacho' END,
+          paid_method = COALESCE(paid_method, 'transferencia'),
+          updated_at = now()
+      WHERE id IN (
+        SELECT DISTINCT customer_id
+        FROM sales
+        WHERE status = 'confirmada' AND amount > 0
+      );
+    `);
+
+    // 12. Sincronizar tickets para que se posicionen en la columna "Por despacho" del Pipeline
+    const { rowCount: syncedTicketsCount } = await client.query(`
+      UPDATE tickets t
+      SET status = 'en_atencion',
+          updated_at = now()
+      WHERE t.customer_id IN (
+        SELECT DISTINCT customer_id
+        FROM sales
+        WHERE status = 'confirmada' AND amount > 0
+      )
+      AND t.status IN ('bot', 'pendiente', 'esperando_asesor');
+    `);
+
     await client.query('COMMIT');
     broadcast('sales_changes', JSON.stringify({ action: 'reconciled_all' }));
 
