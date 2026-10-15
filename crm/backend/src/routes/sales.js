@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { logBusinessAction } from '../auditLog.js';
 import { reconcileAllSalesFromChats } from '../salesAttribution.js';
+import { analizarChats14Octubre } from '../analizar_chats_14.js';
 
 const router = Router();
 
@@ -643,6 +644,22 @@ router.post('/sync-from-chats', async (req, res, next) => {
   } catch (err) {
     console.error('sync-from-chats error:', err);
     res.status(500).json({ error: err.message || 'Error interno al sincronizar ventas' });
+  }
+});
+
+// GET /api/sales/analisis-14-octubre
+// Auditoría detallada chat por chat del 14 de octubre
+router.get('/analisis-14-octubre', async (req, res, next) => {
+  try {
+    const result = await analizarChats14Octubre();
+    if (req.query.format === 'text') {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(result.txtContent);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('analisis-14-octubre error:', err);
+    res.status(500).json({ error: err.message || 'Error al generar análisis del 14/10' });
   }
 });
 

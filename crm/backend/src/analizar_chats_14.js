@@ -251,6 +251,7 @@ export async function analizarChats14Octubre() {
     clientesLeydiCuaderno: auditResults.filter(r => r.esCuadernoLeydi).length,
     reportFileJson: reportPath,
     reportFileTxt: txtPath,
+    txtContent: txt,
     clientes: auditResults
   };
 }

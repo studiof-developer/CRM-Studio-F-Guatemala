@@ -7,7 +7,7 @@ import {
   Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, syncSalesFromChats } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, syncSalesFromChats, fetchAnalisis14Octubre } from '../api.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 
@@ -118,6 +118,45 @@ export default function SalesAdvisorDashboard() {
   // Estado para sincronización profunda de chats
   const [syncingChats, setSyncingChats] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+
+  // Estados para modal de auditoría de chats 14/10
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditData, setAuditData] = useState(null);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditFilter, setAuditFilter] = useState('todos'); // 'todos', 'aura', 'leydi', 'ventas'
+  const [auditViewMode, setAuditViewMode] = useState('cards'); // 'cards', 'txt'
+  const [copiedAudit, setCopiedAudit] = useState(false);
+
+  async function handleOpenAudit() {
+    if (auditLoading) return;
+    setAuditLoading(true);
+    try {
+      const data = await fetchAnalisis14Octubre();
+      setAuditData(data);
+    } catch (err) {
+      alert(err.message || 'Error al cargar la auditoría del 14/10');
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  function handleDownloadAuditTxt() {
+    if (!auditData?.txtContent) return;
+    const blob = new Blob([auditData.txtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'analisis_14_octubre.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleCopyAuditTxt() {
+    if (!auditData?.txtContent) return;
+    navigator.clipboard.writeText(auditData.txtContent);
+    setCopiedAudit(true);
+    setTimeout(() => setCopiedAudit(false), 3000);
+  }
 
   async function handleSaveAmount(saleId) {
     const num = Number(editAmountVal);
@@ -567,12 +606,13 @@ export default function SalesAdvisorDashboard() {
               </button>
 
               <button
-                onClick={() => window.open('/api/diagnostico-chats-14', '_blank')}
+                onClick={handleOpenAudit}
+                disabled={auditLoading}
                 title="Abrir auditoría exhaustiva mensaje por mensaje de los chats del 14 de octubre"
-                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white disabled:opacity-50"
               >
-                <FileText size={13} />
-                <span>Auditoría Chats 14/10</span>
+                {auditLoading ? <RefreshCw size={13} className="animate-spin" /> : <FileText size={13} />}
+                <span>{auditLoading ? 'Cargando auditoría...' : 'Auditoría Chats 14/10'}</span>
               </button>
 
               <button
@@ -848,12 +888,13 @@ export default function SalesAdvisorDashboard() {
 
           {/* Botón Auditoría Chats 14/10 */}
           <button
-            onClick={() => window.open('/api/diagnostico-chats-14', '_blank')}
+            onClick={handleOpenAudit}
+            disabled={auditLoading}
             title="Abrir auditoría exhaustiva mensaje por mensaje de los chats del 14 de octubre"
-            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white disabled:opacity-50"
           >
-            <FileText size={13} />
-            <span>Auditoría Chats 14/10</span>
+            {auditLoading ? <RefreshCw size={13} className="animate-spin" /> : <FileText size={13} />}
+            <span>{auditLoading ? 'Cargando auditoría...' : 'Auditoría Chats 14/10'}</span>
           </button>
 
           {/* Botón Copiar resumen para WhatsApp */}
@@ -1451,6 +1492,258 @@ export default function SalesAdvisorDashboard() {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Auditoría Forense de Chats del 14 de Octubre */}
+      {auditData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-line bg-paper shadow-2xl flex flex-col">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-line p-5 bg-paper">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 font-bold text-lg">
+                  <FileText size={22} />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-ink">
+                      Auditoría Forense de Chats — 14 de Octubre
+                    </h3>
+                    <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                      {auditData.totalClientesAnalizados} clientes analizados
+                    </span>
+                  </div>
+                  <p className="text-xs text-greige-ink">
+                    Cuaderno Aura: {auditData.clientesAuraCuaderno} clientes • Cuaderno Leydi: {auditData.clientesLeydiCuaderno} clientes • Desglose cronológico mensaje por mensaje con OCR y adjuntos
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyAuditTxt}
+                  className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted transition-colors"
+                >
+                  {copiedAudit ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                  <span>{copiedAudit ? '¡Copiado!' : 'Copiar TXT'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadAuditTxt}
+                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors shadow-xs"
+                >
+                  <Download size={13} />
+                  <span>Descargar .txt</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuditData(null)}
+                  className="rounded-xl p-2 text-greige-ink hover:bg-muted hover:text-ink transition-colors ml-2"
+                  title="Cerrar ventana"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de Filtros y Vistas */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-muted/40 p-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, teléfono o terminación..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs text-ink placeholder:text-greige-ink focus:border-accent focus:outline-none w-64"
+                />
+                <div className="flex rounded-xl border border-line bg-paper p-0.5 text-xs">
+                  <button
+                    onClick={() => setAuditFilter('todos')}
+                    className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${auditFilter === 'todos' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                  >
+                    Todos ({auditData.clientes?.length || 0})
+                  </button>
+                  <button
+                    onClick={() => setAuditFilter('aura')}
+                    className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${auditFilter === 'aura' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                  >
+                    Cuaderno Aura (8)
+                  </button>
+                  <button
+                    onClick={() => setAuditFilter('leydi')}
+                    className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${auditFilter === 'leydi' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                  >
+                    Cuaderno Leydi
+                  </button>
+                  <button
+                    onClick={() => setAuditFilter('ventas')}
+                    className={`rounded-lg px-2.5 py-1 font-medium transition-colors ${auditFilter === 'ventas' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                  >
+                    Con Ventas 14/10
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 rounded-xl border border-line bg-paper p-0.5 text-xs">
+                <button
+                  onClick={() => setAuditViewMode('cards')}
+                  className={`rounded-lg px-3 py-1 font-medium transition-colors ${auditViewMode === 'cards' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                >
+                  Vista Tarjetas
+                </button>
+                <button
+                  onClick={() => setAuditViewMode('txt')}
+                  className={`rounded-lg px-3 py-1 font-medium transition-colors ${auditViewMode === 'txt' ? 'bg-indigo-600 text-white font-bold' : 'text-greige-ink hover:text-ink'}`}
+                >
+                  Vista Texto Completo (.txt)
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[calc(92vh-160px)]">
+              {auditViewMode === 'txt' ? (
+                <pre className="rounded-2xl border border-line bg-[#0f172a] p-4 text-xs font-mono text-[#e2e8f0] overflow-x-auto whitespace-pre-wrap leading-relaxed select-text">
+                  {auditData.txtContent}
+                </pre>
+              ) : (
+                (() => {
+                  const filteredClients = (auditData.clientes || []).filter((c) => {
+                    if (auditFilter === 'aura' && !c.esCuadernoAura) return false;
+                    if (auditFilter === 'leydi' && !c.esCuadernoLeydi) return false;
+                    if (auditFilter === 'ventas' && (!c.ventasDia14 || c.ventasDia14.length === 0)) return false;
+                    if (auditSearch.trim()) {
+                      const s = auditSearch.toLowerCase();
+                      const matchName = c.customer?.fullName?.toLowerCase().includes(s);
+                      const matchPhone = c.phone?.toLowerCase().includes(s);
+                      const matchLast4 = c.last4?.includes(s);
+                      return matchName || matchPhone || matchLast4;
+                    }
+                    return true;
+                  });
+
+                  if (filteredClients.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-sm text-greige-ink">
+                        No se encontraron clientes con los filtros seleccionados.
+                      </div>
+                    );
+                  }
+
+                  return filteredClients.map((client) => (
+                    <div key={client.phone} className="rounded-2xl border border-line bg-paper p-4 shadow-xs space-y-3">
+                      {/* Header Cliente */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-ink">{client.customer?.fullName || 'Desconocido'}</span>
+                            <span className="font-mono text-xs text-greige-ink">({client.phone})</span>
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-mono font-bold text-ink">
+                              ...{client.last4}
+                            </span>
+                            {client.esCuadernoAura && (
+                              <span className="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                Cuaderno Aura (14/10)
+                              </span>
+                            )}
+                            {client.esCuadernoLeydi && (
+                              <span className="rounded-full bg-purple-100 border border-purple-300 px-2 py-0.5 text-[10px] font-bold text-purple-800">
+                                Cuaderno Leydi (14/10)
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-greige-ink">
+                            <span>Estado CRM: <b className="text-ink">{client.customer?.manualStatus || '—'}</b></span>
+                            <span>•</span>
+                            <span>Pagado fijo: <b className="text-ink">{client.customer?.paidLocked ? 'Sí' : 'No'}</b></span>
+                            <span>•</span>
+                            <span>Método: <b className="text-ink">{client.customer?.paidMethod || '—'}</b></span>
+                            <span>•</span>
+                            <span>Asesoras en chat: <b className="text-ink">{client.asesorasEnChat?.join(', ') || 'Solo bot/cliente'}</b></span>
+                          </div>
+                        </div>
+
+                        {/* Ventas pill */}
+                        <div className="flex items-center gap-2">
+                          {client.ventasDia14 && client.ventasDia14.length > 0 ? (
+                            <span className="rounded-full bg-success-bg px-2.5 py-1 text-xs font-bold text-success">
+                              {client.ventasDia14.length} venta(s) 14/10: Q {client.ventasDia14.reduce((acc, v) => acc + Number(v.amount), 0).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-greige-ink">
+                              Sin ventas el 14/10
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Resumen de ventas registradas */}
+                      {client.ventas && client.ventas.length > 0 && (
+                        <div className="rounded-xl bg-muted/50 p-2.5 text-xs space-y-1">
+                          <span className="font-semibold text-ink">Ventas en BD:</span>
+                          {client.ventas.map((v) => (
+                            <div key={v.id} className="flex items-center gap-2 text-[11px] text-greige-ink">
+                              <span className="font-bold text-success">Q {Number(v.amount).toFixed(2)}</span>
+                              <span>•</span>
+                              <span>Asesor: <b className="text-ink">{v.advisor_name}</b></span>
+                              <span>•</span>
+                              <span>Fecha: {v.fecha_gt}</span>
+                              <span>•</span>
+                              <span>Origen: {v.amount_source || 'manual'}</span>
+                              <span>•</span>
+                              <span className="italic">{v.notes || ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Transcripción de Mensajes del 14 de Octubre */}
+                      <div>
+                        <h4 className="text-xs font-bold text-ink mb-2">
+                          Historial de Mensajes del 14 de Octubre ({client.mensajes14Octubre?.length || 0}):
+                        </h4>
+                        {client.mensajes14Octubre && client.mensajes14Octubre.length > 0 ? (
+                          <div className="space-y-1.5 max-h-64 overflow-y-auto rounded-xl border border-line bg-surface p-3 font-mono text-xs">
+                            {client.mensajes14Octubre.map((m) => {
+                              const isAdvisor = !!m.asesor;
+                              const isHuman = m.tipo === 'human' || m.sentBy === 'human';
+                              return (
+                                <div key={m.id} className={`p-1.5 rounded-lg ${isAdvisor ? 'bg-indigo-50/70 border border-indigo-100 text-indigo-950' : (isHuman ? 'bg-amber-50/70 border border-amber-100 text-amber-950' : 'bg-muted/40 text-greige-ink')}`}>
+                                  <div className="flex items-center justify-between text-[10px] opacity-75 mb-0.5">
+                                    <span className="font-bold">
+                                      {isAdvisor ? `[ASESORA: ${m.asesor}]` : (isHuman ? '[CLIENTE]' : '[BOT]')}
+                                    </span>
+                                    <span>{m.fecha}</span>
+                                  </div>
+                                  <div className="break-words whitespace-pre-wrap">{m.contenido || '(sin texto)'}</div>
+                                  {m.adjunto && (
+                                    <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-accent">
+                                      <span>📎 ADJUNTO: {m.adjunto.kind} ({m.adjunto.filename})</span>
+                                    </div>
+                                  )}
+                                  {m.ocrAmount && (
+                                    <div className="mt-0.5 text-[11px] font-bold text-success">
+                                      🔍 OCR detectó: Q {m.ocrAmount}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-greige-ink">
+                            No hubo mensajes en chat el 14 de octubre. (Interacción en días previos/posteriores).
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                })()
+              )}
             </div>
           </div>
         </div>

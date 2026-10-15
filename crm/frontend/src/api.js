@@ -888,4 +888,10 @@ export async function syncSalesFromChats() {
   return res.json();
 }
 
+export async function fetchAnalisis14Octubre() {
+  const res = await apiFetch('/api/sales/analisis-14-octubre');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar auditoría del 14/10');
+  return res.json();
+}
+
 
