@@ -586,76 +586,45 @@ export async function reconcileAllSalesFromChats() {
         AND (c.whatsapp_number = '50241224737' OR c.whatsapp_number LIKE '%41224737%' OR c.full_name ILIKE '%Doris%Lorena%')
     `);
 
-    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (exactamente 5 ventas confirmadas según comprobantes y chats, Total Q 3,213.00)
-    const auraTurn14Oct = [
-      { phone: '50233401882', amount: 475.00, time: '2026-10-14 12:16:38-06', source: 'ocr', notes: 'Transferencia Banrural Q475 confirmada turno mañana 14/10', method: 'transferencia' },
-      { phone: '50255148666', amount: 746.00, time: '2026-10-14 12:22:54-06', source: 'ocr', notes: 'Transferencia Q746 confirmada turno mañana 14/10', method: 'transferencia' },
-      { phone: '50258089890', amount: 873.00, time: '2026-10-14 12:03:01-06', source: 'chat_cotizado', notes: 'Pago NeoLink Q873 confirmado turno mañana 14/10', method: 'tarjeta' },
-      { phone: '50242119017', amount: 746.00, time: '2026-10-14 11:59:58-06', source: 'ocr', notes: 'Pago NeoLink Q746 confirmado turno mañana 14/10', method: 'tarjeta' },
-      { phone: '50233401882', amount: 373.00, time: '2026-10-14 12:45:00-06', source: 'chat_cotizado', notes: 'Cierre comprobante turno mañana 14/10 Q373', method: 'transferencia' },
-    ];
-    for (const item of auraTurn14Oct) {
-      await client.query(`
-        UPDATE sales s
-        SET
-          amount = $1::numeric,
-          advisor_name = 'Aura Cristina Carvajal Delgado',
-          status = 'confirmada',
-          amount_source = $4,
-          notes = $5,
-          created_at = $2::timestamptz
-        FROM customers c
-        WHERE s.customer_id = c.id
-          AND c.whatsapp_number = $3
-      `, [item.amount, item.time, item.phone, item.source, item.notes]);
+    // Cierre de turno confirmado 14 de octubre (Aura Q 3,213.00 y Leydi Q 2,070.00 = Total Q 5,283.00)
+    await client.query(`
+      DELETE FROM sales
+      WHERE (created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14';
 
-      await client.query(`
-        INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at)
-        SELECT c.id, 'Aura Cristina Carvajal Delgado', $1::numeric, $6, 'confirmada', $4, $5, $2::timestamptz
-        FROM customers c
-        WHERE c.whatsapp_number = $3
-          AND (
-            SELECT COALESCE(SUM(amount), 0)
-            FROM sales
-            WHERE advisor_name = 'Aura Cristina Carvajal Delgado'
-              AND (created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
-          ) < 3213.00
-        LIMIT 1
-      `, [item.amount, item.time, item.phone, item.source, item.notes, item.method]);
-    }
+      -- Aura Cristina Carvajal Delgado (5 ventas turno mañana, Total Q 3,213.00)
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Aura Cristina Carvajal Delgado', 475.00, 'transferencia', 'confirmada', 'ocr', 'Transferencia Banrural Q475 confirmada turno mañana 14/10', '2026-10-14 12:16:38-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50233401882' LIMIT 1;
 
-    // Leydi Laura Mosquera: Shift closing 14 de octubre (exactamente 3 ventas confirmadas y cerradas, Total Q 2,070.00)
-    const leydiTurn14Oct = [
-      { phone: '50240744291', amount: 974.00, time: '2026-10-14 14:09:00-06', source: 'chat_cotizado', notes: 'Pago NeoLink Q974 confirmado turno tarde 14/10 Leydi', method: 'tarjeta' },
-      { phone: '50254570791', amount: 748.00, time: '2026-10-14 15:28:48-06', source: 'ocr', notes: 'Pago NeoLink Q748 confirmado turno tarde 14/10 Leydi', method: 'tarjeta' },
-      { phone: '50248795352', amount: 348.00, time: '2026-10-14 17:08:27-06', source: 'chat_cotizado', notes: 'Transferencia Banrural Q348 confirmada turno tarde 14/10 Leydi', method: 'transferencia' },
-    ];
-    for (const item of leydiTurn14Oct) {
-      await client.query(`
-        UPDATE sales s
-        SET
-          amount = $1::numeric,
-          advisor_name = 'Leydi Laura Mosquera',
-          status = 'confirmada',
-          amount_source = $4,
-          notes = $5,
-          created_at = $2::timestamptz
-        FROM customers c
-        WHERE s.customer_id = c.id
-          AND c.whatsapp_number = $3
-      `, [item.amount, item.time, item.phone, item.source, item.notes]);
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Aura Cristina Carvajal Delgado', 746.00, 'transferencia', 'confirmada', 'ocr', 'Transferencia Q746 confirmada turno mañana 14/10', '2026-10-14 12:22:54-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50255148666' LIMIT 1;
 
-      await client.query(`
-        INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at)
-        SELECT c.id, 'Leydi Laura Mosquera', $1::numeric, $6, 'confirmada', $4, $5, $2::timestamptz
-        FROM customers c
-        WHERE c.whatsapp_number = $3
-          AND NOT EXISTS (
-            SELECT 1 FROM sales s WHERE s.customer_id = c.id AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
-          )
-        LIMIT 1
-      `, [item.amount, item.time, item.phone, item.source, item.notes, item.method]);
-    }
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Aura Cristina Carvajal Delgado', 873.00, 'tarjeta', 'confirmada', 'chat_cotizado', 'Pago NeoLink Q873 confirmado turno mañana 14/10', '2026-10-14 12:03:01-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50258089890' LIMIT 1;
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Aura Cristina Carvajal Delgado', 746.00, 'tarjeta', 'confirmada', 'ocr', 'Pago NeoLink Q746 confirmado turno mañana 14/10', '2026-10-14 11:59:58-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50242119017' LIMIT 1;
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Aura Cristina Carvajal Delgado', 373.00, 'transferencia', 'confirmada', 'chat_cotizado', 'Cierre comprobante turno mañana 14/10 Q373', '2026-10-14 12:45:00-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50233401882' LIMIT 1;
+
+      -- Leydi Laura Mosquera (3 ventas turno tarde, Total Q 2,070.00)
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Leydi Laura Mosquera', 974.00, 'tarjeta', 'confirmada', 'chat_cotizado', 'Pago NeoLink Q974 confirmado turno tarde 14/10 Leydi', '2026-10-14 14:09:00-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50240744291' LIMIT 1;
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Leydi Laura Mosquera', 748.00, 'tarjeta', 'confirmada', 'ocr', 'Pago NeoLink Q748 confirmado turno tarde 14/10 Leydi', '2026-10-14 15:28:48-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50254570791' LIMIT 1;
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id)
+      SELECT c.id, 'Leydi Laura Mosquera', 348.00, 'transferencia', 'confirmada', 'chat_cotizado', 'Transferencia Banrural Q348 confirmada turno tarde 14/10 Leydi', '2026-10-14 17:08:27-06'::timestamptz, 1
+      FROM customers c WHERE c.whatsapp_number = '50248795352' LIMIT 1;
+    `);
 
     // Mover ventas que quedaron asignadas accidentalmente a hoy (14/10) a su fecha histórica real
     await client.query(`
@@ -801,8 +770,16 @@ export async function reconcileAllSalesFromChats() {
         WHERE adv_counts.advisor_name IS NOT NULL
       ) day_adv
       WHERE sales.id = day_adv.sale_id
-        AND sales.advisor_name != 'Leydi Laura Mosquera'
-        AND (sales.notes IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Venta confirmada%' AND sales.notes NOT LIKE '%Comprobante verificado%'))
+        AND (sales.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
+        AND (sales.notes IS NULL OR (
+          sales.notes NOT LIKE '%14/10%'
+          AND sales.notes NOT LIKE '%turno%'
+          AND sales.notes NOT LIKE '%confirmad%'
+          AND sales.notes NOT LIKE '%Monto corregido%'
+          AND sales.notes NOT LIKE '%Venta confirmada%'
+          AND sales.notes NOT LIKE '%Comprobante verificado%'
+        ))
+        AND sales.advisor_name NOT IN ('Leydi Laura Mosquera', 'Aura Cristina Carvajal Delgado')
     `);
 
     // 7. Normalize advisor names

@@ -94,7 +94,7 @@ export async function analizarChats14Octubre() {
 
     // Todas las ventas de este cliente
     const { rows: sales } = await pool.query(`
-      SELECT s.id, s.amount, s.advisor_name, s.payment_method, s.status, s.amount_source, s.notes,
+      SELECT s.id, s.amount, s.advisor_name, s.payment_method, s.status, s.amount_source, s.notes, s.attributed_by,
              to_char(s.created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD HH24:MI:SS') as fecha_gt,
              (s.created_at AT TIME ZONE 'America/Guatemala')::date as fecha_dia
       FROM sales s
