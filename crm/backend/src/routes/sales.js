@@ -29,6 +29,7 @@ function buildSalesFilter(period, from, to, lineId, params = []) {
   } else {
     // Default: 'hoy' (el día de hoy en hora local de Guatemala)
     clauses.push(`s.created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`s.created_at < ((date_trunc('day', now() AT TIME ZONE 'America/Guatemala') + interval '1 day') AT TIME ZONE 'America/Guatemala')`);
   }
 
   if (lineId) {
