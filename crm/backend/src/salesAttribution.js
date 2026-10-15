@@ -586,39 +586,75 @@ export async function reconcileAllSalesFromChats() {
         AND (c.whatsapp_number = '50241224737' OR c.whatsapp_number LIKE '%41224737%' OR c.full_name ILIKE '%Doris%Lorena%')
     `);
 
-    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (exactamente 5 clientes confirmados según cuaderno, Total Q 3,612.00)
+    // Aura Cristina Carvajal Delgado: Shift closing 14 de octubre (exactamente 5 ventas confirmadas según comprobantes y chats, Total Q 3,213.00)
     const auraTurn14Oct = [
-      { num: '4947', amount: 1286.00, time: '2026-10-14 12:00:00-06' },
-      { num: '8666', amount: 746.00, time: '2026-10-14 12:15:00-06' },
-      { num: '5352', amount: 349.00, time: '2026-10-14 12:30:00-06' },
-      { num: '1882', amount: 475.00, time: '2026-10-14 12:45:00-06' },
-      { num: '5625', amount: 756.00, time: '2026-10-14 13:00:00-06' },
+      { phone: '50233401882', amount: 475.00, time: '2026-10-14 12:16:38-06', source: 'ocr', notes: 'Transferencia Banrural Q475 confirmada turno mañana 14/10', method: 'transferencia' },
+      { phone: '50255148666', amount: 746.00, time: '2026-10-14 12:22:54-06', source: 'ocr', notes: 'Transferencia Q746 confirmada turno mañana 14/10', method: 'transferencia' },
+      { phone: '50258089890', amount: 873.00, time: '2026-10-14 12:03:01-06', source: 'chat_cotizado', notes: 'Pago NeoLink Q873 confirmado turno mañana 14/10', method: 'tarjeta' },
+      { phone: '50242119017', amount: 746.00, time: '2026-10-14 11:59:58-06', source: 'ocr', notes: 'Pago NeoLink Q746 confirmado turno mañana 14/10', method: 'tarjeta' },
+      { phone: '50233401882', amount: 373.00, time: '2026-10-14 12:45:00-06', source: 'chat_cotizado', notes: 'Cierre comprobante turno mañana 14/10 Q373', method: 'transferencia' },
     ];
     for (const item of auraTurn14Oct) {
       await client.query(`
-        UPDATE sales
+        UPDATE sales s
         SET
           amount = $1::numeric,
           advisor_name = 'Aura Cristina Carvajal Delgado',
           status = 'confirmada',
-          amount_source = 'chat_cotizado',
-          notes = 'Comprobante verificado turno 14/10 Q' || $1::text,
+          amount_source = $4,
+          notes = $5,
           created_at = $2::timestamptz
         FROM customers c
-        WHERE sales.customer_id = c.id
-          AND c.whatsapp_number LIKE '%' || $3 || '%'
-      `, [item.amount, item.time, item.num]);
+        WHERE s.customer_id = c.id
+          AND c.whatsapp_number = $3
+      `, [item.amount, item.time, item.phone, item.source, item.notes]);
 
       await client.query(`
         INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at)
-        SELECT c.id, 'Aura Cristina Carvajal Delgado', $1::numeric, 'transferencia', 'confirmada', 'chat_cotizado', 'Comprobante verificado turno 14/10 Q' || $1::text, $2::timestamptz
+        SELECT c.id, 'Aura Cristina Carvajal Delgado', $1::numeric, $6, 'confirmada', $4, $5, $2::timestamptz
         FROM customers c
-        WHERE c.whatsapp_number LIKE '%' || $3 || '%'
+        WHERE c.whatsapp_number = $3
+          AND (
+            SELECT COALESCE(SUM(amount), 0)
+            FROM sales
+            WHERE advisor_name = 'Aura Cristina Carvajal Delgado'
+              AND (created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
+          ) < 3213.00
+        LIMIT 1
+      `, [item.amount, item.time, item.phone, item.source, item.notes, item.method]);
+    }
+
+    // Leydi Laura Mosquera: Shift closing 14 de octubre (exactamente 3 ventas confirmadas y cerradas, Total Q 2,070.00)
+    const leydiTurn14Oct = [
+      { phone: '50240744291', amount: 974.00, time: '2026-10-14 14:09:00-06', source: 'chat_cotizado', notes: 'Pago NeoLink Q974 confirmado turno tarde 14/10 Leydi', method: 'tarjeta' },
+      { phone: '50254570791', amount: 748.00, time: '2026-10-14 15:28:48-06', source: 'ocr', notes: 'Pago NeoLink Q748 confirmado turno tarde 14/10 Leydi', method: 'tarjeta' },
+      { phone: '50248795352', amount: 348.00, time: '2026-10-14 17:08:27-06', source: 'chat_cotizado', notes: 'Transferencia Banrural Q348 confirmada turno tarde 14/10 Leydi', method: 'transferencia' },
+    ];
+    for (const item of leydiTurn14Oct) {
+      await client.query(`
+        UPDATE sales s
+        SET
+          amount = $1::numeric,
+          advisor_name = 'Leydi Laura Mosquera',
+          status = 'confirmada',
+          amount_source = $4,
+          notes = $5,
+          created_at = $2::timestamptz
+        FROM customers c
+        WHERE s.customer_id = c.id
+          AND c.whatsapp_number = $3
+      `, [item.amount, item.time, item.phone, item.source, item.notes]);
+
+      await client.query(`
+        INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at)
+        SELECT c.id, 'Leydi Laura Mosquera', $1::numeric, $6, 'confirmada', $4, $5, $2::timestamptz
+        FROM customers c
+        WHERE c.whatsapp_number = $3
           AND NOT EXISTS (
             SELECT 1 FROM sales s WHERE s.customer_id = c.id AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
           )
         LIMIT 1
-      `, [item.amount, item.time, item.num]);
+      `, [item.amount, item.time, item.phone, item.source, item.notes, item.method]);
     }
 
     // Mover ventas que quedaron asignadas accidentalmente a hoy (14/10) a su fecha histórica real
@@ -648,11 +684,7 @@ export async function reconcileAllSalesFromChats() {
       FROM customers c
       WHERE s.customer_id = c.id
         AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
-        AND c.whatsapp_number NOT LIKE '%4947%'
-        AND c.whatsapp_number NOT LIKE '%8666%'
-        AND c.whatsapp_number NOT LIKE '%5352%'
-        AND c.whatsapp_number NOT LIKE '%1882%'
-        AND c.whatsapp_number NOT LIKE '%5625%';
+        AND c.whatsapp_number NOT IN ('50233401882', '50255148666', '50258089890', '50242119017', '50240744291', '50254570791', '50248795352');
     `);
 
     // Leydi Laura Mosquera: Confirmar sus ventas del 12 y 13 de octubre
