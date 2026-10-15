@@ -904,7 +904,7 @@ export async function reconcileAllSalesFromChats() {
         FROM sales
         WHERE status = 'confirmada' AND amount > 0
       )
-      AND t.status IN ('bot', 'pendiente', 'esperando_asesor');
+      AND t.status IN ('bot', 'esperando_asesor');
     `);
 
     await client.query('COMMIT');
