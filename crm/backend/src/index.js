@@ -31,6 +31,8 @@ import { startListener } from './listener.js';
 import { runMigrations } from './migrate.js';
 import { seedDefaultWhatsappNumber, syncWabaSubscriptions } from './seedWhatsappNumber.js';
 
+import { analizarChats14Octubre } from './analizar_chats_14.js';
+
 // Before anything else touches the database — everything below assumes today's schema.
 await runMigrations();
 await seedDefaultWhatsappNumber();
@@ -50,6 +52,23 @@ app.use(express.json({ limit: '25mb', verify: (req, res, buf) => { req.rawBody =
 app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// Endpoint de diagnóstico y auditoría exhaustiva de chats del 14 de octubre
+app.get('/api/diagnostico-chats-14', async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const result = await analizarChats14Octubre();
+    if (req.query.format === 'json') {
+      return res.json(result);
+    }
+    const content = fs.readFileSync(result.reportFileTxt, 'utf8');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(content);
+  } catch (err) {
+    console.error('diagnostico-chats-14 error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
 app.use('/api/auth', authRouter);
 app.use('/api/tickets', requireAuth, ticketsRouter);
 app.use('/api/conversations', requireAuth, conversationsRouter);

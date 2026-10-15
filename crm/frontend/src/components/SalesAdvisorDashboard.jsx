@@ -4,7 +4,7 @@ import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
   FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check,
-  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles
+  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, syncSalesFromChats } from '../api.js';
@@ -567,6 +567,15 @@ export default function SalesAdvisorDashboard() {
               </button>
 
               <button
+                onClick={() => window.open('/api/diagnostico-chats-14', '_blank')}
+                title="Abrir auditoría exhaustiva mensaje por mensaje de los chats del 14 de octubre"
+                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+              >
+                <FileText size={13} />
+                <span>Auditoría Chats 14/10</span>
+              </button>
+
+              <button
                 onClick={exportDailyToExcel}
                 disabled={!dailyData?.daily?.length}
                 className="flex items-center gap-1.5 rounded-xl bg-success px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-opacity hover:opacity-95 disabled:opacity-50"
@@ -835,6 +844,16 @@ export default function SalesAdvisorDashboard() {
           >
             <Sparkles size={13} className={syncingChats ? 'animate-spin' : ''} />
             <span>{syncingChats ? 'Analizando...' : 'Re-analizar chats'}</span>
+          </button>
+
+          {/* Botón Auditoría Chats 14/10 */}
+          <button
+            onClick={() => window.open('/api/diagnostico-chats-14', '_blank')}
+            title="Abrir auditoría exhaustiva mensaje por mensaje de los chats del 14 de octubre"
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+          >
+            <FileText size={13} />
+            <span>Auditoría Chats 14/10</span>
           </button>
 
           {/* Botón Copiar resumen para WhatsApp */}
