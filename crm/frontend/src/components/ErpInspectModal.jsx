@@ -137,8 +137,8 @@ export default function ErpInspectModal({ onClose }) {
                   setSyncingErp(true);
                   setError(null);
                   try {
-                    await triggerSyncErp();
-                    setSyncSuccessMsg('¡Sincronización de inventario ERP iniciada en segundo plano!');
+                    const syncRes = await triggerSyncErp();
+                    setSyncSuccessMsg(syncRes?.message || '¡Sincronización de inventario ERP iniciada en segundo plano!');
                   } catch (e) {
                     setError(e.message);
                   } finally {

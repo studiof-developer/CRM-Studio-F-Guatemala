@@ -66,74 +66,162 @@ function isSellableSucursal(sucursal) {
   return !/imperfecto/i.test(sucursal || '');
 }
 
+let cachedPriceMaps = { exactMap: new Map(), baseMap: new Map() };
+let lastPriceSyncAt = 0;
+let inflightPriceSync = null;
+
+function parseErpPriceValue(val) {
+  if (typeof val === 'number') return Number.isFinite(val) && val > 0 ? val : null;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^0-9.-]/g, '');
+    const num = Number(cleaned);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }
+  return null;
+}
+
+function normalizeRefExact(rawRef) {
+  return String(rawRef ?? '').trim().toUpperCase().replace(/[\s-]+/g, '');
+}
+
+function normalizeRefBase(exactRef) {
+  return exactRef.replace(/[A-Z]+$/, '');
+}
+
 function buildReferencePriceMap(refPriceRows) {
   const exactMap = new Map();
   const baseMap = new Map();
   for (const r of refPriceRows || []) {
-    const rawRef = String(r?.Referencia ?? r?.referencia ?? '').trim().toUpperCase();
-    const priceVal = Number(r?.Precio ?? r?.precio ?? r?.PrecioVenta ?? r?.Valor);
-    if (!rawRef || !Number.isFinite(priceVal) || priceVal <= 0) continue;
-    exactMap.set(rawRef, priceVal);
-    const baseRef = rawRef.replace(/[A-Z]$/, '');
-    if (baseRef && baseRef !== rawRef && !baseMap.has(baseRef)) {
+    if (!r || typeof r !== 'object') continue;
+    const rawRef =
+      r.Referencia ?? r.referencia ?? r.Ref ?? r.ref ?? r.Codigo ?? r.codigo ?? r.Estilo ?? r.estilo ?? '';
+    const exactRef = normalizeRefExact(rawRef);
+    const priceVal = parseErpPriceValue(
+      r.Precio ?? r.precio ?? r.PrecioVenta ?? r.PrecioPublico ?? r.Valor ?? r.PVP ?? r.Tarifa
+    );
+    if (!exactRef || !priceVal) continue;
+    exactMap.set(exactRef, priceVal);
+    const baseRef = normalizeRefBase(exactRef);
+    if (baseRef && !baseMap.has(baseRef)) {
       baseMap.set(baseRef, priceVal);
     }
   }
   return { exactMap, baseMap };
 }
 
-function lookupReferencePrice({ exactMap, baseMap }, rawRef) {
-  if (!rawRef) return null;
-  const clean = String(rawRef).trim().toUpperCase();
+export function lookupReferencePrice(priceMaps, rawRef) {
+  const maps = priceMaps || cachedPriceMaps;
+  if (!rawRef || !maps) return null;
+  const clean = normalizeRefExact(rawRef);
   if (!clean) return null;
-  if (exactMap.has(clean)) return exactMap.get(clean);
-  const base = clean.replace(/[A-Z]$/, '');
-  if (base && exactMap.has(base)) return exactMap.get(base);
-  if (base && baseMap.has(base)) return baseMap.get(base);
+  if (maps.exactMap?.has(clean)) return maps.exactMap.get(clean);
+  const base = normalizeRefBase(clean);
+  if (base && maps.exactMap?.has(base)) return maps.exactMap.get(base);
+  if (base && maps.baseMap?.has(base)) return maps.baseMap.get(base);
   return null;
 }
 
-async function applyReferencePricesToExistingProducts(exactMap) {
-  const entries = [...exactMap.entries()];
-  if (!entries.length) return 0;
-  let updatedTotal = 0;
-  const CHUNK = 500;
-  for (let i = 0; i < entries.length; i += CHUNK) {
-    const chunk = entries.slice(i, i + CHUNK);
-    const values = [];
-    const tuples = chunk.map(([ref, price], idx) => {
-      values.push(ref, price);
-      const base = idx * 2;
-      return `($${base + 1}::text, $${base + 2}::numeric)`;
-    }).join(',');
+export function lookupCachedReferencePrice(rawRef) {
+  return lookupReferencePrice(cachedPriceMaps, rawRef);
+}
 
-    const res = await pool.query(
-      `UPDATE products p
-       SET price = v.price
-       FROM (VALUES ${tuples}) AS v(ref, price)
-       WHERE (
-         UPPER(TRIM(p.reference)) = v.ref
-         OR REGEXP_REPLACE(UPPER(TRIM(COALESCE(p.reference, ''))), '[A-Z]$', '') = v.ref
-         OR SPLIT_PART(UPPER(TRIM(p.sku)), '_', 1) = v.ref
-       )
-       AND (p.price IS DISTINCT FROM v.price)`,
-      values
-    );
-    updatedTotal += res.rowCount || 0;
+async function applyReferencePricesToExistingProducts(priceMaps) {
+  const entries = [...(priceMaps?.exactMap?.entries() || [])];
+  if (!entries.length) return 0;
+
+  const exactRefs = [];
+  const baseRefs = [];
+  const prices = [];
+
+  for (const [exactRef, price] of entries) {
+    exactRefs.push(exactRef);
+    baseRefs.push(normalizeRefBase(exactRef));
+    prices.push(price);
   }
-  return updatedTotal;
+
+  const res = await pool.query(
+    `WITH ref_prices AS (
+       SELECT
+         unnest($1::text[]) AS exact_ref,
+         unnest($2::text[]) AS base_ref,
+         unnest($3::numeric[]) AS price
+     ),
+     exact_lookup AS (
+       SELECT DISTINCT ON (exact_ref) exact_ref, price
+       FROM ref_prices
+       WHERE exact_ref <> ''
+     ),
+     base_lookup AS (
+       SELECT DISTINCT ON (base_ref) base_ref, price
+       FROM ref_prices
+       WHERE base_ref <> ''
+     )
+     UPDATE products p
+     SET price = COALESCE(e.price, b.price)
+     FROM (
+       SELECT
+         p2.id,
+         REGEXP_REPLACE(UPPER(TRIM(COALESCE(NULLIF(p2.reference, ''), SPLIT_PART(p2.sku, '_', 1)))), '[\\s-]+', '', 'g') AS prod_exact_ref,
+         REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(COALESCE(NULLIF(p2.reference, ''), SPLIT_PART(p2.sku, '_', 1)))), '[\\s-]+', '', 'g'), '[A-Z]+$', '') AS prod_base_ref
+       FROM products p2
+     ) norm
+     LEFT JOIN exact_lookup e ON e.exact_ref = norm.prod_exact_ref
+     LEFT JOIN base_lookup b ON b.base_ref = norm.prod_base_ref
+     WHERE p.id = norm.id
+       AND COALESCE(e.price, b.price) IS NOT NULL
+       AND p.price IS DISTINCT FROM COALESCE(e.price, b.price)`,
+    [exactRefs, baseRefs, prices]
+  );
+
+  return res.rowCount || 0;
+}
+
+export async function syncErpReferencePrices() {
+  const refPriceRows = await fetchErpReferencePrices();
+  const priceMaps = buildReferencePriceMap(refPriceRows);
+  if (priceMaps.exactMap.size > 0) {
+    cachedPriceMaps = priceMaps;
+    lastPriceSyncAt = Date.now();
+  }
+  const updatedCount = await applyReferencePricesToExistingProducts(priceMaps);
+  return {
+    refPricesCount: priceMaps.exactMap.size,
+    updatedCount,
+  };
+}
+
+export async function ensureErpPricesSynced(maxAgeMs = 2 * 60 * 1000) {
+  if (Date.now() - lastPriceSyncAt < maxAgeMs && cachedPriceMaps.exactMap.size > 0) {
+    return { refPricesCount: cachedPriceMaps.exactMap.size, updatedCount: 0, cached: true };
+  }
+  if (inflightPriceSync) return inflightPriceSync;
+  inflightPriceSync = syncErpReferencePrices()
+    .catch((err) => {
+      console.error('ensureErpPricesSynced failed:', err.message);
+      return { refPricesCount: cachedPriceMaps.exactMap.size, updatedCount: 0, error: err.message };
+    })
+    .finally(() => {
+      inflightPriceSync = null;
+    });
+  return inflightPriceSync;
 }
 
 async function syncErpInventory() {
-  const [rows, refPriceRows] = await Promise.all([
-    fetchErpInventory(),
-    fetchErpReferencePrices().catch((err) => {
+  let priceMaps = cachedPriceMaps;
+  if (!priceMaps || priceMaps.exactMap.size === 0) {
+    try {
+      const refPriceRows = await fetchErpReferencePrices();
+      priceMaps = buildReferencePriceMap(refPriceRows);
+      if (priceMaps.exactMap.size > 0) {
+        cachedPriceMaps = priceMaps;
+        lastPriceSyncAt = Date.now();
+      }
+    } catch (err) {
       console.error('ERP ref-precio sync warning:', err.message);
-      return [];
-    }),
-  ]);
+    }
+  }
 
-  const priceMaps = buildReferencePriceMap(refPriceRows);
+  const rows = await fetchErpInventory();
 
   // One existencia row per sucursal — collapsed here into one row per sellable item
   // (CodBarras or Referencia+Talla+Color), summing available stock across
@@ -148,7 +236,7 @@ async function syncErpInventory() {
       const refPrice = lookupReferencePrice(priceMaps, r.Referencia);
       const inlinePriceVal = Number(r.Precio || r.PrecioVenta || r.PrecioPublico || r.PrecioLista || r.Valor || r.PVP || r.PrecioFinal || r.PrecioUnitario);
       const inlinePrice = Number.isFinite(inlinePriceVal) && inlinePriceVal > 0 ? inlinePriceVal : null;
-      const price = refPrice ?? inlinePrice ?? 0;
+      const price = refPrice ?? inlinePrice ?? null;
       p = {
         sku: skuKey,
         reference: r.Referencia ? String(r.Referencia).trim() : null,
@@ -174,29 +262,34 @@ async function syncErpInventory() {
     'sku',
     [
       'reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'stock_quantity',
-      'price = CASE WHEN EXCLUDED.price > 0 THEN EXCLUDED.price ELSE COALESCE(products.price, 0) END',
+      'price = CASE WHEN EXCLUDED.price IS NOT NULL AND EXCLUDED.price > 0 THEN EXCLUDED.price ELSE products.price END',
     ],
     products,
     (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, p.price, 0, p.stock, true]
   );
 
-  // Also ensure any existing products in DB not in today's existencia rows get their reference price synced
-  const extraPriceUpdates = await applyReferencePricesToExistingProducts(priceMaps.exactMap);
+  const extraPriceUpdates = await applyReferencePricesToExistingProducts(priceMaps);
   return { productsCount: products.length, refPricesCount: priceMaps.exactMap.size, extraPriceUpdates };
 }
 
 export async function runErpSync() {
   try {
-    const n = await syncErpCustomers();
-    console.log(`ERP sync: ${n} clientes actualizados`);
+    const priceRes = await syncErpReferencePrices();
+    console.log(`ERP sync (ref-precio): ${priceRes.refPricesCount} referencias leídas, ${priceRes.updatedCount} productos actualizados con precio`);
   } catch (err) {
-    console.error('ERP customers sync failed', err);
+    console.error('ERP ref-precio sync failed', err);
   }
   try {
     const res = await syncErpInventory();
-    console.log(`ERP sync: ${res.productsCount} productos actualizados (${res.refPricesCount} precios por referencia desde /api/data/ref-precio, ${res.extraPriceUpdates} adicionales sincronizados)`);
+    console.log(`ERP sync (inventario): ${res.productsCount} productos actualizados (${res.extraPriceUpdates} precios adicionales sincronizados)`);
   } catch (err) {
     console.error('ERP inventory sync failed', err);
+  }
+  try {
+    const n = await syncErpCustomers();
+    console.log(`ERP sync (clientes): ${n} clientes actualizados`);
+  } catch (err) {
+    console.error('ERP customers sync failed', err);
   }
 }
 

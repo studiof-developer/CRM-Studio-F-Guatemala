@@ -9,7 +9,17 @@ const HOST = process.env.ERP_HOST || '50.21.176.81';
 const PORT = Number(process.env.ERP_PORT || 8443);
 const API_KEY = process.env.ERP_API_KEY;
 const PINNED_FINGERPRINT = (process.env.ERP_CERT_FINGERPRINT || '').toUpperCase();
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 90_000;
+
+function extractErpRows(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.rows)) return body.rows;
+  if (Array.isArray(body?.recordset)) return body.recordset;
+  if (Array.isArray(body?.result)) return body.result;
+  if (Array.isArray(body?.items)) return body.items;
+  return [];
+}
 
 function get(path) {
   return new Promise((resolve, reject) => {
@@ -60,17 +70,17 @@ export function isErpConfigured() {
 
 export async function fetchErpCustomers() {
   const body = await get('/api/data/cliente-resumen-crm');
-  return body?.data ?? [];
+  return extractErpRows(body);
 }
 
 export async function fetchErpInventory() {
   const body = await get('/api/data/existencia');
-  return body?.data ?? [];
+  return extractErpRows(body);
 }
 
 export async function fetchErpReferencePrices() {
   const body = await get('/api/data/ref-precio');
-  return body?.data ?? [];
+  return extractErpRows(body);
 }
 
 export async function fetchErpPathSafe(path) {

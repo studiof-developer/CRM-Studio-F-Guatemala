@@ -7,11 +7,31 @@ import { pool } from '../db.js';
 import { requireRole } from '../auth.js';
 import { PRODUCT_IMAGES_DIR, listImageFiles, findBestImageMatch, syncProductImages } from '../productImageSync.js';
 import { isErpConfigured, fetchErpPathSafe } from '../erpClient.js';
+import { ensureErpPricesSynced, lookupCachedReferencePrice, syncErpReferencePrices, runErpSync } from '../erpSync.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const REQUIRED_COLUMNS = ['sku', 'name', 'category', 'price'];
+
+async function enrichRowsWithErpPrices(rows) {
+  if (!rows.length || !isErpConfigured()) return rows;
+  const hasMissingPrice = rows.some((r) => r.price == null || Number(r.price) <= 0);
+  if (hasMissingPrice) {
+    await ensureErpPricesSynced();
+  }
+  for (const row of rows) {
+    if (row.price == null || Number(row.price) <= 0) {
+      const refCandidate = row.reference || (row.sku ? String(row.sku).split('_')[0] : null);
+      const matchedPrice = lookupCachedReferencePrice(refCandidate);
+      if (matchedPrice && matchedPrice > 0) {
+        row.price = matchedPrice;
+        pool.query('UPDATE products SET price = $1 WHERE id = $2', [matchedPrice, row.id]).catch(() => {});
+      }
+    }
+  }
+  return rows;
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -25,6 +45,8 @@ router.get('/', async (req, res, next) => {
          LIMIT 100`,
         [`%${q}%`]
       );
+
+      await enrichRowsWithErpPrices(rows);
 
       // Si algún producto no tiene foto vinculada aún, busca coincidencia en tiempo real
       for (const row of rows) {
@@ -44,6 +66,7 @@ router.get('/', async (req, res, next) => {
       `SELECT id, sku, reference, barcode, erp_article_id, name, category, line, size, color, price, discount_pct, stock_quantity, active, image_url
        FROM products ORDER BY id DESC LIMIT 500`
     );
+    await enrichRowsWithErpPrices(rows);
     res.json(rows);
   } catch (err) { next(err); }
 });
@@ -243,12 +266,20 @@ router.post('/sync-images', requireRole('admin', 'supervisor'), async (req, res,
   }
 });
 
-// Sincronización manual del ERP en segundo plano
+// Sincronización manual del ERP (sincroniza precios de referencia de inmediato y el resto en segundo plano)
 router.post('/sync-erp', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const { runErpSync } = await import('../erpSync.js');
+    const priceRes = await syncErpReferencePrices().catch((err) => {
+      console.error('Error in manual syncErpReferencePrices:', err);
+      return { refPricesCount: 0, updatedCount: 0, error: err.message };
+    });
     runErpSync().catch((err) => console.error('Error in manual runErpSync:', err));
-    res.json({ ok: true, message: 'Sincronización de ERP iniciada' });
+    res.json({
+      ok: true,
+      message: `Precios sincronizados (${priceRes.refPricesCount} referencias ERP, ${priceRes.updatedCount} productos actualizados). Sincronización de existencias en curso.`,
+      refPricesCount: priceRes.refPricesCount,
+      updatedCount: priceRes.updatedCount,
+    });
   } catch (err) {
     next(err);
   }

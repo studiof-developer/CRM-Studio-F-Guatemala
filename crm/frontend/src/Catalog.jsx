@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, PackageX, Search, ImageOff, Database, Calculator } from 'lucide-react';
-import { fetchProducts, importProducts, productImageUrl } from './api.js';
+import { Upload, PackageX, Search, ImageOff, Database, Calculator, RefreshCw } from 'lucide-react';
+import { fetchProducts, importProducts, productImageUrl, triggerSyncErp } from './api.js';
 import Badge from './components/Badge.jsx';
 import Pagination from './components/Pagination.jsx';
 import Select from './components/Select.jsx';
@@ -15,6 +15,8 @@ export default function Catalog({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [syncingErp, setSyncingErp] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
   const [result, setResult] = useState(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
@@ -27,20 +29,38 @@ export default function Catalog({ user }) {
   const [allCategories, setAllCategories] = useState([]);
   const searchTimer = useRef(null);
 
-  function load() {
+  function load(customSearch) {
+    const q = (customSearch !== undefined ? customSearch : search).trim();
     setLoading(true);
-    fetchProducts()
+    fetchProducts(q || undefined)
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setProducts(list);
-        setAllCategories([...new Set(list.map((p) => p.category).filter(Boolean))].sort());
+        if (!q) {
+          setAllCategories([...new Set(list.map((p) => p.category).filter(Boolean))].sort());
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }
 
+  async function handleSyncErpPrices() {
+    setSyncingErp(true);
+    setError(null);
+    setSyncMsg(null);
+    try {
+      const res = await triggerSyncErp();
+      setSyncMsg(res.message || 'Precios sincronizados desde el ERP');
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSyncingErp(false);
+    }
+  }
+
   // Carga inicial
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(''); }, []);
 
   // Búsqueda en servidor con debounce para consultar referencias o SKUs más allá de los primeros 500
   useEffect(() => {
@@ -139,6 +159,10 @@ export default function Catalog({ user }) {
             <Button variant="outline" onClick={() => setQuoteOpen(true)}>
               <Calculator size={16} /> Cotizador / Calculadora
             </Button>
+            <Button variant="outline" onClick={handleSyncErpPrices} disabled={syncingErp}>
+              <RefreshCw size={16} className={syncingErp ? 'animate-spin' : ''} />
+              {syncingErp ? 'Sincronizando…' : 'Sincronizar Precios ERP'}
+            </Button>
             <Button variant="outline" onClick={() => setShowErpModal(true)}>
               <Database size={16} /> Diagnóstico ERP
             </Button>
@@ -177,6 +201,9 @@ export default function Catalog({ user }) {
           Un <code className="rounded bg-paper px-1.5 py-0.5">sku</code> que ya existe se actualiza; uno nuevo se crea.
         </div>
 
+        {syncMsg && (
+          <p className="mb-4 text-sm text-success font-medium">{syncMsg}</p>
+        )}
         {result && (
           <p className="mb-4 text-sm text-success">
             {result.imported} de {result.totalRows} filas importadas.
@@ -247,7 +274,13 @@ export default function Catalog({ user }) {
                 <td className="px-4 py-3">{p.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.size}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.color}</td>
-                <td className="px-4 py-3 font-medium">Q{p.price}</td>
+                <td className="px-4 py-3 font-medium">
+                  {Number(p.price) > 0 ? (
+                    `Q${Number(p.price).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin precio</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {p.stock_quantity === 0 ? (
                     <span className="flex items-center gap-1.5 text-danger">
@@ -278,7 +311,14 @@ export default function Catalog({ user }) {
         />
       </div>
       </div>
-      {showErpModal && <ErpInspectModal onClose={() => setShowErpModal(false)} />}
+      {showErpModal && (
+        <ErpInspectModal
+          onClose={() => {
+            setShowErpModal(false);
+            load();
+          }}
+        />
+      )}
       <QuoteModal
         open={quoteOpen}
         onClose={() => setQuoteOpen(false)}
