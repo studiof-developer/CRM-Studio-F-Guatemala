@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, PackageX, Search, ImageOff, Database } from 'lucide-react';
+import { Upload, PackageX, Search, ImageOff, Database, Calculator } from 'lucide-react';
 import { fetchProducts, importProducts, productImageUrl } from './api.js';
 import Badge from './components/Badge.jsx';
 import Pagination from './components/Pagination.jsx';
 import Select from './components/Select.jsx';
 import { Button } from './components/ui.jsx';
 import ErpInspectModal from './components/ErpInspectModal.jsx';
+import QuoteModal from './components/QuoteModal.jsx';
 
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 50];
 
-export default function Catalog() {
+export default function Catalog({ user }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,6 +21,7 @@ export default function Catalog() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showErpModal, setShowErpModal] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const fileInput = useRef(null);
 
   const [allCategories, setAllCategories] = useState([]);
@@ -133,7 +135,10 @@ export default function Catalog() {
               {products.length} productos · lo que el agente ofrece viene de aquí.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setQuoteOpen(true)}>
+              <Calculator size={16} /> Cotizador / Calculadora
+            </Button>
             <Button variant="outline" onClick={() => setShowErpModal(true)}>
               <Database size={16} /> Diagnóstico ERP
             </Button>
@@ -274,6 +279,14 @@ export default function Catalog() {
       </div>
       </div>
       {showErpModal && <ErpInspectModal onClose={() => setShowErpModal(false)} />}
+      <QuoteModal
+        open={quoteOpen}
+        onClose={() => setQuoteOpen(false)}
+        customer={{ fullName: 'Cotización General' }}
+        activeLine={{ label: 'Studio F' }}
+        advisor={user}
+        catalog={products}
+      />
     </div>
   );
 }

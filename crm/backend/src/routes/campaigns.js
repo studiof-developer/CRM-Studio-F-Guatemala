@@ -342,6 +342,19 @@ router.get('/audience', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
+    // Auto-complete any campaign stuck in 'sending' for > 10 minutes with no recent message activity
+    await pool.query(
+      `UPDATE campaigns ca
+       SET status = 'completed', completed_at = COALESCE(completed_at, now())
+       WHERE ca.status = 'sending'
+         AND ca.created_at < now() - interval '10 minutes'
+         AND NOT EXISTS (
+           SELECT 1 FROM n8n_chat_histories h
+           WHERE h.message->'additional_kwargs'->>'campaignId' = ca.id::text
+             AND h.created_at > now() - interval '5 minutes'
+         )`
+    ).catch(() => {});
+
     const { rows } = await pool.query(
       `SELECT ca.*,
               (SELECT count(*) FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' = ca.id::text) AS sent_count,
@@ -842,6 +855,25 @@ router.post('/', async (req, res, next) => {
         error: skippedCooldown.length
           ? 'Todos los destinatarios seleccionados recibieron una difusión en las últimas 42 horas'
           : 'La audiencia quedó vacía',
+      });
+    }
+
+    // Guard against double-click / concurrent duplicate campaign submissions within 90 seconds
+    const { rows: recentDup } = await pool.query(
+      `SELECT id, recipient_count FROM campaigns
+       WHERE template_name = $1
+         AND COALESCE(whatsapp_number_id, 1) = COALESCE($2::int, 1)
+         AND recipient_count = $3
+         AND created_at > now() - interval '90 seconds'
+       ORDER BY id DESC LIMIT 1`,
+      [templateName, lineId ?? null, audience.length]
+    );
+    if (recentDup.length > 0) {
+      return res.status(201).json({
+        id: recentDup[0].id,
+        recipientCount: recentDup[0].recipient_count,
+        skippedCooldown,
+        deduplicated: true,
       });
     }
 

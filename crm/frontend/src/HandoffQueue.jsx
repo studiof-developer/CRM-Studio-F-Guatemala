@@ -354,7 +354,14 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true, sort } }));
     try {
       const { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal } = await fetchPipelineColumn(key, { offset: 0, limit, sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
-      setColumns((prev) => ({ ...prev, [key]: { cards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal, offset: cards.length, loading: false, sort } }));
+      const seenTickets = new Set();
+      const uniqueCards = cards.filter((c) => {
+        const k = c.ticketId ?? `c:${c.customerId}`;
+        if (seenTickets.has(k)) return false;
+        seenTickets.add(k);
+        return true;
+      });
+      setColumns((prev) => ({ ...prev, [key]: { cards: uniqueCards, total, newTotal, continuingTotal, newTodayTotal, unreadTotal, offset: uniqueCards.length, loading: false, sort } }));
     } catch (err) {
       setError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
@@ -370,10 +377,19 @@ export default function HandoffQueue({ user, onOpenConversation }) {
     setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
     try {
       const { cards } = await fetchPipelineColumn(key, { offset: col.offset, limit: PAGE_SIZE, sort: col.sort, from: dateFrom, to: dateTo, since: sinceTs, until: untilTs, q: searching ? debouncedSearch : undefined, unreadOnly, lineId: selectedLine || undefined });
-      setColumns((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], cards: [...prev[key].cards, ...cards], offset: prev[key].offset + cards.length, loading: false },
-      }));
+      setColumns((prev) => {
+        const existingKeys = new Set(prev[key].cards.map((c) => c.ticketId ?? `c:${c.customerId}`));
+        const newUnique = cards.filter((c) => {
+          const k = c.ticketId ?? `c:${c.customerId}`;
+          if (existingKeys.has(k)) return false;
+          existingKeys.add(k);
+          return true;
+        });
+        return {
+          ...prev,
+          [key]: { ...prev[key], cards: [...prev[key].cards, ...newUnique], offset: prev[key].offset + cards.length, loading: false },
+        };
+      });
     } catch (err) {
       showError(err.message);
       setColumns((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
@@ -402,9 +418,10 @@ export default function HandoffQueue({ user, onOpenConversation }) {
       const next = { ...prev };
       for (const key of COLUMN_ORDER) {
         const col = next[key];
-        const idx = col.cards.findIndex((c) => c.customerId === customerId);
-        if (idx !== -1) {
-          next[key] = { ...col, cards: col.cards.filter((_, i) => i !== idx), total: Math.max(0, col.total - 1), offset: Math.max(0, col.offset - 1) };
+        const filtered = col.cards.filter((c) => c.customerId !== customerId && (!card?.ticketId || c.ticketId !== card.ticketId));
+        const removedCount = col.cards.length - filtered.length;
+        if (removedCount > 0) {
+          next[key] = { ...col, cards: filtered, total: Math.max(0, col.total - removedCount), offset: Math.max(0, col.offset - removedCount) };
         }
       }
       if (bucket && card) {

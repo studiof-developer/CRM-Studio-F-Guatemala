@@ -20,7 +20,8 @@ router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const {
-      customerId,
+      customerId: rawCustomerId,
+      whatsappNumber,
       whatsappNumberId,
       items,
       subtotal,
@@ -29,34 +30,57 @@ router.post('/', async (req, res, next) => {
       notes,
     } = req.body ?? {};
 
-    if (!customerId) return res.status(400).json({ error: 'customerId is required' });
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items array cannot be empty' });
     }
 
     await client.query('BEGIN');
 
+    let customerId = rawCustomerId ? Number(rawCustomerId) : null;
+    if (!customerId && whatsappNumber) {
+      const cleanPhone = String(whatsappNumber).split('__')[0].replace(/\D/g, '');
+      if (cleanPhone) {
+        const { rows: cRows } = await client.query(
+          `SELECT id FROM customers WHERE whatsapp_number = $1 LIMIT 1`,
+          [cleanPhone]
+        );
+        customerId = cRows[0]?.id ?? null;
+      }
+    }
+
     const quoteNumber = await generateQuoteNumber();
 
-    const { rows: quoteRows } = await client.query(
-      `INSERT INTO quotes (
-        quote_number, customer_id, advisor_user_id, whatsapp_number_id,
-        subtotal, discount_total, grand_total, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'enviada', $8)
-      RETURNING *`,
-      [
+    let quote = null;
+    if (customerId) {
+      const { rows: quoteRows } = await client.query(
+        `INSERT INTO quotes (
+          quote_number, customer_id, advisor_user_id, whatsapp_number_id,
+          subtotal, discount_total, grand_total, status, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'enviada', $8)
+        RETURNING *`,
+        [
+          quoteNumber,
+          customerId,
+          req.user?.id || null,
+          whatsappNumberId || null,
+          Number(subtotal) || 0,
+          Number(discountTotal) || 0,
+          Number(grandTotal) || 0,
+          notes || null,
+        ]
+      );
+      quote = quoteRows[0];
+    } else {
+      // Standalone calculator quote (without specific customer row)
+      await client.query('COMMIT');
+      return res.status(201).json({
+        id: null,
         quoteNumber,
-        customerId,
-        req.user?.id || null,
-        whatsappNumberId || null,
-        Number(subtotal) || 0,
-        Number(discountTotal) || 0,
-        Number(grandTotal) || 0,
-        notes || null,
-      ]
-    );
-
-    const quote = quoteRows[0];
+        grandTotal: Number(grandTotal) || 0,
+        discountTotal: Number(discountTotal) || 0,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     for (const item of items) {
       await client.query(

@@ -82,6 +82,14 @@ const BUCKET_CASE_SQL = `
 // in that case, but functionally it's the same "needs a template, not a normal reply"
 // situation, so it falls back to last_message_at — whichever side wrote last (db/init/
 // 046), always set once ANY message exists — to judge staleness instead of exempting it.
+const TICKET_LAST_MSG_AT_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_message_at, c.last_message_at) ELSE t.last_message_at END`;
+const TICKET_LAST_MSG_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_message, c.last_message) ELSE t.last_message END`;
+const TICKET_LAST_CUST_MSG_AT_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) ELSE t.last_customer_message_at END`;
+const TICKET_LAST_CUST_MSG_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_customer_message, c.last_customer_message) ELSE t.last_customer_message END`;
+const TICKET_HAS_UNREAD_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.has_unread, c.has_unread, false) ELSE COALESCE(t.has_unread, false) END`;
+const TICKET_AWAITING_REPLY_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.awaiting_reply, c.awaiting_reply, false) ELSE COALESCE(t.awaiting_reply, false) END`;
+const EXCLUDE_PHANTOM_LINE_TICKET_SQL = `AND (COALESCE(t.whatsapp_number_id, 1) = 1 OR t.last_message_at IS NOT NULL OR t.last_customer_message_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM tickets t1 WHERE t1.customer_id = t.customer_id AND COALESCE(t1.whatsapp_number_id, 1) = 1 AND t1.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}))`;
+
 const DORMANT_ELIGIBLE_BUCKET_SQL = `(${BUCKET_CASE_SQL}) IN ('en_atencion', 'cotizacion', 'medio_pago')`;
 const DORMANCY_TIMESTAMP_SQL = `COALESCE(last_customer_message_at, last_message_at)`;
 function dormancyClauseSql(dormant) {
@@ -280,27 +288,27 @@ router.get('/pipeline', async (req, res, next) => {
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                CASE
                  WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN false
+                 WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 ELSE ${TICKET_HAS_UNREAD_SQL}
                END AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                t.updated_at AS stage_since,
-               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
-               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
+               ${TICKET_LAST_CUST_MSG_AT_SQL} AS last_customer_message_at,
+               ${TICKET_LAST_CUST_MSG_SQL} AS last_customer_message,
                CASE
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
-                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
-                  ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN false
+                  WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) >= (${TICKET_LAST_MSG_AT_SQL}) THEN true
+                  WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_MSG_AT_SQL}) IS NULL THEN true
+                  ELSE ${TICKET_AWAITING_REPLY_SQL}
                 END AS awaiting_reply,
-                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-                COALESCE(t.last_message, c.last_message) AS last_message,
+                ${TICKET_LAST_MSG_AT_SQL} AS last_message_at,
+                ${TICKET_LAST_MSG_SQL} AS last_message,
                 CASE
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN true
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN true
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN true
                   ELSE false
                 END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
@@ -311,7 +319,7 @@ router.get('/pipeline', async (req, res, next) => {
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${lClause} ${lineFilterSql}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} ${lClause} ${lineFilterSql}
       ),
       -- A duplicate open ticket for the same customer (n8n's handoff firing twice on
       -- the same inbound message, 2026-09-14 report — two identical cards, same phone,
@@ -462,27 +470,27 @@ router.get('/pipeline/card', async (req, res, next) => {
                c.id AS customer_id, c.full_name, c.whatsapp_number, c.created_at AS customer_created_at,
                CASE
                  WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN false
+                 WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 ELSE ${TICKET_HAS_UNREAD_SQL}
                END AS customer_has_unread, c.channel,
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                t.updated_at AS stage_since,
-               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
-               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
+               ${TICKET_LAST_CUST_MSG_AT_SQL} AS last_customer_message_at,
+               ${TICKET_LAST_CUST_MSG_SQL} AS last_customer_message,
                CASE
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) >= COALESCE(t.last_message_at, c.last_message_at) THEN true
-                  WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NOT NULL AND COALESCE(t.last_message_at, c.last_message_at) IS NULL THEN true
-                  ELSE COALESCE(t.awaiting_reply, c.awaiting_reply, false)
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN false
+                  WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) >= (${TICKET_LAST_MSG_AT_SQL}) THEN true
+                  WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_MSG_AT_SQL}) IS NULL THEN true
+                  ELSE ${TICKET_AWAITING_REPLY_SQL}
                 END AS awaiting_reply,
-                COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-                COALESCE(t.last_message, c.last_message) AS last_message,
+                ${TICKET_LAST_MSG_AT_SQL} AS last_message_at,
+                ${TICKET_LAST_MSG_SQL} AS last_message,
                 CASE
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN true
-                  WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN true
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN true
+                  WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN true
                   ELSE false
                 END AS last_message_by_advisor,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label, comp.name AS company_name,
@@ -493,7 +501,7 @@ router.get('/pipeline/card', async (req, res, next) => {
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
         LEFT JOIN companies comp ON brnd.company_id = comp.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} AND c.id = $1 ${linesClause(req.user, 't')} ${lineFilterSql}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} AND c.id = $1 ${linesClause(req.user, 't')} ${lineFilterSql}
       ),
       deduped AS (SELECT * FROM temped WHERE ticket_rn = 1)
       SELECT *, ${BUCKET_CASE_SQL} AS bucket
@@ -692,10 +700,10 @@ router.get('/pipeline/export', async (req, res, next) => {
                ${EFFECTIVE_STATUS_SQL} AS temperature,
                c.full_name, c.whatsapp_number,
                t.updated_at AS stage_since,
-               COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
-               COALESCE(t.last_customer_message, c.last_customer_message) AS last_customer_message,
-               COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
-               COALESCE(t.last_message, c.last_message) AS last_message,
+               ${TICKET_LAST_CUST_MSG_AT_SQL} AS last_customer_message_at,
+               ${TICKET_LAST_CUST_MSG_SQL} AS last_customer_message,
+               ${TICKET_LAST_MSG_AT_SQL} AS last_message_at,
+               ${TICKET_LAST_MSG_SQL} AS last_message,
                brnd.name AS brand_name, br.name AS branch_name, wn.label AS line_label,
                ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
         FROM tickets t
@@ -703,7 +711,7 @@ router.get('/pipeline/export', async (req, res, next) => {
         LEFT JOIN whatsapp_numbers wn ON t.whatsapp_number_id = wn.id
         LEFT JOIN branches br ON wn.branch_id = br.id
         LEFT JOIN brands brnd ON br.brand_id = brnd.id
-        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${linesClause(req.user, 't')} ${lineFilterSql}
+        WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} ${linesClause(req.user, 't')} ${lineFilterSql}
       ),
       -- Same duplicate-open-ticket collapse as /pipeline above — see its comment.
       deduped AS (
@@ -875,16 +883,16 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
                  t.updated_at AS stage_since,
                  CASE
                  WHEN t.status IN ('esperando_asesor', 'resuelto') THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) IS NOT NULL AND COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 WHEN COALESCE(t.last_message_at, c.last_message_at) > COALESCE(t.last_customer_message_at, c.last_customer_message_at) THEN false
-                 WHEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) IS NULL THEN false
-                 ELSE COALESCE(t.has_unread, c.has_unread, false)
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) IS NOT NULL AND (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 WHEN (${TICKET_LAST_MSG_AT_SQL}) > (${TICKET_LAST_CUST_MSG_AT_SQL}) THEN false
+                 WHEN (${TICKET_LAST_CUST_MSG_AT_SQL}) IS NULL THEN false
+                 ELSE ${TICKET_HAS_UNREAD_SQL}
                END AS customer_has_unread, c.created_at AS customer_created_at,
-                 COALESCE(t.last_customer_message_at, c.last_customer_message_at) AS last_customer_message_at,
-                 COALESCE(t.last_message_at, c.last_message_at) AS last_message_at,
+                 ${TICKET_LAST_CUST_MSG_AT_SQL} AS last_customer_message_at,
+                 ${TICKET_LAST_MSG_AT_SQL} AS last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
-          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${statsLineSql}
+          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} ${statsLineSql}
         ),
         -- Same duplicate-open-ticket collapse as /pipeline — see its comment. Has to
         -- happen before bucket_total/unread_total are counted, or a duplicate would

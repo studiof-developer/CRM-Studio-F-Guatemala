@@ -303,12 +303,27 @@ async function resolveSessionIds(threadKey) {
   return rows.map((r) => r.session_id);
 }
 
-export async function findConversationThread(threadKey, { limit = 50, user } = {}) {
+export async function findConversationThread(threadKey, { limit = 50, user, lineId: optLineId } = {}) {
   const { phone: extractedPhone, lineId: keyLineId } = parseThreadKey(threadKey);
-  let lineId = keyLineId;
+  let lineId = keyLineId || optLineId || null;
   let phone = extractedPhone;
 
-  // If lineId not explicit in threadKey, resolve from advisor's assigned lines
+  // If lineId not explicit in threadKey, resolve from latest active ticket for this phone FIRST
+  // so an advisor from another line opening a bare phone thread never spawns a duplicate cross-line ticket.
+  if (!lineId && phone && PHONE_RE.test(phone)) {
+    const { rows: tRows } = await pool.query(
+      `SELECT COALESCE(t.whatsapp_number_id, 1) AS whatsapp_number_id FROM tickets t
+       JOIN customers c ON c.id = t.customer_id
+       WHERE c.whatsapp_number = $1 AND t.status != 'resuelto'
+       ORDER BY (t.last_message_at IS NOT NULL OR t.last_customer_message_at IS NOT NULL) DESC, t.updated_at DESC, t.id DESC LIMIT 1`,
+      [phone]
+    );
+    if (tRows.length && tRows[0].whatsapp_number_id) {
+      lineId = tRows[0].whatsapp_number_id;
+    }
+  }
+
+  // If still no lineId, resolve from advisor's assigned lines
   if (!lineId && user?.role === 'asesor') {
     const { rows: assignedLines } = await pool.query(
       'SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1 LIMIT 1',
@@ -316,20 +331,6 @@ export async function findConversationThread(threadKey, { limit = 50, user } = {
     );
     if (assignedLines.length) {
       lineId = assignedLines[0].whatsapp_number_id;
-    }
-  }
-
-  // If still no lineId, resolve from latest active ticket for this phone
-  if (!lineId && phone && PHONE_RE.test(phone)) {
-    const { rows: tRows } = await pool.query(
-      `SELECT t.whatsapp_number_id FROM tickets t
-       JOIN customers c ON c.id = t.customer_id
-       WHERE c.whatsapp_number = $1 AND t.status != 'resuelto' AND t.whatsapp_number_id IS NOT NULL
-       ORDER BY t.updated_at DESC, t.id DESC LIMIT 1`,
-      [phone]
-    );
-    if (tRows.length && tRows[0].whatsapp_number_id) {
-      lineId = tRows[0].whatsapp_number_id;
     }
   }
 

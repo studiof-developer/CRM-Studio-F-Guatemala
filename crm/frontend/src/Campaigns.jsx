@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow, RefreshCw, ShieldCheck } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
 import MetaStrategyTab from './MetaStrategyTab.jsx';
@@ -437,7 +437,11 @@ function NewCampaignModal({ onClose, onSent }) {
   const canSend = !!lineId && !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
     && (temperature || manualPicked.length > 0) && totalRecipients > 0;
 
+  const sendingRef = useRef(false);
+
   async function handleSend() {
+    if (sendingRef.current || busy) return;
+    sendingRef.current = true;
     setBusy(true);
     try {
       const res = await createCampaign({
@@ -463,6 +467,7 @@ function NewCampaignModal({ onClose, onSent }) {
     } catch (err) {
       showError(err.message);
     } finally {
+      sendingRef.current = false;
       setBusy(false);
       setConfirmOpen(false);
     }

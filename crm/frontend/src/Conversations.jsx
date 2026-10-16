@@ -2439,6 +2439,14 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                     <Mail size={12} /> Marcar como no leído
                   </span>
                 )}
+                <span
+                  role="button"
+                  title="Abrir Cotizador / Calculadora de Prendas"
+                  onClick={(e) => { e.stopPropagation(); setQuoteOpen(true); }}
+                  className="flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-white"
+                >
+                  <Calculator size={12} /> Cotizar
+                </span>
               </div>
             </button>
 

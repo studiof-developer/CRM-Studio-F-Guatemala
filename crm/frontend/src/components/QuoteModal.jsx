@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Trash2, X, Calculator, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, X, Calculator, Image as ImageIcon, Check, Loader2, Download } from 'lucide-react';
 import { generateQuoteCardBlob } from '../lib/quoteImageGenerator.js';
 import { createQuote, fetchProducts, productImageUrl } from '../api.js';
 import { showSuccess, showError } from './Toast.jsx';
@@ -187,16 +187,17 @@ export default function QuoteModal({
     return text;
   }
 
-  async function handleSend() {
+  async function handleSend(downloadOnly = false) {
     if (!items.length) {
       showError('Agrega al menos una prenda para cotizar');
       return;
     }
     setIsGenerating(true);
     try {
-      // 1. Guardar en base de datos
+      // 1. Guardar en base de datos (o generar correlativo)
       const saved = await createQuote({
-        customerId: customer.id,
+        customerId: customer?.id || null,
+        whatsappNumber: customer?.whatsappNumber || null,
         whatsappNumberId: activeLine?.id || null,
         items,
         subtotal,
@@ -222,10 +223,22 @@ export default function QuoteModal({
       const file = new File([blob], `cotizacion-${quoteNum}.png`, { type: 'image/png' });
       const caption = buildQuoteMessageText(quoteNum);
 
-      // 3. Enviar a través del chat
-      if (onSendQuoteImage) {
-        await onSendQuoteImage(file, caption);
+      if (downloadOnly || !onSendQuoteImage) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cotizacion-${quoteNum}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        try { await navigator.clipboard.writeText(caption); } catch { /* ignore */ }
+        showSuccess(`Cotización ${quoteNum} descargada y texto copiado al portapapeles`);
+        return;
       }
+
+      // 3. Enviar a través del chat
+      await onSendQuoteImage(file, caption);
 
       showSuccess(`Cotización ${quoteNum} generada y lista para enviar`);
       onClose();
@@ -248,9 +261,9 @@ export default function QuoteModal({
               <Calculator size={18} />
             </span>
             <div>
-              <h2 className="text-base font-semibold text-ink">Cotizador de Prendas</h2>
+              <h2 className="text-base font-semibold text-ink">Cotizador / Calculadora de Prendas</h2>
               <p className="text-xs text-greige-ink">
-                Cliente: <span className="font-medium text-ink">{customer?.fullName || customer?.whatsappNumber}</span> · Línea: <span className="font-medium text-ink">{activeLine?.label || 'Studio F'}</span>
+                Cliente: <span className="font-medium text-ink">{customer?.fullName || customer?.whatsappNumber || 'General'}</span> · Línea: <span className="font-medium text-ink">{activeLine?.label || 'Studio F'}</span>
               </p>
             </div>
           </div>
@@ -521,9 +534,9 @@ export default function QuoteModal({
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between border-t border-line px-6 py-4 bg-paper">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-4 bg-paper">
           <p className="text-xs text-greige">
-            Se generará una tarjeta PNG estilizada para enviar al chat.
+            Se generará una tarjeta PNG estilizada {onSendQuoteImage ? 'para enviar al chat o descargar.' : 'lista para descargar y copiar.'}
           </p>
           <div className="flex items-center gap-2.5">
             <button
@@ -533,9 +546,21 @@ export default function QuoteModal({
             >
               Cancelar
             </button>
+            {onSendQuoteImage && (
+              <button
+                type="button"
+                onClick={() => handleSend(true)}
+                disabled={items.length === 0 || isGenerating}
+                className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                title="Descargar imagen PNG y copiar texto"
+              >
+                <Download size={14} />
+                Descargar PNG
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleSend}
+              onClick={() => handleSend(false)}
               disabled={items.length === 0 || isGenerating}
               className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
             >
@@ -544,10 +569,15 @@ export default function QuoteModal({
                   <Loader2 size={14} className="animate-spin" />
                   Generando imagen…
                 </>
-              ) : (
+              ) : onSendQuoteImage ? (
                 <>
                   <ImageIcon size={14} />
                   Enviar Cotización al Chat
+                </>
+              ) : (
+                <>
+                  <Download size={14} />
+                  Descargar Cotización PNG
                 </>
               )}
             </button>
