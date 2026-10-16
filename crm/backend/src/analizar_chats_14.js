@@ -55,7 +55,7 @@ export async function analizarChats14Octubre() {
     FROM n8n_chat_histories h
     LEFT JOIN customers c ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
     LEFT JOIN message_attachments att ON att.n8n_message_id = h.id
-    WHERE (h.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
+    WHERE (h.created_at AT TIME ZONE 'America/Guatemala')::date IN ('2026-10-14', '2026-10-15')
       AND (
         att.id IS NOT NULL 
         OR h.message->'additional_kwargs'->>'hasAttachment' = 'true'
@@ -63,12 +63,12 @@ export async function analizarChats14Octubre() {
       )
   `);
 
-  // 5. Clientes con ventas registradas el 14 de octubre
+  // 5. Clientes con ventas registradas el 14 o 15 de octubre
   const { rows: salesRows14 } = await pool.query(`
     SELECT DISTINCT c.whatsapp_number, c.id as customer_id, c.full_name
     FROM sales s
     JOIN customers c ON s.customer_id = c.id
-    WHERE (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-14'
+    WHERE (s.created_at AT TIME ZONE 'America/Guatemala')::date IN ('2026-10-14', '2026-10-15')
   `);
 
   // Unificar teléfonos únicos a auditar

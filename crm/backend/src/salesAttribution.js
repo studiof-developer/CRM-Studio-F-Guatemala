@@ -2,7 +2,7 @@ import { pool } from './db.js';
 import { logBusinessAction } from './auditLog.js';
 import { broadcast } from './events.js';
 
-export const CONFIRMATION_PHRASES_REGEX = /\b(gracias\s+por\s+(su|tu)\s+compra|pago\s+(recibido|confirmado|verificado|acreditado)|comprobante\s+(recibido|verificado|confirmado)|pedido\s+(confirmado|registrado)|hemos\s+recibido\s+(su|tu)\s+pago|confirmamos\s+(su|tu)\s+pago|ya\s+qued[oó]\s+registrad[ao]|pago\s+con\s+[eé]xito|muchas\s+gracias\s+por\s+(su|tu)\s+pago)\b/i;
+export const CONFIRMATION_PHRASES_REGEX = /\b(gracias\s+por\s+(su|tu)\s+compra|pago\s+(recibido|confirmado|verificado|acreditado)|comprobante\s+(recibido|verificado|confirmado)|pedido\s+(confirmado|registrado)|hemos\s+recibido\s+(su|tu)\s+pago|confirmamos\s+(su|tu)\s+pago|ya\s+qued[oó]\s+registrad[ao]|pago\s+con\s+[eé]xito|muchas\s+gracias\s+por\s+(su|tu)\s+pago|proceso\s+de\s+alistamiento|pedido\s+ya\s+est[aá]\s+en\s+proceso|agregado\s+a\s+la\s+compra)\b/i;
 
 export function isConfirmationMessage(text) {
   if (!text || typeof text !== 'string') return false;
@@ -35,7 +35,7 @@ export async function extractPriceFromRecentAdvisorMessages(whatsappNumber, befo
   for (const r of rows) {
     const text = r.content || '';
     // Look for explicit "total: Q539", "total Q1930", "total son 539", "serían Q539", "son Q539", etc.
-    const totalMatch = text.match(/(?:total|son|ser[ií]an|depositar|cancelar|pagar)[^\d]{0,15}Q?\.?\s*(\d{2,4}(?:\.\d{2})?)/i);
+    const totalMatch = text.match(/(?:total|son|ser[ií]an|depositar|cancelar|pagar|queda\s+(?:hoy\s+)?en)[^\d]{0,15}Q?\.?\s*(\d{2,4}(?:\.\d{2})?)/i);
     if (totalMatch) {
       const val = parseFloat(totalMatch[1]);
       if (val >= 50 && val <= 10000) return val;
@@ -70,24 +70,29 @@ export async function autoRecordSale({
   if (!customerId) return null;
 
   try {
+    // Never record a sale if the note indicates an unrecognized image / non-receipt
+    if (notes && /no se reconoci[oó] como comprobante/i.test(notes)) {
+      return null;
+    }
+
     // 1. Prevent duplicates for the same purchase. Same customer + same day counts as the
-    // same sale, unless an explicit amount is given that differs from every sale already
-    // recorded that day (a genuine second purchase).
+    // same sale, unless a second verified OCR receipt (receiptAmount > 0) is provided with a different amount.
     const dateCheckSql = createdAt
       ? `AND date_trunc('day', created_at AT TIME ZONE 'America/Guatemala') = date_trunc('day', $2::timestamptz AT TIME ZONE 'America/Guatemala')`
       : `AND date_trunc('day', created_at AT TIME ZONE 'America/Guatemala') = date_trunc('day', now() AT TIME ZONE 'America/Guatemala')`;
     const dateParams = createdAt ? [customerId, createdAt] : [customerId];
 
     const { rows: existingSales } = await pool.query(
-      `SELECT id, amount FROM sales WHERE customer_id = $1 ${dateCheckSql} ORDER BY id DESC`,
+      `SELECT id, amount, notes FROM sales WHERE customer_id = $1 ${dateCheckSql} ORDER BY id DESC`,
       dateParams
     );
 
     if (existingSales.length > 0) {
       const explicitAmount = Number(amount);
-      const isNewPurchase = explicitAmount > 0
+      const hasVerifiedSecondReceipt = Number(receiptAmount) > 0 && explicitAmount > 0;
+      const isNewPurchase = hasVerifiedSecondReceipt
         && !existingSales.some((s) => Math.abs(Number(s.amount) - explicitAmount) < 0.5);
-      if (!isNewPurchase) return existingSales[0]; // Already recorded
+      if (!isNewPurchase) return existingSales[0]; // Already recorded today
     }
 
     // 2. Fetch customer details
@@ -128,13 +133,12 @@ export async function autoRecordSale({
     }
 
     // 4. Resolve attending advisor, recording which rule decided it.
-    // CHAT ATTENDANT PRIORITY: The advisor who actually engaged with the customer in the chat
-    // in the 48h before payment ALWAYS takes precedence over whoever clicked a button or had the ticket.
+    // SHIFT ATTENDANT PRIORITY: The advisor who MOST RECENTLY wrote to the customer in the chat
+    // right before the payment is the one who closed the sale in her shift.
     let advisorName = null;
     let advisorId = null;
     let attributedBy = null;
 
-    // 1st: The advisor who actually wrote to this customer in the chat in the 48h before the payment
     if (customer.whatsapp_number) {
       const timeFilter = createdAt
         ? `AND h.created_at <= $2::timestamptz + interval '1 hour' AND h.created_at >= $2::timestamptz - interval '48 hours'`
@@ -143,6 +147,7 @@ export async function autoRecordSale({
 
       const { rows: chatAdvisorRows } = await pool.query(
         `SELECT h.message->'additional_kwargs'->>'advisorName' AS advisor_name,
+                MAX(h.id) AS last_msg_id,
                 COUNT(*)::int AS msg_count
          FROM n8n_chat_histories h
          WHERE (h.session_id = $1 OR h.session_id LIKE $1 || '__%')
@@ -152,7 +157,7 @@ export async function autoRecordSale({
            AND h.message->'additional_kwargs'->>'advisorName' NOT IN ('asesor', 'bot', 'sistema', '')
            ${timeFilter}
          GROUP BY 1
-         ORDER BY msg_count DESC, MAX(h.id) DESC
+         ORDER BY MAX(h.id) DESC, msg_count DESC
          LIMIT 1`,
         chatParams
       );
@@ -435,6 +440,77 @@ export async function reconcileAllSalesFromChats() {
   try {
     await client.query('BEGIN');
 
+    // 0. Purge false-positive sales created by unrecognized images (e.g. dress/catalog photos)
+    // where the customer had NO real payment evidence on that day.
+    await client.query(`
+      DELETE FROM sales s
+      USING customers c
+      WHERE s.customer_id = c.id
+        AND (s.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
+        AND s.notes LIKE '%no se reconoció como comprobante%'
+        AND NOT EXISTS (
+          SELECT 1 FROM n8n_chat_histories h
+          WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
+            AND (h.created_at AT TIME ZONE 'America/Guatemala')::date = (s.created_at AT TIME ZONE 'America/Guatemala')::date
+            AND (
+              (
+                (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\\.[0-9]+)?$'
+                AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric >= 50
+                AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric <= 10000
+              )
+              OR (
+                h.message->>'type' = 'ai'
+                AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
+                AND h.message->>'content' ~* '(proceso\\s+de\\s+alistamiento|pedido\\s+ya\\s+est[aá]\\s+en\\s+proceso|gracias\\s+por\\s+(su|tu)\\s+compra|pago\\s+(recibido|confirmado|verificado)|comprobante\\s+(recibido|verificado|confirmado)|agregado\\s+a\\s+la\\s+compra)'
+              )
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM access_audit aa
+          WHERE aa.customer_id = s.customer_id
+            AND aa.action = 'customer_marked_paid'
+            AND aa.actor NOT ILIKE '%OCR%'
+            AND aa.actor NOT ILIKE '%Sistema%'
+            AND (aa.accessed_at AT TIME ZONE 'America/Guatemala')::date = (s.created_at AT TIME ZONE 'America/Guatemala')::date
+        )
+    `);
+
+    // 0b. If a customer had multiple rows on the same day with 'no se reconoció como comprobante'
+    // (because they sent multiple dress photos before actually paying), keep only one and upgrade its timestamp/note
+    await client.query(`
+      DELETE FROM sales s1
+      USING sales s2
+      WHERE s1.customer_id = s2.customer_id
+        AND s1.id > s2.id
+        AND (s1.created_at AT TIME ZONE 'America/Guatemala')::date = (s2.created_at AT TIME ZONE 'America/Guatemala')::date
+        AND (s1.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
+        AND s1.notes LIKE '%no se reconoció como comprobante%'
+    `);
+
+    await client.query(`
+      UPDATE sales s
+      SET
+        notes = 'Comprobante y alistamiento verificado en chat',
+        created_at = COALESCE(
+          (
+            SELECT h.created_at
+            FROM n8n_chat_histories h
+            JOIN customers c ON c.id = s.customer_id
+            WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
+              AND (h.created_at AT TIME ZONE 'America/Guatemala')::date = (s.created_at AT TIME ZONE 'America/Guatemala')::date
+              AND (
+                ((h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\\.[0-9]+)?$' AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric >= 50)
+                OR (h.message->>'type' = 'ai' AND h.message->>'content' ~* '(proceso\\s+de\\s+alistamiento|gracias\\s+por\\s+(su|tu)\\s+compra|pago\\s+(recibido|confirmado))')
+              )
+            ORDER BY h.id DESC
+            LIMIT 1
+          ),
+          s.created_at
+        )
+      WHERE s.notes LIKE '%no se reconoció como comprobante%'
+        AND (s.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
+    `);
+
     // 1. Deduplicate duplicate sales (keep one record, delete duplicates within 24h)
     await client.query(`
       DELETE FROM sales
@@ -693,20 +769,23 @@ export async function reconcileAllSalesFromChats() {
       WHERE s.customer_id = c.id
         AND (c.whatsapp_number LIKE '%4043264%' OR c.full_name ILIKE '%Ana%Melgar%');
 
-      -- Re-atribuir ventas donde Leydi marcó el pago o atendió el ticket
-      UPDATE sales s
-      SET advisor_name = 'Leydi Laura Mosquera'
-      FROM access_audit aa
-      WHERE aa.customer_id = s.customer_id
-        AND aa.action = 'customer_marked_paid'
-        AND aa.actor ILIKE '%Leydi%';
+    `);
 
-      UPDATE sales s
-      SET advisor_name = 'Leydi Laura Mosquera'
-      FROM tickets t
-      WHERE t.customer_id = s.customer_id
-        AND t.assigned_advisor ILIKE '%Leydi%'
-        AND s.notes NOT LIKE '%turno 14/10%';
+    // 4b. Reconcile Yesenia Galvez (50246041682) on 15/10: Two real NeoLink purchases closed by Luisa Cristancho (Q1,056.00 at 10:48 and Q649.00 at 11:17)
+    await client.query(`
+      DELETE FROM sales s
+      USING customers c
+      WHERE s.customer_id = c.id
+        AND c.whatsapp_number = '50246041682'
+        AND (s.created_at AT TIME ZONE 'America/Guatemala')::date = '2026-10-15';
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id, attributed_by)
+      SELECT c.id, 'Luisa Cristancho', 1056.00, 'tarjeta', 'confirmada', 'ocr', 'Pago NeoLink Q1,056 confirmado por OCR y alistamiento Luisa 15/10', '2026-10-15 10:48:07-06'::timestamptz, 1, 'asesor_en_turno_dia'
+      FROM customers c WHERE c.whatsapp_number = '50246041682' LIMIT 1;
+
+      INSERT INTO sales (customer_id, advisor_name, amount, payment_method, status, amount_source, notes, created_at, whatsapp_number_id, attributed_by)
+      SELECT c.id, 'Luisa Cristancho', 649.00, 'tarjeta', 'confirmada', 'chat_cotizado', 'Segundo pedido NeoLink Q649 agregado a la compra Luisa 15/10', '2026-10-15 11:17:17-06'::timestamptz, 1, 'asesor_en_turno_dia'
+      FROM customers c WHERE c.whatsapp_number = '50246041682' LIMIT 1;
     `);
 
     // 5. Prioritize actual OCR receipt amounts from chat deposit slips over preliminary quotes
@@ -723,18 +802,18 @@ export async function reconcileAllSalesFromChats() {
         FROM sales s
         JOIN customers c ON s.customer_id = c.id
         JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
-        WHERE (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\.[0-9]+)?$'
-          AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric > 0
+        WHERE (h.message->'additional_kwargs'->>'ocrAmount') ~ '^[0-9]+(\\.[0-9]+)?$'
+          AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric >= 50
           AND (h.message->'additional_kwargs'->>'ocrAmount')::numeric <= 10000
-          AND h.created_at <= s.created_at + interval '24 hours'
-          AND h.created_at >= s.created_at - interval '7 days'
+          AND (h.created_at AT TIME ZONE 'America/Guatemala')::date = (s.created_at AT TIME ZONE 'America/Guatemala')::date
         ORDER BY s.id, h.id DESC
       ) ocr_sub
       WHERE sales.id = ocr_sub.sale_id
-        AND (sales.amount = 0 OR sales.amount IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Comprobante verificado%' AND sales.amount_source != 'ocr'))
+        AND (sales.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
+        AND (sales.amount = 0 OR sales.amount IS NULL OR (sales.notes NOT LIKE '%Monto corregido%' AND sales.notes NOT LIKE '%Comprobante verificado%' AND sales.notes NOT LIKE '%Segundo pedido%' AND sales.amount_source != 'ocr'))
     `);
 
-    // 6. Smart Re-attribution: Attribute each sale to the advisor in turn who actually conversed with that customer on the purchase date
+    // 6. Smart Re-attribution: Attribute each sale to the advisor in turn who MOST RECENTLY conversed with that customer right before/at the purchase
     const { rowCount: reattributedCount } = await client.query(`
       UPDATE sales
       SET
@@ -754,6 +833,7 @@ export async function reconcileAllSalesFromChats() {
               WHEN h.message->'additional_kwargs'->>'advisorName' ILIKE '%Aura%' THEN 'Aura Cristina Carvajal Delgado'
               ELSE h.message->'additional_kwargs'->>'advisorName'
             END AS advisor_name,
+            MAX(h.id) AS last_msg_id,
             COUNT(*) AS cnt
           FROM n8n_chat_histories h
           WHERE (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
@@ -761,10 +841,10 @@ export async function reconcileAllSalesFromChats() {
             AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
             AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
             AND h.message->'additional_kwargs'->>'advisorName' NOT IN ('asesor', 'bot', 'sistema', '')
-            AND h.created_at <= s.created_at + interval '4 hours'
-            AND h.created_at >= s.created_at - interval '36 hours'
+            AND h.created_at <= s.created_at + interval '2 hours'
+            AND h.created_at >= s.created_at - interval '24 hours'
           GROUP BY 1
-          ORDER BY cnt DESC, MAX(h.id) DESC
+          ORDER BY MAX(h.id) DESC, cnt DESC
           LIMIT 1
         ) adv_counts
         WHERE adv_counts.advisor_name IS NOT NULL
@@ -773,13 +853,10 @@ export async function reconcileAllSalesFromChats() {
         AND (sales.created_at AT TIME ZONE 'America/Guatemala')::date != '2026-10-14'
         AND (sales.notes IS NULL OR (
           sales.notes NOT LIKE '%14/10%'
-          AND sales.notes NOT LIKE '%turno%'
-          AND sales.notes NOT LIKE '%confirmad%'
           AND sales.notes NOT LIKE '%Monto corregido%'
-          AND sales.notes NOT LIKE '%Venta confirmada%'
-          AND sales.notes NOT LIKE '%Comprobante verificado%'
+          AND sales.notes NOT LIKE '%el 12 de octubre%'
+          AND sales.notes NOT LIKE '%el 29 de septiembre%'
         ))
-        AND sales.advisor_name NOT IN ('Leydi Laura Mosquera', 'Aura Cristina Carvajal Delgado')
     `);
 
     // 7. Normalize advisor names
@@ -807,7 +884,7 @@ export async function reconcileAllSalesFromChats() {
       FROM (
         SELECT DISTINCT ON (s.id)
           s.id AS sale_id,
-          (regexp_match(h.message->>'content', '(?i)(?:total|son|ser[ií]an|depositar|cancelar|pagar)?[^\d]{0,10}Q\.?\s*([0-9]{2,4})'))[1]::numeric AS val
+          (regexp_match(h.message->>'content', '(?i)(?:total|son|ser[ií]an|depositar|cancelar|pagar)?[^\\d]{0,10}Q\\.?\\s*([0-9]{2,4})'))[1]::numeric AS val
         FROM sales s
         JOIN customers c ON s.customer_id = c.id
         JOIN n8n_chat_histories h ON (h.session_id = c.whatsapp_number OR h.session_id LIKE c.whatsapp_number || '__%' OR h.session_id LIKE '%' || RIGHT(c.whatsapp_number, 8))
@@ -816,7 +893,7 @@ export async function reconcileAllSalesFromChats() {
           AND (h.message->'additional_kwargs'->>'sentBy') = 'advisor'
           AND h.created_at <= s.created_at + interval '24 hours'
           AND h.created_at >= s.created_at - interval '7 days'
-          AND h.message->>'content' ~* 'Q\.?\s*[0-9]{2,4}'
+          AND h.message->>'content' ~* 'Q\\.?\\s*[0-9]{2,4}'
         ORDER BY s.id, h.id DESC
       ) sub
       WHERE sales.id = sub.sale_id
@@ -857,7 +934,28 @@ export async function reconcileAllSalesFromChats() {
       WHERE sales.customer_id = t.customer_id AND sales.whatsapp_number_id IS NULL;
     `);
 
-    // 11. Sincronizar estado en todos los clientes compradores a "despacho" y paid_locked = true
+    // 11. Reset customers who were falsely marked paid/despacho by deleted unrecognized-image sales
+    await client.query(`
+      UPDATE customers c
+      SET paid_locked = false,
+          manual_status = NULL,
+          paid_method = NULL,
+          updated_at = now()
+      WHERE c.paid_locked = true
+        AND COALESCE(c.purchase_frequency, 0) = 0
+        AND NOT EXISTS (
+          SELECT 1 FROM sales s WHERE s.customer_id = c.id AND s.status = 'confirmada' AND s.amount > 0
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM access_audit aa
+          WHERE aa.customer_id = c.id
+            AND aa.action = 'customer_marked_paid'
+            AND aa.actor NOT ILIKE '%OCR%'
+            AND aa.actor NOT ILIKE '%Sistema%'
+        );
+    `);
+
+    // 11b. Sincronizar estado en todos los clientes compradores reales a "despacho" y paid_locked = true
     const { rowCount: syncedCustomersCount } = await client.query(`
       UPDATE customers
       SET paid_locked = true,

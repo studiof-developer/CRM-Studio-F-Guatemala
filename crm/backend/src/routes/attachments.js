@@ -21,24 +21,18 @@ import { autoRecordSale } from '../salesAttribution.js';
 // didn't actually happen.
 async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = null) {
   const { rows: updated } = await pool.query(
-    `UPDATE customers AS c SET paid_locked = true, paid_method = $2, manual_status = 'pagado',
+    `UPDATE customers AS c SET paid_locked = true, paid_method = $2,
+       manual_status = CASE WHEN c.manual_status = 'pqrs' THEN 'pqrs' ELSE 'despacho' END,
        payment_suggested_at = NULL, payment_suggestion_reason = NULL, payment_suggestion_method = NULL,
        updated_at = now()
-     WHERE c.id = $1 AND c.paid_locked = false AND (${EFFECTIVE_STATUS_SQL}) = 'caliente'
+     WHERE c.id = $1
      RETURNING c.id`,
     [customerId, paidMethod]
   );
   if (updated.length) {
-    // Also sets manual_status='pagado' — unlike the manual "Marcar como Pagado" button
-    // (customers.js), which only sets paid_locked and was leaving the Pipeline card
-    // sitting in whatever column it was already in.
     logBusinessAction({ fullName: 'Sistema (OCR)', id: null }, customerId, 'customer_marked_paid', detailNote);
 
     if (amount && Number(amount) > 0) {
-      // Same attribution engine as the manual path: advisor who last wrote to the customer
-      // in the 48h before the receipt (not just the ticket's assigned advisor, which is
-      // empty whenever nobody pressed "Tomar conversación"), and the receipt is validated
-      // against the latest quote.
       await autoRecordSale({
         customerId,
         user: { fullName: 'Sistema (OCR)', id: null },
@@ -48,7 +42,9 @@ async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = n
         notes: 'Confirmado automáticamente por OCR',
       });
     }
+    return true;
   }
+  return false;
 }
 
 const router = Router();
@@ -233,6 +229,7 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
      WHERE h.session_id LIKE $1 || '%'
        AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
        AND h.message->>'content' ~ 'Q\\s?\\d{1,5}|\\d{1,5}[.,]\\d{2}'
+       AND h.created_at >= now() - interval '48 hours'
      ORDER BY h.id DESC LIMIT 1`,
     [phone]
   );
@@ -242,83 +239,74 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
     ? parseAmount(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
     : null;
 
-  if (expectedAmount) {
-    const ocrText = await extractText(buffer).catch((err) => {
-      console.error('receipt OCR failed', err);
-      return '';
-    });
-    const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
+  const ocrText = await extractText(buffer).catch((err) => {
+    console.error('receipt OCR failed', err);
+    return '';
+  });
+  const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
+  const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
 
-    if (receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
-      const paidMethod = guessPaidMethod(ocrText);
+  if (ocrAmount != null && ocrAmount > 0 && ocrAmount <= 10000) {
+    await pool.query(
+      `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
+      [inboundMessageId, ocrAmount]
+    );
+  }
+
+  if (expectedAmount && receiptContainsAmount(ocrText, expectedAmount, extraReceiptKeywords)) {
+    const paidMethod = guessPaidMethod(ocrText);
+    await confirmAutoPayment(
+      customerId,
+      paidMethod,
+      `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`,
+      expectedAmount
+    );
+    autoConfirmed = true;
+  } else if (ocrAmount != null && ocrAmount >= 50 && ocrAmount <= 10000) {
+    const paidMethod = guessPaidMethod(ocrText);
+    if (expectedAmount) {
+      const { rows: summed } = await pool.query(
+        `SELECT COALESCE(SUM((h.message->'additional_kwargs'->>'ocrAmount')::numeric), 0) AS total
+         FROM n8n_chat_histories h
+         WHERE h.session_id LIKE $1 || '%'
+           AND h.message->>'type' = 'human'
+           AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
+           AND h.created_at >= now() - make_interval(hours => $2::int)`,
+        [phone, contextHours]
+      );
+      if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
+        await confirmAutoPayment(
+          customerId,
+          paidMethod,
+          `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`,
+          expectedAmount
+        );
+        autoConfirmed = true;
+      }
+    }
+
+    if (!autoConfirmed) {
+      // Valid bank/NeoLink receipt with receipt keywords and valid retail amount (e.g. NeoLink link sent without plain-text quote or multi-item total)
       await confirmAutoPayment(
         customerId,
         paidMethod,
-        `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`,
-        expectedAmount
+        `${paidMethod} — Comprobante verificado por OCR por Q${ocrAmount}: "${ocrSnippet}" (automático)`,
+        ocrAmount
       );
       autoConfirmed = true;
-    } else {
-      const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
-      if (ocrAmount != null) {
-        await pool.query(
-          `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
-          [inboundMessageId, ocrAmount]
-        );
-        const { rows: summed } = await pool.query(
-          `SELECT COALESCE(SUM((h.message->'additional_kwargs'->>'ocrAmount')::numeric), 0) AS total
-           FROM n8n_chat_histories h
-           WHERE h.session_id LIKE $1 || '%'
-             AND h.message->>'type' = 'human'
-             AND h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL
-             AND h.created_at >= now() - make_interval(hours => $2::int)`,
-          [phone, contextHours]
-        );
-        if (Math.round(Number(summed[0].total)) === Math.round(expectedAmount)) {
-          const paidMethod = guessPaidMethod(ocrText);
-          await confirmAutoPayment(
-            customerId,
-            paidMethod,
-            `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`,
-            expectedAmount
-          );
-          autoConfirmed = true;
-        }
-      }
-
-      if (!autoConfirmed) {
-        suggestionReason = ocrAmount != null
-          ? `El cliente envió una imagen (posible comprobante de pago) — leyó Q${ocrAmount}, pero se había cotizado Q${expectedAmount}`
-          : `El cliente envió una imagen (posible comprobante de pago) — no se reconoció como comprobante (sin monto ni palabras de recibo)`;
-        logBusinessAction(
-          { fullName: 'Sistema (OCR)', id: null },
-          customerId,
-          'payment_ocr_no_match',
-          `Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}"${ocrAmount != null ? ` (monto detectado: Q${ocrAmount})` : ''}`
-        );
-
-        // Auto-record sale with status 'revisar' or quoted amount so the sale is not lost
-        if (expectedAmount && expectedAmount > 0) {
-          await autoRecordSale({
-            customerId,
-            user: { fullName: 'Sistema (OCR)', id: null },
-            paymentMethod: guessPaidMethod(ocrText) || 'transferencia',
-            amount: expectedAmount,
-            notes: suggestionReason,
-          }).catch((e) => console.error('autoRecordSale on unconfirmed receipt failed:', e));
-        }
-      }
     }
   } else {
-    suggestionReason = 'El cliente envió una imagen (posible comprobante de pago) — no se ha cotizado ningún precio en esta conversación todavía';
-  }
-
-  if (!autoConfirmed) {
-    await pool.query(
-      `UPDATE customers SET payment_suggested_at = now(), payment_suggestion_reason = $2, payment_suggestion_method = NULL
-       WHERE id = $1 AND paid_locked = false`,
-      [customerId, suggestionReason]
-    );
+    // Image is NOT recognized as a payment receipt (e.g. photo of a dress, blouse, catalog screenshot).
+    // NEVER auto-record a sale for unrecognized images!
+    if (expectedAmount) {
+      suggestionReason = `El cliente envió una imagen — no se reconoció como comprobante (sin monto ni palabras de recibo)`;
+      logBusinessAction(
+        { fullName: 'Sistema (OCR)', id: null },
+        customerId,
+        'payment_ocr_no_match',
+        `Q${expectedAmount} cotizado, imagen sin formato de recibo: "${ocrSnippet}"`
+      );
+    }
   }
 }
 

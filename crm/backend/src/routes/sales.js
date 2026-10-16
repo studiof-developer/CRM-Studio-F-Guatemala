@@ -8,7 +8,10 @@ const router = Router();
 
 // Builds the date and line filter for sales queries using Guatemala local timezone
 function buildSalesFilter(period, from, to, lineId, params = []) {
-  const clauses = [];
+  const clauses = [
+    `s.amount > 0`,
+    `COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'`,
+  ];
 
   if (period === 'ayer') {
     clauses.push(`s.created_at >= (date_trunc('day', (now() AT TIME ZONE 'America/Guatemala') - interval '1 day') AT TIME ZONE 'America/Guatemala')`);
@@ -521,6 +524,8 @@ router.get('/daily-breakdown', async (req, res, next) => {
        FROM sales s
        WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
          AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
+         AND s.amount > 0
+         AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
          ${lineClause}
        GROUP BY day, s.advisor_name
        ORDER BY day ASC, monto DESC`,
@@ -542,6 +547,8 @@ router.get('/daily-breakdown', async (req, res, next) => {
        FROM sales s
        WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
          AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
+         AND s.amount > 0
+         AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
          ${lineClause}
        GROUP BY day
        ORDER BY day ASC`,
