@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { fetchErpCustomers, fetchErpInventory } from './erpClient.js';
+import { fetchErpCustomers, fetchErpInventory, fetchErpReferencePrices } from './erpClient.js';
 
 // Postgres parses an ISO datetime string as a DATE just fine, but this makes the
 // "no date given" case explicit instead of handing it an empty string.
@@ -66,8 +66,74 @@ function isSellableSucursal(sucursal) {
   return !/imperfecto/i.test(sucursal || '');
 }
 
+function buildReferencePriceMap(refPriceRows) {
+  const exactMap = new Map();
+  const baseMap = new Map();
+  for (const r of refPriceRows || []) {
+    const rawRef = String(r?.Referencia ?? r?.referencia ?? '').trim().toUpperCase();
+    const priceVal = Number(r?.Precio ?? r?.precio ?? r?.PrecioVenta ?? r?.Valor);
+    if (!rawRef || !Number.isFinite(priceVal) || priceVal <= 0) continue;
+    exactMap.set(rawRef, priceVal);
+    const baseRef = rawRef.replace(/[A-Z]$/, '');
+    if (baseRef && baseRef !== rawRef && !baseMap.has(baseRef)) {
+      baseMap.set(baseRef, priceVal);
+    }
+  }
+  return { exactMap, baseMap };
+}
+
+function lookupReferencePrice({ exactMap, baseMap }, rawRef) {
+  if (!rawRef) return null;
+  const clean = String(rawRef).trim().toUpperCase();
+  if (!clean) return null;
+  if (exactMap.has(clean)) return exactMap.get(clean);
+  const base = clean.replace(/[A-Z]$/, '');
+  if (base && exactMap.has(base)) return exactMap.get(base);
+  if (base && baseMap.has(base)) return baseMap.get(base);
+  return null;
+}
+
+async function applyReferencePricesToExistingProducts(exactMap) {
+  const entries = [...exactMap.entries()];
+  if (!entries.length) return 0;
+  let updatedTotal = 0;
+  const CHUNK = 500;
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const chunk = entries.slice(i, i + CHUNK);
+    const values = [];
+    const tuples = chunk.map(([ref, price], idx) => {
+      values.push(ref, price);
+      const base = idx * 2;
+      return `($${base + 1}::text, $${base + 2}::numeric)`;
+    }).join(',');
+
+    const res = await pool.query(
+      `UPDATE products p
+       SET price = v.price
+       FROM (VALUES ${tuples}) AS v(ref, price)
+       WHERE (
+         UPPER(TRIM(p.reference)) = v.ref
+         OR REGEXP_REPLACE(UPPER(TRIM(COALESCE(p.reference, ''))), '[A-Z]$', '') = v.ref
+         OR SPLIT_PART(UPPER(TRIM(p.sku)), '_', 1) = v.ref
+       )
+       AND (p.price IS DISTINCT FROM v.price)`,
+      values
+    );
+    updatedTotal += res.rowCount || 0;
+  }
+  return updatedTotal;
+}
+
 async function syncErpInventory() {
-  const rows = await fetchErpInventory();
+  const [rows, refPriceRows] = await Promise.all([
+    fetchErpInventory(),
+    fetchErpReferencePrices().catch((err) => {
+      console.error('ERP ref-precio sync warning:', err.message);
+      return [];
+    }),
+  ]);
+
+  const priceMaps = buildReferencePriceMap(refPriceRows);
 
   // One existencia row per sucursal — collapsed here into one row per sellable item
   // (CodBarras or Referencia+Talla+Color), summing available stock across
@@ -79,12 +145,14 @@ async function syncErpInventory() {
     const skuKey = r.CodBarras || `${r.Referencia}_${r.Talla || 'U'}_${r.Color || r.ColorSF || 'U'}`;
     let p = bySku.get(skuKey);
     if (!p) {
-      const priceVal = Number(r.Precio || r.PrecioVenta || r.PrecioPublico || r.PrecioLista || r.Valor || r.PVP || r.PrecioFinal || r.PrecioUnitario);
-      const price = Number.isFinite(priceVal) && priceVal > 0 ? priceVal : null;
+      const refPrice = lookupReferencePrice(priceMaps, r.Referencia);
+      const inlinePriceVal = Number(r.Precio || r.PrecioVenta || r.PrecioPublico || r.PrecioLista || r.Valor || r.PVP || r.PrecioFinal || r.PrecioUnitario);
+      const inlinePrice = Number.isFinite(inlinePriceVal) && inlinePriceVal > 0 ? inlinePriceVal : null;
+      const price = refPrice ?? inlinePrice ?? 0;
       p = {
         sku: skuKey,
-        reference: r.Referencia || null,
-        barcode: r.CodBarras || null,
+        reference: r.Referencia ? String(r.Referencia).trim() : null,
+        barcode: r.CodBarras ? String(r.CodBarras).trim() : null,
         erp_article_id: Number(r.idArticulo) || null,
         name: r.DescripcionArticulo || r.NombreTallaColor || r.Referencia || skuKey,
         category: r.DescripTipoPrenda || 'Sin categoría',
@@ -106,12 +174,15 @@ async function syncErpInventory() {
     'sku',
     [
       'reference', 'barcode', 'erp_article_id', 'name', 'category', 'line', 'size', 'color', 'stock_quantity',
-      'price = COALESCE(EXCLUDED.price, products.price)',
+      'price = CASE WHEN EXCLUDED.price > 0 THEN EXCLUDED.price ELSE COALESCE(products.price, 0) END',
     ],
     products,
     (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, p.price, 0, p.stock, true]
   );
-  return products.length;
+
+  // Also ensure any existing products in DB not in today's existencia rows get their reference price synced
+  const extraPriceUpdates = await applyReferencePricesToExistingProducts(priceMaps.exactMap);
+  return { productsCount: products.length, refPricesCount: priceMaps.exactMap.size, extraPriceUpdates };
 }
 
 export async function runErpSync() {
@@ -122,9 +193,10 @@ export async function runErpSync() {
     console.error('ERP customers sync failed', err);
   }
   try {
-    const n = await syncErpInventory();
-    console.log(`ERP sync: ${n} productos actualizados`);
+    const res = await syncErpInventory();
+    console.log(`ERP sync: ${res.productsCount} productos actualizados (${res.refPricesCount} precios por referencia desde /api/data/ref-precio, ${res.extraPriceUpdates} adicionales sincronizados)`);
   } catch (err) {
     console.error('ERP inventory sync failed', err);
   }
 }
+

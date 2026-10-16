@@ -27,17 +27,18 @@ router.get('/inventory', async (req, res, next) => {
     const q = req.query.q?.trim();
     if (!q) return res.status(400).json({ error: 'q required' });
     const { rows } = await pool.query(
-      `SELECT sku, name, category, line, size, color, price, discount_pct, stock_quantity
+      `SELECT sku, reference, name, category, line, size, color, price, discount_pct, stock_quantity
        FROM products
        WHERE active
          AND stock_quantity > 0
-         AND (name ILIKE $1 OR category ILIKE $1 OR line ILIKE $1 OR color ILIKE $1 OR size ILIKE $1)
+         AND (reference ILIKE $1 OR sku ILIKE $1 OR name ILIKE $1 OR category ILIKE $1 OR line ILIKE $1 OR color ILIKE $1 OR size ILIKE $1)
        ORDER BY stock_quantity DESC
        LIMIT 15`,
       [`%${q}%`]
     );
     res.json(rows.map((r) => ({
       sku: r.sku,
+      referencia: r.reference,
       nombre: r.name,
       categoria: r.category,
       linea: r.line,

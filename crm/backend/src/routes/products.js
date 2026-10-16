@@ -63,6 +63,7 @@ router.get('/erp-inspect', requireRole('admin', 'supervisor'), async (req, res, 
       const candidates = [
         '/api/data/existencia',
         '/api/data/cliente-resumen-crm',
+        '/api/data/ref-precio',
         '/api/data/precios',
         '/api/data/precio',
         '/api/data/lista-precios',

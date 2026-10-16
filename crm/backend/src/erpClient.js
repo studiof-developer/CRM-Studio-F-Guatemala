@@ -68,6 +68,11 @@ export async function fetchErpInventory() {
   return body?.data ?? [];
 }
 
+export async function fetchErpReferencePrices() {
+  const body = await get('/api/data/ref-precio');
+  return body?.data ?? [];
+}
+
 export async function fetchErpPathSafe(path) {
   try {
     const data = await get(path);
