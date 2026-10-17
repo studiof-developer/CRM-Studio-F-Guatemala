@@ -1279,6 +1279,45 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
       buffer: req.file.buffer,
     });
 
+    // Advance pipeline stage and update ticket/customer preview when an attachment (e.g. quote PNG) is sent
+    if (phone) {
+      const previewLabel = (caption || `📎 ${req.file.originalname || 'Archivo adjunto'}`).slice(0, 255);
+      try {
+        await pool.query(
+          `UPDATE tickets SET
+             last_message = $1,
+             last_message_at = now(),
+             awaiting_reply = false,
+             status = CASE WHEN status = 'esperando_asesor' OR status = 'difusion_enviada' THEN 'en_atencion' ELSE status END,
+             assigned_advisor = COALESCE(assigned_advisor, $2),
+             first_response_at = COALESCE(first_response_at, now()),
+             updated_at = now()
+           WHERE customer_id = (SELECT id FROM customers WHERE whatsapp_number = $3)
+             AND (whatsapp_number_id = $4 OR ($4 = 1 AND whatsapp_number_id IS NULL))
+             AND status != 'resuelto'`,
+          [previewLabel, req.user.fullName, phone, lineId || 1]
+        );
+
+        await pool.query(
+          `UPDATE customers SET
+             last_message = $1,
+             last_message_at = now(),
+             awaiting_reply = false,
+             has_unread = false
+           WHERE whatsapp_number = $2`,
+          [previewLabel, phone]
+        );
+
+        await pool.query(
+          `INSERT INTO conversation_reads (phone, last_read_message_id, updated_at) VALUES ($1, $2, now())
+           ON CONFLICT (phone) DO UPDATE SET last_read_message_id = GREATEST(conversation_reads.last_read_message_id, $2), updated_at = now()`,
+          [phone, inserted[0].id]
+        );
+      } catch (err) {
+        console.error('Error updating ticket/customer state on advisor attachment send:', err);
+      }
+    }
+
     // Saved and shown already — the two sequential Meta round-trips (upload the media,
     // then send it) happen in the background instead of making the advisor wait on them,
     // same as text messages.

@@ -988,10 +988,47 @@ function SocialThreadPanel({
         activeLine={whatsappLines?.find((l) => l.id === 1) || { label: 'Studio F' }}
         advisor={user}
         catalog={catalogProducts}
-        onSendQuoteImage={async (file, caption) => {
+        onSendQuoteImage={async (file, caption, { sendImmediately = true } = {}) => {
           const previewUrl = URL.createObjectURL(file);
-          setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
-          if (caption) setDraft(caption);
+          if (info?.ticketStatus && info.ticketStatus !== 'en_atencion' && info.ticketStatus !== 'resuelto') {
+            try {
+              await takeSocialContact(contactId);
+              await loadInfo();
+            } catch {
+              /* continue */
+            }
+          }
+          if (sendImmediately) {
+            const tempId = `opt-quote-${Date.now()}`;
+            setMessages((prev) => [
+              ...(prev || []),
+              {
+                id: tempId,
+                direction: 'out',
+                body: caption || '',
+                createdAt: new Date().toISOString(),
+                pending: true,
+                attachment: {
+                  id: null,
+                  kind: 'image',
+                  filename: file.name,
+                  url: previewUrl,
+                },
+              },
+            ]);
+            try {
+              await sendSocialMessage(contactId, caption || '', file);
+              load();
+              loadInfo();
+              onCustomerChanged?.();
+            } catch (err) {
+              setMessages((prev) => (prev || []).filter((m) => m.id !== tempId));
+              throw err;
+            }
+          } else {
+            setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
+            if (caption) setDraft(caption);
+          }
         }}
       />
 
@@ -3243,11 +3280,41 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
         activeLine={whatsappLines.find((l) => l.id === activeLineId) || { label: 'Studio F' }}
         advisor={user}
         catalog={catalogProducts}
-        onSendQuoteImage={async (file, caption) => {
+        onSendQuoteImage={async (file, caption, { sendImmediately = true } = {}) => {
           if (!selectedId) return;
+          const targetId = selectedId;
           const previewUrl = URL.createObjectURL(file);
-          setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
-          if (caption) setDraft(caption);
+
+          // Si la conversación seguía en bot o esperando_asesor, la tomamos automáticamente
+          // para habilitar la barra de escritura y asignarla al asesor.
+          if (thread && thread.ticketStatus !== 'en_atencion' && thread.ticketStatus !== 'resuelto') {
+            try {
+              if (thread.ticketId) {
+                await updateTicket(thread.ticketId, { status: 'en_atencion', assigned_advisor: user.fullName });
+              } else {
+                await takeConversation(targetId);
+              }
+              await loadThread();
+              load(false);
+            } catch {
+              /* continue */
+            }
+          }
+
+          if (sendImmediately) {
+            const entry = {
+              localId: `${Date.now()}-quote-${Math.random().toString(36).slice(2)}`,
+              file,
+              previewUrl,
+              caption: caption || undefined,
+              status: 'sending',
+            };
+            setPendingSends((prev) => ({ ...prev, [targetId]: [...(prev[targetId] ?? []), entry] }));
+            await sendPendingEntry(targetId, entry);
+          } else {
+            setStagedFiles((prev) => [...prev, { file, id: `${Date.now()}`, previewUrl }]);
+            if (caption) setDraft(caption);
+          }
         }}
       />
 

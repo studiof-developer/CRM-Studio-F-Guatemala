@@ -1,8 +1,25 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Trash2, X, Calculator, Image as ImageIcon, Check, Loader2, Download } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  Trash2,
+  X,
+  Calculator,
+  Image as ImageIcon,
+  Loader2,
+  Download,
+  Send,
+  Eye,
+  Copy,
+  Sparkles,
+  Truck,
+  Tag,
+} from 'lucide-react';
 import { generateQuoteCardBlob } from '../lib/quoteImageGenerator.js';
 import { createQuote, fetchProducts, productImageUrl } from '../api.js';
 import { showSuccess, showError } from './Toast.jsx';
+
+const QUICK_DISCOUNTS = [0, 10, 15, 20, 30, 40, 50];
 
 export default function QuoteModal({
   open,
@@ -17,8 +34,22 @@ export default function QuoteModal({
   const [serverResults, setServerResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [items, setItems] = useState([]);
+  const [shippingCost, setShippingCost] = useState(0);
+  const [customNote, setCustomNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewBlobUrl, setPreviewBlobUrl] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Limpiar vista previa al cerrar
+  useEffect(() => {
+    if (!open) {
+      setShowPreview(false);
+      if (previewBlobUrl) {
+        URL.revokeObjectURL(previewBlobUrl);
+        setPreviewBlobUrl(null);
+      }
+    }
+  }, [open, previewBlobUrl]);
 
   // Búsqueda dinámica en backend / catálogo cuando el usuario escribe
   useEffect(() => {
@@ -60,13 +91,18 @@ export default function QuoteModal({
       (p.color || '').toLowerCase().includes(q) ||
       (p.barcode || '').toLowerCase().includes(q);
 
-    // Prioriza resultados directos de la base de datos que coincidan con lo escrito
     const serverMatches = serverResults.filter(matchesFilter);
-    if (serverMatches.length > 0) return serverMatches.slice(0, 10);
+    if (serverMatches.length > 0) return serverMatches.slice(0, 12);
 
-    // Fallback al catálogo precargado en memoria (también filtrando estrictamente por q)
-    return catalog.filter(matchesFilter).slice(0, 10);
+    return catalog.filter(matchesFilter).slice(0, 12);
   }, [search, serverResults, catalog]);
+
+  function invalidatePreview() {
+    if (previewBlobUrl) {
+      URL.revokeObjectURL(previewBlobUrl);
+      setPreviewBlobUrl(null);
+    }
+  }
 
   function addItem(product) {
     const unitPrice = Number(product.price) || 0;
@@ -74,13 +110,13 @@ export default function QuoteModal({
     const finalPrice = unitPrice * (1 - discountPct / 100);
 
     const newItem = {
-      productId: product.id,
-      sku: product.reference || product.sku,
+      productId: product.id || null,
+      sku: String(product.reference || product.sku || 'REF'),
       reference: product.reference || null,
       barcode: product.barcode || null,
-      name: product.name,
-      size: product.size || '',
-      color: product.color || '',
+      name: String(product.name || 'Prenda Studio F'),
+      size: String(product.size || ''),
+      color: String(product.color || ''),
       imageUrl: product.image_url || null,
       unitPrice,
       discountPct,
@@ -91,26 +127,27 @@ export default function QuoteModal({
     setItems((prev) => [...prev, newItem]);
     setSearch('');
     setServerResults([]);
-    setPreviewBlobUrl(null);
+    invalidatePreview();
   }
 
   function addCustomItem() {
-    if (!search.trim()) return;
+    const raw = search.trim();
     const newItem = {
       productId: null,
-      sku: search.trim().toUpperCase(),
+      sku: raw ? raw.toUpperCase() : `REF-${items.length + 1}`,
       name: 'Prenda personalizada',
       size: '',
       color: '',
-      unitPrice: 150,
+      imageUrl: null,
+      unitPrice: 499,
       discountPct: 0,
-      finalPrice: 150,
+      finalPrice: 499,
       quantity: 1,
     };
     setItems((prev) => [...prev, newItem]);
     setSearch('');
     setServerResults([]);
-    setPreviewBlobUrl(null);
+    invalidatePreview();
   }
 
   function updateItem(index, field, value) {
@@ -136,79 +173,172 @@ export default function QuoteModal({
         item.name = value;
       } else if (field === 'sku') {
         item.sku = value;
+      } else if (field === 'size') {
+        item.size = value;
+      } else if (field === 'color') {
+        item.color = value;
       }
 
       copy[index] = item;
       return copy;
     });
-    setPreviewBlobUrl(null);
+    invalidatePreview();
+  }
+
+  function applyGlobalDiscount(pct) {
+    setItems((prev) =>
+      prev.map((item) => {
+        const discountPct = Math.min(100, Math.max(0, Number(pct) || 0));
+        return {
+          ...item,
+          discountPct,
+          finalPrice: item.unitPrice * (1 - discountPct / 100),
+        };
+      })
+    );
+    invalidatePreview();
   }
 
   function removeItem(index) {
     setItems((prev) => prev.filter((_, i) => i !== index));
-    setPreviewBlobUrl(null);
+    invalidatePreview();
   }
 
   // Cálculos totales
   const subtotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    return items.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1), 0);
   }, [items]);
 
-  const grandTotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
+  const itemsTotalAfterDiscount = useMemo(() => {
+    return items.reduce((sum, item) => sum + (Number(item.finalPrice) || 0) * (Number(item.quantity) || 1), 0);
   }, [items]);
 
   const discountTotal = useMemo(() => {
-    return Math.max(0, subtotal - grandTotal);
-  }, [subtotal, grandTotal]);
+    return Math.max(0, subtotal - itemsTotalAfterDiscount);
+  }, [subtotal, itemsTotalAfterDiscount]);
 
-  // Genera el texto para el mensaje de WhatsApp
+  const grandTotal = useMemo(() => {
+    return itemsTotalAfterDiscount + (Math.max(0, Number(shippingCost) || 0));
+  }, [itemsTotalAfterDiscount, shippingCost]);
+
+  // Genera el texto para el mensaje de WhatsApp / Red Social
   function buildQuoteMessageText(quoteNumber) {
     const brand = activeLine?.label || 'Studio F';
     let text = `✨ *Cotización ${brand}* ✨\nFolio: *${quoteNumber}*\n\n`;
 
     items.forEach((item) => {
-      text += `👗 *${item.name}* (Ref: \`${item.sku}\`)\n`;
-      text += `• Precio regular: Q${Number(item.unitPrice).toFixed(2)}\n`;
-      if (item.discountPct > 0) {
-        text += `• Descuento: *${item.discountPct}%*\n`;
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const detail = [
+        item.size ? `Talla ${item.size}` : '',
+        item.color ? `Color ${item.color}` : '',
+        qty > 1 ? `${qty} uds` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
+      text += `👗 *${item.name || 'Prenda'}* (Ref: \`${item.sku || 'N/A'}\`)${detail ? ` — _${detail}_` : ''}\n`;
+      text += `• Precio regular: Q${Number(item.unitPrice || 0).toFixed(2)}\n`;
+      if (Number(item.discountPct) > 0) {
+        text += `• Descuento: *-${Number(item.discountPct)}%*\n`;
       }
-      text += `• Subtotal: *Q${(item.finalPrice * item.quantity).toFixed(2)}*\n\n`;
+      text += `• Subtotal: *Q${((Number(item.finalPrice) || 0) * qty).toFixed(2)}*\n\n`;
     });
 
+    const totalPieces = items.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
     text += `━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🛍️ *Total (${items.length} prenda${items.length !== 1 ? 's' : ''}): Q${grandTotal.toFixed(2)}*\n`;
+    if (Number(shippingCost) > 0) {
+      text += `🚚 Envío a domicilio: Q${Number(shippingCost).toFixed(2)}\n`;
+    }
+    text += `🛍️ *Total a pagar (${totalPieces} prenda${totalPieces !== 1 ? 's' : ''}): Q${grandTotal.toFixed(2)}*\n`;
     if (discountTotal > 0) {
       text += `🎉 *¡Te ahorras Q${discountTotal.toFixed(2)}!*\n`;
     }
+    if (customNote.trim()) {
+      text += `📌 _${customNote.trim()}_\n`;
+    }
     text += `━━━━━━━━━━━━━━━━━━━\n`;
-    text += `_Cotización válida por 48 horas sujeta a existencias._`;
+    text += `_Cotización válida por 48 horas sujeta a disponibilidad de existencias._`;
 
     return text;
   }
 
-  async function handleSend(downloadOnly = false) {
+  async function handlePreview() {
+    if (!items.length) {
+      showError('Agrega al menos una prenda para previsualizar');
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const blob = await generateQuoteCardBlob({
+        brandName: activeLine?.label || 'STUDIO F',
+        quoteNumber: 'COT-VISTA-PREVIA',
+        advisorName: advisor?.fullName || 'Asesor de Ventas',
+        customerName: customer?.fullName || customer?.whatsappNumber || 'Cliente',
+        items,
+        subtotal,
+        discountTotal,
+        shippingCost: Number(shippingCost) || 0,
+        grandTotal,
+        customNote,
+      });
+      if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+      const url = URL.createObjectURL(blob);
+      setPreviewBlobUrl(url);
+      setShowPreview(true);
+    } catch (err) {
+      showError(err.message || 'No se pudo generar la vista previa');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleCopyTextOnly() {
+    if (!items.length) return;
+    const text = buildQuoteMessageText(`COT-${new Date().getFullYear()}`);
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccess('Resumen de cotización copiado al portapapeles');
+    } catch {
+      showError('No se pudo copiar al portapapeles');
+    }
+  }
+
+  /**
+   * mode:
+   * - 'send_now': envía directo al chat del cliente (toma la conversación automáticamente si estaba en espera)
+   * - 'stage': pasa la imagen y el texto a la caja de escritura del chat para editar antes de enviar
+   * - 'download': descarga el PNG y copia el texto al portapapeles
+   */
+  async function handleProcessQuote(mode = 'send_now') {
     if (!items.length) {
       showError('Agrega al menos una prenda para cotizar');
       return;
     }
     setIsGenerating(true);
     try {
-      // 1. Guardar en base de datos (o generar correlativo)
-      const saved = await createQuote({
-        customerId: customer?.id || null,
-        whatsappNumber: customer?.whatsappNumber || null,
-        whatsappNumberId: activeLine?.id || null,
-        items,
-        subtotal,
-        discountTotal,
-        grandTotal,
-        notes: `Cotización de ${items.length} prendas por ${advisor?.fullName || 'Asesor'}`,
-      });
+      // 1. Guardar en base de datos (con fallback resiliente para que NUNCA bloquee al asesor)
+      let quoteNum = `COT-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+      try {
+        const saved = await createQuote({
+          customerId: customer?.id || null,
+          whatsappNumber: customer?.whatsappNumber || null,
+          whatsappNumberId: activeLine?.id || null,
+          items,
+          subtotal,
+          discountTotal,
+          grandTotal,
+          notes:
+            customNote.trim() ||
+            `Cotización de ${items.length} prendas por ${advisor?.fullName || 'Asesor'}`,
+        });
+        if (saved?.quoteNumber) {
+          quoteNum = saved.quoteNumber;
+        }
+      } catch (dbErr) {
+        console.warn('Fallback a correlativo local de cotización:', dbErr);
+      }
 
-      const quoteNum = saved.quoteNumber || 'COT-2026-0001';
-
-      // 2. Generar tarjeta en imagen PNG
+      // 2. Generar tarjeta en imagen PNG de alta resolución
       const blob = await generateQuoteCardBlob({
         brandName: activeLine?.label || 'STUDIO F',
         quoteNumber: quoteNum,
@@ -217,13 +347,15 @@ export default function QuoteModal({
         items,
         subtotal,
         discountTotal,
+        shippingCost: Number(shippingCost) || 0,
         grandTotal,
+        customNote,
       });
 
       const file = new File([blob], `cotizacion-${quoteNum}.png`, { type: 'image/png' });
       const caption = buildQuoteMessageText(quoteNum);
 
-      if (downloadOnly || !onSendQuoteImage) {
+      if (mode === 'download' || !onSendQuoteImage) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -232,15 +364,23 @@ export default function QuoteModal({
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
-        try { await navigator.clipboard.writeText(caption); } catch { /* ignore */ }
+        try {
+          await navigator.clipboard.writeText(caption);
+        } catch {
+          /* ignore */
+        }
         showSuccess(`Cotización ${quoteNum} descargada y texto copiado al portapapeles`);
         return;
       }
 
-      // 3. Enviar a través del chat
-      await onSendQuoteImage(file, caption);
+      // 3. Enviar directo al chat o pasar al borrador
+      await onSendQuoteImage(file, caption, { sendImmediately: mode === 'send_now' });
 
-      showSuccess(`Cotización ${quoteNum} generada y lista para enviar`);
+      if (mode === 'send_now') {
+        showSuccess(`Cotización ${quoteNum} enviada al cliente`);
+      } else {
+        showSuccess(`Cotización ${quoteNum} cargada en la barra de mensaje`);
+      }
       onClose();
     } catch (err) {
       showError(err.message || 'Error al procesar la cotización');
@@ -253,7 +393,7 @@ export default function QuoteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="flex h-[90vh] max-h-[820px] w-full max-w-3xl flex-col rounded-2xl bg-paper shadow-2xl border border-line overflow-hidden">
+      <div className="flex h-[92vh] max-h-[860px] w-full max-w-4xl flex-col rounded-2xl bg-paper shadow-2xl border border-line overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-black/[0.02] dark:bg-white/[0.02]">
           <div className="flex items-center gap-2.5">
@@ -263,22 +403,48 @@ export default function QuoteModal({
             <div>
               <h2 className="text-base font-semibold text-ink">Cotizador / Calculadora de Prendas</h2>
               <p className="text-xs text-greige-ink">
-                Cliente: <span className="font-medium text-ink">{customer?.fullName || customer?.whatsappNumber || 'General'}</span> · Línea: <span className="font-medium text-ink">{activeLine?.label || 'Studio F'}</span>
+                Cliente: <span className="font-medium text-ink">{customer?.fullName || customer?.whatsappNumber || 'General'}</span> · Línea:{' '}
+                <span className="font-medium text-ink">{activeLine?.label || 'Studio F'}</span>
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={handlePreview}
+                disabled={isGenerating}
+                className="flex items-center gap-1.5 rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <Eye size={14} />
+                {showPreview ? 'Actualizar Vista Previa' : 'Vista Previa PNG'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-greige hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Buscador de catálogo */}
           <div className="relative">
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-greige-ink">
-              Buscar referencia en Catálogo o SKU
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-greige-ink">
+                Buscar referencia en Catálogo o agregar prenda manual
+              </label>
+              <button
+                type="button"
+                onClick={addCustomItem}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+              >
+                <Plus size={13} /> + Agregar fila manual
+              </button>
+            </div>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-3.5 text-greige pointer-events-none" />
               <input
@@ -295,8 +461,8 @@ export default function QuoteModal({
                     }
                   }
                 }}
-                placeholder="Escribe código (ej. S176012A, BLU) o nombre de prenda... (Enter para agregar)"
-                className="w-full rounded-xl border border-line bg-black/[0.02] dark:bg-white/[0.04] py-2.5 pl-10 pr-24 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                placeholder="Escribe referencia (ej. S176012A, S042), nombre, color o código de barras... (Enter para agregar)"
+                className="w-full rounded-xl border border-line bg-black/[0.02] dark:bg-white/[0.04] py-2.5 pl-10 pr-28 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
               />
               {searching ? (
                 <Loader2 size={16} className="absolute right-3 text-greige animate-spin" />
@@ -304,7 +470,7 @@ export default function QuoteModal({
                 <button
                   type="button"
                   onClick={addCustomItem}
-                  className="absolute right-2 rounded-lg bg-black/5 dark:bg-white/10 px-2.5 py-1 text-xs font-medium text-ink hover:bg-black/10"
+                  className="absolute right-2 rounded-lg bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent hover:bg-accent hover:text-white transition-colors"
                 >
                   + Personalizada
                 </button>
@@ -367,7 +533,7 @@ export default function QuoteModal({
                 ) : (
                   <div className="p-4 text-center">
                     <p className="text-xs text-greige-ink mb-2">
-                      No se encontró la referencia <strong className="text-ink">"{search.trim()}"</strong> en el catálogo.
+                      No se encontró la referencia <strong className="text-ink">"{search.trim()}"</strong> en el catálogo cargado.
                     </p>
                     <button
                       type="button"
@@ -375,13 +541,35 @@ export default function QuoteModal({
                       className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent hover:text-white transition-colors"
                     >
                       <Plus size={13} />
-                      Cotizar "{search.trim().toUpperCase()}" como personalizada
+                      Cotizar "{search.trim().toUpperCase()}" manualmente
                     </button>
                   </div>
                 )}
               </div>
             )}
           </div>
+
+          {/* Barra rápida de descuento global */}
+          {items.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-black/[0.015] dark:bg-white/[0.02] px-3.5 py-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-greige-ink">
+                <Tag size={13} className="text-accent" />
+                <span>Aplicar descuento rápido a todas las prendas:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {QUICK_DISCOUNTS.map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => applyGlobalDiscount(pct)}
+                    className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] font-semibold text-ink hover:border-accent hover:bg-accent hover:text-white transition-colors"
+                  >
+                    {pct === 0 ? 'Sin desc.' : `-${pct}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tabla de ítems cotizados */}
           <div>
@@ -391,7 +579,11 @@ export default function QuoteModal({
               </span>
               {items.length > 0 && (
                 <button
-                  onClick={() => setItems([])}
+                  type="button"
+                  onClick={() => {
+                    setItems([]);
+                    invalidatePreview();
+                  }}
                   className="text-xs text-danger hover:underline"
                 >
                   Vaciar lista
@@ -403,39 +595,62 @@ export default function QuoteModal({
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line p-8 text-center bg-black/[0.01]">
                 <Calculator size={32} className="text-greige/50 mb-2" />
                 <p className="text-sm font-medium text-ink">No hay prendas agregadas</p>
-                <p className="text-xs text-greige-ink mt-0.5">Usa el buscador arriba para agregar las referencias que consultó el cliente.</p>
+                <p className="text-xs text-greige-ink mt-0.5">
+                  Busca por código o nombre arriba, o haz clic en "+ Agregar fila manual".
+                </p>
               </div>
             ) : (
               <div className="rounded-xl border border-line bg-paper overflow-hidden shadow-xs divide-y divide-line-soft">
                 {items.map((item, idx) => (
-                  <div key={idx} className="flex flex-wrap items-center justify-between gap-3 p-3.5 hover:bg-black/[0.01]">
-                    <div className="flex items-center gap-2.5 min-w-[200px] flex-1">
+                  <div
+                    key={idx}
+                    className="flex flex-wrap items-center justify-between gap-3 p-3.5 hover:bg-black/[0.01]"
+                  >
+                    <div className="flex items-start gap-2.5 min-w-[220px] flex-1">
                       {item.imageUrl ? (
                         <img
                           src={productImageUrl(item.imageUrl)}
                           alt=""
-                          className="h-10 w-10 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs"
+                          className="h-11 w-11 shrink-0 rounded-lg object-cover border border-line bg-white shadow-xs mt-0.5"
                         />
                       ) : null}
-                      <div className="flex-1 min-w-0">
-                        <input
-                          type="text"
-                          value={item.sku}
-                          onChange={(e) => updateItem(idx, 'sku', e.target.value)}
-                          className="font-bold text-xs text-ink bg-transparent outline-none w-full"
-                          placeholder="Referencia / SKU"
-                        />
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => updateItem(idx, 'name', e.target.value)}
-                          className="text-xs text-greige-ink bg-transparent outline-none w-full truncate"
-                          placeholder="Nombre de prenda"
-                        />
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item.sku}
+                            onChange={(e) => updateItem(idx, 'sku', e.target.value)}
+                            className="font-bold text-xs text-ink bg-black/[0.03] dark:bg-white/[0.05] rounded px-2 py-0.5 outline-none focus:ring-1 focus:ring-accent w-28"
+                            placeholder="Ref / SKU"
+                          />
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => updateItem(idx, 'name', e.target.value)}
+                            className="text-xs font-medium text-ink bg-transparent border-b border-transparent focus:border-line outline-none flex-1 min-w-0"
+                            placeholder="Nombre de la prenda"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item.size}
+                            onChange={(e) => updateItem(idx, 'size', e.target.value)}
+                            className="text-[11px] text-greige-ink bg-black/[0.02] dark:bg-white/[0.04] border border-line-soft rounded px-2 py-0.5 outline-none focus:border-accent w-20"
+                            placeholder="Talla (ej. 8, M)"
+                          />
+                          <input
+                            type="text"
+                            value={item.color}
+                            onChange={(e) => updateItem(idx, 'color', e.target.value)}
+                            className="text-[11px] text-greige-ink bg-black/[0.02] dark:bg-white/[0.04] border border-line-soft rounded px-2 py-0.5 outline-none focus:border-accent w-28"
+                            placeholder="Color (ej. Negro)"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       {/* Cantidad */}
                       <div className="flex flex-col items-center">
                         <span className="text-[10px] text-greige uppercase">Cant</span>
@@ -444,7 +659,7 @@ export default function QuoteModal({
                           min="1"
                           value={item.quantity}
                           onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                          className="w-12 text-center rounded-lg border border-line py-1 text-xs text-ink outline-none"
+                          className="w-12 text-center rounded-lg border border-line py-1 text-xs text-ink outline-none focus:border-accent"
                         />
                       </div>
 
@@ -456,7 +671,7 @@ export default function QuoteModal({
                           step="0.01"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(idx, 'unitPrice', e.target.value)}
-                          className="w-20 text-right rounded-lg border border-line py-1 px-2 text-xs text-ink outline-none"
+                          className="w-20 text-right rounded-lg border border-line py-1 px-2 text-xs text-ink outline-none focus:border-accent"
                         />
                       </div>
 
@@ -469,7 +684,7 @@ export default function QuoteModal({
                           max="100"
                           value={item.discountPct}
                           onChange={(e) => updateItem(idx, 'discountPct', e.target.value)}
-                          className="w-16 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-danger outline-none"
+                          className="w-16 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-danger outline-none focus:border-accent"
                         />
                       </div>
 
@@ -481,16 +696,16 @@ export default function QuoteModal({
                           step="0.01"
                           value={item.finalPrice ? Number(item.finalPrice.toFixed(2)) : 0}
                           onChange={(e) => updateItem(idx, 'finalPrice', e.target.value)}
-                          className="w-20 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-ink outline-none"
+                          className="w-20 text-right rounded-lg border border-line py-1 px-2 text-xs font-semibold text-ink outline-none focus:border-accent"
                           title="Edita el precio final o usa el % de descuento"
                         />
                       </div>
 
                       {/* Subtotal Ítem */}
-                      <div className="flex flex-col items-end min-w-[70px]">
-                        <span className="text-[10px] text-greige uppercase">Total</span>
+                      <div className="flex flex-col items-end min-w-[72px]">
+                        <span className="text-[10px] text-greige uppercase">Subtotal</span>
                         <span className="text-xs font-bold text-ink py-1">
-                          Q{(item.finalPrice * item.quantity).toFixed(2)}
+                          Q{((Number(item.finalPrice) || 0) * (Number(item.quantity) || 1)).toFixed(2)}
                         </span>
                       </div>
 
@@ -498,7 +713,7 @@ export default function QuoteModal({
                         type="button"
                         onClick={() => removeItem(idx)}
                         className="text-greige hover:text-danger p-1"
-                        title="Eliminar"
+                        title="Eliminar prenda"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -509,25 +724,115 @@ export default function QuoteModal({
             )}
           </div>
 
-          {/* Cuadro de Totales */}
+          {/* Opciones de Envío y Nota + Cuadro de Totales */}
           {items.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between rounded-xl bg-black/[0.03] dark:bg-white/[0.04] p-4 border border-line">
-              <div className="space-y-1 mb-3 sm:mb-0">
-                <p className="text-xs text-greige-ink">
-                  Total de prendas cotizadas: <span className="font-semibold text-ink">{items.reduce((s, i) => s + i.quantity, 0)}</span>
-                </p>
-                {discountTotal > 0 && (
-                  <p className="text-xs font-semibold text-success flex items-center gap-1">
-                    🎉 Ahorro total para el cliente: Q{discountTotal.toFixed(2)}
-                  </p>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Envío y Observación */}
+              <div className="rounded-xl border border-line bg-black/[0.015] dark:bg-white/[0.02] p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                    <Truck size={14} className="text-accent" />
+                    Envío a domicilio (Q)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {[0, 25, 35].map((cost) => (
+                      <button
+                        key={cost}
+                        type="button"
+                        onClick={() => {
+                          setShippingCost(cost);
+                          invalidatePreview();
+                        }}
+                        className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold border transition-colors ${
+                          Number(shippingCost) === cost
+                            ? 'bg-accent text-white border-accent'
+                            : 'bg-paper text-greige-ink border-line hover:text-ink'
+                        }`}
+                      >
+                        {cost === 0 ? 'Gratis' : `Q${cost}`}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min="0"
+                      value={shippingCost}
+                      onChange={(e) => {
+                        setShippingCost(Math.max(0, Number(e.target.value) || 0));
+                        invalidatePreview();
+                      }}
+                      className="w-16 rounded-lg border border-line bg-paper px-2 py-0.5 text-right text-xs font-semibold text-ink outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-greige-ink">
+                    Nota u observación en la tarjeta (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={customNote}
+                    onChange={(e) => {
+                      setCustomNote(e.target.value);
+                      invalidatePreview();
+                    }}
+                    placeholder="Ej. Envío gratis por compra mayor a Q500 / Reserva en sede Oakland Mall"
+                    className="w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+                  />
+                </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-xs text-greige block">TOTAL A PAGAR</span>
-                <span className="text-2xl font-bold tracking-tight text-ink">
-                  Q{grandTotal.toFixed(2)}
+              {/* Resumen Financiero */}
+              <div className="flex flex-col justify-between rounded-xl bg-black/[0.03] dark:bg-white/[0.04] p-4 border border-line">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-greige-ink">
+                    <span>Subtotal regular ({items.reduce((s, i) => s + (Number(i.quantity) || 1), 0)} prendas):</span>
+                    <span className="font-medium text-ink">Q{subtotal.toFixed(2)}</span>
+                  </div>
+                  {discountTotal > 0 && (
+                    <div className="flex justify-between text-xs font-semibold text-success">
+                      <span>🎉 Ahorro por descuento:</span>
+                      <span>-Q{discountTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {Number(shippingCost) > 0 && (
+                    <div className="flex justify-between text-xs text-greige-ink">
+                      <span>Envío a domicilio:</span>
+                      <span className="font-medium text-ink">Q{Number(shippingCost).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-line flex items-baseline justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-greige-ink">TOTAL A PAGAR</span>
+                  <span className="text-2xl font-bold tracking-tight text-ink">Q{grandTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Vista previa de la tarjeta generada */}
+          {showPreview && previewBlobUrl && (
+            <div className="rounded-xl border border-line bg-black/[0.02] p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-accent" />
+                  Vista previa de la tarjeta PNG que recibirá el cliente
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="text-xs text-greige hover:text-ink"
+                >
+                  Ocultar vista previa
+                </button>
+              </div>
+              <div className="flex justify-center overflow-hidden rounded-lg border border-line bg-white p-2">
+                <img
+                  src={previewBlobUrl}
+                  alt="Vista previa de cotización"
+                  className="max-h-96 w-auto object-contain rounded shadow-sm"
+                />
               </div>
             </div>
           )}
@@ -535,52 +840,89 @@ export default function QuoteModal({
 
         {/* Footer actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-4 bg-paper">
-          <p className="text-xs text-greige">
-            Se generará una tarjeta PNG estilizada {onSendQuoteImage ? 'para enviar al chat o descargar.' : 'lista para descargar y copiar.'}
-          </p>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyTextOnly}
+              disabled={items.length === 0 || isGenerating}
+              className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs font-semibold text-greige-ink hover:bg-black/5 dark:hover:bg-white/5 hover:text-ink disabled:opacity-50"
+              title="Copiar únicamente el desglose en texto"
+            >
+              <Copy size={13} />
+              Copiar Texto
+            </button>
+            <button
+              type="button"
+              onClick={() => handleProcessQuote('download')}
+              disabled={items.length === 0 || isGenerating}
+              className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+              title="Descargar imagen PNG y copiar texto al portapapeles"
+            >
+              <Download size={14} />
+              Descargar PNG
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-line px-4 py-2 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5"
+              className="rounded-xl border border-line px-3.5 py-2 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5"
             >
               Cancelar
             </button>
-            {onSendQuoteImage && (
+
+            {onSendQuoteImage ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleProcessQuote('stage')}
+                  disabled={items.length === 0 || isGenerating}
+                  className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/20 disabled:opacity-50"
+                  title="Coloca la imagen y el texto en la caja del chat para que puedas editarlo antes de enviar"
+                >
+                  <ImageIcon size={14} />
+                  Pasar al Borrador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProcessQuote('send_now')}
+                  disabled={items.length === 0 || isGenerating}
+                  className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Enviando…
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      Enviar Cotización al Chat
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={() => handleSend(true)}
+                onClick={() => handleProcessQuote('download')}
                 disabled={items.length === 0 || isGenerating}
-                className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
-                title="Descargar imagen PNG y copiar texto"
+                className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
               >
-                <Download size={14} />
-                Descargar PNG
+                {isGenerating ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Generando…
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    Descargar Cotización PNG
+                  </>
+                )}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => handleSend(false)}
-              disabled={items.length === 0 || isGenerating}
-              className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  Generando imagen…
-                </>
-              ) : onSendQuoteImage ? (
-                <>
-                  <ImageIcon size={14} />
-                  Enviar Cotización al Chat
-                </>
-              ) : (
-                <>
-                  <Download size={14} />
-                  Descargar Cotización PNG
-                </>
-              )}
-            </button>
           </div>
         </div>
       </div>
