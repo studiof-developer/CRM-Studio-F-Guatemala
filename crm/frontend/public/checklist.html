@@ -427,7 +427,7 @@
         <div class="brand-badge">✓</div>
         <div class="brand-text">
           <h1>Checklist Maestro del 100% del Proyecto — Bagneres CRM</h1>
-          <p>Control de Entregables Funcionales Verificables (Studio F &amp; ELA Guatemala)</p>
+          <p>Control de Entregables Funcionales Verificables — Sedes de Studio F y Línea Basshert</p>
         </div>
       </div>
 
@@ -447,7 +447,7 @@
       <div class="eyebrow">LISTA DE VERIFICACIÓN CORPORATIVA • ALCANCE 100% DEL SISTEMA</div>
       <h2 class="hero-title">Estado de Cumplimiento de Todos los Entregables del CRM</h2>
       <p class="hero-sub">
-        Este documento desglosa el <strong>100% de las funciones del proyecto Bagneres CRM</strong> en puntos de control claros y auditables. Permite ver qué puntos ya están terminados y operando en producción, cuáles están en ajuste/calibración hoy mismo y cuáles corresponden a la última etapa pendiente por desarrollar (Logística y Despachos).
+        Este documento desglosa el <strong>100% de las funciones del proyecto Bagneres CRM</strong> (para las <strong>sedes de Studio F y la línea Basshert</strong>) en puntos de control claros y auditables. Permite ver qué puntos ya están terminados y operando en producción, cuáles están en ajuste/calibración hoy mismo y cuáles corresponden a la última etapa pendiente por desarrollar (Logística y Despachos).
       </p>
 
       <div class="master-bar-box">
@@ -494,19 +494,19 @@
     const CHECKLIST_DATA = [
       {
         areaId: 'area-1',
-        areaTitle: '1. Estructura Corporativa Multi-Empresa, Marcas, Líneas y Usuarios',
-        areaSubtitle: 'Base organizacional del grupo empresarial, tiendas físicas, números de WhatsApp y control de accesos.',
+        areaTitle: '1. Estructura Corporativa: Sedes de Studio F, Línea Basshert, Líneas y Usuarios',
+        areaSubtitle: 'Base organizacional de las sedes de Studio F y la línea Basshert, números de WhatsApp y control de accesos.',
         areaPct: '100%',
         items: [
-          { status: 'done', module: 'Módulo 01: Empresas', title: 'Creación y edición de múltiples empresas / razones sociales', desc: 'Permite dar de alta distintas sociedades dentro del mismo CRM y activarlas o desactivarlas.' },
-          { status: 'done', module: 'Módulo 01: Empresas', title: 'Asignación de marcas comerciales por empresa', desc: 'Vincula qué marcas (Studio F, ELA, etc.) pertenecen a cada razón social.' },
-          { status: 'done', module: 'Módulo 02: Marcas y Tiendas', title: 'Administración de marcas comerciales (Studio F, ELA)', desc: 'Gestión independiente de cada marca del grupo.' },
-          { status: 'done', module: 'Módulo 02: Marcas y Tiendas', title: 'Creación y gestión de sucursales / tiendas físicas por marca', desc: 'Permite registrar cada tienda física y asociarla a su marca correspondiente.' },
-          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Conexión de múltiples números de WhatsApp Business (Multi-Línea)', desc: 'Permite operar varios números oficiales de WhatsApp al mismo tiempo sin mezclar chats.' },
+          { status: 'done', module: 'Módulo 01: Empresas', title: 'Administración de la estructura corporativa en el CRM', desc: 'Permite gestionar y mantener activa la estructura empresarial de la operación.' },
+          { status: 'done', module: 'Módulo 01: Empresas', title: 'Vinculación operativa de Studio F y la línea Basshert', desc: 'Integra la operación de las sedes de Studio F y la línea Basshert bajo la misma plataforma.' },
+          { status: 'done', module: 'Módulo 02: Sedes y Líneas', title: 'Administración de la operación de Studio F y la línea Basshert', desc: 'Gestión independiente y ordenada de Studio F y de la línea Basshert.' },
+          { status: 'done', module: 'Módulo 02: Sedes y Líneas', title: 'Creación y gestión de las sedes físicas de Studio F', desc: 'Permite registrar cada sede física de Studio F y asociarla a su operación correspondiente.' },
+          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Conexión de las líneas de WhatsApp Business (Studio F y Basshert)', desc: 'Permite operar las líneas oficiales de Studio F y la línea Basshert al mismo tiempo sin mezclar chats.' },
           { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Botón de diagnóstico y prueba en vivo de conexión con Meta', desc: 'Verifica en un clic si el token y el número de teléfono están activos en Meta.' },
-          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Aislamiento estricto de sesiones por línea telefónica', desc: 'Si un mismo cliente escribe a dos líneas distintas, cada conversación se mantiene separada y ordenada.' },
+          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Aislamiento estricto de sesiones por línea telefónica', desc: 'Si un mismo cliente escribe a Studio F y a la línea Basshert, cada conversación se mantiene separada y ordenada.' },
           { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Gestión de usuarios con 3 niveles (Administrador, Supervisor, Asesora)', desc: 'Controla qué pantallas y acciones puede realizar cada integrante del equipo.' },
-          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Asignación personalizada de líneas de WhatsApp por asesora', desc: 'Define exactamente qué líneas puede ver y responder cada asesora.' }
+          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Asignación personalizada de líneas de WhatsApp por asesora', desc: 'Define exactamente qué líneas (Studio F o Basshert) puede ver y responder cada asesora.' }
         ]
       },
       {
@@ -764,7 +764,7 @@
             CHECKLIST MAESTRO DEL 100% DEL PROYECTO — BAGNERES CRM
           </h1>
           <p style="font-size:10pt; color:#4b5563; margin-top:0;">
-            <strong>Operación:</strong> Studio F &amp; ELA Guatemala &nbsp;|&nbsp;
+            <strong>Operación:</strong> Sedes de Studio F y Línea Basshert &nbsp;|&nbsp;
             <strong>Fecha:</strong> 17 de octubre de 2026 &nbsp;|&nbsp;
             <strong>Total de Entregables Verificables:</strong> 57 puntos en 6 Áreas Corporativas
           </p>
