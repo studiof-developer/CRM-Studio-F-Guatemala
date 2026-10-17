@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.svg" />
+  <title>Checklist Maestro del Proyecto (100%) — Bagneres CRM</title>
+  <style>
+    :root {
+      --bg: #f4f5f8;
+      --paper: #ffffff;
+      --paper-soft: #f9fafb;
+      --ink: #111827;
+      --muted: #4b5563;
+      --subtle: #6b7280;
+      --line: #e5e7eb;
+      --line-soft: #f3f4f6;
+      --primary: #3730a3;
+      --primary-light: #eef2ff;
+      --primary-border: #c7d2fe;
+      --ok: #15803d;
+      --ok-bg: #dcfce7;
+      --ok-border: #86efac;
+      --warn: #b45309;
+      --warn-bg: #fef3c7;
+      --warn-border: #fcd34d;
+      --todo: #0369a1;
+      --todo-bg: #e0f2fe;
+      --todo-border: #7dd3fc;
+      --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 6px 16px rgba(17, 24, 39, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+
+    /* ---- Topbar ---- */
+    .topbar-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 15px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--ok);
+      color: #fff;
+      font-weight: 800;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(21, 128, 61, 0.25);
+    }
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 0;
+      color: var(--ink);
+    }
+    .brand-text p {
+      font-size: 12px;
+      color: var(--subtle);
+      margin: 0;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(55, 48, 163, 0.22);
+    }
+    .btn-primary:hover { background: #312e81; }
+    .btn-outline {
+      background: var(--paper);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .btn-outline:hover { background: var(--paper-soft); border-color: #d1d5db; }
+
+    /* ---- Container ---- */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 26px 28px 80px;
+    }
+
+    /* ---- Summary Card ---- */
+    .summary-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 26px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ok);
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-border);
+      padding: 4px 11px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .hero-title {
+      font-size: clamp(21px, 2.8vw, 28px);
+      font-weight: 800;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    .hero-sub {
+      font-size: 14px;
+      color: var(--muted);
+      margin: 0 0 20px;
+      max-width: 920px;
+    }
+
+    /* ---- Master Progress Bar ---- */
+    .master-bar-box {
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+    .master-bar-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .master-bar-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .master-bar-stats {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .master-track {
+      width: 100%;
+      height: 14px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+    }
+    .seg-done { background: var(--ok); height: 100%; transition: width 0.3s ease; }
+    .seg-wip { background: #f59e0b; height: 100%; transition: width 0.3s ease; }
+    .seg-todo { background: #38bdf8; height: 100%; transition: width 0.3s ease; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      margin-top: 10px;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* ---- Filter Bar ---- */
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 22px;
+      box-shadow: var(--shadow-sm);
+    }
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .filter-btn {
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 13px;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      background: var(--paper-soft);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { color: var(--ink); }
+    .filter-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .search-input {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      min-width: 260px;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--primary); }
+
+    /* ---- Checklist Sections ---- */
+    .area-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      margin-bottom: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .area-head {
+      background: var(--paper-soft);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .area-head-left h2 {
+      font-size: 16.5px;
+      font-weight: 800;
+      margin: 0;
+      color: var(--ink);
+    }
+    .area-head-left p {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin: 2px 0 0;
+    }
+    .area-pct-pill {
+      font-size: 12.5px;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+    }
+
+    .checklist-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .checklist-row {
+      border-bottom: 1px solid var(--line-soft);
+      transition: background 0.12s;
+    }
+    .checklist-row:last-child { border-bottom: none; }
+    .checklist-row:hover { background: #f8fafc; }
+
+    .col-check {
+      width: 48px;
+      text-align: center;
+      padding: 13px 6px 13px 18px;
+      vertical-align: top;
+    }
+    .check-box {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+    }
+    .check-done {
+      background: var(--ok);
+      color: #fff;
+      border: 1px solid var(--ok);
+    }
+    .check-wip {
+      background: var(--warn-bg);
+      color: var(--warn);
+      border: 1.5px solid #f59e0b;
+    }
+    .check-todo {
+      background: #fff;
+      color: transparent;
+      border: 2px solid #94a3b8;
+    }
+
+    .col-main {
+      padding: 13px 14px;
+      vertical-align: top;
+    }
+    .item-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 2px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .item-module-tag {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 8px;
+      border-radius: 6px;
+      background: var(--line-soft);
+      color: var(--muted);
+    }
+    .item-desc {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .col-status {
+      width: 190px;
+      padding: 13px 20px 13px 10px;
+      text-align: right;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    .chip-done { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
+    .chip-wip { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+    .chip-todo { background: var(--todo-bg); color: var(--todo); border: 1px solid var(--todo-border); }
+
+    @media (max-width: 768px) {
+      .topbar, .container { padding-left: 16px; padding-right: 16px; }
+      .col-status { width: auto; text-align: left; padding-left: 14px; padding-top: 0; }
+      .checklist-row { display: block; padding: 8px 0; }
+      .col-check, .col-main, .col-status { display: block; width: 100%; }
+      .search-input { width: 100%; }
+    }
+    @media print {
+      .topbar-wrap, .controls-bar { display: none !important; }
+      body { background: #fff; }
+      .area-card, .summary-card { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA SUPERIOR -->
+  <header class="topbar-wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-badge">✓</div>
+        <div class="brand-text">
+          <h1>Checklist Maestro del 100% del Proyecto — Bagneres CRM</h1>
+          <p>Control de Entregables Funcionales Verificables (Studio F &amp; ELA Guatemala)</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="/" class="btn btn-outline">← Volver al CRM</a>
+        <a href="/informe.html" class="btn btn-outline">📄 Ver Informe Explicativo</a>
+        <button onclick="window.print()" class="btn btn-outline">🖨️ Imprimir / PDF</button>
+        <button onclick="exportChecklistToWord()" class="btn btn-primary">📥 Descargar Checklist en Word (.doc)</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- TARJETA RESUMEN DEL CHECKLIST -->
+    <section class="summary-card">
+      <div class="eyebrow">LISTA DE VERIFICACIÓN CORPORATIVA • ALCANCE 100% DEL SISTEMA</div>
+      <h2 class="hero-title">Estado de Cumplimiento de Todos los Entregables del CRM</h2>
+      <p class="hero-sub">
+        Este documento desglosa el <strong>100% de las funciones del proyecto Bagneres CRM</strong> en puntos de control claros y auditables. Permite ver qué puntos ya están terminados y operando en producción, cuáles están en ajuste/calibración hoy mismo y cuáles corresponden a la última etapa pendiente por desarrollar (Logística y Despachos).
+      </p>
+
+      <div class="master-bar-box">
+        <div class="master-bar-top">
+          <span class="master-bar-title">Progreso Total de Entregables del Proyecto (<span id="stat-total-count">57</span> puntos verificables)</span>
+          <span class="master-bar-stats" id="stat-headline">84% Terminado (48/57) • 9% En Ajuste Hoy (5) • 7% Pendiente (4)</span>
+        </div>
+        <div class="master-track">
+          <div id="bar-done" class="seg-done" style="width: 84%;"></div>
+          <div id="bar-wip" class="seg-wip" style="width: 9%;"></div>
+          <div id="bar-todo" class="seg-todo" style="width: 7%;"></div>
+        </div>
+        <div class="legend-row">
+          <span><i class="legend-dot" style="background: var(--ok);"></i><strong id="count-done">48</strong> Entregables Terminados (100% Operativos)</span>
+          <span><i class="legend-dot" style="background: #f59e0b;"></i><strong id="count-wip">5</strong> Entregables en Ajuste / Calibración Hoy</span>
+          <span><i class="legend-dot" style="background: #38bdf8;"></i><strong id="count-todo">4</strong> Entregables Pendientes de Desarrollo (Módulo Logística)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FILTROS Y BUSCADOR -->
+    <div class="controls-bar">
+      <div class="filter-group">
+        <button class="filter-btn active" onclick="filterChecklist('all', this)">Todos los Puntos (57)</button>
+        <button class="filter-btn" onclick="filterChecklist('done', this)">✅ Terminados (48)</button>
+        <button class="filter-btn" onclick="filterChecklist('wip', this)">⏳ En Ajuste / Calibración Hoy (5)</button>
+        <button class="filter-btn" onclick="filterChecklist('todo', this)">⬜ Pendientes por Desarrollar (4)</button>
+      </div>
+      <input
+        type="text"
+        id="search-box"
+        class="search-input"
+        placeholder="Buscar entregable, módulo o función..."
+        oninput="searchChecklist(this.value)"
+      />
+    </div>
+
+    <!-- CONTENEDOR DINÁMICO DEL CHECKLIST -->
+    <div id="checklist-container"></div>
+
+  </main>
+
+  <script>
+    const CHECKLIST_DATA = [
+      {
+        areaId: 'area-1',
+        areaTitle: '1. Estructura Corporativa Multi-Empresa, Marcas, Líneas y Usuarios',
+        areaSubtitle: 'Base organizacional del grupo empresarial, tiendas físicas, números de WhatsApp y control de accesos.',
+        areaPct: '100%',
+        items: [
+          { status: 'done', module: 'Módulo 01: Empresas', title: 'Creación y edición de múltiples empresas / razones sociales', desc: 'Permite dar de alta distintas sociedades dentro del mismo CRM y activarlas o desactivarlas.' },
+          { status: 'done', module: 'Módulo 01: Empresas', title: 'Asignación de marcas comerciales por empresa', desc: 'Vincula qué marcas (Studio F, ELA, etc.) pertenecen a cada razón social.' },
+          { status: 'done', module: 'Módulo 02: Marcas y Tiendas', title: 'Administración de marcas comerciales (Studio F, ELA)', desc: 'Gestión independiente de cada marca del grupo.' },
+          { status: 'done', module: 'Módulo 02: Marcas y Tiendas', title: 'Creación y gestión de sucursales / tiendas físicas por marca', desc: 'Permite registrar cada tienda física y asociarla a su marca correspondiente.' },
+          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Conexión de múltiples números de WhatsApp Business (Multi-Línea)', desc: 'Permite operar varios números oficiales de WhatsApp al mismo tiempo sin mezclar chats.' },
+          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Botón de diagnóstico y prueba en vivo de conexión con Meta', desc: 'Verifica en un clic si el token y el número de teléfono están activos en Meta.' },
+          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Aislamiento estricto de sesiones por línea telefónica', desc: 'Si un mismo cliente escribe a dos líneas distintas, cada conversación se mantiene separada y ordenada.' },
+          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Gestión de usuarios con 3 niveles (Administrador, Supervisor, Asesora)', desc: 'Controla qué pantallas y acciones puede realizar cada integrante del equipo.' },
+          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Asignación personalizada de líneas de WhatsApp por asesora', desc: 'Define exactamente qué líneas puede ver y responder cada asesora.' }
+        ]
+      },
+      {
+        areaId: 'area-2',
+        areaTitle: '2. Operación Comercial, Bandeja Omnicanal y Clientes 360°',
+        areaSubtitle: 'Herramientas diarias de atención al cliente, seguimiento en embudo de ventas e historial de tiendas físicas.',
+        areaPct: '100%',
+        items: [
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Recepción y envío de mensajes de WhatsApp en tiempo real', desc: 'Actualización instantánea sin necesidad de recargar la página.' },
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Integración de mensajes de Instagram Direct y Facebook Messenger', desc: 'Atención de redes sociales desde la misma bandeja de conversaciones.' },
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Indicador de presencia en vivo (quién está viendo cada chat)', desc: 'Muestra el nombre de la asesora que tiene abierto un chat para evitar doble respuesta.' },
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Soporte multimedia completo (fotos, notas de voz, documentos, respuestas citadas)', desc: 'Envío y reproducción de audios, imágenes de prendas, PDFs y respuesta a mensajes específicos.' },
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Buscador global dentro de conversaciones y filtro de no leídos', desc: 'Encuentra rápidamente cualquier cliente, teléfono o palabra mencionada en los chats.' },
+          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Ventana de chat emergente (Chat Popup) desde cualquier pantalla', desc: 'Permite abrir y responder un chat desde el Pipeline o Auditoría sin salir de esa vista.' },
+          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Tablero Kanban por temperatura (Frío, Tibio, Caliente, Pagado, Por Despacho, PQRS)', desc: 'Organización visual de todos los clientes según su etapa en el proceso de compra.' },
+          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Avance automático de etapa según señales de compra en el chat', desc: 'Sube automáticamente la temperatura cuando el cliente cotiza o solicita cuentas bancarias.' },
+          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Deduplicación de tarjetas por cliente en el Pipeline', desc: 'Garantiza una única tarjeta limpia por cliente sin duplicados.' },
+          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Sincronización automática con +18,000 clientes de tiendas físicas', desc: 'Descarga periódica del resumen histórico de clientes desde el ERP.' },
+          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Visualización en el chat de monto histórico comprado, facturas y última compra', desc: 'Permite a la asesora saber de inmediato si habla con una clienta VIP o nueva.' },
+          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Visualización de tallas frecuentes (blusa, jean, calzado) y tienda preferida', desc: 'Muestra las tallas reales registradas en sus compras de tienda física.' },
+          { status: 'done', module: 'Módulo 08: Respuestas Rápidas', title: 'Catálogo de plantillas rápidas de respuesta con atajo "/" en el chat', desc: 'Inserción inmediata de cuentas bancarias, requisitos de envío, saludos y políticas.' }
+        ]
+      },
+      {
+        areaId: 'area-3',
+        areaTitle: '3. Catálogo Digital, Precios ERP, Cotizador Visual e Inteligencia Artificial',
+        areaSubtitle: 'Inventario conectado al ERP, fotografías SFTP, calculadora gráfica de cotizaciones y bot de atención 24/7.',
+        areaPct: '98%',
+        items: [
+          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Sincronización de existencias reales desde el ERP (/api/data/existencia)', desc: 'Suma el stock disponible real en tiendas descartando automáticamente la bodega de imperfectos.' },
+          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Buscador instantáneo por Referencia (ej. S219701), SKU, código de barras o color', desc: 'Búsqueda rápida en servidor sobre todo el catálogo de prendas.' },
+          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Importación manual complementaria vía archivo CSV', desc: 'Permite cargar o actualizar listas de productos por archivo cuando se requiera.' },
+          { status: 'wip', module: 'Módulo 09: Catálogo Digital', title: 'Sincronización automática de precios oficiales desde /api/data/ref-precio (8,022 refs)', desc: 'Recién subido hoy a producción: asigna automáticamente el precio oficial en Quetzales a cada referencia y habilita el botón "Sincronizar Precios ERP".' },
+          { status: 'done', module: 'Módulo 10: Fotos SFTP', title: 'Enlace inteligente de +4,760 fotografías de prendas desde el servidor SFTP', desc: 'Empareja cada foto con su referencia y color correspondiente sin intervención manual.' },
+          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Acceso a la Calculadora desde el encabezado del Chat y desde el Catálogo', desc: 'Disponible tanto para enviar directo a un cliente en conversación como para cotizaciones generales.' },
+          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Cálculo automático de descuentos (% o precio final), subtotales y ahorro del cliente', desc: 'Calcula al instante cuánto paga y cuánto ahorra el cliente en una o varias prendas.' },
+          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Generación de tarjeta gráfica PNG con foto, desglose y folio consecutivo (COT-2026-XXXX)', desc: 'Crea la imagen lista para enviar por WhatsApp o descargar con texto copiado al portapapeles.' },
+          { status: 'wip', module: 'Módulo 11: Cotizador / Calculadora', title: 'Carga automática del precio oficial del ERP al seleccionar cualquier referencia en el Cotizador', desc: 'Recién subido hoy a producción junto con la sincronización de /api/data/ref-precio.' },
+          { status: 'done', module: 'Módulo 12: Diagnóstico ERP', title: 'Consola de inspección en vivo de vistas del ERP y sondeo de endpoints', desc: 'Permite verificar qué columnas y datos entrega el ERP en tiempo real.' },
+          { status: 'done', module: 'Módulo 13: Agente IA 24/7', title: 'Bot de recepción conectado a existencias reales, precios y ficha del cliente', desc: 'Responde consultas iniciales con datos reales del inventario y transfiere a asesora humana.' },
+          { status: 'done', module: 'Módulo 13: Agente IA 24/7', title: 'Simulador interno de pruebas del Agente IA (/pruebas)', desc: 'Entorno dentro del CRM para probar conversaciones con el bot sin usar WhatsApp externo.' }
+        ]
+      },
+      {
+        areaId: 'area-4',
+        areaTitle: '4. Marketing, Difusiones Masivas y Estrategia Meta',
+        areaSubtitle: 'Envío de campañas promocionales, administración de plantillas oficiales, remarketing y control de costos.',
+        areaPct: '100%',
+        items: [
+          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Creación y envío de difusiones masivas segmentadas por línea y temperatura', desc: 'Permite lanzar campañas a grupos de clientes o listas específicas con imagen y variables.' },
+          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Candado anti-duplicados por número telefónico normalizado', desc: 'Impide que un mismo cliente reciba dos veces el mismo mensaje masivo.' },
+          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Monitoreo en vivo de entrega (Enviado, Recibido, Leído, Falló) y reintento de fallidos', desc: 'Muestra el resultado exacto de cada destinatario de la campaña.' },
+          { status: 'done', module: 'Módulo 15: Plantillas Meta', title: 'Creación, envío a aprobación y eliminación de plantillas oficiales desde el CRM', desc: 'Conexión directa con Meta para gestionar plantillas sin entrar al administrador externo.' },
+          { status: 'done', module: 'Módulo 16: Remarketing', title: 'Pipeline de Remarketing para recuperar cotizaciones abiertas y pagos pendientes', desc: 'Identifica clientes con intención de compra que aún no han cerrado su pedido.' },
+          { status: 'done', module: 'Módulo 17: Estrategia Meta', title: 'Monitor de salud y calidad de líneas de WhatsApp + Simulador financiero de costos', desc: 'Calcula el costo estimado de cada campaña y recomienda la mezcla ideal de audiencias.' }
+        ]
+      },
+      {
+        areaId: 'area-5',
+        areaTitle: '5. Dirección, Analítica, Auditoría, Configuración y Métricas por Asesora',
+        areaSubtitle: 'Tablero gerencial, reglas configurables en vivo, bitácora de seguridad, lectura OCR y ventas por asesora.',
+        areaPct: '90%',
+        items: [
+          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Dashboard directivo con indicadores de clientes, tickets, tiempos de respuesta y métodos de pago', desc: 'Resumen ejecutivo diario del estado general de la operación.' },
+          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Configuración en vivo de columnas, nombres, íconos y colores del Pipeline', desc: 'El administrador puede adaptar el embudo sin requerir cambios de código.' },
+          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Configuración en vivo de palabras clave de detección, OCR, SLA, Meta Ads y Redes Sociales', desc: '5 pestañas de administración directa de parámetros del sistema.' },
+          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Panel de "Chats sin responder" con tiempo de espera y cálculo de descuento Fashion Time', desc: 'Alerta inmediata de clientes esperando atención y el escalón de descuento según su hora de entrada.' },
+          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Historial auditable de decisiones tomadas por el Agente de IA', desc: 'Transparencia sobre cada transferencia o clasificación hecha por el bot.' },
+          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Bitácora inalterable de seguridad y accesos con exportación a Excel (.xlsx)', desc: 'Registra quién vio un cliente, quién movió una tarjeta, quién marcó pagado e inicios de sesión.' },
+          { status: 'done', module: 'Módulo 20: OCR y Métricas', title: 'Motor de lectura automática de comprobantes bancarios en imagen (OCR)', desc: 'Reconoce boletas de transferencia, depósito y tarjeta enviadas por los clientes.' },
+          { status: 'done', module: 'Módulo 20: OCR y Métricas', title: 'Tablero de ventas por asesora con filtro de fechas, detalle por cliente y resumen para WhatsApp', desc: 'Permite consultar cuánto lleva vendido cada asesora y copiar el reporte diario.' },
+          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Regla determinista de atribución de asesora cuando varias asesoras intervienen en un mismo chat', desc: 'En calibración activa: asegurar que la venta se asigne siempre a la asesora correcta en cambios de turno sin necesidad de ajustes manuales.' },
+          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Filtro estricto entre comprobantes bancarios reales vs. fotos de prendas/catálogo con números', desc: 'En calibración activa: evitar que imágenes promocionales o de ropa generen registros de venta falsos.' },
+          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Cruce directo entre la Cotización formal enviada (Calculadora) y el comprobante de pago recibido', desc: 'En calibración activa: vincular el monto cotizado con el pago confirmado para lograr 100% de exactitud en el reporte.' }
+        ]
+      },
+      {
+        areaId: 'area-6',
+        areaTitle: '6. Módulo de Logística, Alistamiento y Guías de Despacho',
+        areaSubtitle: 'Control post-venta desde que el pago queda confirmado hasta que el paquete llega a manos del cliente.',
+        areaPct: '20%',
+        items: [
+          { status: 'done', module: 'Módulo 21: Logística y Envíos', title: 'Paso automático del cliente a etapa "Por Despacho" al confirmarse el pago', desc: 'Ya operativo en el Pipeline Comercial.' },
+          { status: 'done', module: 'Módulo 21: Logística y Envíos', title: 'Plantilla estructurada de solicitud de datos de envío en el chat', desc: 'Captura de Nombre, Dirección, Ciudad, Zona, Departamento, Celular, NIT/DPI y Correo.' },
+          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Pantalla dedicada de Logística con bandeja de pedidos pagados pendientes de alistar', desc: 'Pendiente de desarrollo: vista exclusiva para bodega/despachos con el detalle de prendas a empacar.' },
+          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Control de estados de despacho (Pendiente empaque → Empacado → En ruta → Entregado / Novedad)', desc: 'Pendiente de desarrollo: trazabilidad paso a paso del paquete físico.' },
+          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Campo de asignación de empresa transportadora y número de guía de envío', desc: 'Pendiente de desarrollo: registro formal de la guía asociada a cada venta.' },
+          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Notificación automática al WhatsApp del cliente cuando su pedido es despachado con su guía', desc: 'Pendiente de desarrollo: aviso automático al cliente y cierre del ciclo logístico.' }
+        ]
+      }
+    ];
+
+    let currentFilter = 'all';
+    let currentSearch = '';
+
+    function renderChecklist() {
+      const container = document.getElementById('checklist-container');
+      let html = '';
+
+      let totalCount = 0;
+      let doneCount = 0;
+      let wipCount = 0;
+      let todoCount = 0;
+
+      CHECKLIST_DATA.forEach((area) => {
+        area.items.forEach((it) => {
+          totalCount++;
+          if (it.status === 'done') doneCount++;
+          else if (it.status === 'wip') wipCount++;
+          else todoCount++;
+        });
+
+        const visibleItems = area.items.filter((it) => {
+          const matchesStatus = currentFilter === 'all' || it.status === currentFilter;
+          const q = currentSearch.trim().toLowerCase();
+          const matchesSearch =
+            !q ||
+            it.title.toLowerCase().includes(q) ||
+            it.desc.toLowerCase().includes(q) ||
+            it.module.toLowerCase().includes(q) ||
+            area.areaTitle.toLowerCase().includes(q);
+          return matchesStatus && matchesSearch;
+        });
+
+        if (visibleItems.length === 0) return;
+
+        html += `
+          <section class="area-card">
+            <div class="area-head">
+              <div class="area-head-left">
+                <h2>${area.areaTitle}</h2>
+                <p>${area.areaSubtitle}</p>
+              </div>
+              <span class="area-pct-pill">Avance del Área: ${area.areaPct}</span>
+            </div>
+            <table class="checklist-table">
+              <tbody>
+        `;
+
+        visibleItems.forEach((it) => {
+          const checkClass =
+            it.status === 'done' ? 'check-done' : it.status === 'wip' ? 'check-wip' : 'check-todo';
+          const checkSymbol =
+            it.status === 'done' ? '✓' : it.status === 'wip' ? '⏳' : '';
+          const chipClass =
+            it.status === 'done' ? 'chip-done' : it.status === 'wip' ? 'chip-wip' : 'chip-todo';
+          const chipLabel =
+            it.status === 'done'
+              ? '✅ Completado (100%)'
+              : it.status === 'wip'
+              ? '⏳ En Calibración Hoy'
+              : '⬜ Pendiente Desarrollo';
+
+          html += `
+            <tr class="checklist-row">
+              <td class="col-check">
+                <span class="check-box ${checkClass}">${checkSymbol}</span>
+              </td>
+              <td class="col-main">
+                <div class="item-title">
+                  <span class="item-module-tag">${it.module}</span>
+                  <span>${it.title}</span>
+                </div>
+                <p class="item-desc">${it.desc}</p>
+              </td>
+              <td class="col-status">
+                <span class="status-chip ${chipClass}">${chipLabel}</span>
+              </td>
+            </tr>
+          `;
+        });
+
+        html += `
+              </tbody>
+            </table>
+          </section>
+        `;
+      });
+
+      container.innerHTML = html || '<div class="summary-card" style="text-align:center;color:var(--muted);">No se encontraron entregables con ese filtro.</div>';
+
+      // Update top summary counters
+      const pctDone = Math.round((doneCount / totalCount) * 100);
+      const pctWip = Math.round((wipCount / totalCount) * 100);
+      const pctTodo = Math.max(0, 100 - pctDone - pctWip);
+
+      document.getElementById('stat-total-count').textContent = totalCount;
+      document.getElementById('count-done').textContent = doneCount;
+      document.getElementById('count-wip').textContent = wipCount;
+      document.getElementById('count-todo').textContent = todoCount;
+      document.getElementById('stat-headline').textContent =
+        `${pctDone}% Terminado (${doneCount}/${totalCount}) • ${pctWip}% En Ajuste Hoy (${wipCount}) • ${pctTodo}% Pendiente (${todoCount})`;
+
+      document.getElementById('bar-done').style.width = `${pctDone}%`;
+      document.getElementById('bar-wip').style.width = `${pctWip}%`;
+      document.getElementById('bar-todo').style.width = `${pctTodo}%`;
+    }
+
+    function filterChecklist(status, btnEl) {
+      currentFilter = status;
+      document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      renderChecklist();
+    }
+
+    function searchChecklist(val) {
+      currentSearch = val || '';
+      renderChecklist();
+    }
+
+    function exportChecklistToWord() {
+      let rowsHtml = '';
+      let idx = 1;
+      CHECKLIST_DATA.forEach((area) => {
+        rowsHtml += `
+          <tr style="background-color:#e0e7ff; color:#1e1b4b; font-weight:bold;">
+            <td colspan="4" style="padding:8px;">${area.areaTitle} (Avance: ${area.areaPct})</td>
+          </tr>
+        `;
+        area.items.forEach((it) => {
+          const mark = it.status === 'done' ? '[ X ]' : it.status === 'wip' ? '[ ~ ]' : '[   ]';
+          const stateText =
+            it.status === 'done'
+              ? 'Completado (100%)'
+              : it.status === 'wip'
+              ? 'En Ajuste / Calibración'
+              : 'Pendiente de Desarrollo';
+          const bg = idx % 2 === 0 ? '#f9fafb' : '#ffffff';
+          rowsHtml += `
+            <tr style="background-color:${bg};">
+              <td align="center" style="font-family:Consolas, monospace; font-weight:bold; width:8%;">${mark}</td>
+              <td style="width:22%;"><strong>${it.module}</strong></td>
+              <td style="width:50%;"><strong>${it.title}</strong><br/><span style="color:#4b5563; font-size:9pt;">${it.desc}</span></td>
+              <td style="width:20%;"><strong>${stateText}</strong></td>
+            </tr>
+          `;
+          idx++;
+        });
+      });
+
+      const wordDoc = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office"
+              xmlns:w="urn:schemas-microsoft-com:office:word"
+              xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="utf-8">
+          <title>Checklist Maestro 100% — Bagneres CRM</title>
+          <style>
+            @page { size: 21.59cm 27.94cm; margin: 1.8cm; }
+            body { font-family: Calibri, Arial, sans-serif; color: #111827; font-size: 10pt; }
+          </style>
+        </head>
+        <body>
+          <h1 style="font-size:18pt; color:#1e1b4b; border-bottom:2px solid #15803d; padding-bottom:6pt; margin-bottom:4pt;">
+            CHECKLIST MAESTRO DEL 100% DEL PROYECTO — BAGNERES CRM
+          </h1>
+          <p style="font-size:10pt; color:#4b5563; margin-top:0;">
+            <strong>Operación:</strong> Studio F &amp; ELA Guatemala &nbsp;|&nbsp;
+            <strong>Fecha:</strong> 17 de octubre de 2026 &nbsp;|&nbsp;
+            <strong>Total de Entregables Verificables:</strong> 57 puntos en 6 Áreas Corporativas
+          </p>
+          <p style="font-size:10pt;">
+            <strong>Leyenda:</strong> <code>[ X ]</code> Completado y Operativo en Producción &nbsp;|&nbsp;
+            <code>[ ~ ]</code> En Cierre / Calibración Hoy &nbsp;|&nbsp;
+            <code>[ &nbsp; ]</code> Definido / Pendiente de Desarrollo
+          </p>
+          <table border="1" cellspacing="0" cellpadding="6" style="width:100%; border-collapse:collapse; border-color:#cbd5e1; font-size:9.5pt;">
+            <thead>
+              <tr style="background-color:#1e293b; color:#ffffff;">
+                <th align="center">Check</th>
+                <th align="left">Módulo</th>
+                <th align="left">Entregable Funcional y Descripción</th>
+                <th align="left">Estado Actual</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(['\ufeff', wordDoc], { type: 'application/msword;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Checklist_Maestro_100_Bagneres_CRM.doc';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+
+    renderChecklist();
+  </script>
+</body>
+</html>
