@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" href="/favicon.svg" />
-  <title>Checklist Maestro del Proyecto (100%) — Bagneres CRM</title>
+  <title>Checklist Ejecutivo del Proyecto — Bagneres CRM (Sedes de Studio F y Línea Basshert)</title>
   <style>
     :root {
       --bg: #f4f5f8;
@@ -25,10 +25,10 @@
       --warn: #b45309;
       --warn-bg: #fef3c7;
       --warn-border: #fcd34d;
-      --todo: #0369a1;
-      --todo-bg: #e0f2fe;
-      --todo-border: #7dd3fc;
-      --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 6px 16px rgba(17, 24, 39, 0.04);
+      --info: #0369a1;
+      --info-bg: #e0f2fe;
+      --info-border: #7dd3fc;
+      --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 4px 12px rgba(17, 24, 39, 0.03);
     }
 
     * { box-sizing: border-box; }
@@ -39,10 +39,10 @@
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
-      line-height: 1.5;
+      line-height: 1.45;
     }
 
-    /* ---- Topbar ---- */
+    /* ---- Topbar (mismo estilo del Informe Corporativo) ---- */
     .topbar-wrap {
       position: sticky;
       top: 0;
@@ -52,14 +52,14 @@
       border-bottom: 1px solid var(--line);
     }
     .topbar {
-      max-width: 1280px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 15px 28px;
+      padding: 14px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 14px;
+      gap: 12px;
     }
     .brand {
       display: flex;
@@ -70,14 +70,14 @@
       width: 38px;
       height: 38px;
       border-radius: 10px;
-      background: var(--ok);
+      background: var(--primary);
       color: #fff;
       font-weight: 800;
-      font-size: 16px;
+      font-size: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 10px rgba(21, 128, 61, 0.25);
+      box-shadow: 0 4px 10px rgba(55, 48, 163, 0.25);
     }
     .brand-text h1 {
       font-size: 16px;
@@ -126,295 +126,218 @@
 
     /* ---- Container ---- */
     .container {
-      max-width: 1280px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 26px 28px 80px;
+      padding: 24px 24px 64px;
     }
 
-    /* ---- Summary Card ---- */
-    .summary-card {
+    /* ---- Hero & KPIs Compactos ---- */
+    .hero-card {
       background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 20px;
-      padding: 26px;
+      border-radius: 18px;
+      padding: 22px 24px;
       box-shadow: var(--shadow-sm);
-      margin-bottom: 22px;
+      margin-bottom: 20px;
+    }
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
     }
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--ok);
-      background: var(--ok-bg);
-      border: 1px solid var(--ok-border);
-      padding: 4px 11px;
+      color: var(--primary);
+      background: var(--primary-light);
+      border: 1px solid var(--primary-border);
+      padding: 3px 10px;
       border-radius: 999px;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
     .hero-title {
-      font-size: clamp(21px, 2.8vw, 28px);
+      font-size: 22px;
       font-weight: 800;
-      margin: 0 0 8px;
+      margin: 0;
       letter-spacing: -0.02em;
     }
     .hero-sub {
-      font-size: 14px;
+      font-size: 13.5px;
       color: var(--muted);
-      margin: 0 0 20px;
-      max-width: 920px;
+      margin: 4px 0 0;
     }
 
-    /* ---- Master Progress Bar ---- */
-    .master-bar-box {
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .kpi-mini {
       background: var(--paper-soft);
       border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 18px 20px;
-      margin-bottom: 18px;
-    }
-    .master-bar-top {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-    .master-bar-title {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--ink);
-    }
-    .master-bar-stats {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--primary);
-    }
-    .master-track {
-      width: 100%;
-      height: 14px;
-      background: #e5e7eb;
-      border-radius: 999px;
-      overflow: hidden;
-      display: flex;
-    }
-    .seg-done { background: var(--ok); height: 100%; transition: width 0.3s ease; }
-    .seg-wip { background: #f59e0b; height: 100%; transition: width 0.3s ease; }
-    .seg-todo { background: #38bdf8; height: 100%; transition: width 0.3s ease; }
-
-    .legend-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 18px;
-      margin-top: 10px;
-      font-size: 12.5px;
-      color: var(--muted);
-    }
-    .legend-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 3px;
-      margin-right: 6px;
-      vertical-align: middle;
-    }
-
-    /* ---- Filter Bar ---- */
-    .controls-bar {
+      border-radius: 12px;
+      padding: 12px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px 16px;
-      margin-bottom: 22px;
-      box-shadow: var(--shadow-sm);
     }
-    .filter-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+    .kpi-mini-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--subtle);
     }
-    .filter-btn {
-      font-family: inherit;
-      font-size: 12.5px;
-      font-weight: 600;
-      padding: 7px 13px;
-      border-radius: 9px;
-      border: 1px solid var(--line);
-      background: var(--paper-soft);
+    .kpi-mini-sub {
+      font-size: 11.5px;
       color: var(--muted);
-      cursor: pointer;
-      transition: all 0.15s;
+      margin-top: 2px;
     }
-    .filter-btn:hover { color: var(--ink); }
-    .filter-btn.active {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
+    .kpi-mini-val {
+      font-size: 22px;
+      font-weight: 800;
     }
-    .search-input {
-      font-family: inherit;
-      font-size: 13px;
-      padding: 8px 14px;
-      border-radius: 9px;
-      border: 1px solid var(--line);
-      min-width: 260px;
-      outline: none;
-    }
-    .search-input:focus { border-color: var(--primary); }
 
-    /* ---- Checklist Sections ---- */
+    /* ---- Grid de Áreas (2 columnas en escritorio para que sea corto y fácil de ver) ---- */
+    .areas-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
     .area-card {
       background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 18px;
-      margin-bottom: 22px;
+      border-radius: 16px;
       overflow: hidden;
       box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
     }
     .area-head {
-      background: var(--paper-soft);
-      border-bottom: 1px solid var(--line);
-      padding: 16px 22px;
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      color: #ffffff;
+      padding: 13px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
     }
-    .area-head-left h2 {
-      font-size: 16.5px;
+    .area-head h2 {
+      font-size: 14.5px;
       font-weight: 800;
       margin: 0;
-      color: var(--ink);
     }
-    .area-head-left p {
-      font-size: 12.5px;
-      color: var(--muted);
-      margin: 2px 0 0;
-    }
-    .area-pct-pill {
-      font-size: 12.5px;
+    .area-head span {
+      font-size: 11.5px;
       font-weight: 800;
-      padding: 5px 12px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 3px 9px;
       border-radius: 999px;
-      background: var(--primary-light);
-      color: var(--primary);
-      border: 1px solid var(--primary-border);
+      white-space: nowrap;
     }
 
-    .checklist-table {
-      width: 100%;
-      border-collapse: collapse;
+    /* ---- Lista Compacta de Items ---- */
+    .item-list {
+      divide-y: 1px solid var(--line-soft);
     }
-    .checklist-row {
+    .check-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
       border-bottom: 1px solid var(--line-soft);
-      transition: background 0.12s;
     }
-    .checklist-row:last-child { border-bottom: none; }
-    .checklist-row:hover { background: #f8fafc; }
+    .check-item:last-child { border-bottom: none; }
+    .check-item:hover { background: var(--paper-soft); }
 
-    .col-check {
-      width: 48px;
-      text-align: center;
-      padding: 13px 6px 13px 18px;
-      vertical-align: top;
+    .item-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
     }
-    .check-box {
+    .box-icon {
       width: 22px;
       height: 22px;
       border-radius: 6px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 900;
-      cursor: pointer;
-      user-select: none;
+      flex-shrink: 0;
+      margin-top: 1px;
     }
-    .check-done {
-      background: var(--ok);
-      color: #fff;
-      border: 1px solid var(--ok);
-    }
-    .check-wip {
-      background: var(--warn-bg);
-      color: var(--warn);
-      border: 1.5px solid #f59e0b;
-    }
-    .check-todo {
-      background: #fff;
-      color: transparent;
-      border: 2px solid #94a3b8;
-    }
+    .icon-ok { background: var(--ok); color: #fff; }
+    .icon-warn { background: var(--warn-bg); color: var(--warn); border: 1.5px solid #f59e0b; }
+    .icon-info { background: var(--info-bg); color: var(--info); border: 1.5px solid #38bdf8; }
 
-    .col-main {
-      padding: 13px 14px;
-      vertical-align: top;
+    .item-text {
+      min-width: 0;
     }
-    .item-title {
-      font-size: 14px;
+    .item-name {
+      font-size: 13.5px;
       font-weight: 700;
       color: var(--ink);
-      margin: 0 0 2px;
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .item-module-tag {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 1px 8px;
-      border-radius: 6px;
-      background: var(--line-soft);
-      color: var(--muted);
-    }
-    .item-desc {
-      font-size: 12.5px;
-      color: var(--muted);
       margin: 0;
     }
-
-    .col-status {
-      width: 190px;
-      padding: 13px 20px 13px 10px;
-      text-align: right;
-      vertical-align: top;
-      white-space: nowrap;
+    .item-mini-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 1px 0 0;
     }
-    .status-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
+
+    .item-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      flex-shrink: 0;
+      width: 82px;
+    }
+    .pct-pill {
       font-size: 11.5px;
-      font-weight: 700;
-      padding: 4px 10px;
+      font-weight: 800;
+      padding: 2px 8px;
       border-radius: 999px;
     }
-    .chip-done { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
-    .chip-wip { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
-    .chip-todo { background: var(--todo-bg); color: var(--todo); border: 1px solid var(--todo-border); }
+    .pill-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
+    .pill-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+    .pill-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
 
-    @media (max-width: 768px) {
-      .topbar, .container { padding-left: 16px; padding-right: 16px; }
-      .col-status { width: auto; text-align: left; padding-left: 14px; padding-top: 0; }
-      .checklist-row { display: block; padding: 8px 0; }
-      .col-check, .col-main, .col-status { display: block; width: 100%; }
-      .search-input { width: 100%; }
+    .mini-track {
+      width: 100%;
+      height: 5px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    .mini-fill-ok { height: 100%; background: var(--ok); }
+    .mini-fill-warn { height: 100%; background: #f59e0b; }
+    .mini-fill-info { height: 100%; background: #0284c7; }
+
+    @media (max-width: 960px) {
+      .areas-grid { grid-template-columns: 1fr; }
+      .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .kpi-strip { grid-template-columns: 1fr; }
+      .topbar, .container { padding-left: 14px; padding-right: 14px; }
     }
     @media print {
-      .topbar-wrap, .controls-bar { display: none !important; }
+      .topbar-wrap { display: none !important; }
       body { background: #fff; }
-      .area-card, .summary-card { box-shadow: none; break-inside: avoid; }
+      .area-card, .hero-card { box-shadow: none; break-inside: avoid; }
     }
   </style>
 </head>
@@ -426,324 +349,491 @@
       <div class="brand">
         <div class="brand-badge">✓</div>
         <div class="brand-text">
-          <h1>Checklist Maestro del 100% del Proyecto — Bagneres CRM</h1>
-          <p>Control de Entregables Funcionales Verificables — Sedes de Studio F y Línea Basshert</p>
+          <h1>Bagneres CRM — Checklist Ejecutivo del 100% del Proyecto</h1>
+          <p>Resumen por Área, Función y Porcentaje — Sedes de Studio F y Línea Basshert</p>
         </div>
       </div>
 
       <div class="actions">
         <a href="/" class="btn btn-outline">← Volver al CRM</a>
-        <a href="/informe.html" class="btn btn-outline">📄 Ver Informe Explicativo</a>
+        <a href="/informe.html" class="btn btn-outline">📄 Ver Informe Detallado</a>
         <button onclick="window.print()" class="btn btn-outline">🖨️ Imprimir / PDF</button>
-        <button onclick="exportChecklistToWord()" class="btn btn-primary">📥 Descargar Checklist en Word (.doc)</button>
+        <button onclick="exportChecklistToWord()" class="btn btn-primary">📥 Descargar en Word (.doc)</button>
       </div>
     </div>
   </header>
 
   <main class="container">
 
-    <!-- TARJETA RESUMEN DEL CHECKLIST -->
-    <section class="summary-card">
-      <div class="eyebrow">LISTA DE VERIFICACIÓN CORPORATIVA • ALCANCE 100% DEL SISTEMA</div>
-      <h2 class="hero-title">Estado de Cumplimiento de Todos los Entregables del CRM</h2>
-      <p class="hero-sub">
-        Este documento desglosa el <strong>100% de las funciones del proyecto Bagneres CRM</strong> (para las <strong>sedes de Studio F y la línea Basshert</strong>) en puntos de control claros y auditables. Permite ver qué puntos ya están terminados y operando en producción, cuáles están en ajuste/calibración hoy mismo y cuáles corresponden a la última etapa pendiente por desarrollar (Logística y Despachos).
-      </p>
+    <!-- ENCABEZADO RESUMEN -->
+    <section class="hero-card">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">CHECKLIST EJECUTIVO RESUMIDO • CORTE OCTUBRE 2026</div>
+          <h2 class="hero-title">Estado del 100% del Sistema en una Sola Vista</h2>
+          <p class="hero-sub">Desglose directo de las <strong>6 áreas</strong> y los <strong>21 módulos</strong> para las <strong>sedes de Studio F y la línea Basshert</strong>.</p>
+        </div>
+      </div>
 
-      <div class="master-bar-box">
-        <div class="master-bar-top">
-          <span class="master-bar-title">Progreso Total de Entregables del Proyecto (<span id="stat-total-count">57</span> puntos verificables)</span>
-          <span class="master-bar-stats" id="stat-headline">84% Terminado (48/57) • 9% En Ajuste Hoy (5) • 7% Pendiente (4)</span>
+      <div class="kpi-strip">
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Avance Global</div>
+            <div class="kpi-mini-sub">Ponderado total</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--ok);">92%</div>
         </div>
-        <div class="master-track">
-          <div id="bar-done" class="seg-done" style="width: 84%;"></div>
-          <div id="bar-wip" class="seg-wip" style="width: 9%;"></div>
-          <div id="bar-todo" class="seg-todo" style="width: 7%;"></div>
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Terminados</div>
+            <div class="kpi-mini-sub">Listos al 100%</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--primary);">17 / 21</div>
         </div>
-        <div class="legend-row">
-          <span><i class="legend-dot" style="background: var(--ok);"></i><strong id="count-done">48</strong> Entregables Terminados (100% Operativos)</span>
-          <span><i class="legend-dot" style="background: #f59e0b;"></i><strong id="count-wip">5</strong> Entregables en Ajuste / Calibración Hoy</span>
-          <span><i class="legend-dot" style="background: #38bdf8;"></i><strong id="count-todo">4</strong> Entregables Pendientes de Desarrollo (Módulo Logística)</span>
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Trabajando Hoy</div>
+            <div class="kpi-mini-sub">En cierre / ajuste</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--warn);">3</div>
+        </div>
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Por Desarrollar</div>
+            <div class="kpi-mini-sub">Módulo Logística</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--info);">1</div>
         </div>
       </div>
     </section>
 
-    <!-- FILTROS Y BUSCADOR -->
-    <div class="controls-bar">
-      <div class="filter-group">
-        <button class="filter-btn active" onclick="filterChecklist('all', this)">Todos los Puntos (57)</button>
-        <button class="filter-btn" onclick="filterChecklist('done', this)">✅ Terminados (48)</button>
-        <button class="filter-btn" onclick="filterChecklist('wip', this)">⏳ En Ajuste / Calibración Hoy (5)</button>
-        <button class="filter-btn" onclick="filterChecklist('todo', this)">⬜ Pendientes por Desarrollar (4)</button>
-      </div>
-      <input
-        type="text"
-        id="search-box"
-        class="search-input"
-        placeholder="Buscar entregable, módulo o función..."
-        oninput="searchChecklist(this.value)"
-      />
-    </div>
+    <!-- CUADRÍCULA DE LAS 6 ÁREAS (RESUMIDA Y DIRECTA) -->
+    <div class="areas-grid">
 
-    <!-- CONTENEDOR DINÁMICO DEL CHECKLIST -->
-    <div id="checklist-container"></div>
+      <!-- ÁREA 1 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 1. Estructura Corporativa y Accesos</h2>
+          <span>Promedio: 100%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">01. Gestión de Empresas</p>
+                <p class="item-mini-desc">Estructura corporativa que agrupa Studio F y la línea Basshert.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">02. Sedes de Studio F y Línea Basshert</p>
+                <p class="item-mini-desc">Registro de las sedes físicas de Studio F y operación de Basshert.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">03. Líneas de WhatsApp</p>
+                <p class="item-mini-desc">Conexión de líneas de Studio F y Basshert con test en vivo en Meta.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">04. Usuarios, Roles y Permisos</p>
+                <p class="item-mini-desc">Perfiles Admin, Supervisor y Asesora con asignación por línea.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA 2 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 2. Atención Omnicanal y Ventas</h2>
+          <span>Promedio: 100%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">05. Bandeja Omnicanal + Chat Popup</p>
+                <p class="item-mini-desc">WhatsApp, Instagram y Facebook unificados en tiempo real.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">06. Pipeline Comercial (Kanban)</p>
+                <p class="item-mini-desc">Embudo Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">07. Clientes 360° + Historial ERP</p>
+                <p class="item-mini-desc">Cruce con +18,000 clientes de sedes: compras, tallas y NIT.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">08. Biblioteca de Respuestas Rápidas</p>
+                <p class="item-mini-desc">Plantillas rápidas con atajo "/" para cuentas, saludos y envíos.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA 3 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 3. Catálogo, Calculadora e IA</h2>
+          <span>Promedio: 98%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-warn">⏳</span>
+              <div class="item-text">
+                <p class="item-name">09. Catálogo Digital, Stock y Precios ERP</p>
+                <p class="item-mini-desc">Stock disponible real + 8,022 precios sincronizados hoy del ERP.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-warn">95%</span>
+              <div class="mini-track"><div class="mini-fill-warn" style="width:95%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">10. Sincronizador de Fotos SFTP</p>
+                <p class="item-mini-desc">Enlace automático de +4,760 fotos oficiales por referencia.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-warn">⏳</span>
+              <div class="item-text">
+                <p class="item-name">11. Cotizador / Calculadora Visual PNG</p>
+                <p class="item-mini-desc">Cálculo de descuentos y tarjeta PNG con precios ERP integrados hoy.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-warn">95%</span>
+              <div class="mini-track"><div class="mini-fill-warn" style="width:95%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">12. Consola de Diagnóstico ERP</p>
+                <p class="item-mini-desc">Inspección en vivo de endpoints y sincronización manual.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">13. Agente IA 24/7 + Simulador</p>
+                <p class="item-mini-desc">Bot conectado a stock real con pantalla interna de pruebas.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA 4 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 4. Marketing y Estrategia Meta</h2>
+          <span>Promedio: 100%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">14. Campañas y Difusiones Masivas</p>
+                <p class="item-mini-desc">Envíos masivos por WhatsApp con candado anti-duplicados.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">15. Gestor de Plantillas Meta</p>
+                <p class="item-mini-desc">Creación y aprobación oficial de plantillas desde el CRM.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">16. Pipeline de Remarketing</p>
+                <p class="item-mini-desc">Recuperación de clientes con cotización abierta o pago pendiente.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">17. Estrategia Meta y Simulador Costos</p>
+                <p class="item-mini-desc">Salud de líneas y calculadora financiera de presupuesto Meta.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA 5 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 5. Dirección, Auditoría y Métricas</h2>
+          <span>Promedio: 90%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">18. Dashboard y Configuración en Vivo</p>
+                <p class="item-mini-desc">KPIs operativos + 5 pestañas de ajustes (Pipeline, OCR, SLA, Ads).</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-ok">✓</span>
+              <div class="item-text">
+                <p class="item-name">19. Auditoría, SLA (Fashion Time) y Excel</p>
+                <p class="item-mini-desc">Alertas de espera, historial IA y bitácora exportable a Excel.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-ok">100%</span>
+              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-warn">⏳</span>
+              <div class="item-text">
+                <p class="item-name">20. Motor OCR y Métricas por Asesora</p>
+                <p class="item-mini-desc">Lectura de boletas y ventas; calibrando exactitud entre turnos.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-warn">70%</span>
+              <div class="mini-track"><div class="mini-fill-warn" style="width:70%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA 6 -->
+      <section class="area-card">
+        <div class="area-head">
+          <h2>Área 6. Post-Venta y Logística</h2>
+          <span>Promedio: 15%</span>
+        </div>
+        <div class="item-list">
+          <div class="check-item">
+            <div class="item-left">
+              <span class="box-icon icon-info">📋</span>
+              <div class="item-text">
+                <p class="item-name">21. Módulo de Logística y Guías de Envío</p>
+                <p class="item-mini-desc">Definido (etapa Por Despacho lista); pendiente panel de empaque y guías.</p>
+              </div>
+            </div>
+            <div class="item-right">
+              <span class="pct-pill pill-info">15%</span>
+              <div class="mini-track"><div class="mini-fill-info" style="width:15%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
 
   </main>
 
   <script>
-    const CHECKLIST_DATA = [
-      {
-        areaId: 'area-1',
-        areaTitle: '1. Estructura Corporativa: Sedes de Studio F, Línea Basshert, Líneas y Usuarios',
-        areaSubtitle: 'Base organizacional de las sedes de Studio F y la línea Basshert, números de WhatsApp y control de accesos.',
-        areaPct: '100%',
-        items: [
-          { status: 'done', module: 'Módulo 01: Empresas', title: 'Administración de la estructura corporativa en el CRM', desc: 'Permite gestionar y mantener activa la estructura empresarial de la operación.' },
-          { status: 'done', module: 'Módulo 01: Empresas', title: 'Vinculación operativa de Studio F y la línea Basshert', desc: 'Integra la operación de las sedes de Studio F y la línea Basshert bajo la misma plataforma.' },
-          { status: 'done', module: 'Módulo 02: Sedes y Líneas', title: 'Administración de la operación de Studio F y la línea Basshert', desc: 'Gestión independiente y ordenada de Studio F y de la línea Basshert.' },
-          { status: 'done', module: 'Módulo 02: Sedes y Líneas', title: 'Creación y gestión de las sedes físicas de Studio F', desc: 'Permite registrar cada sede física de Studio F y asociarla a su operación correspondiente.' },
-          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Conexión de las líneas de WhatsApp Business (Studio F y Basshert)', desc: 'Permite operar las líneas oficiales de Studio F y la línea Basshert al mismo tiempo sin mezclar chats.' },
-          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Botón de diagnóstico y prueba en vivo de conexión con Meta', desc: 'Verifica en un clic si el token y el número de teléfono están activos en Meta.' },
-          { status: 'done', module: 'Módulo 03: Líneas WhatsApp', title: 'Aislamiento estricto de sesiones por línea telefónica', desc: 'Si un mismo cliente escribe a Studio F y a la línea Basshert, cada conversación se mantiene separada y ordenada.' },
-          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Gestión de usuarios con 3 niveles (Administrador, Supervisor, Asesora)', desc: 'Controla qué pantallas y acciones puede realizar cada integrante del equipo.' },
-          { status: 'done', module: 'Módulo 04: Usuarios y Roles', title: 'Asignación personalizada de líneas de WhatsApp por asesora', desc: 'Define exactamente qué líneas (Studio F o Basshert) puede ver y responder cada asesora.' }
-        ]
-      },
-      {
-        areaId: 'area-2',
-        areaTitle: '2. Operación Comercial, Bandeja Omnicanal y Clientes 360°',
-        areaSubtitle: 'Herramientas diarias de atención al cliente, seguimiento en embudo de ventas e historial de tiendas físicas.',
-        areaPct: '100%',
-        items: [
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Recepción y envío de mensajes de WhatsApp en tiempo real', desc: 'Actualización instantánea sin necesidad de recargar la página.' },
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Integración de mensajes de Instagram Direct y Facebook Messenger', desc: 'Atención de redes sociales desde la misma bandeja de conversaciones.' },
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Indicador de presencia en vivo (quién está viendo cada chat)', desc: 'Muestra el nombre de la asesora que tiene abierto un chat para evitar doble respuesta.' },
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Soporte multimedia completo (fotos, notas de voz, documentos, respuestas citadas)', desc: 'Envío y reproducción de audios, imágenes de prendas, PDFs y respuesta a mensajes específicos.' },
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Buscador global dentro de conversaciones y filtro de no leídos', desc: 'Encuentra rápidamente cualquier cliente, teléfono o palabra mencionada en los chats.' },
-          { status: 'done', module: 'Módulo 05: Bandeja Omnicanal', title: 'Ventana de chat emergente (Chat Popup) desde cualquier pantalla', desc: 'Permite abrir y responder un chat desde el Pipeline o Auditoría sin salir de esa vista.' },
-          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Tablero Kanban por temperatura (Frío, Tibio, Caliente, Pagado, Por Despacho, PQRS)', desc: 'Organización visual de todos los clientes según su etapa en el proceso de compra.' },
-          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Avance automático de etapa según señales de compra en el chat', desc: 'Sube automáticamente la temperatura cuando el cliente cotiza o solicita cuentas bancarias.' },
-          { status: 'done', module: 'Módulo 06: Pipeline Comercial', title: 'Deduplicación de tarjetas por cliente en el Pipeline', desc: 'Garantiza una única tarjeta limpia por cliente sin duplicados.' },
-          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Sincronización automática con +18,000 clientes de tiendas físicas', desc: 'Descarga periódica del resumen histórico de clientes desde el ERP.' },
-          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Visualización en el chat de monto histórico comprado, facturas y última compra', desc: 'Permite a la asesora saber de inmediato si habla con una clienta VIP o nueva.' },
-          { status: 'done', module: 'Módulo 07: Clientes 360° (ERP)', title: 'Visualización de tallas frecuentes (blusa, jean, calzado) y tienda preferida', desc: 'Muestra las tallas reales registradas en sus compras de tienda física.' },
-          { status: 'done', module: 'Módulo 08: Respuestas Rápidas', title: 'Catálogo de plantillas rápidas de respuesta con atajo "/" en el chat', desc: 'Inserción inmediata de cuentas bancarias, requisitos de envío, saludos y políticas.' }
-        ]
-      },
-      {
-        areaId: 'area-3',
-        areaTitle: '3. Catálogo Digital, Precios ERP, Cotizador Visual e Inteligencia Artificial',
-        areaSubtitle: 'Inventario conectado al ERP, fotografías SFTP, calculadora gráfica de cotizaciones y bot de atención 24/7.',
-        areaPct: '98%',
-        items: [
-          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Sincronización de existencias reales desde el ERP (/api/data/existencia)', desc: 'Suma el stock disponible real en tiendas descartando automáticamente la bodega de imperfectos.' },
-          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Buscador instantáneo por Referencia (ej. S219701), SKU, código de barras o color', desc: 'Búsqueda rápida en servidor sobre todo el catálogo de prendas.' },
-          { status: 'done', module: 'Módulo 09: Catálogo Digital', title: 'Importación manual complementaria vía archivo CSV', desc: 'Permite cargar o actualizar listas de productos por archivo cuando se requiera.' },
-          { status: 'wip', module: 'Módulo 09: Catálogo Digital', title: 'Sincronización automática de precios oficiales desde /api/data/ref-precio (8,022 refs)', desc: 'Recién subido hoy a producción: asigna automáticamente el precio oficial en Quetzales a cada referencia y habilita el botón "Sincronizar Precios ERP".' },
-          { status: 'done', module: 'Módulo 10: Fotos SFTP', title: 'Enlace inteligente de +4,760 fotografías de prendas desde el servidor SFTP', desc: 'Empareja cada foto con su referencia y color correspondiente sin intervención manual.' },
-          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Acceso a la Calculadora desde el encabezado del Chat y desde el Catálogo', desc: 'Disponible tanto para enviar directo a un cliente en conversación como para cotizaciones generales.' },
-          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Cálculo automático de descuentos (% o precio final), subtotales y ahorro del cliente', desc: 'Calcula al instante cuánto paga y cuánto ahorra el cliente en una o varias prendas.' },
-          { status: 'done', module: 'Módulo 11: Cotizador / Calculadora', title: 'Generación de tarjeta gráfica PNG con foto, desglose y folio consecutivo (COT-2026-XXXX)', desc: 'Crea la imagen lista para enviar por WhatsApp o descargar con texto copiado al portapapeles.' },
-          { status: 'wip', module: 'Módulo 11: Cotizador / Calculadora', title: 'Carga automática del precio oficial del ERP al seleccionar cualquier referencia en el Cotizador', desc: 'Recién subido hoy a producción junto con la sincronización de /api/data/ref-precio.' },
-          { status: 'done', module: 'Módulo 12: Diagnóstico ERP', title: 'Consola de inspección en vivo de vistas del ERP y sondeo de endpoints', desc: 'Permite verificar qué columnas y datos entrega el ERP en tiempo real.' },
-          { status: 'done', module: 'Módulo 13: Agente IA 24/7', title: 'Bot de recepción conectado a existencias reales, precios y ficha del cliente', desc: 'Responde consultas iniciales con datos reales del inventario y transfiere a asesora humana.' },
-          { status: 'done', module: 'Módulo 13: Agente IA 24/7', title: 'Simulador interno de pruebas del Agente IA (/pruebas)', desc: 'Entorno dentro del CRM para probar conversaciones con el bot sin usar WhatsApp externo.' }
-        ]
-      },
-      {
-        areaId: 'area-4',
-        areaTitle: '4. Marketing, Difusiones Masivas y Estrategia Meta',
-        areaSubtitle: 'Envío de campañas promocionales, administración de plantillas oficiales, remarketing y control de costos.',
-        areaPct: '100%',
-        items: [
-          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Creación y envío de difusiones masivas segmentadas por línea y temperatura', desc: 'Permite lanzar campañas a grupos de clientes o listas específicas con imagen y variables.' },
-          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Candado anti-duplicados por número telefónico normalizado', desc: 'Impide que un mismo cliente reciba dos veces el mismo mensaje masivo.' },
-          { status: 'done', module: 'Módulo 14: Campañas Masivas', title: 'Monitoreo en vivo de entrega (Enviado, Recibido, Leído, Falló) y reintento de fallidos', desc: 'Muestra el resultado exacto de cada destinatario de la campaña.' },
-          { status: 'done', module: 'Módulo 15: Plantillas Meta', title: 'Creación, envío a aprobación y eliminación de plantillas oficiales desde el CRM', desc: 'Conexión directa con Meta para gestionar plantillas sin entrar al administrador externo.' },
-          { status: 'done', module: 'Módulo 16: Remarketing', title: 'Pipeline de Remarketing para recuperar cotizaciones abiertas y pagos pendientes', desc: 'Identifica clientes con intención de compra que aún no han cerrado su pedido.' },
-          { status: 'done', module: 'Módulo 17: Estrategia Meta', title: 'Monitor de salud y calidad de líneas de WhatsApp + Simulador financiero de costos', desc: 'Calcula el costo estimado de cada campaña y recomienda la mezcla ideal de audiencias.' }
-        ]
-      },
-      {
-        areaId: 'area-5',
-        areaTitle: '5. Dirección, Analítica, Auditoría, Configuración y Métricas por Asesora',
-        areaSubtitle: 'Tablero gerencial, reglas configurables en vivo, bitácora de seguridad, lectura OCR y ventas por asesora.',
-        areaPct: '90%',
-        items: [
-          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Dashboard directivo con indicadores de clientes, tickets, tiempos de respuesta y métodos de pago', desc: 'Resumen ejecutivo diario del estado general de la operación.' },
-          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Configuración en vivo de columnas, nombres, íconos y colores del Pipeline', desc: 'El administrador puede adaptar el embudo sin requerir cambios de código.' },
-          { status: 'done', module: 'Módulo 18: Dashboard y Config.', title: 'Configuración en vivo de palabras clave de detección, OCR, SLA, Meta Ads y Redes Sociales', desc: '5 pestañas de administración directa de parámetros del sistema.' },
-          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Panel de "Chats sin responder" con tiempo de espera y cálculo de descuento Fashion Time', desc: 'Alerta inmediata de clientes esperando atención y el escalón de descuento según su hora de entrada.' },
-          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Historial auditable de decisiones tomadas por el Agente de IA', desc: 'Transparencia sobre cada transferencia o clasificación hecha por el bot.' },
-          { status: 'done', module: 'Módulo 19: Auditoría Total', title: 'Bitácora inalterable de seguridad y accesos con exportación a Excel (.xlsx)', desc: 'Registra quién vio un cliente, quién movió una tarjeta, quién marcó pagado e inicios de sesión.' },
-          { status: 'done', module: 'Módulo 20: OCR y Métricas', title: 'Motor de lectura automática de comprobantes bancarios en imagen (OCR)', desc: 'Reconoce boletas de transferencia, depósito y tarjeta enviadas por los clientes.' },
-          { status: 'done', module: 'Módulo 20: OCR y Métricas', title: 'Tablero de ventas por asesora con filtro de fechas, detalle por cliente y resumen para WhatsApp', desc: 'Permite consultar cuánto lleva vendido cada asesora y copiar el reporte diario.' },
-          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Regla determinista de atribución de asesora cuando varias asesoras intervienen en un mismo chat', desc: 'En calibración activa: asegurar que la venta se asigne siempre a la asesora correcta en cambios de turno sin necesidad de ajustes manuales.' },
-          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Filtro estricto entre comprobantes bancarios reales vs. fotos de prendas/catálogo con números', desc: 'En calibración activa: evitar que imágenes promocionales o de ropa generen registros de venta falsos.' },
-          { status: 'wip', module: 'Módulo 20: OCR y Métricas', title: 'Cruce directo entre la Cotización formal enviada (Calculadora) y el comprobante de pago recibido', desc: 'En calibración activa: vincular el monto cotizado con el pago confirmado para lograr 100% de exactitud en el reporte.' }
-        ]
-      },
-      {
-        areaId: 'area-6',
-        areaTitle: '6. Módulo de Logística, Alistamiento y Guías de Despacho',
-        areaSubtitle: 'Control post-venta desde que el pago queda confirmado hasta que el paquete llega a manos del cliente.',
-        areaPct: '20%',
-        items: [
-          { status: 'done', module: 'Módulo 21: Logística y Envíos', title: 'Paso automático del cliente a etapa "Por Despacho" al confirmarse el pago', desc: 'Ya operativo en el Pipeline Comercial.' },
-          { status: 'done', module: 'Módulo 21: Logística y Envíos', title: 'Plantilla estructurada de solicitud de datos de envío en el chat', desc: 'Captura de Nombre, Dirección, Ciudad, Zona, Departamento, Celular, NIT/DPI y Correo.' },
-          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Pantalla dedicada de Logística con bandeja de pedidos pagados pendientes de alistar', desc: 'Pendiente de desarrollo: vista exclusiva para bodega/despachos con el detalle de prendas a empacar.' },
-          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Control de estados de despacho (Pendiente empaque → Empacado → En ruta → Entregado / Novedad)', desc: 'Pendiente de desarrollo: trazabilidad paso a paso del paquete físico.' },
-          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Campo de asignación de empresa transportadora y número de guía de envío', desc: 'Pendiente de desarrollo: registro formal de la guía asociada a cada venta.' },
-          { status: 'todo', module: 'Módulo 21: Logística y Envíos', title: 'Notificación automática al WhatsApp del cliente cuando su pedido es despachado con su guía', desc: 'Pendiente de desarrollo: aviso automático al cliente y cierre del ciclo logístico.' }
-        ]
-      }
-    ];
-
-    let currentFilter = 'all';
-    let currentSearch = '';
-
-    function renderChecklist() {
-      const container = document.getElementById('checklist-container');
-      let html = '';
-
-      let totalCount = 0;
-      let doneCount = 0;
-      let wipCount = 0;
-      let todoCount = 0;
-
-      CHECKLIST_DATA.forEach((area) => {
-        area.items.forEach((it) => {
-          totalCount++;
-          if (it.status === 'done') doneCount++;
-          else if (it.status === 'wip') wipCount++;
-          else todoCount++;
-        });
-
-        const visibleItems = area.items.filter((it) => {
-          const matchesStatus = currentFilter === 'all' || it.status === currentFilter;
-          const q = currentSearch.trim().toLowerCase();
-          const matchesSearch =
-            !q ||
-            it.title.toLowerCase().includes(q) ||
-            it.desc.toLowerCase().includes(q) ||
-            it.module.toLowerCase().includes(q) ||
-            area.areaTitle.toLowerCase().includes(q);
-          return matchesStatus && matchesSearch;
-        });
-
-        if (visibleItems.length === 0) return;
-
-        html += `
-          <section class="area-card">
-            <div class="area-head">
-              <div class="area-head-left">
-                <h2>${area.areaTitle}</h2>
-                <p>${area.areaSubtitle}</p>
-              </div>
-              <span class="area-pct-pill">Avance del Área: ${area.areaPct}</span>
-            </div>
-            <table class="checklist-table">
-              <tbody>
-        `;
-
-        visibleItems.forEach((it) => {
-          const checkClass =
-            it.status === 'done' ? 'check-done' : it.status === 'wip' ? 'check-wip' : 'check-todo';
-          const checkSymbol =
-            it.status === 'done' ? '✓' : it.status === 'wip' ? '⏳' : '';
-          const chipClass =
-            it.status === 'done' ? 'chip-done' : it.status === 'wip' ? 'chip-wip' : 'chip-todo';
-          const chipLabel =
-            it.status === 'done'
-              ? '✅ Completado (100%)'
-              : it.status === 'wip'
-              ? '⏳ En Calibración Hoy'
-              : '⬜ Pendiente Desarrollo';
-
-          html += `
-            <tr class="checklist-row">
-              <td class="col-check">
-                <span class="check-box ${checkClass}">${checkSymbol}</span>
-              </td>
-              <td class="col-main">
-                <div class="item-title">
-                  <span class="item-module-tag">${it.module}</span>
-                  <span>${it.title}</span>
-                </div>
-                <p class="item-desc">${it.desc}</p>
-              </td>
-              <td class="col-status">
-                <span class="status-chip ${chipClass}">${chipLabel}</span>
-              </td>
-            </tr>
-          `;
-        });
-
-        html += `
-              </tbody>
-            </table>
-          </section>
-        `;
-      });
-
-      container.innerHTML = html || '<div class="summary-card" style="text-align:center;color:var(--muted);">No se encontraron entregables con ese filtro.</div>';
-
-      // Update top summary counters
-      const pctDone = Math.round((doneCount / totalCount) * 100);
-      const pctWip = Math.round((wipCount / totalCount) * 100);
-      const pctTodo = Math.max(0, 100 - pctDone - pctWip);
-
-      document.getElementById('stat-total-count').textContent = totalCount;
-      document.getElementById('count-done').textContent = doneCount;
-      document.getElementById('count-wip').textContent = wipCount;
-      document.getElementById('count-todo').textContent = todoCount;
-      document.getElementById('stat-headline').textContent =
-        `${pctDone}% Terminado (${doneCount}/${totalCount}) • ${pctWip}% En Ajuste Hoy (${wipCount}) • ${pctTodo}% Pendiente (${todoCount})`;
-
-      document.getElementById('bar-done').style.width = `${pctDone}%`;
-      document.getElementById('bar-wip').style.width = `${pctWip}%`;
-      document.getElementById('bar-todo').style.width = `${pctTodo}%`;
-    }
-
-    function filterChecklist(status, btnEl) {
-      currentFilter = status;
-      document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
-      if (btnEl) btnEl.classList.add('active');
-      renderChecklist();
-    }
-
-    function searchChecklist(val) {
-      currentSearch = val || '';
-      renderChecklist();
-    }
-
     function exportChecklistToWord() {
+      const areas = [
+        {
+          title: 'Área 1. Estructura Corporativa y Accesos (100%)',
+          items: [
+            ['[ X ]', '01. Gestión de Empresas', 'Estructura corporativa que agrupa Studio F y la línea Basshert.', '100%'],
+            ['[ X ]', '02. Sedes de Studio F y Línea Basshert', 'Registro de las sedes físicas de Studio F y operación de Basshert.', '100%'],
+            ['[ X ]', '03. Líneas de WhatsApp', 'Conexión de líneas de Studio F y Basshert con test en vivo en Meta.', '100%'],
+            ['[ X ]', '04. Usuarios, Roles y Permisos', 'Perfiles Admin, Supervisor y Asesora con asignación por línea.', '100%']
+          ]
+        },
+        {
+          title: 'Área 2. Atención Omnicanal y Ventas (100%)',
+          items: [
+            ['[ X ]', '05. Bandeja Omnicanal + Chat Popup', 'WhatsApp, Instagram y Facebook unificados en tiempo real.', '100%'],
+            ['[ X ]', '06. Pipeline Comercial (Kanban)', 'Embudo Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS.', '100%'],
+            ['[ X ]', '07. Clientes 360° + Historial ERP', 'Cruce con +18,000 clientes de sedes: compras, tallas y NIT.', '100%'],
+            ['[ X ]', '08. Biblioteca de Respuestas Rápidas', 'Plantillas rápidas con atajo "/" para cuentas, saludos y envíos.', '100%']
+          ]
+        },
+        {
+          title: 'Área 3. Catálogo, Calculadora e IA (98%)',
+          items: [
+            ['[ ~ ]', '09. Catálogo Digital, Stock y Precios ERP', 'Stock disponible real + 8,022 precios sincronizados hoy del ERP.', '95%'],
+            ['[ X ]', '10. Sincronizador de Fotos SFTP', 'Enlace automático de +4,760 fotos oficiales por referencia.', '100%'],
+            ['[ ~ ]', '11. Cotizador / Calculadora Visual PNG', 'Cálculo de descuentos y tarjeta PNG con precios ERP integrados hoy.', '95%'],
+            ['[ X ]', '12. Consola de Diagnóstico ERP', 'Inspección en vivo de endpoints y sincronización manual.', '100%'],
+            ['[ X ]', '13. Agente IA 24/7 + Simulador', 'Bot conectado a stock real con pantalla interna de pruebas.', '100%']
+          ]
+        },
+        {
+          title: 'Área 4. Marketing y Estrategia Meta (100%)',
+          items: [
+            ['[ X ]', '14. Campañas y Difusiones Masivas', 'Envíos masivos por WhatsApp con candado anti-duplicados.', '100%'],
+            ['[ X ]', '15. Gestor de Plantillas Meta', 'Creación y aprobación oficial de plantillas desde el CRM.', '100%'],
+            ['[ X ]', '16. Pipeline de Remarketing', 'Recuperación de clientes con cotización abierta o pago pendiente.', '100%'],
+            ['[ X ]', '17. Estrategia Meta y Simulador Costos', 'Salud de líneas y calculadora financiera de presupuesto Meta.', '100%']
+          ]
+        },
+        {
+          title: 'Área 5. Dirección, Auditoría y Métricas (90%)',
+          items: [
+            ['[ X ]', '18. Dashboard y Configuración en Vivo', 'KPIs operativos + 5 pestañas de ajustes (Pipeline, OCR, SLA, Ads).', '100%'],
+            ['[ X ]', '19. Auditoría, SLA (Fashion Time) y Excel', 'Alertas de espera, historial IA y bitácora exportable a Excel.', '100%'],
+            ['[ ~ ]', '20. Motor OCR y Métricas por Asesora', 'Lectura de boletas y ventas; calibrando exactitud entre turnos.', '70%']
+          ]
+        },
+        {
+          title: 'Área 6. Post-Venta y Logística (15%)',
+          items: [
+            ['[   ]', '21. Módulo de Logística y Guías de Envío', 'Definido (etapa Por Despacho lista); pendiente panel de empaque y guías.', '15%']
+          ]
+        }
+      ];
+
       let rowsHtml = '';
-      let idx = 1;
-      CHECKLIST_DATA.forEach((area) => {
+      areas.forEach((area) => {
         rowsHtml += `
           <tr style="background-color:#e0e7ff; color:#1e1b4b; font-weight:bold;">
-            <td colspan="4" style="padding:8px;">${area.areaTitle} (Avance: ${area.areaPct})</td>
+            <td colspan="4" style="padding:7px 10px;">${area.title}</td>
           </tr>
         `;
         area.items.forEach((it) => {
-          const mark = it.status === 'done' ? '[ X ]' : it.status === 'wip' ? '[ ~ ]' : '[   ]';
-          const stateText =
-            it.status === 'done'
-              ? 'Completado (100%)'
-              : it.status === 'wip'
-              ? 'En Ajuste / Calibración'
-              : 'Pendiente de Desarrollo';
-          const bg = idx % 2 === 0 ? '#f9fafb' : '#ffffff';
           rowsHtml += `
-            <tr style="background-color:${bg};">
-              <td align="center" style="font-family:Consolas, monospace; font-weight:bold; width:8%;">${mark}</td>
-              <td style="width:22%;"><strong>${it.module}</strong></td>
-              <td style="width:50%;"><strong>${it.title}</strong><br/><span style="color:#4b5563; font-size:9pt;">${it.desc}</span></td>
-              <td style="width:20%;"><strong>${stateText}</strong></td>
+            <tr>
+              <td align="center" style="font-family:Consolas,monospace; font-weight:bold; width:9%;">${it[0]}</td>
+              <td style="width:31%;"><strong>${it[1]}</strong></td>
+              <td style="width:48%; color:#374151;">${it[2]}</td>
+              <td align="center" style="width:12%;"><strong>${it[3]}</strong></td>
             </tr>
           `;
-          idx++;
         });
       });
 
@@ -753,33 +843,27 @@
               xmlns="http://www.w3.org/TR/REC-html40">
         <head>
           <meta charset="utf-8">
-          <title>Checklist Maestro 100% — Bagneres CRM</title>
+          <title>Checklist Ejecutivo — Bagneres CRM</title>
           <style>
             @page { size: 21.59cm 27.94cm; margin: 1.8cm; }
             body { font-family: Calibri, Arial, sans-serif; color: #111827; font-size: 10pt; }
           </style>
         </head>
         <body>
-          <h1 style="font-size:18pt; color:#1e1b4b; border-bottom:2px solid #15803d; padding-bottom:6pt; margin-bottom:4pt;">
-            CHECKLIST MAESTRO DEL 100% DEL PROYECTO — BAGNERES CRM
+          <h1 style="font-size:17pt; color:#1e1b4b; border-bottom:2px solid #3730a3; padding-bottom:5pt; margin-bottom:4pt;">
+            CHECKLIST EJECUTIVO DEL PROYECTO (100%) — BAGNERES CRM
           </h1>
           <p style="font-size:10pt; color:#4b5563; margin-top:0;">
             <strong>Operación:</strong> Sedes de Studio F y Línea Basshert &nbsp;|&nbsp;
-            <strong>Fecha:</strong> 17 de octubre de 2026 &nbsp;|&nbsp;
-            <strong>Total de Entregables Verificables:</strong> 57 puntos en 6 Áreas Corporativas
-          </p>
-          <p style="font-size:10pt;">
-            <strong>Leyenda:</strong> <code>[ X ]</code> Completado y Operativo en Producción &nbsp;|&nbsp;
-            <code>[ ~ ]</code> En Cierre / Calibración Hoy &nbsp;|&nbsp;
-            <code>[ &nbsp; ]</code> Definido / Pendiente de Desarrollo
+            <strong>Avance Global:</strong> 92% (17 de 21 módulos al 100%)
           </p>
           <table border="1" cellspacing="0" cellpadding="6" style="width:100%; border-collapse:collapse; border-color:#cbd5e1; font-size:9.5pt;">
             <thead>
               <tr style="background-color:#1e293b; color:#ffffff;">
                 <th align="center">Check</th>
-                <th align="left">Módulo</th>
-                <th align="left">Entregable Funcional y Descripción</th>
-                <th align="left">Estado Actual</th>
+                <th align="left">Módulo / Función</th>
+                <th align="left">Descripción Resumida</th>
+                <th align="center">% Avance</th>
               </tr>
             </thead>
             <tbody>
@@ -794,14 +878,12 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'Checklist_Maestro_100_Bagneres_CRM.doc';
+      link.download = 'Checklist_Ejecutivo_Bagneres_CRM.doc';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      URL.revokeObjectURL(url);
     }
-
-    renderChecklist();
   </script>
 </body>
 </html>
