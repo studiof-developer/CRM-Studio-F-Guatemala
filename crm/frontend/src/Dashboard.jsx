@@ -239,17 +239,27 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="sticky top-0 z-10 bg-paper px-4 pb-4 pt-8 md:px-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Panorama general de Studio F.
-          {data?.generatedAt && (
-            <span className="ml-1">
-              Actualizado hoy a las{' '}
-              {new Date(data.generatedAt).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}.
-            </span>
-          )}
-        </p>
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-paper px-4 pb-4 pt-8 md:px-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Panorama general de Studio F.
+            {data?.generatedAt && (
+              <span className="ml-1">
+                Actualizado hoy a las{' '}
+                {new Date(data.generatedAt).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}.
+              </span>
+            )}
+          </p>
+        </div>
+        <a
+          href="/informe.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:bg-black/5 dark:hover:bg-white/5"
+        >
+          📄 Informe Corporativo del Sistema (21 Módulos)
+        </a>
       </div>
 
       <div className="px-4 pb-8 md:px-8">

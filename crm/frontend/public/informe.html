@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.svg" />
+  <title>Informe Corporativo Integral — Bagneres CRM (Studio F &amp; ELA)</title>
+  <style>
+    :root {
+      --bg: #f4f5f8;
+      --paper: #ffffff;
+      --paper-soft: #f9fafb;
+      --ink: #111827;
+      --muted: #4b5563;
+      --subtle: #6b7280;
+      --line: #e5e7eb;
+      --line-soft: #f3f4f6;
+      --primary: #3730a3;
+      --primary-light: #eef2ff;
+      --primary-border: #c7d2fe;
+      --ok: #15803d;
+      --ok-bg: #dcfce7;
+      --ok-border: #86efac;
+      --warn: #b45309;
+      --warn-bg: #fef3c7;
+      --warn-border: #fcd34d;
+      --info: #0369a1;
+      --info-bg: #e0f2fe;
+      --info-border: #7dd3fc;
+      --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 6px 16px rgba(17, 24, 39, 0.04);
+      --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.06), 0 18px 36px rgba(17, 24, 39, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+    }
+
+    /* ---- Topbar ---- */
+    .topbar-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: -0.02em;
+      box-shadow: 0 4px 10px rgba(55, 48, 163, 0.25);
+    }
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 0;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .brand-text p {
+      font-size: 12px;
+      color: var(--subtle);
+      margin: 0;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(55, 48, 163, 0.25);
+    }
+    .btn-primary:hover { background: #312e81; }
+    .btn-outline {
+      background: var(--paper);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .btn-outline:hover { background: var(--paper-soft); border-color: #d1d5db; }
+
+    /* ---- Navigation Tabs ---- */
+    .subbar {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 28px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      background: var(--bg);
+      padding: 4px;
+      border-radius: 11px;
+      border: 1px solid var(--line);
+    }
+    .tab-btn {
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--ink); }
+    .tab-btn.active {
+      background: var(--paper);
+      color: var(--primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ---- Main Container ---- */
+    .container {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 28px 80px;
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+
+    /* ---- Hero & KPIs ---- */
+    .hero-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--primary);
+      background: var(--primary-light);
+      border: 1px solid var(--primary-border);
+      padding: 4px 11px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .hero-title {
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 800;
+      margin: 0 0 10px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .hero-lead {
+      font-size: 14.5px;
+      color: var(--muted);
+      margin: 0 0 22px;
+      max-width: 980px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .kpi-box {
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--subtle);
+    }
+    .kpi-val {
+      font-size: 28px;
+      font-weight: 800;
+      margin: 4px 0;
+      letter-spacing: -0.02em;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 8px 0 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+    }
+    .fill-ok { background: var(--ok); }
+    .fill-warn { background: #d97706; }
+    .fill-info { background: #0284c7; }
+
+    /* ---- Layout with Sticky Sidebar ---- */
+    .split-layout {
+      display: flex;
+      align-items: flex-start;
+      gap: 28px;
+    }
+    .side-index {
+      width: 260px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 128px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .side-index h3 {
+      font-size: 11.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--subtle);
+      margin: 0 0 10px;
+    }
+    .side-links {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .side-links a {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: 8px;
+      transition: all 0.15s;
+    }
+    .side-links a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .side-filter-box {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .filter-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+    .filter-pill:hover { background: var(--paper-soft); color: var(--ink); }
+    .filter-pill.active {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: var(--primary-border);
+    }
+
+    .main-column {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ---- Area Section ---- */
+    .area-block {
+      margin-bottom: 36px;
+      scroll-margin-top: 130px;
+    }
+    .area-header {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--primary);
+      border-radius: 14px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .area-tag {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--primary);
+    }
+    .area-header h2 {
+      font-size: 19px;
+      font-weight: 800;
+      margin: 2px 0 6px;
+      color: var(--ink);
+    }
+    .area-header p {
+      font-size: 13.5px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* ---- Module Cards ---- */
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .module-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .module-card.full-width {
+      grid-column: span 2;
+    }
+    .module-card.status-active {
+      border-color: var(--warn-border);
+    }
+    .module-card.status-pending {
+      border-color: var(--info-border);
+    }
+
+    .mod-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .mod-num {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .mod-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 2px 0 0;
+      color: var(--ink);
+    }
+    .pct-badge {
+      font-size: 13px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 9px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
+    .badge-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+    .badge-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+
+    .mod-explain {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 10px 0;
+      background: var(--paper-soft);
+      border: 1px solid var(--line-soft);
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+    .mod-explain strong { color: var(--ink); }
+
+    .mod-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      font-size: 12.5px;
+      color: var(--ink);
+    }
+    .mod-list li { margin-bottom: 5px; }
+    .mod-list li span { color: var(--muted); }
+
+    .work-box {
+      margin-top: 12px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      font-size: 12.5px;
+    }
+    .work-warn {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-border);
+      color: #78350f;
+    }
+    .work-info {
+      background: var(--info-bg);
+      border: 1px solid var(--info-border);
+      color: #0c4a6e;
+    }
+
+    /* ---- Journey Steps ---- */
+    .journey-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .journey-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .step-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+
+    /* ---- Summary Table ---- */
+    .corp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: var(--paper);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .corp-table th {
+      background: #1e293b;
+      color: #ffffff;
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .corp-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .corp-table tr:nth-child(even) td { background: var(--paper-soft); }
+
+    @media (max-width: 1024px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .split-layout { flex-direction: column; }
+      .side-index { width: 100%; position: static; }
+      .modules-grid { grid-template-columns: 1fr; }
+      .module-card.full-width { grid-column: span 1; }
+      .journey-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .topbar, .subbar, .container { padding-left: 16px; padding-right: 16px; }
+    }
+    @media print {
+      .topbar-wrap, .side-index { display: none !important; }
+      .view-panel { display: block !important; margin-bottom: 30px; }
+      body { background: #fff; }
+      .hero-card, .module-card, .area-header { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA SUPERIOR FIJA -->
+  <header class="topbar-wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-badge">SF</div>
+        <div class="brand-text">
+          <h1>Bagneres CRM — Informe Corporativo de Avance Funcional</h1>
+          <p>Ecosistema Comercial Multi-Empresa, Multi-Marca y Omnicanal (Studio F &amp; ELA Guatemala)</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="/" class="btn btn-outline">← Volver al CRM</a>
+        <button onclick="window.print()" class="btn btn-outline">🖨️ Imprimir / Guardar PDF</button>
+        <button onclick="exportToWord()" class="btn btn-primary">📄 Descargar Informe en Word (.doc)</button>
+      </div>
+    </div>
+
+    <div class="subbar">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('tab-modulos', this)">1. Los 21 Módulos del Sistema (Detalle Completo)</button>
+        <button class="tab-btn" onclick="switchTab('tab-recorrido', this)">2. Guía Didáctica: ¿Cómo Funciona Paso a Paso?</button>
+        <button class="tab-btn" onclick="switchTab('tab-actual', this)">3. En Qué Estamos Trabajando Hoy y Próximas Fases</button>
+        <button class="tab-btn" onclick="switchTab('tab-matriz', this)">4. Tabla Ejecutiva de Porcentajes</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- BLOQUE EJECUTIVO DE INTRODUCCIÓN Y KPIS -->
+    <section class="hero-card">
+      <div class="eyebrow">DOCUMENTO EJECUTIVO Y DIDÁCTICO • CORTE OCTUBRE 2026</div>
+      <h2 class="hero-title">Radiografía Funcional Completa de Bagneres CRM</h2>
+      <p class="hero-lead">
+        Este informe explica de manera clara, práctica y sin tecnicismos de programación todo lo que compone <strong>Bagneres CRM</strong> hasta el día de hoy. El sistema abarca desde la administración corporativa de <strong>múltiples empresas, marcas, sucursales y líneas telefónicas</strong>, hasta la atención de clientes en vivo, consulta de inventario con foto y precio oficial, generación de cotizaciones, campañas de marketing, auditoría gerencial y control de ventas por asesora.
+      </p>
+
+      <div class="kpi-grid">
+        <div class="kpi-box">
+          <div class="kpi-label">AVANCE GLOBAL PONDERADO</div>
+          <div class="kpi-val" style="color: var(--ok);">92%</div>
+          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 92%;"></div></div>
+          <div class="kpi-sub">21 módulos desarrollados en 6 áreas de negocio.</div>
+        </div>
+
+        <div class="kpi-box">
+          <div class="kpi-label">MÓDULOS 100% OPERATIVOS</div>
+          <div class="kpi-val" style="color: var(--primary);">17 de 21</div>
+          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 81%;"></div></div>
+          <div class="kpi-sub">Empresas, Marcas, Líneas, Chats, Pipeline, Clientes, Marketing, Auditoría, IA.</div>
+        </div>
+
+        <div class="kpi-box">
+          <div class="kpi-label">EN CIERRE Y CALIBRACIÓN HOY</div>
+          <div class="kpi-val" style="color: var(--warn);">3 Módulos</div>
+          <div class="progress-track"><div class="progress-fill fill-warn" style="width: 87%;"></div></div>
+          <div class="kpi-sub">Precios en Catálogo (95%), Cotizador (95%) y Métricas por Asesora (70%).</div>
+        </div>
+
+        <div class="kpi-box">
+          <div class="kpi-label">PRÓXIMA FASE DEFINIDA</div>
+          <div class="kpi-val" style="color: var(--info);">1 Módulo</div>
+          <div class="progress-track"><div class="progress-fill fill-info" style="width: 15%;"></div></div>
+          <div class="kpi-sub">Módulo de Logística, Alistamiento y Guías de Envío (15% base lista).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================================
+         PESTAÑA 1: LOS 21 MÓDULOS DEL SISTEMA DIVIDIDOS EN 6 ÁREAS
+         ================================================================================= -->
+    <div id="tab-modulos" class="view-panel active">
+      <div class="split-layout">
+
+        <!-- ÍNDICE LATERAL Y FILTROS -->
+        <aside class="side-index">
+          <h3>Índice por Área de Negocio</h3>
+          <nav class="side-links">
+            <a href="#area-1">1. Estructura Corporativa (4)</a>
+            <a href="#area-2">2. Atención Omnicanal y Ventas (4)</a>
+            <a href="#area-3">3. Catálogo, Cotizador e IA (5)</a>
+            <a href="#area-4">4. Marketing y Estrategia Meta (4)</a>
+            <a href="#area-5">5. Dirección, Métricas y Auditoría (3)</a>
+            <a href="#area-6">6. Post-Venta y Logística (1)</a>
+          </nav>
+
+          <div class="side-filter-box">
+            <h3>Filtrar por Estado</h3>
+            <button class="filter-pill active" onclick="filterCards('all', this)">
+              <span>Todos los módulos</span> <strong>21</strong>
+            </button>
+            <button class="filter-pill" onclick="filterCards('done', this)">
+              <span>✅ 100% Terminados</span> <strong>17</strong>
+            </button>
+            <button class="filter-pill" onclick="filterCards('active', this)">
+              <span>🔄 Trabajando Ahorita</span> <strong>3</strong>
+            </button>
+            <button class="filter-pill" onclick="filterCards('pending', this)">
+              <span>📋 Pendiente Desarrollo</span> <strong>1</strong>
+            </button>
+          </div>
+        </aside>
+
+        <!-- LISTADO DE ÁREAS Y TARJETAS -->
+        <div class="main-column">
+
+          <!-- ÁREA 1 -->
+          <section id="area-1" class="area-block">
+            <div class="area-header">
+              <div class="area-tag">ÁREA 1 • ESTRUCTURA CORPORATIVA Y ADMINISTRACIÓN (4 MÓDULOS AL 100%)</div>
+              <h2>Empresas, Marcas, Sucursales, Líneas de WhatsApp y Usuarios</h2>
+              <p>Es la base organizacional del sistema: permite que el CRM funcione para varias empresas del grupo, múltiples marcas comerciales (Studio F, ELA, etc.), distintas tiendas físicas y diferentes equipos de asesoras con permisos controlados.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 1 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 01 • TERMINADO</div>
+                      <h3 class="mod-title">Gestión de Empresas (Multi-Empresa)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Es el módulo donde se registran las distintas empresas o razones sociales del grupo empresarial (por ejemplo, Bagneres y cualquier otra sociedad comercial).
+                  </div>
+                  <ul class="mod-list">
+                    <li>Permite crear, editar, activar o desactivar empresas en cualquier momento.</li>
+                    <li>Permite vincular qué marcas comerciales pertenecen a cada empresa.</li>
+                    <li>Prepara al CRM para escalar a nuevas operaciones o países sin mezclar la información.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 2 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 02 • TERMINADO</div>
+                      <h3 class="mod-title">Gestión de Marcas y Sucursales / Tiendas</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Permite dar de alta cada marca comercial (<strong>Studio F, ELA</strong>, etc.) y registrar dentro de cada marca todas sus tiendas o sucursales físicas.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Organiza qué sucursales pertenecen a Studio F y cuáles a ELA.</li>
+                    <li>Permite que cada línea de WhatsApp quede identificada con su marca y tienda real.</li>
+                    <li>Ayuda a que la asesora y el Cotizador sepan bajo qué marca están atendiendo al cliente.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 3 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 03 • TERMINADO</div>
+                      <h3 class="mod-title">Administración de Líneas de WhatsApp</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Es el panel donde se conectan todos los números telefónicos de WhatsApp Business de la empresa para que funcionen simultáneamente dentro del CRM.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Conecta múltiples líneas telefónicas vinculadas a su respectiva marca y sucursal.</li>
+                    <li>Incluye un <strong>botón de prueba en vivo</strong> que verifica al instante si la conexión con Meta (WhatsApp) está sana.</li>
+                    <li>Aísla las conversaciones por línea: si un mismo cliente escribe a Studio F y también a ELA, cada marca mantiene su hilo separado y ordenado.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 4 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 04 • TERMINADO</div>
+                      <h3 class="mod-title">Usuarios, Roles y Permisos por Línea</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Administra las cuentas de acceso de todo el personal con tres niveles de autoridad: <strong>Administrador, Supervisor y Asesora</strong>.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Permite elegir exactamente <strong>qué líneas de WhatsApp puede ver y atender cada asesora</strong>.</li>
+                    <li>Protege los módulos sensibles (Auditoría, Marketing Masivo, Empresas, Configuración) para que solo entren Administradores o Supervisores.</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 2 -->
+          <section id="area-2" class="area-block">
+            <div class="area-header">
+              <div class="area-tag">ÁREA 2 • OPERACIÓN COMERCIAL Y ATENCIÓN OMNICANAL (4 MÓDULOS AL 100%)</div>
+              <h2>Conversaciones Unificadas, Pipeline Comercial, Clientes 360° y Respuestas Rápidas</h2>
+              <p>Es el corazón operativo donde las asesoras atienden a los clientes, consultan su historial de compras en tiendas físicas y dan seguimiento a cada oportunidad de venta hasta el cierre.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 5 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 05 • TERMINADO</div>
+                      <h3 class="mod-title">Bandeja Omnicanal (WhatsApp, Instagram y Facebook)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una bandeja única donde entran todos los mensajes de WhatsApp (de todas las líneas), Instagram Direct y Facebook Messenger en tiempo real.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Muestra en vivo <strong>qué asesora está viendo cada chat</strong> para no pisarse entre compañeras.</li>
+                    <li>Permite enviar textos, fotografías, notas de voz, documentos y responder mensajes específicos.</li>
+                    <li>Incluye <strong>Ventana de Chat Emergente</strong>: permite abrir cualquier conversación desde el Pipeline o Auditoría sin perder de vista la pantalla en la que se está trabajando.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 6 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 06 • TERMINADO</div>
+                      <h3 class="mod-title">Pipeline Comercial (Embudo Visual de Ventas)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un tablero de columnas donde cada cliente se ubica según su etapa de compra: <em>Frío → Tibio → Caliente → Pagado → Por Despacho → PQRS</em>.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Mueve al cliente automáticamente cuando pregunta precios (Tibio), pide cuentas de pago (Caliente) o envía su boleta de pago (Por Despacho).</li>
+                    <li><strong>100% libre de duplicados:</strong> cada cliente tiene una única tarjeta consolidada por línea.</li>
+                    <li>Filtros por fecha, marca, línea de WhatsApp y canal de origen.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 7 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 07 • TERMINADO</div>
+                      <h3 class="mod-title">Directorio Clientes 360° + Historial de Tiendas (ERP)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Conecta automáticamente el número de celular del cliente que escribe por WhatsApp con el historial de los <strong>+18,000 clientes de tiendas físicas</strong>.
+                  </div>
+                  <ul class="mod-list">
+                    <li>La asesora ve al instante: nombre completo, NIT/DPI, <strong>monto total gastado en tiendas</strong> y número de facturas.</li>
+                    <li>Muestra qué tipo de prendas compra más (blusas, jeans, vestidos, pantalones) y <strong>qué tallas usa</strong>.</li>
+                    <li>Indica cuál es su tienda favorita y cuántos días lleva sin comprar.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 8 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 08 • TERMINADO</div>
+                      <h3 class="mod-title">Biblioteca de Respuestas Rápidas (/atajos)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un catálogo de mensajes pre-redactados y autorizados por la empresa para que las asesoras contesten en un segundo escribiendo el símbolo <code>/</code>.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Ideal para enviar números de cuentas bancarias, requisitos de envío, saludos institucionales y políticas de garantía sin errores de digitación.</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 3 -->
+          <section id="area-3" class="area-block">
+            <div class="area-header">
+              <div class="area-tag">ÁREA 3 • CATÁLOGO DIGITAL, COTIZADOR VISUAL E INTELIGENCIA ARTIFICIAL (5 MÓDULOS)</div>
+              <h2>Existencias en Vivo, Precios Oficiales, Fotos SFTP, Calculadora PNG y Bot IA</h2>
+              <p>Conecta el inventario físico y las listas de precios del sistema central (ERP) directamente con el chat para que tanto el Agente de IA como las asesoras ofrezcan solo prendas disponibles y coticen al instante.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 9 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 09 • EN CIERRE FINAL HOY</div>
+                      <h3 class="mod-title">Catálogo Digital de Prendas, Existencias y Precios</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">95%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 95%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Buscador en vivo de todas las prendas por código de referencia (ej. <code>S219701</code>), código de barras, categoría o color, mostrando cuántas unidades reales hay para la venta.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Descarta automáticamente la bodega de imperfectos para nunca ofrecer prendas dañadas.</li>
+                    <li>Incluye botón directo <strong>"Sincronizar Precios ERP"</strong> para actualizar valores al instante.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔄 En qué estamos hoy (5% restante):</strong> Ya subimos a producción la sincronización con el nuevo acceso oficial de precios (8,022 referencias) para que todas las prendas muestren su precio en Quetzales automáticamente.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 10 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 10 • TERMINADO</div>
+                      <h3 class="mod-title">Sincronizador Automático de Fotografías (SFTP)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un sistema automático que revisa las más de <strong>4,760 fotografías oficiales</strong> subidas por el equipo de catálogo y las enlaza con su prenda correspondiente.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Reconoce la referencia aunque varíe la letra final o el formato del nombre del archivo.</li>
+                    <li>Permite ampliar la foto en pantalla completa o incluirla automáticamente en la tarjeta de cotización.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 11 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 11 • EN CIERRE FINAL HOY</div>
+                      <h3 class="mod-title">Cotizador / Calculadora Visual de Prendas</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">95%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 95%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una calculadora comercial disponible tanto dentro de cada chat como en la pantalla de Catálogo. Permite armar una cotización formal en segundos.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Busca la prenda por referencia, aplica descuentos por porcentaje (ej. 20%, 40%) o por monto final y calcula cuánto dinero ahorra el cliente.</li>
+                    <li>Genera automáticamente una <strong>imagen PNG de alta presentación</strong> con foto de la prenda, precios, ahorro y número de folio (<code>COT-2026-XXXX</code>), lista para enviar por WhatsApp o descargar.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔄 En qué estamos hoy (5% restante):</strong> Con la actualización recién desplegada, al buscar una referencia en la calculadora cargará automáticamente su precio oficial del ERP.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 12 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 12 • TERMINADO</div>
+                      <h3 class="mod-title">Consola de Diagnóstico e Inspección del ERP</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un panel técnico-ejecutivo para supervisar en vivo la comunicación con el servidor del ERP de la empresa.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Permite probar qué accesos o tablas tiene habilitados el ERP (Existencias, Clientes, Precios por Referencia).</li>
+                    <li>Permite buscar una referencia puntual directamente en el ERP y disparar sincronizaciones manuales.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 13 -->
+              <article class="module-card full-width" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 13 • TERMINADO Y OPERATIVO</div>
+                      <h3 class="mod-title">Agente de Inteligencia Artificial (Mar-IA 24/7) + Simulador Interno de Pruebas</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Es el asistente virtual inteligente que recibe a los clientes las 24 horas, entiende qué prenda o talla buscan consultando el catálogo real del CRM y transfiere la conversación a una asesora humana cuando el cliente está listo para comprar o requiere ayuda especial.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Conectado en tiempo real a las existencias, referencias, precios e historial del cliente.</li>
+                    <li>Incluye un <strong>Módulo de Pruebas (/pruebas)</strong> dentro del CRM para que los supervisores puedan conversar con el bot y probar sus respuestas sin necesidad de usar un teléfono externo.</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 4 -->
+          <section id="area-4" class="area-block">
+            <div class="area-header">
+              <div class="area-tag">ÁREA 4 • MARKETING, DIFUSIONES MASIVAS Y ESTRATEGIA META (4 MÓDULOS AL 100%)</div>
+              <h2>Campañas Masivas, Plantillas Oficiales, Remarketing y Simulador Financiero Meta</h2>
+              <p>Permite ejecutar campañas promocionales por WhatsApp a miles de clientes cuidando la salud de las líneas telefónicas y controlando el retorno de inversión.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 14 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 14 • TERMINADO</div>
+                      <h3 class="mod-title">Difusiones y Campañas Masivas por WhatsApp</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Herramienta para enviar promociones masivas a grupos de clientes (por temperatura o selección manual) desde cualquiera de las líneas de WhatsApp.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Muestra en tiempo real a cuántos clientes les llegó el mensaje, cuántos lo leyeron y si alguno falló (con botón para reintentar fallidos).</li>
+                    <li><strong>Candado anti-duplicados:</strong> garantiza que un mismo número nunca reciba el mismo mensaje masivo dos veces.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 15 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 15 • TERMINADO</div>
+                      <h3 class="mod-title">Gestor de Plantillas Oficiales de Meta</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Permite crear, subir imágenes de cabecera y enviar a aprobación ante Meta las plantillas necesarias para campañas masivas sin salir del CRM.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Muestra el estado de aprobación en Meta (Aprobada, En revisión, Rechazada) por cada línea.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 16 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 16 • TERMINADO</div>
+                      <h3 class="mod-title">Pipeline de Remarketing y Recuperación</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un tablero especializado dentro de Marketing que agrupa a los clientes que se quedaron a mitad de camino (pidieron cotización o datos de pago pero aún no han comprado) para reactivarlos.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 17 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 17 • TERMINADO</div>
+                      <h3 class="mod-title">Estrategia Meta, Salud de Línea y Simulador de Costos</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una calculadora estratégica que protege los números de WhatsApp contra bloqueos y calcula cuánto costará una campaña antes de enviarla.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Recomienda automáticamente qué proporción enviar a clientes calientes, tibios y fríos.</li>
+                    <li>Calcula el presupuesto estimado de tarifas de Meta según el volumen de mensajes a enviar.</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 5 -->
+          <section id="area-5" class="area-block">
+            <div class="area-header">
+              <div class="area-tag">ÁREA 5 • DIRECCIÓN, ANALÍTICA, AUDITORÍA Y CONFIGURACIÓN (3 MÓDULOS + SUBMÓDULOS)</div>
+              <h2>Dashboard Directivo, Configuración en Vivo, Auditoría Total y Métricas por Asesora</h2>
+              <p>Brinda a la gerencia y supervisión visibilidad completa sobre tiempos de respuesta, bitácora de seguridad, lectura de boletas bancarias y ventas logradas por cada asesora.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 18 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 18 • TERMINADO</div>
+                      <h3 class="mod-title">Dashboard General y Centro de Configuración (5 Pestañas)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Combina el tablero de gráficas generales del negocio con el panel donde el Administrador ajusta las reglas del CRM sin depender de soporte técnico.
+                  </div>
+                  <ul class="mod-list">
+                    <li><strong>5 Pestañas de Configuración:</strong> (1) Personalización de columnas y colores del Pipeline, (2) Palabras clave de detección y OCR, (3) Conexión Meta Ads, (4) Conexión de Instagram/Facebook, y (5) Tiempos límite de respuesta (SLA).</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 19 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 19 • TERMINADO</div>
+                      <h3 class="mod-title">Módulo de Auditoría, Alertas SLA y Bitácora Excel</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Es el centro de vigilancia y calidad de atención para supervisores y gerencia, dividido en 3 vistas:
+                  </div>
+                  <ul class="mod-list">
+                    <li><strong>1. Chats sin responder:</strong> Muestra qué clientes llevan más tiempo esperando respuesta y calcula el porcentaje de descuento <em>Fashion Time</em> según la hora en que escribieron.</li>
+                    <li><strong>2. Decisiones del Bot IA:</strong> Explica por qué el asistente virtual tomó cada decisión.</li>
+                    <li><strong>3. Registro de Accesos y Cambios:</strong> Bitácora de seguridad que guarda quién inició sesión, quién vio un chat, quién movió un cliente o quién marcó un pago, con <strong>descarga directa a Excel (.xlsx)</strong>.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 20 -->
+              <article class="module-card full-width status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 20 • EN CALIBRACIÓN ACTIVA (PRIORIDAD ACTUAL)</div>
+                      <h3 class="mod-title">Motor Lector de Boletas (OCR) y Reporte de Métricas de Ventas por Asesora</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">70%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 70%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Es el módulo que detecta cuando un cliente envía la foto de su comprobante de pago (transferencia, depósito bancario o voucher de tarjeta), extrae el monto en Quetzales y le suma la venta a la asesora que atendió al cliente.
+                  </div>
+                  <ul class="mod-list">
+                    <li><strong>Lo que ya está funcionando (70%):</strong> Lectura de boletas bancarias de los principales bancos de Guatemala, tabla comparativa de asesoras, filtro por día/rango de fechas, botón para copiar resumen de cierre a WhatsApp y auditoría detallada de chats.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🛠️ ¿Por qué está en 70% y qué estamos trabajando ahorita (30% restante)?</strong><br/>
+                    En la operación real ocurren dos situaciones especiales: (1) un mismo cliente es atendido por una asesora en la mañana y envía el comprobante en la tarde cuando otra asesora abre el chat; y (2) en el chat se envían imágenes de catálogo o promociones con números que no son boletas bancarias. Estamos perfeccionando el motor de atribución para que asigne cada venta con <strong>100% de exactitud a la asesora correcta sin ajustes manuales</strong>.
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 6 -->
+          <section id="area-6" class="area-block">
+            <div class="area-header" style="border-left-color: var(--info);">
+              <div class="area-tag" style="color: var(--info);">ÁREA 6 • POST-VENTA Y LOGÍSTICA (DEFINIDO / PENDIENTE DE DESARROLLO)</div>
+              <h2>Módulo de Logística, Alistamiento de Pedidos y Guías de Despacho</h2>
+              <p>Es el módulo que cerrará el ciclo operativo una vez que la venta ha sido pagada y verificada en el chat.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 21 -->
+              <article class="module-card full-width status-pending" data-status="pending">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--info);">MÓDULO 21 • DEFINIDO / PRÓXIMA FASE DE DESARROLLO</div>
+                      <h3 class="mod-title">Panel Operativo de Logística, Empaque y Seguimiento de Envíos</h3>
+                    </div>
+                    <span class="pct-badge badge-info">15%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 15%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una pantalla pensada exclusivamente para el personal de despacho/bodega, donde recibirán todos los pedidos pagados para prepararlos, empacarlos, asignarles número de guía de mensajería y confirmar su entrega.
+                  </div>
+                  <ul class="mod-list">
+                    <li><strong>✅ Lo que ya existe hoy (15%):</strong> La columna <em>"Por Despacho"</em> en el Pipeline ya agrupa automáticamente a todos los clientes con pago confirmado, y las asesoras ya solicitan en el chat la plantilla completa de datos de envío (Nombre, Dirección, Ciudad, Zona, Departamento, Celular de quien recibe, NIT/DPI y Correo).</li>
+                  </ul>
+                  <div class="work-box work-info">
+                    <strong>📋 Lo que está definido y pendiente de programar (85% restante):</strong><br/>
+                    Construir el módulo dedicado de Logística con: (1) Bandeja de pedidos pagados pendientes de alistar con las prendas cotizadas, (2) Control de estados logísticos (<em>Pendiente de empaque → Empacado → Guía asignada / En ruta → Entregado / Novedad</em>), y (3) Envío automático del número de guía al WhatsApp del cliente.
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================================
+         PESTAÑA 2: GUÍA DIDÁCTICA PASO A PASO (PARA PRINCIPIANTES / INDUCCIÓN)
+         ================================================================================= -->
+    <div id="tab-recorrido" class="view-panel">
+      <div class="hero-card">
+        <div class="eyebrow">GUÍA DIDÁCTICA PARA CUALQUIER INTEGRANTE DE LA EMPRESA</div>
+        <h2 class="hero-title">¿Cómo funciona Bagneres CRM desde que un cliente saluda hasta que compra?</h2>
+        <p class="hero-lead">
+          Si alguien nuevo llega hoy a la empresa y pregunta <em>"¿Cómo trabaja el sistema?"</em>, estos son los <strong>6 pasos sencillos</strong> que ocurren en cada venta:
+        </p>
+
+        <div class="journey-grid">
+          <div class="journey-card">
+            <div class="step-circle">1</div>
+            <h3 class="mod-title">El cliente escribe por redes o WhatsApp</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              El cliente ve un anuncio o publicación de Studio F / ELA y envía un mensaje por WhatsApp, Instagram o Facebook preguntando por una prenda. El mensaje entra de inmediato a la <strong>Bandeja Omnicanal</strong>.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">2</div>
+            <h3 class="mod-title">El Bot IA o la Asesora lo recibe sabiendo quién es</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              El sistema cruza su teléfono con la base de tiendas físicas y le muestra a la asesora si es una clienta frecuente, cuánto ha comprado antes, cuál es su talla de blusa/jean/calzado y en qué tienda suele comprar.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">3</div>
+            <h3 class="mod-title">Búsqueda de prenda con foto, stock y precio real</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              La asesora escribe el código de referencia (ej. <code>S219701</code>) en el <strong>Catálogo</strong> o en el <strong>Cotizador</strong>. El sistema le muestra la fotografía oficial, el precio en Quetzales y cuántas unidades disponibles hay en tiendas.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">4</div>
+            <h3 class="mod-title">Envío de Tarjeta de Cotización desde la Calculadora</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              En el <strong>Cotizador</strong>, la asesora selecciona las prendas, aplica el descuento promocional del día y con un clic envía al WhatsApp de la clienta una tarjeta gráfica con foto, precio regular, descuento y total a pagar.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">5</div>
+            <h3 class="mod-title">Pago, lectura de boleta y suma a Métricas</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              La clienta realiza su transferencia o depósito y manda la foto del comprobante al chat. El sistema detecta el pago, mueve a la clienta a la columna <strong>"Por Despacho"</strong> y registra la venta en el reporte de la asesora.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">6</div>
+            <h3 class="mod-title">Alistamiento, Guía y Entrega (Fase Logística)</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              Con los datos de dirección capturados en el chat, el pedido en columna <strong>"Por Despacho"</strong> pasa al área encargada de empacar la prenda, generar la guía de mensajería y enviarla hasta la puerta del cliente.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================================
+         PESTAÑA 3: EN QUÉ ESTAMOS TRABAJANDO HOY Y PRÓXIMAS FASES
+         ================================================================================= -->
+    <div id="tab-actual" class="view-panel">
+      <div class="hero-card">
+        <div class="eyebrow">FOCO DE TRABAJO ACTUAL Y HOJA DE RUTA</div>
+        <h2 class="hero-title">¿En qué estamos trabajando ahorita mismo?</h2>
+        <p class="hero-lead">
+          Con 17 de los 21 módulos ya terminados al 100%, el equipo de desarrollo está concentrado hoy en <strong>3 objetivos puntuales</strong> para llevar toda la plataforma al 100%:
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          <div class="module-card status-active">
+            <div class="mod-top">
+              <div>
+                <div class="mod-num" style="color: var(--ok);">FRENTE 1 • RECIÉN DESPLEGADO HOY (95% → 100%)</div>
+                <h3 class="mod-title">Sincronización Automática de Precios Oficiales en Catálogo y Cotizador</h3>
+              </div>
+              <span class="pct-badge badge-ok">Listo en Producción</span>
+            </div>
+            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
+              <strong>Situación:</strong> El ERP habilitó el nuevo acceso <code>/api/data/ref-precio</code> con los precios oficiales de <strong>8,022 referencias</strong>. Hoy subimos la actualización para que el CRM sincronice esos precios de forma prioritaria e instantánea al abrir el Catálogo o buscar una prenda en la Calculadora de Cotizaciones, e incluimos el botón directo <em>"Sincronizar Precios ERP"</em>.
+            </p>
+          </div>
+
+          <div class="module-card status-active">
+            <div class="mod-top">
+              <div>
+                <div class="mod-num" style="color: var(--warn);">FRENTE 2 • EN TRABAJO ACTIVO AHORITA (70% → 100%)</div>
+                <h3 class="mod-title">Precisión Definitiva del Reporte de Métricas y Ventas por Asesora</h3>
+              </div>
+              <span class="pct-badge badge-warn">En Calibración (70%)</span>
+            </div>
+            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
+              <strong>Situación:</strong> Actualmente el reporte de ventas por asesora funciona al 70% porque cuando dos asesoras atienden a un mismo cliente en distintos turnos, o cuando el cliente envía fotos de prendas junto con comprobantes bancarios, se han requerido ajustes manuales para cuadrar el cierre. Estamos rediseñando la regla de atribución para que vincule de forma limpia la cotización, la asesora que gestionó la venta y el comprobante real de pago, logrando <strong>100% de exactitud automática</strong>.
+            </p>
+          </div>
+
+          <div class="module-card status-pending">
+            <div class="mod-top">
+              <div>
+                <div class="mod-num" style="color: var(--info);">FRENTE 3 • SIGUIENTE FASE DE DESARROLLO (15% → 100%)</div>
+                <h3 class="mod-title">Construcción del Módulo Completo de Logística y Despachos</h3>
+              </div>
+              <span class="pct-badge badge-info">Definido (15%)</span>
+            </div>
+            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
+              <strong>Situación:</strong> El flujo comercial ya deja a los clientes pagados en la columna <em>"Por Despacho"</em> con sus datos de entrega. El siguiente paso de desarrollo es construir la pantalla operativa de Logística para administrar el alistamiento de prendas, asignación de número de guía de transporte y confirmación de entrega al cliente.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================================
+         PESTAÑA 4: TABLA EJECUTIVA DE PORCENTAJES (LOS 21 MÓDULOS)
+         ================================================================================= -->
+    <div id="tab-matriz" class="view-panel">
+      <div class="hero-card">
+        <div class="eyebrow">MATRIZ CONSOLIDADA DE LOS 21 MÓDULOS</div>
+        <h2 class="hero-title">Tabla Resumen de Avance Funcional</h2>
+        <p class="hero-lead">Vista rápida en formato de tabla ejecutiva de los 21 módulos que conforman Bagneres CRM.</p>
+
+        <div style="overflow-x: auto;">
+          <table class="corp-table">
+            <thead>
+              <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 22%;">Área Corporativa</th>
+                <th style="width: 28%;">Módulo Funcional</th>
+                <th style="width: 10%;">Avance</th>
+                <th style="width: 15%;">Estado</th>
+                <th style="width: 20%;">Resumen Ejecutivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Multi-Empresa)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Múltiples razones sociales y asignación de marcas.</td></tr>
+              <tr><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Marcas y Sucursales</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Marcas (Studio F, ELA) y tiendas físicas.</td></tr>
+              <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Multi-línea con botón de prueba en vivo en Meta.</td></tr>
+              <tr><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles y Permisos por Línea</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Admin, Supervisor y Asesora con líneas asignadas.</td></tr>
+              <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal + Chat Emergente</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>WhatsApp, Instagram y Facebook en vivo con presencia.</td></tr>
+              <tr><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Kanban)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Etapas de venta automatizadas sin duplicados.</td></tr>
+              <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial Tiendas ERP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Cruce con +18,000 clientes, compras y tallas.</td></tr>
+              <tr><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Atajos rápidos (<code>/</code>) para cuentas, saludos y envíos.</td></tr>
+              <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital, Stock y Precios ERP</strong></td><td><strong>95%</strong></td><td>🔄 Cerrando hoy</td><td>Stock real + 8,022 precios sincronizados del ERP.</td></tr>
+              <tr><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático de Fotos SFTP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Enlace automático de +4,760 fotos de prendas.</td></tr>
+              <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual PNG</strong></td><td><strong>95%</strong></td><td>🔄 Cerrando hoy</td><td>Calculadora de descuentos y tarjeta PNG en chat/catálogo.</td></tr>
+              <tr><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola de Diagnóstico e Inspector ERP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Pruebas en vivo de endpoints y sincronización manual.</td></tr>
+              <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente IA 24/7 + Simulador de Pruebas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Bot conectado a stock real con pantalla de pruebas.</td></tr>
+              <tr><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Envíos masivos con métricas y bloqueo anti-duplicados.</td></tr>
+              <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales Meta</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Creación y aprobación de plantillas desde el CRM.</td></tr>
+              <tr><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Recuperación de clientes con cotización abierta.</td></tr>
+              <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta y Simulador de Costos</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Salud de líneas y cálculo financiero de campañas.</td></tr>
+              <tr><td>18</td><td>Dirección y Control</td><td><strong>Dashboard General y Configuración (5 tabs)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>KPIs generales y ajustes de Pipeline, OCR, Ads, Redes y SLA.</td></tr>
+              <tr><td>19</td><td>Dirección y Control</td><td><strong>Auditoría, SLA (Fashion Time) y Excel</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Chats sin responder, decisiones IA y bitácora en Excel.</td></tr>
+              <tr><td>20</td><td>Dirección y Control</td><td><strong>Motor OCR y Métricas de Ventas por Asesora</strong></td><td><strong>70%</strong></td><td>🛠️ En calibración</td><td>Lectura de boletas y ventas; afinando exactitud por turno.</td></tr>
+              <tr><td>21</td><td>Post-Venta y Logística</td><td><strong>Módulo de Logística, Alistamiento y Guías</strong></td><td><strong>15%</strong></td><td>📋 Por desarrollar</td><td>Etapa Por Despacho lista; falta panel de bodega y guías.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- CONTENIDO OCULTO OPTIMIZADO PARA EXPORTACIÓN A MICROSOFT WORD (.DOC) -->
+  <div id="word-export-content" style="display:none;">
+    <div style="font-family: Calibri, Arial, sans-serif; color: #111827; line-height: 1.45;">
+      <h1 style="color: #1e1b4b; font-size: 20pt; margin-bottom: 4pt; border-bottom: 2px solid #3730a3; padding-bottom: 6pt;">
+        INFORME CORPORATIVO INTEGRAL DE AVANCE FUNCIONAL — BAGNERES CRM
+      </h1>
+      <p style="font-size: 10.5pt; color: #4b5563; margin-top: 0;">
+        <strong>Grupo Empresarial:</strong> Bagneres (Studio F &amp; ELA Guatemala) &nbsp;|&nbsp;
+        <strong>Fecha:</strong> 17 de octubre de 2026 &nbsp;|&nbsp;
+        <strong>Avance Global Ponderado:</strong> 92% (21 Módulos Funcionales)
+      </p>
+
+      <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
+        1. Resumen Ejecutivo (Explicación Sencilla para Dirección)
+      </h2>
+      <p style="font-size: 10.5pt; text-align: justify;">
+        <strong>Bagneres CRM</strong> es una plataforma empresarial multi-empresa, multi-marca y omnicanal creada para centralizar toda la operación comercial digital de <strong>Studio F y ELA en Guatemala</strong>. Reúne en un solo sistema la estructura de empresas y tiendas físicas, todas las líneas de WhatsApp, Instagram y Facebook, el catálogo conectado al inventario y precios oficiales del sistema central (ERP), una calculadora gráfica de cotizaciones, un asistente de Inteligencia Artificial 24/7, campañas masivas de marketing, auditoría de seguridad y el control de ventas por asesora.
+      </p>
+
+      <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
+        2. Recorrido Paso a Paso de una Venta en el Sistema
+      </h2>
+      <ol style="font-size: 10.5pt;">
+        <li style="margin-bottom: 4pt;"><strong>Recepción Omnicanal:</strong> El cliente escribe por WhatsApp, Instagram o Facebook y su conversación aparece en vivo en la Bandeja Omnicanal de su marca correspondiente.</li>
+        <li style="margin-bottom: 4pt;"><strong>Reconocimiento Clientes 360°:</strong> El sistema cruza su teléfono con los +18,000 clientes de tiendas físicas y muestra cuánto ha comprado históricamente, qué tallas usa y cuál es su tienda preferida.</li>
+        <li style="margin-bottom: 4pt;"><strong>Consulta en Catálogo Digital:</strong> La asesora o el Bot IA consulta la referencia viendo existencias disponibles reales (sin imperfectos), fotografía oficial y precio en Quetzales.</li>
+        <li style="margin-bottom: 4pt;"><strong>Cotización en Calculadora Visual:</strong> La asesora selecciona las prendas en el Cotizador, aplica el descuento correspondiente y envía una tarjeta gráfica PNG con el resumen y ahorro directo al WhatsApp del cliente.</li>
+        <li style="margin-bottom: 4pt;"><strong>Confirmación de Pago y Métricas:</strong> Cuando el cliente envía la foto de su comprobante bancario, el sistema registra el pago, mueve al cliente a la columna <em>Por Despacho</em> y suma la venta a la asesora.</li>
+        <li style="margin-bottom: 4pt;"><strong>Despacho y Logística:</strong> El área de logística recibe los pedidos en estado <em>Por Despacho</em> para alistar las prendas, asignar guía de transporte y entregar al cliente.</li>
+      </ol>
+
+      <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
+        3. Matriz Completa de los 21 Módulos del CRM por Área de Negocio
+      </h2>
+      <table border="1" cellspacing="0" cellpadding="6" style="width: 100%; border-collapse: collapse; font-size: 9.5pt; border-color: #cbd5e1;">
+        <thead>
+          <tr style="background-color: #1e293b; color: #ffffff;">
+            <th align="left" style="width: 5%;">#</th>
+            <th align="left" style="width: 20%;">Área</th>
+            <th align="left" style="width: 27%;">Módulo Funcional</th>
+            <th align="center" style="width: 8%;">Avance</th>
+            <th align="left" style="width: 14%;">Estado</th>
+            <th align="left" style="width: 26%;">Función Principal para la Empresa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Multi-Empresa)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Registro de múltiples razones sociales y asignación de marcas por empresa.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Marcas y Sucursales</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Administración de marcas (Studio F, ELA) y sus tiendas físicas.</td></tr>
+          <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas WhatsApp</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Conexión de múltiples números de WhatsApp con prueba en vivo ante Meta.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles y Permisos por Línea</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Perfiles Admin, Supervisor y Asesora con asignación de líneas por usuario.</td></tr>
+          <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal + Chat Emergente</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>WhatsApp, Instagram y Facebook unificados con indicador de presencia en vivo.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Kanban)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Clasificación Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS sin duplicados.</td></tr>
+          <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial Tiendas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Cruce con +18,000 clientes del ERP: compras en tiendas, tallas y NIT.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Atajos rápidos (/) para cuentas bancarias, saludos y datos de envío.</td></tr>
+          <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital, Stock y Precios ERP</strong></td><td align="center"><strong>95%</strong></td><td>Cerrando hoy</td><td>Inventario disponible real y sincronización de 8,022 precios del ERP.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático Fotos SFTP</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Vinculación automática de +4,760 fotografías oficiales con cada referencia.</td></tr>
+          <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual PNG</strong></td><td align="center"><strong>95%</strong></td><td>Cerrando hoy</td><td>Calculadora de descuentos en chat y catálogo que genera tarjeta gráfica PNG.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola Diagnóstico e Inspector ERP</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Inspección en vivo de endpoints del ERP y sincronización bajo demanda.</td></tr>
+          <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente IA 24/7 + Simulador Pruebas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Bot conectado a inventario real con simulador interno de conversación.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Envíos masivos por WhatsApp con métricas de lectura y candado anti-duplicados.</td></tr>
+          <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales Meta</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Creación y aprobación oficial de plantillas de WhatsApp desde el CRM.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Embudo para recuperar clientes con cotización abierta o pago pendiente.</td></tr>
+          <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta y Simulador Costos</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Salud de líneas, distribución sugerida y simulador financiero de envíos.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>18</td><td>Dirección y Control</td><td><strong>Dashboard General y Configuración</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Gráficas ejecutivas y 5 pestañas de configuración (Pipeline, OCR, Ads, Redes, SLA).</td></tr>
+          <tr><td>19</td><td>Dirección y Control</td><td><strong>Auditoría, SLA (Fashion Time) y Excel</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Alertas de chats sin responder, decisiones IA y bitácora exportable a Excel.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>20</td><td>Dirección y Control</td><td><strong>Motor OCR y Métricas por Asesora</strong></td><td align="center"><strong>70%</strong></td><td>En calibración</td><td>Lectura de comprobantes y ventas por asesora; afinando precisión entre turnos.</td></tr>
+          <tr><td>21</td><td>Post-Venta y Logística</td><td><strong>Módulo de Logística y Guías</strong></td><td align="center"><strong>15%</strong></td><td>Por desarrollar</td><td>Columna Por Despacho activa; pendiente construir panel de bodega y guías.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
+        4. Detalle de Frentes Activos de Trabajo (En qué estamos ahorita mismo)
+      </h2>
+      <p style="font-size: 10.5pt;">
+        <strong>1. Cierre de Precios Automáticos en Catálogo y Cotizador (95% → 100%):</strong> Ya se conectó el nuevo endpoint del ERP (<code>/api/data/ref-precio</code> con 8,022 referencias) con sincronización rápida e independiente para que cada referencia muestre su precio en Quetzales tanto en el Catálogo como en la Calculadora de Cotizaciones.<br/><br/>
+        <strong>2. Calibración Definitiva de Métricas y Ventas por Asesora (70% → 100%):</strong> Estamos perfeccionando la regla de atribución para que cuando más de una asesora interviene en el mismo chat o se envían fotos de prendas junto con comprobantes, el sistema asigne la venta con 100% de exactitud a la asesora correcta sin ajustes manuales.<br/><br/>
+        <strong>3. Próximo Desarrollo — Módulo de Logística y Seguimiento de Despachos (15% → 100%):</strong> Construcción del panel operativo para el equipo de bodega/logística con control de alistamiento, registro de número de guía de transporte y notificación automática de envío al cliente.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tabId, btnEl) {
+      document.querySelectorAll('.view-panel').forEach((p) => p.classList.remove('active'));
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add('active');
+
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function filterCards(status, btnEl) {
+      document.querySelectorAll('.filter-pill').forEach((b) => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+
+      document.querySelectorAll('.module-card[data-status]').forEach((card) => {
+        if (status === 'all' || card.getAttribute('data-status') === status) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      document.querySelectorAll('.area-block').forEach((area) => {
+        const visibleCards = area.querySelectorAll('.module-card[data-status]:not([style*="display: none"])');
+        area.style.display = visibleCards.length > 0 ? '' : 'none';
+      });
+    }
+
+    function exportToWord() {
+      const content = document.getElementById('word-export-content').innerHTML;
+      const wordHtml =
+        '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+        'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
+        'xmlns="http://www.w3.org/TR/REC-html40">' +
+        '<head><meta charset="utf-8"><title>Informe Corporativo Integral Bagneres CRM</title>' +
+        '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->' +
+        '<style>@page { size: 21.59cm 27.94cm; margin: 1.8cm 1.8cm 1.8cm 1.8cm; } body { font-family: Calibri, Arial, sans-serif; }</style>' +
+        '</head><body>' +
+        content +
+        '</body></html>';
+
+      const blob = new Blob(['\ufeff', wordHtml], {
+        type: 'application/msword;charset=utf-8'
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Informe_Corporativo_Integral_Bagneres_CRM.doc';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+  </script>
+</body>
+</html>
