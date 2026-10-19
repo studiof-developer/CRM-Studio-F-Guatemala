@@ -1188,6 +1188,8 @@ router.post('/:sessionId/messages', async (req, res, next) => {
               customerId: cRows[0].id,
               user: req.user,
               channel: 'whatsapp',
+              messageId: inserted[0].id,
+              lineId,
               notes: 'Confirmado por mensaje: ' + content.trim().slice(0, 80),
             }).catch((e) => console.error('confirmSaleByAdvisorMessage error:', e));
           }
@@ -1351,6 +1353,8 @@ router.post('/:sessionId/attachments', upload.single('file'), async (req, res, n
               customerId: cRows[0].id,
               user: req.user,
               channel: 'whatsapp',
+              messageId: inserted[0].id,
+              lineId,
               notes: 'Confirmado por comprobante/mensaje: ' + caption.trim().slice(0, 80),
             }).catch((e) => console.error('confirmSaleByAdvisorMessage error:', e));
           }

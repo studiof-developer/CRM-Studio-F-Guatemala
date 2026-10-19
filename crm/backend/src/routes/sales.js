@@ -1,15 +1,28 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logBusinessAction } from '../auditLog.js';
-import { reconcileAllSalesFromChats } from '../salesAttribution.js';
-import { analizarChats14Octubre } from '../analizar_chats_14.js';
+import { requireRole } from '../auth.js';
+import { auditSales, rebuildSales } from '../salesAttribution.js';
 
 const router = Router();
+
+// Solo las ventas confirmadas con monto suman a los totales; las "por revisar" se muestran
+// aparte (por_revisar) para que nadie las pierda de vista pero no inflen el cierre.
+const CONFIRMED = "s.status = 'confirmada' AND s.amount > 0";
+const GT_HOUR = "extract(hour from s.created_at AT TIME ZONE 'America/Guatemala')";
+const GT_DOW = "extract(dow from s.created_at AT TIME ZONE 'America/Guatemala')";
+const shiftSum = (cond, alias) => `COALESCE(SUM(s.amount) FILTER (WHERE ${CONFIRMED} AND ${cond}), 0)::numeric(10,2) AS ${alias}`;
+// Mismo corte de turnos que shiftOf() en salesRules.js (donde está probado).
+const SHIFT_BUCKETS = [
+  shiftSum(`${GT_DOW} <> 0 AND ${GT_HOUR} >= 8 AND ${GT_HOUR} < 15`, 'turno_manana'),
+  shiftSum(`${GT_DOW} <> 0 AND ${GT_HOUR} >= 15 AND ${GT_HOUR} < 21`, 'turno_tarde'),
+  shiftSum(`${GT_DOW} = 0 AND ${GT_HOUR} >= 8 AND ${GT_HOUR} < 21`, 'turno_domingo'),
+  shiftSum(`(${GT_HOUR} < 8 OR ${GT_HOUR} >= 21)`, 'turno_fuera'),
+].join(', ');
 
 // Builds the date and line filter for sales queries using Guatemala local timezone
 function buildSalesFilter(period, from, to, lineId, params = []) {
   const clauses = [
-    `s.amount > 0`,
     `COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'`,
   ];
 
@@ -209,7 +222,7 @@ router.get('/by-advisor', async (req, res, next) => {
          COUNT(*)::int AS total_ventas,
          COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales
        FROM sales s
-       WHERE true ${filterSql}`,
+       WHERE ${CONFIRMED} ${filterSql}`,
       summaryParams
     );
 
@@ -226,11 +239,12 @@ router.get('/by-advisor', async (req, res, next) => {
       `SELECT
          COALESCE(NULLIF(TRIM(s.advisor_name), ''), 'Sin Asignar') AS advisor_name,
          MAX(s.advisor_id) AS advisor_id,
-         COUNT(DISTINCT s.customer_id)::int AS clientes_vendidos,
-         COUNT(*)::int AS cantidad_ventas,
-         COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales,
-         ROUND(COALESCE(AVG(s.amount), 0), 2)::numeric(10,2) AS ticket_promedio,
-         COUNT(*) FILTER (WHERE s.status = 'revisar')::int AS por_revisar
+         COUNT(DISTINCT s.customer_id) FILTER (WHERE ${CONFIRMED})::int AS clientes_vendidos,
+         COUNT(*) FILTER (WHERE ${CONFIRMED})::int AS cantidad_ventas,
+         COALESCE(SUM(s.amount) FILTER (WHERE ${CONFIRMED}), 0)::numeric(10,2) AS total_quetzales,
+         ROUND(COALESCE(AVG(s.amount) FILTER (WHERE ${CONFIRMED}), 0), 2)::numeric(10,2) AS ticket_promedio,
+         COUNT(*) FILTER (WHERE s.status = 'revisar')::int AS por_revisar,
+         ${SHIFT_BUCKETS}
        FROM sales s
        WHERE true ${advisorFilterSql}
        GROUP BY COALESCE(NULLIF(TRIM(s.advisor_name), ''), 'Sin Asignar')
@@ -238,18 +252,16 @@ router.get('/by-advisor', async (req, res, next) => {
       advisorParams
     );
 
-    // Asegurar que las asesoras del CRM siempre aparezcan en el ranking, incluso si llevan 0 ventas en el período
-    const knownAdvisors = ['Aura Cristina Carvajal Delgado', 'Leydi Laura Mosquera', 'Luisa Cristancho'];
-    try {
-      const { rows: uAdvs } = await pool.query(
-        `SELECT DISTINCT full_name FROM users WHERE role IN ('asesor', 'supervisor') AND full_name IS NOT NULL`
-      );
-      for (const u of uAdvs) {
-        if (u.full_name && !knownAdvisors.some(k => k.toLowerCase() === u.full_name.toLowerCase())) {
-          knownAdvisors.push(u.full_name);
-        }
-      }
-    } catch (_) {}
+    // Las asesoras siempre aparecen en el ranking aunque lleven 0 ventas; si se filtra por
+    // línea, solo las que tienen esa línea asignada.
+    const { rows: uAdvs } = await pool.query(
+      `SELECT DISTINCT u.full_name FROM users u
+       LEFT JOIN user_whatsapp_numbers uwn ON uwn.user_id = u.id
+       WHERE u.role IN ('asesor', 'supervisor') AND u.full_name IS NOT NULL
+         AND ($1::int IS NULL OR uwn.whatsapp_number_id = $1::int)`,
+      [lineId ? Number(lineId) : null]
+    );
+    const knownAdvisors = uAdvs.map((u) => u.full_name);
 
     const existingNames = new Set(advisorRows.map(a => a.advisor_name.toLowerCase()));
     for (const name of knownAdvisors) {
@@ -262,6 +274,10 @@ router.get('/by-advisor', async (req, res, next) => {
           total_quetzales: '0.00',
           ticket_promedio: '0.00',
           por_revisar: 0,
+          turno_manana: '0.00',
+          turno_tarde: '0.00',
+          turno_domingo: '0.00',
+          turno_fuera: '0.00',
         });
       }
     }
@@ -286,6 +302,12 @@ router.get('/by-advisor', async (req, res, next) => {
         totalQuetzales: total,
         ticketPromedio: Number(a.ticket_promedio),
         porRevisar: Number(a.por_revisar),
+        turnos: {
+          manana: Number(a.turno_manana),
+          tarde: Number(a.turno_tarde),
+          domingo: Number(a.turno_domingo),
+          fuera: Number(a.turno_fuera),
+        },
         porcentajeDelTotal: grandTotal > 0 ? Number(((total / grandTotal) * 100).toFixed(1)) : 0,
       };
     });
@@ -300,7 +322,7 @@ router.get('/by-advisor', async (req, res, next) => {
          COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales,
          COUNT(*)::int AS cantidad_ventas
        FROM sales s
-       WHERE true ${dailyFilterSql}
+       WHERE ${CONFIRMED} ${dailyFilterSql}
        GROUP BY day
        ORDER BY day ASC`,
       dailyParams
@@ -316,7 +338,7 @@ router.get('/by-advisor', async (req, res, next) => {
          COUNT(*)::int AS count,
          COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_quetzales
        FROM sales s
-       WHERE true ${methodFilterSql}
+       WHERE ${CONFIRMED} ${methodFilterSql}
        GROUP BY method
        ORDER BY total_quetzales DESC`,
       methodParams
@@ -524,7 +546,7 @@ router.get('/daily-breakdown', async (req, res, next) => {
        FROM sales s
        WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
          AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
-         AND s.amount > 0
+         AND s.status = 'confirmada' AND s.amount > 0
          AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
          ${lineClause}
        GROUP BY day, s.advisor_name
@@ -547,7 +569,7 @@ router.get('/daily-breakdown', async (req, res, next) => {
        FROM sales s
        WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
          AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
-         AND s.amount > 0
+         AND s.status = 'confirmada' AND s.amount > 0
          AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
          ${lineClause}
        GROUP BY day
@@ -634,39 +656,28 @@ router.get('/daily-breakdown', async (req, res, next) => {
   }
 });
 
-// POST /api/sales/sync-from-chats
-// Re-analiza todos los historiales de chats, corrige montos irreales (> Q10,000)
-// y atribuye cada venta a la asesora que realmente atendió al cliente en el chat.
-router.post('/sync-from-chats', async (req, res, next) => {
+// GET /api/sales/audit?from=YYYY-MM-DD&to=YYYY-MM-DD[&lineId=]
+// Compara cada comprobante del chat contra las ventas registradas (asesora, día, monto).
+// Solo lee: no cambia nada.
+router.get('/audit', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const result = await reconcileAllSalesFromChats();
-    const actor = req.user || { fullName: 'Sistema', id: null };
-    logBusinessAction(actor, null, 'reconcile_sales_from_chats', 'Sincronización profunda ejecutada');
-
-    res.json({
-      success: true,
-      message: 'Ventas y chats sincronizados y re-atribuidos exitosamente.',
-      ...result,
-    });
+    const { from, to, lineId } = req.query;
+    res.json(await auditSales({ from, to, lineId: lineId ? Number(lineId) : null }));
   } catch (err) {
-    console.error('sync-from-chats error:', err);
-    res.status(500).json({ error: err.message || 'Error interno al sincronizar ventas' });
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
   }
 });
 
-// GET /api/sales/analisis-14-octubre
-// Auditoría detallada chat por chat del 14 de octubre
-router.get('/analisis-14-octubre', async (req, res, next) => {
+// POST /api/sales/rebuild { from, to, lineId?, apply? }
+// Sin apply:true solo muestra el plan. Nunca borra ni toca ventas bloqueadas.
+router.post('/rebuild', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const result = await analizarChats14Octubre();
-    if (req.query.format === 'text') {
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      return res.send(result.txtContent);
-    }
-    res.json(result);
+    const { from, to, lineId, apply } = req.body ?? {};
+    res.json(await rebuildSales({ from, to, lineId: lineId ? Number(lineId) : null, apply: apply === true, user: req.user }));
   } catch (err) {
-    console.error('analisis-14-octubre error:', err);
-    res.status(500).json({ error: err.message || 'Error al generar análisis del 14/10' });
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
   }
 });
 

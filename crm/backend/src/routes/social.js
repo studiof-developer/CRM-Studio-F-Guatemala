@@ -601,6 +601,7 @@ router.post('/contacts/:id/messages', upload.single('file'), async (req, res, ne
           customerId,
           user: req.user,
           channel: provider || 'social',
+          messageId,
           notes: `Confirmado por mensaje en ${provider || 'social'}: "${body.slice(0, 80)}"`,
         }).catch((err) => console.warn('[confirmSaleByAdvisorMessage social error]', err.message));
       }

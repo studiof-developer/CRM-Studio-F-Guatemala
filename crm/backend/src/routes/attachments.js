@@ -9,7 +9,7 @@ import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
 import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
 import { getSetting } from './settings.js';
-import { autoRecordSale } from '../salesAttribution.js';
+import { recordSaleFromReceipt } from '../salesAttribution.js';
 
 // Shared by both the single-receipt match and the multi-receipt-sum match below —
 // re-checks paid_locked/caliente at write time instead of trusting an earlier SELECT,
@@ -19,7 +19,7 @@ import { autoRecordSale } from '../salesAttribution.js';
 // and must NOT overwrite whatever they just set — the caller still treats that as
 // "handled" (skip the suggestion banner), just without logging a confirmation that
 // didn't actually happen.
-async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = null) {
+async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = null, messageId = null) {
   const { rows: updated } = await pool.query(
     `UPDATE customers AS c SET paid_locked = true, paid_method = $2,
        manual_status = CASE WHEN c.manual_status = 'pqrs' THEN 'pqrs' ELSE 'despacho' END,
@@ -32,16 +32,9 @@ async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = n
   if (updated.length) {
     logBusinessAction({ fullName: 'Sistema (OCR)', id: null }, customerId, 'customer_marked_paid', detailNote);
 
-    if (amount && Number(amount) > 0) {
-      await autoRecordSale({
-        customerId,
-        user: { fullName: 'Sistema (OCR)', id: null },
-        paymentMethod: paidMethod,
-        amount: Number(amount),
-        receiptAmount: Number(amount),
-        notes: 'Confirmado automáticamente por OCR',
-      });
-    }
+    // La venta nace del comprobante (su fecha, su monto y la asesora que atendía en ese
+    // momento) — ver salesAttribution.js.
+    if (messageId) await recordSaleFromReceipt({ messageId, amount: amount ? Number(amount) : null, paymentMethod: paidMethod });
     return true;
   }
   return false;
@@ -259,7 +252,8 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
       customerId,
       paidMethod,
       `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (automático)`,
-      expectedAmount
+      expectedAmount,
+      inboundMessageId
     );
     autoConfirmed = true;
   } else if (ocrAmount != null && ocrAmount >= 50 && ocrAmount <= 10000) {
@@ -279,7 +273,8 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
           customerId,
           paidMethod,
           `${paidMethod} — Q${expectedAmount} cotizado, comprobante leído: "${ocrSnippet}" (combinado con comprobante(s) anterior(es), automático)`,
-          expectedAmount
+          expectedAmount,
+          inboundMessageId
         );
         autoConfirmed = true;
       }
@@ -291,7 +286,8 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
         customerId,
         paidMethod,
         `${paidMethod} — Comprobante verificado por OCR por Q${ocrAmount}: "${ocrSnippet}" (automático)`,
-        ocrAmount
+        ocrAmount,
+        inboundMessageId
       );
       autoConfirmed = true;
     }

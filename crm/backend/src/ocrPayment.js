@@ -52,6 +52,9 @@ function matchesReceiptKeywords(ocrText, extraKeywords = []) {
 // whichever separator appears LAST is the decimal point; any earlier one is a
 // thousands separator and gets dropped.
 export function parseAmount(raw) {
+  // Callers pass whole regex matches like "Q2.486,00"; a leading "Q"/"Q." made parseFloat
+  // return NaN, which silently dropped every unlabeled Q-prefixed amount.
+  raw = String(raw).replace(/^[^\d]+/, '');
   const lastComma = raw.lastIndexOf(',');
   const lastDot = raw.lastIndexOf('.');
   const lastSep = Math.max(lastComma, lastDot);

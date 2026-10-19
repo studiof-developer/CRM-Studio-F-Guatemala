@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
-import { autoRecordSale } from '../salesAttribution.js';
+import { recordManualSale } from '../salesAttribution.js';
 
 const router = Router();
 
@@ -255,14 +255,14 @@ router.patch('/:id/tags', async (req, res, next) => {
       if (paidLocked === true && !before.paid_locked) {
         logBusinessAction(req.user, Number(req.params.id), 'customer_marked_paid', paidMethod);
       }
-      autoRecordSale({
+      recordManualSale({
         customerId: req.params.id,
         ticketId,
         user: req.user,
         paymentMethod: paidMethod || rows[0]?.paid_method || null,
         amount: saleAmount,
         notes: saleNotes,
-      }).catch((e) => console.error('autoRecordSale failed:', e));
+      }).catch((e) => console.error('recordManualSale failed:', e));
     }
 
     res.json(rows[0]);

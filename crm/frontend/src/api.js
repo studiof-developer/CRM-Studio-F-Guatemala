@@ -882,15 +882,15 @@ export async function fetchDailySalesBreakdown(filters = {}) {
   return res.json();
 }
 
-export async function syncSalesFromChats() {
-  const res = await apiFetch('/api/sales/sync-from-chats', { method: 'POST' });
-  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al sincronizar ventas desde chats');
-  return res.json();
-}
-
-export async function fetchAnalisis14Octubre() {
-  const res = await apiFetch('/api/sales/analisis-14-octubre');
-  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar auditoría del 14/10');
+// Auditoría contra el chat: sin apply solo muestra qué corregiría; con apply:true lo aplica.
+// Nunca borra ventas ni toca las bloqueadas (calibradas a mano antes del 16/10).
+export async function rebuildSales({ from, to, lineId, apply = false }) {
+  const res = await apiFetch('/api/sales/rebuild', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to, lineId: lineId || undefined, apply }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al auditar las ventas');
   return res.json();
 }
 
