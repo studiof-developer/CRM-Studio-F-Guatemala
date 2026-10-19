@@ -70,6 +70,7 @@ async function runAnalysis(runId, period) {
   const orphans = [];
   const withoutEvidence = [];
   let resent = 0;
+  let beat = 0;
   try {
     for (let i = 0; i < customers.length; i++) {
       const c = customers[i];
@@ -82,7 +83,8 @@ async function runAnalysis(runId, period) {
       } catch (err) {
         console.error(`analysis: customer ${c.id} failed`, err.message);
       }
-      if ((i + 1) % 10 === 0) await pool.query('UPDATE sales_analysis_runs SET progress = $2, updated_at = now() WHERE id = $1', [runId, i + 1]);
+      // Latido cada ~5 s (no cada 10 clientes): un cliente con muchas imágenes tarda minutos y, sin latido, parece interrumpido.
+      if (Date.now() - beat >= 5000 || i + 1 === customers.length) { beat = Date.now(); await pool.query('UPDATE sales_analysis_runs SET progress = $2, updated_at = now() WHERE id = $1', [runId, i + 1]); }
     }
   } finally {
     await ocr.close();
