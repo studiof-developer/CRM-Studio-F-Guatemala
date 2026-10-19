@@ -225,8 +225,7 @@ export default function QuoteModal({
   // tarjeta). Una sola prenda: el detalle completo. Varias: una línea por prenda (referencia, talla, precio) para
   // que una cotización larga no sature el chat. El total va en "Total a pagar", que lee el motor de ventas.
   function buildQuoteMessageText() {
-    const brand = activeLine?.label || 'Studio F';
-    let text = `✨ *Cotización ${brand}* ✨\n\n`;
+    let text = '';
     const totalPieces = items.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
     const money = (n) => `Q${(Number(n) || 0).toFixed(2)}`;
 
