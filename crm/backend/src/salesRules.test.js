@@ -413,3 +413,8 @@ test('varias prendas cotizadas y confirmación sin comprobante: se listan las ci
   assert.deepEqual(ep.quotedAmounts, [374, 349]);
   assert.ok(ep.issues.includes('varias_cotizaciones'));
 });
+
+test('el total de la cotización se lee aunque traiga (N prendas) y el ahorro después', () => {
+  assert.equal(quotedAmountIn('🛍️ *Total a pagar (1 prenda): Q802.17*\n🎉 *¡Te ahorras Q152.83!*'), 802.17);
+  assert.equal(quotedAmountIn('━━━\n🚚 Envío a domicilio: Q56.00\n🛍️ *Total a pagar (3 prendas): Q2297.00*'), 2297);
+});

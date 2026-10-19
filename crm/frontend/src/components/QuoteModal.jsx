@@ -221,36 +221,40 @@ export default function QuoteModal({
     return itemsTotalAfterDiscount + (Math.max(0, Number(shippingCost) || 0));
   }, [itemsTotalAfterDiscount, shippingCost]);
 
-  // Genera el texto para el mensaje de WhatsApp / Red Social. Corto a propósito: el detalle ya va en la tarjeta
-  // (imagen); aquí solo folio, prendas, envío y total. Se conserva "Total a pagar: Q…" porque el motor de
-  // ventas lee ese total del chat.
-  function buildQuoteMessageText(quoteNumber) {
-    let text = `✨ *Cotización ${quoteNumber}*
+  // Genera el texto para el mensaje de WhatsApp / Red Social. Sin folio ni leyenda de vigencia (el folio va en la
+  // tarjeta). Una sola prenda: el detalle completo. Varias: una línea por prenda (referencia, talla, precio) para
+  // que una cotización larga no sature el chat. El total va en "Total a pagar", que lee el motor de ventas.
+  function buildQuoteMessageText() {
+    const brand = activeLine?.label || 'Studio F';
+    let text = `✨ *Cotización ${brand}* ✨\n\n`;
+    const totalPieces = items.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
+    const money = (n) => `Q${(Number(n) || 0).toFixed(2)}`;
 
-`;
-
-    items.forEach((item) => {
+    if (items.length === 1) {
+      const item = items[0];
       const qty = Math.max(1, Number(item.quantity) || 1);
-      const detail = [item.size ? `Talla ${item.size}` : '', item.color, qty > 1 ? `x${qty}` : ''].filter(Boolean).join(' · ');
-      const regular = (Number(item.unitPrice) || 0) * qty;
-      const final = (Number(item.finalPrice) || 0) * qty;
-      const price = Number(item.discountPct) > 0
-        ? `Q${regular.toFixed(2)} → *Q${final.toFixed(2)}* (-${Number(item.discountPct)}%)`
-        : `*Q${final.toFixed(2)}*`;
-      text += `👗 ${item.name || 'Prenda'}${detail ? ` · ${detail}` : ''}
-${price}
-`;
-    });
+      const detail = [item.size ? `Talla ${item.size}` : '', item.color ? `Color ${item.color}` : '', qty > 1 ? `${qty} uds` : ''].filter(Boolean).join(' · ');
+      text += `👗 *${item.name || 'Prenda'}* (Ref: \`${item.sku || 'N/A'}\`)${detail ? ` — _${detail}_` : ''}\n`;
+      text += `• Precio regular: ${money(item.unitPrice)}\n`;
+      if (Number(item.discountPct) > 0) text += `• Descuento: *-${Number(item.discountPct)}%*\n`;
+      text += `• Subtotal: *${money((Number(item.finalPrice) || 0) * qty)}*\n\n`;
+    } else {
+      items.forEach((item) => {
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const regular = (Number(item.unitPrice) || 0) * qty;
+        const final = (Number(item.finalPrice) || 0) * qty;
+        const price = Number(item.discountPct) > 0 ? `${money(regular)} → *${money(final)}*` : `*${money(final)}*`;
+        const detail = [item.size ? `Talla ${item.size}` : '', qty > 1 ? `x${qty}` : ''].filter(Boolean).join(' · ');
+        text += `👗 ${item.sku || 'N/A'}${detail ? ` · ${detail}` : ''} · ${price}\n`;
+      });
+      text += '\n';
+    }
 
-    if (Number(shippingCost) > 0) text += `🚚 Envío: Q${Number(shippingCost).toFixed(2)}
-`;
-    if (customNote.trim()) text += `📌 ${customNote.trim()}
-`;
-    text += `
-🛍️ *Total a pagar: Q${grandTotal.toFixed(2)}*`;
-    if (discountTotal > 0) text += ` (ahorras Q${discountTotal.toFixed(2)})`;
-    text += `
-_Válida 48 h, sujeta a existencias._`;
+    text += `━━━━━━━━━━━━━━━━━━━\n`;
+    if (Number(shippingCost) > 0) text += `🚚 Envío a domicilio: ${money(shippingCost)}\n`;
+    if (customNote.trim()) text += `📌 _${customNote.trim()}_\n`;
+    text += `🛍️ *Total a pagar (${totalPieces} prenda${totalPieces !== 1 ? 's' : ''}): ${money(grandTotal)}*`;
+    if (items.length === 1 && discountTotal > 0) text += `\n🎉 *¡Te ahorras ${money(discountTotal)}!*`;
 
     return text;
   }

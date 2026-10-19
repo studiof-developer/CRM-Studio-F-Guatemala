@@ -48,7 +48,9 @@ export function acceptsOffer(text) {
 
 // Un monto cotizado por la asesora en texto libre: "Total Q539", "son Q1,930", "Q 890".
 export function quotedAmountIn(text) {
-  const t = text ?? '';
+  // El mensaje de la cotización trae "Total a pagar (3 prendas): Q2297.00" y, a veces, "¡Te ahorras Q152.83!" después: el
+  // número entre paréntesis no es el monto y lo ahorrado no es el total.
+  const t = String(text ?? '').replace(/\(\s*\d+\s*prendas?\s*\)/gi, '').split(/ahorras/i)[0];
   const amount = '(\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{2})?|\\d{2,5}(?:[.,]\\d{2})?)';
   const labeled = t.match(new RegExp(`(?:total|son|ser[ií]an|depositar|cancelar|pagar|queda\\s+(?:hoy\\s+)?en)[^\\d]{0,15}Q?\\.?\\s*${amount}`, 'i'));
   if (labeled) {
