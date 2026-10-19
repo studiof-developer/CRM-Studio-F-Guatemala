@@ -4,7 +4,7 @@ import { X, RefreshCw, Download, Play, ClipboardList } from 'lucide-react';
 import { startSalesAnalysis, fetchSalesAnalysis, crossCheckSalesNotebook } from '../api.js';
 
 const ISSUE_LABEL = {
-  sin_medios_de_pago_en_chat: 'Sin medios de pago en el chat',
+  sin_medios_de_pago_en_chat: 'Sin medios de pago recientes (24 h) en el chat',
   monto_no_leido: 'Monto no leído',
   monto_distinto_a_cotizacion: 'Monto distinto a lo cotizado',
   varias_asesoras: 'Varias asesoras en la venta',

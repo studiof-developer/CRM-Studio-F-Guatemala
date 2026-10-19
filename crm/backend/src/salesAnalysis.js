@@ -1,10 +1,7 @@
-import fs from 'fs';
 import { pool } from './db.js';
 import { guatemalaParts } from './salesRules.js';
 import { analyzeCustomer, nameResolver } from './salesThreads.js';
-import { extractReceiptAmount } from './ocrPayment.js';
-import { createOcrSession, extractDocumentText, isPaymentVoucher } from './ocrDocument.js';
-import { getSetting } from './routes/settings.js';
+import { createLazyOcrRunner } from './ocrRunner.js';
 
 // Análisis histórico (solo lectura): recorre el chat completo de cada cliente que compró
 // ("Pagado", "Por despacho" o con ventas registradas) y reconstruye cada venta con la MISMA
@@ -12,35 +9,6 @@ import { getSetting } from './routes/settings.js';
 // confirmación de la asesora. No escribe nada en ventas ni en clientes: guarda el informe en
 // sales_analysis_runs y el resultado de leer cada adjunto en attachment_ocr (caché).
 const STALE_MS = 5 * 60 * 1000;
-
-// Lee los adjuntos (imagen/PDF) que el cliente mandó DESPUÉS de recibir medios de pago y que
-// nunca pasaron por OCR. Un solo lector Tesseract para todo el recorrido; cada resultado se
-// guarda en attachment_ocr, así una segunda corrida no repite el trabajo.
-async function createOcrRunner() {
-  const extraKeywords = await getSetting('extra_receipt_keywords', []);
-  const session = await createOcrSession();
-  return {
-    async run(att) {
-      let amount = null;
-      let voucher = false;
-      let snippet = null;
-      try {
-        const text = await extractDocumentText(await fs.promises.readFile(att.file_path), att.mime_type, session.recognize);
-        amount = extractReceiptAmount(text, extraKeywords);
-        voucher = isPaymentVoucher(text);
-        snippet = text.replace(/\s+/g, ' ').trim().slice(0, 200);
-      } catch (err) {
-        console.error('analysis OCR failed for attachment', att.id, err.message);
-      }
-      await pool.query(
-        'INSERT INTO attachment_ocr (attachment_id, amount, voucher, snippet) VALUES ($1, $2, $3, $4) ON CONFLICT (attachment_id) DO NOTHING',
-        [att.id, amount, voucher, snippet]
-      );
-      return { amount, voucher };
-    },
-    close: () => session.close(),
-  };
-}
 
 function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }) {
   const by = {};
@@ -88,7 +56,7 @@ async function runAnalysis(runId) {
   );
   await pool.query('UPDATE sales_analysis_runs SET total = $2, updated_at = now() WHERE id = $1', [runId, customers.length]);
   const canonical = nameResolver();
-  const ocr = await createOcrRunner();
+  const ocr = createLazyOcrRunner();
   const rows = [];
   const orphans = [];
   const withoutEvidence = [];

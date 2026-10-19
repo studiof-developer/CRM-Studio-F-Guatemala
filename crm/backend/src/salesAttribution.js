@@ -5,6 +5,7 @@ import {
   CONFIRMATION_PHRASES_REGEX, isConfirmationMessage, attributeAdvisor, latestQuote,
   isResentReceipt, inRetailRange, guatemalaParts, shiftOf,
 } from './salesRules.js';
+import { createLazyOcrRunner } from './ocrRunner.js';
 import {
   defaultLineId, lineFromSession, loadEvents, resolveAdvisor, buildThread, analyzeCustomer, nameResolver,
 } from './salesThreads.js';
@@ -350,10 +351,13 @@ export async function auditSales({ from, to, lineId = null }) {
   );
 
   const canonical = nameResolver();
+  // Lee las imágenes y PDF del rango que aún no se habían leído (y saca los centavos exactos). Cada
+  // lectura queda en caché; el tope evita que una sola auditoría se alargue sin límite.
+  const ocr = createLazyOcrRunner({ maxReads: 80 });
   const claimed = new Set();
   const items = [];
   for (const customer of candidates) {
-    const { rows: episodes, orphans } = await analyzeCustomer(customer, { canonical });
+    const { rows: episodes, orphans } = await analyzeCustomer(customer, { canonical, ocr });
     for (const o of orphans) {
       if (new Date(o.at) >= start && new Date(o.at) <= end && (!lineId || Number(lineId) === o.line)) {
         items.push({ status: 'sin_contexto', receiptId: o.eventId, at: o.at, customerId: customer.id, customer: o.customer, phone: customer.whatsapp_number, amount: o.amount, line: o.line, shift: shiftOf(o.at) });
@@ -368,7 +372,7 @@ export async function auditSales({ from, to, lineId = null }) {
       if (!sale) {
         sale = (await pool.query(
           `SELECT * FROM sales WHERE customer_id = $1 AND evidence_message_id IS NULL AND created_at BETWEEN $2 AND $3
-             AND (amount = 0 OR $4::numeric IS NULL OR abs(amount - $4::numeric) < 0.5)
+             AND (amount = 0 OR $4::numeric IS NULL OR abs(amount - $4::numeric) <= 1)
            ORDER BY abs(extract(epoch FROM created_at - $5::timestamptz)) LIMIT 3`,
           [customer.id, new Date(+new Date(ep.at) - DAY), new Date(+new Date(ep.at) + DAY), ep.amount, ep.at]
         )).rows.find((s) => !claimed.has(s.id));
@@ -395,6 +399,8 @@ export async function auditSales({ from, to, lineId = null }) {
       items.push(item);
     }
   }
+
+  await ocr.close();
 
   // Ventas sin ninguna prueba ni confirmación en el chat que las respalde (y que nadie calibró a mano).
   const { rows: unbacked } = await pool.query(
@@ -494,7 +500,7 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
         : ' [Sin comprobante ni confirmación en el chat: revisar]';
       await pool.query(
         `UPDATE sales SET status = 'revisar', updated_at = now(), notes = COALESCE(notes, '') || $2
-         WHERE id = $1 AND NOT attribution_locked AND status <> 'revisar'`,
+         WHERE id = $1 AND NOT attribution_locked AND status <> 'revisar' AND evidence_message_id IS NULL`,
         [i.saleId, note]
       );
     }

@@ -356,3 +356,26 @@ test('episodios: con comprobante que trae el monto, la base es el documento y no
   assert.equal(ep.amountBasis, 'comprobante');
   assert.ok(!ep.issues.includes('monto_por_validar'));
 });
+
+test('medios de pago de hace días no cuentan: gana quien atendía al cliente al pagar', () => {
+  const eventos = [
+    adv(gt('14', '10:00'), 'Luisa', 'Cuenta Banrural 4012345678 total Q350'), // 3 días antes, compra que no se cerró
+    adv(gt('17', '16:35'), 'Luisa', 'Bota recta'),
+    adv(gt('17', '16:36'), 'Aura', '¿Lo agregamos?'),
+    img(gt('17', '16:38'), 349.5),
+    adv(gt('17', '16:55'), 'Aura', CANONICA),
+  ];
+  const [ep] = buildEpisodes(eventos).episodes;
+  assert.equal(ep.advisor, 'Aura');
+  assert.equal(ep.rule, 'ultimo_asesor_antes_del_pago');
+  assert.equal(ep.amount, 349.5);
+});
+
+test('medios de pago del mismo día siguen mandando (cambio de turno)', () => {
+  const eventos = [
+    adv(gt('17', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'),
+    adv(gt('17', '15:30'), 'Leydi', 'Hola, sigues interesada?'),
+    img(gt('17', '16:00'), 539),
+  ];
+  assert.equal(buildEpisodes(eventos).episodes[0]?.advisor, 'Aura');
+});

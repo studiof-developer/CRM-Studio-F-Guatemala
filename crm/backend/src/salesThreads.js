@@ -95,7 +95,8 @@ export async function threadLines(phone) {
 // pero únicamente los que llegaron después de que la asesora dio medios de pago: lo anterior
 // no puede ser la prueba de esta compra y leerlo sería trabajo perdido.
 async function applyAttachments(events, ocr) {
-  const candidates = events.filter((e) => e.role === 'customer' && !e.ocrAmount);
+  // Sin monto leído, o con un monto entero de una imagen/PDF (el OCR de antes redondeaba los centavos).
+  const candidates = events.filter((e) => e.role === 'customer' && (!e.ocrAmount || (e.via && e.via !== 'texto' && Number.isInteger(e.ocrAmount))));
   if (!candidates.length) return;
   const { rows } = await pool.query(
     `SELECT a.id, a.n8n_message_id, a.mime_type, a.file_path, o.amount, o.voucher AS cached_voucher,
@@ -118,10 +119,14 @@ async function applyAttachments(events, ocr) {
       let amount = att.cached ? Number(att.amount) : null;
       let voucher = att.cached ? att.cached_voucher : false;
       if (!att.cached && ocr && firstPayInfo && +new Date(e.at) > +new Date(firstPayInfo.at)) {
-        ({ amount, voucher } = await ocr.run(att));
+        const read = await ocr.run(att);
+        if (!read.skipped) ({ amount, voucher } = read);
       }
       if (voucher) e.voucher = true;
-      if (amount > 0 && !e.ocrAmount) { e.ocrAmount = amount; e.via = att.mime_type === 'application/pdf' ? 'pdf' : 'imagen'; }
+      if (amount > 0) {
+        if (!e.ocrAmount) { e.ocrAmount = amount; e.via = att.mime_type === 'application/pdf' ? 'pdf' : 'imagen'; }
+        else if (Math.abs(amount - e.ocrAmount) <= 1) e.ocrAmount = amount; // misma cifra, ahora con centavos
+      }
     }
   }
 }

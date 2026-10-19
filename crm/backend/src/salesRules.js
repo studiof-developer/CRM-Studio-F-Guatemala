@@ -97,13 +97,17 @@ function sortedByTime(events) {
 // Orden de decisión: (1) quien dio los medios de pago más recientemente antes del pago,
 // (2) si nadie los dio, quien escribió por última vez antes del pago, (3) si el cliente
 // pagó fuera de horario, quien le respondió primero en las siguientes 2 h.
-export function attributeAdvisor(events, atTime, { lookbackMs = 7 * 86400000, graceMs = 2 * 3600000 } = {}) {
+// Medios de pago "recientes": una cuenta o link enviado hace días (de una compra que no se cerró)
+// no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
+export const PAYINFO_FRESH_MS = 24 * 3600000;
+
+export function attributeAdvisor(events, atTime, { lookbackMs = 7 * 86400000, graceMs = 2 * 3600000, freshMs = PAYINFO_FRESH_MS } = {}) {
   const t = +new Date(atTime);
   const advisorEvents = sortedByTime(events).filter(
     (e) => e.role === 'advisor' && e.advisor && !GENERIC_ADVISOR_NAMES.has(String(e.advisor).trim().toLowerCase())
   );
   const before = advisorEvents.filter((e) => +new Date(e.at) <= t && +new Date(e.at) >= t - lookbackMs);
-  const gave = [...before].reverse().find((e) => givesPaymentInfo(e.text));
+  const gave = [...before].reverse().find((e) => +new Date(e.at) >= t - freshMs && givesPaymentInfo(e.text));
   if (gave) return { advisor: gave.advisor, rule: 'dio_medios_de_pago', eventId: gave.id };
   const last = before[before.length - 1];
   if (last) return { advisor: last.advisor, rule: 'ultimo_asesor_antes_del_pago', eventId: last.id };
@@ -213,7 +217,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
     const t = +new Date(anchor.at);
     const windowStart = prevAt ?? t - lookbackMs;
     const cycle = sorted.filter((e) => +new Date(e.at) > windowStart && +new Date(e.at) <= t);
-    const payInfo = [...cycle].reverse().find((e) => e.role === 'advisor' && givesPaymentInfo(e.text));
+    const payInfo = [...cycle].reverse().find((e) => e.role === 'advisor' && +new Date(e.at) >= t - PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
     // Quién la atendía se decide con lo ocurrido desde la venta anterior; solo si ahí no hay
     // nadie se recurre a todo el historial reciente.
     const attribution = attributeAdvisor(cycle, anchor.at) ?? attributeAdvisor(sorted, anchor.at);
