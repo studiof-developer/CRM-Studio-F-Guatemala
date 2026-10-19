@@ -168,7 +168,7 @@ export async function analyzeCustomer(customer, { canonical = nameResolver(), oc
         advisor: await canonical(ep.advisor), rule: ep.rule, paymentInfoBy: await canonical(ep.paymentInfoBy),
         medium: ep.medium, voucher: ep.voucher, shift: ep.shift, touchedBy: await Promise.all(ep.touchedBy.map(canonical)),
         confirmedBy: await canonical(ep.confirmedBy), confirmedAt: ep.confirmedAt ?? null,
-        attributionUncertain: ep.attributionUncertain, amountBasis: ep.amountBasis, priceApprovedByCustomer: ep.priceApprovedByCustomer,
+        attributionUncertain: ep.attributionUncertain, quotedAmounts: ep.quotedAmounts, amountBasis: ep.amountBasis, priceApprovedByCustomer: ep.priceApprovedByCustomer,
         verified: ep.verified, status: ep.status, imagesWithoutAmount: ep.imagesWithoutAmount, issues: ep.issues,
       });
     }

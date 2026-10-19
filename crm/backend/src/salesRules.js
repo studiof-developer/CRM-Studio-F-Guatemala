@@ -227,8 +227,12 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
     const proof = cycle.filter((e) => e.role === 'customer');
     const imagesWithoutAmount = proof.filter((e) => e.image && !e.ocrAmount).length;
     const voucher = proof.some((e) => e.voucher);
+    // Montos distintos que la asesora cotizó en las últimas 48 h: si el cliente se lleva varias prendas y no hay
+    // comprobante, el total no está en el chat y se muestra cada cifra para que un supervisor decida.
+    const quotedAmounts = [...new Set(cycle.filter((e) => e.role === 'advisor' && +new Date(e.at) >= t - 2 * DAY_MS).map((e) => quotedAmountIn(e.text)).filter((v) => v != null))].slice(-6);
     const issues = [];
     if (!payInfo) issues.push('sin_medios_de_pago_en_chat');
+    if (type === 'confirmacion' && quotedAmounts.length > 1) issues.push('varias_cotizaciones');
     if (amount == null) issues.push('monto_no_leido');
     if (type === 'confirmacion' && amount != null) issues.push('monto_por_validar');
     if (type === 'confirmacion' && approvedPrice && !approvedPrice.approved) issues.push('precio_sin_aprobacion_del_cliente');
@@ -244,7 +248,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
       // Cómo se obtuvo el monto: leído de un documento (imagen/PDF/texto del banco) o inferido del precio aprobado.
       amountBasis: amount == null ? null : (type === 'comprobante' ? 'comprobante' : 'precio_aprobado'),
       priceApprovedByCustomer: type === 'confirmacion' ? (approvedPrice?.approved ?? null) : null,
-      advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null, attributionUncertain: handoff,
+      advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null, attributionUncertain: handoff, quotedAmounts,
       paymentInfoBy: payInfo?.advisor ?? null, paymentInfoAt: payInfo?.at ?? null,
       medium: payInfo ? paymentMedium(payInfo.text) : null, voucher,
       touchedBy: touched, shift: shiftOf(anchor.at), imagesWithoutAmount, issues,

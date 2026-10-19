@@ -2,6 +2,7 @@ import { pool } from './db.js';
 import { guatemalaParts } from './salesRules.js';
 import { analyzeCustomer, nameResolver } from './salesThreads.js';
 import { createLazyOcrRunner } from './ocrRunner.js';
+import { compareWithRegistered } from './salesComparison.js';
 
 // Análisis histórico (solo lectura): recorre el chat completo de cada cliente que compró
 // ("Pagado", "Por despacho" o con ventas registradas) y reconstruye cada venta con la MISMA
@@ -10,7 +11,15 @@ import { createLazyOcrRunner } from './ocrRunner.js';
 // sales_analysis_runs y el resultado de leer cada adjunto en attachment_ocr (caché).
 const STALE_MS = 5 * 60 * 1000;
 
-function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }) {
+// Por defecto: desde el día 1 del mes pasado hasta hoy (hora de Guatemala).
+export function defaultPeriod(now = new Date()) {
+  const to = guatemalaParts(now).ymd;
+  const [y, m] = to.split('-').map(Number);
+  const prev = m === 1 ? [y - 1, 12] : [y, m - 1];
+  return { from: `${prev[0]}-${String(prev[1]).padStart(2, '0')}-01`, to };
+}
+
+function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed, period, comparison }) {
   const by = {};
   const quality = {
     pendientesDeConfirmar: 0, montoPorValidar: 0, comprobantesSinContexto: orphans.length, sinMediosDePagoEnChat: 0, montoNoLeido: 0,
@@ -38,7 +47,7 @@ function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }
   }
   const verified = rows.filter((r) => r.verified);
   return {
-    generatedAt: new Date().toISOString(), customersAnalyzed,
+    generatedAt: new Date().toISOString(), customersAnalyzed, period, comparison,
     ventas: verified.length, ventasPendientes: rows.length - verified.length,
     totalQuetzales: verified.reduce((s, r) => s + (r.amount ?? 0), 0), comprobantesReenviados: resent,
     clientesSinEvidencia: withoutEvidence.length, quality,
@@ -47,7 +56,7 @@ function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }
   };
 }
 
-async function runAnalysis(runId) {
+async function runAnalysis(runId, period) {
   const { rows: customers } = await pool.query(
     `SELECT c.id, c.whatsapp_number, c.full_name, c.manual_status FROM customers c
      WHERE c.manual_status IN ('pagado', 'despacho') OR c.paid_locked
@@ -79,13 +88,28 @@ async function runAnalysis(runId) {
     await ocr.close();
   }
   rows.sort((a, b) => +new Date(a.at) - +new Date(b.at));
+  const inPeriod = (d) => { const y = guatemalaParts(d).ymd; return y >= period.from && y <= period.to; };
+  const periodRows = rows.filter((r) => inPeriod(r.at));
+  const periodOrphans = orphans.filter((o) => inPeriod(o.at));
+  const { rows: sales } = await pool.query(
+    `SELECT s.id, s.customer_id, s.created_at, s.amount, s.status, s.advisor_name, s.attribution_locked, c.full_name AS customer_name, c.whatsapp_number AS phone
+     FROM sales s JOIN customers c ON c.id = s.customer_id
+     WHERE s.created_at >= $1::timestamptz - interval '2 days' AND s.created_at <= $2::timestamptz + interval '3 days'`,
+    [`${period.from}T00:00:00-06:00`, `${period.to}T23:59:59-06:00`]
+  );
+  for (const s of sales) s.advisorCanonical = (await canonical(s.advisor_name)) ?? s.advisor_name;
+  const comparison = compareWithRegistered({ engineRows: rows, sales, from: period.from, to: period.to });
   await pool.query(
     `UPDATE sales_analysis_runs SET status = 'done', progress = $2, result = $3::jsonb, updated_at = now() WHERE id = $1`,
-    [runId, customers.length, JSON.stringify(summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed: customers.length }))]
+    [runId, customers.length, JSON.stringify(summarize({ rows: periodRows, orphans: periodOrphans, withoutEvidence, resent, customersAnalyzed: customers.length, period, comparison }))]
   );
 }
 
-export async function startAnalysisRun(userId) {
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function startAnalysisRun(userId, range = {}) {
+  const def = defaultPeriod();
+  const period = { from: YMD.test(range.from ?? '') ? range.from : def.from, to: YMD.test(range.to ?? '') ? range.to : def.to };
   const { rows: running } = await pool.query(
     `SELECT id FROM sales_analysis_runs WHERE status = 'running' AND updated_at > now() - ($1::int * interval '1 millisecond') LIMIT 1`, [STALE_MS]
   );
@@ -93,7 +117,7 @@ export async function startAnalysisRun(userId) {
   const { rows } = await pool.query('INSERT INTO sales_analysis_runs (created_by) VALUES ($1) RETURNING id', [userId ?? null]);
   const id = rows[0].id;
   // Corre en segundo plano: leer miles de chats y adjuntos puede tardar de minutos a horas.
-  setImmediate(() => runAnalysis(id).catch(async (err) => {
+  setImmediate(() => runAnalysis(id, period).catch(async (err) => {
     console.error('sales analysis failed', err);
     await pool.query(`UPDATE sales_analysis_runs SET status = 'error', error = $2, updated_at = now() WHERE id = $1`, [id, String(err.message).slice(0, 500)]);
   }));

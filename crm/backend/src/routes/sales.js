@@ -724,7 +724,7 @@ router.post('/rebuild', requireRole('admin', 'supervisor'), async (req, res, nex
 // Análisis histórico de TODOS los chats de clientes que compraron (solo lectura; corre en
 // segundo plano y guarda el informe para reabrirlo).
 router.post('/analysis', requireRole('admin', 'supervisor'), async (req, res, next) => {
-  try { res.status(202).json(await startAnalysisRun(req.user?.id)); } catch (err) { next(err); }
+  try { res.status(202).json(await startAnalysisRun(req.user?.id, { from: req.body?.from, to: req.body?.to })); } catch (err) { next(err); }
 });
 
 router.get('/analysis/latest', requireRole('admin', 'supervisor'), async (req, res, next) => {

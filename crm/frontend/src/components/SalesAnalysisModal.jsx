@@ -13,6 +13,7 @@ const ISSUE_LABEL = {
   sin_prueba_del_cliente: 'Sin prueba del cliente en el chat',
   monto_por_validar: 'Monto por validar (precio aprobado)',
   precio_sin_aprobacion_del_cliente: 'Precio sin aprobación explícita del cliente',
+  varias_cotizaciones: 'Varias prendas cotizadas y sin comprobante (el total no está en el chat)',
 };
 const SHIFT_LABEL = { manana: 'Mañana', tarde: 'Tarde', domingo: 'Domingo', fuera_de_turno: 'Fuera de turno' };
 const VERDICT = {
@@ -143,6 +144,21 @@ export default function SalesAnalysisModal({ open, onClose }) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Fecha', 'Cliente', 'Teléfono', 'Monto leído (Q)', 'Motivo'], ...(result.orphans ?? []).map((o) => [fmtDate(o.at), o.customer, o.phone, o.amount ?? '', 'Llegó sin medios de pago previos ni confirmación de la asesora']),
     ]), 'Pruebas sin contexto');
+    if (result.comparison) {
+      const c = result.comparison;
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['Día', 'Registrado en el CRM (Q)', 'Ventas registradas', 'Según chats verificados (Q)', 'Ventas en chats', 'Diferencia (Q)', 'Por validar (Q)', 'Pendientes de confirmar (Q)', 'Por revisar en el CRM (Q)'],
+        ...c.daily.map((d) => [d.day, d.registrado, d.registradoN, d.chat, d.chatN, d.diferencia, d.porValidar, d.pendientes, d.revisar]),
+      ]), 'Día por día');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['Día', 'Asesora', 'Registrado en el CRM (Q)', 'Ventas registradas', 'Según chats verificados (Q)', 'Ventas en chats', 'Diferencia (Q)', 'Por validar (Q)', 'Pendientes (Q)'],
+        ...c.advisorDay.map((d) => [d.day, d.advisor, d.registrado, d.registradoN, d.chat, d.chatN, d.diferencia, d.porValidar, d.pendientes]),
+      ]), 'Asesora por día');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['Día', 'Resultado', 'Cliente', 'Teléfono', 'Chat: monto (Q)', 'Chat: asesora', 'Chat: base', 'CRM: monto (Q)', 'CRM: asesora', 'CRM: estado', 'Diferencias', 'Cifras cotizadas'],
+        ...c.items.map((i) => [i.day, COMPARE_LABEL[i.status] ?? i.status, i.customer, i.phone, i.chatAmount ?? '', i.chatAdvisor ?? '', i.amountBasis === 'precio_aprobado' ? 'Precio aprobado (por validar)' : (i.via ? `Leído de ${i.via}` : ''), i.registeredAmount ?? '', i.registeredAdvisor ?? '', i.registeredStatus ?? '', (i.diffs ?? []).map((d) => DIFF_COMPARE[d] ?? d).join(', '), (i.quotedAmounts ?? []).join(' · ')]),
+      ]), 'Comparación');
+    }
     XLSX.writeFile(wb, `analisis_chats_vendidos_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
@@ -157,7 +173,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
           <div>
             <h3 className="text-base font-bold text-ink">Análisis de chats de clientes que compraron</h3>
             <p className="mt-0.5 text-xs text-greige-ink">
-              Recorre todo el historial de los clientes en Pagado / Por despacho y reconstruye cada venta: comprobante, quién dio los medios de pago, monto y turno. Solo lee; no cambia ventas.
+              Recorre el historial de los clientes en Pagado / Por despacho y reconstruye cada venta: comprobante, quién dio los medios de pago, monto y turno, y la compara día por día con lo registrado en el CRM{result?.period ? ` (del ${result.period.from} al ${result.period.to})` : ' (por defecto: mes pasado y este mes)'}. Solo lee; no cambia ventas.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -186,7 +202,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
         )}
 
         <div className="flex gap-1 border-b border-line px-5 py-2 text-xs font-semibold">
-          {[['resumen', 'Resumen por asesora'], ['ventas', 'Ventas reconstruidas'], ['cuaderno', 'Contrastar con cuadernos']].map(([k, label]) => (
+          {[['resumen', 'Resumen por asesora'], ['comparar', 'Comparar con el CRM'], ['ventas', 'Ventas reconstruidas'], ['cuaderno', 'Contrastar con cuadernos']].map(([k, label]) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 transition-colors ${tab === k ? 'bg-secondary text-ink' : 'text-greige-ink hover:text-ink'}`}>{label}</button>
           ))}
         </div>
@@ -227,6 +243,8 @@ export default function SalesAnalysisModal({ open, onClose }) {
             </div>
           ) : !result ? (
             <p className="py-16 text-center text-sm text-greige-ink">{running ? 'Esperando el resultado…' : 'Aún no hay un análisis. Pulsa "Analizar todos los chats".'}</p>
+          ) : tab === 'comparar' ? (
+            <CompareView comparison={result.comparison} />
           ) : tab === 'resumen' ? (
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -284,7 +302,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
                       <td className="whitespace-nowrap py-2 pr-2 text-right font-semibold text-ink">{fmtQ(r.amount)}<div className="text-[10px] font-normal text-greige-ink">{[r.medium, r.amountBasis === 'precio_aprobado' ? 'precio aprobado · por validar' : (r.via ? `leído de ${r.via}` : null)].filter(Boolean).join(' · ')}</div></td>
                       <td className="py-2 pr-2 text-ink">{r.advisor ?? '—'}<div className="text-[10px] text-greige-ink">{(r.rule ?? '').replace(/_/g, ' ')}</div></td>
                       <td className="py-2 pr-2 text-ink">{r.paymentInfoBy ?? '—'}</td>
-                      <td className="py-2 text-[10px] text-warning">{r.issues.map((x) => ISSUE_LABEL[x] ?? x).join(' · ')}</td>
+                      <td className="py-2 text-[10px] text-warning">{r.issues.map((x) => ISSUE_LABEL[x] ?? x).join(' · ')}{r.issues.includes('varias_cotizaciones') && r.quotedAmounts?.length > 1 && <div className="text-greige-ink">Cotizó: {r.quotedAmounts.map((q) => fmtQ(q)).join(' · ')} (suma {fmtQ(r.quotedAmounts.reduce((a, b) => a + b, 0))})</div>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -292,6 +310,95 @@ export default function SalesAnalysisModal({ open, onClose }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const COMPARE_LABEL = { coincide: 'Coincide', con_diferencias: 'Con diferencias', solo_en_chat: 'Solo en el chat (falta en el CRM)', solo_registrada: 'Solo en el CRM (sin comprobante en el chat)' };
+const DIFF_COMPARE = { monto: 'monto', asesora: 'asesora', dia: 'día', no_confirmada_en_crm: 'no confirmada en el CRM' };
+const COMPARE_BADGE = { coincide: 'bg-success/10 text-success', con_diferencias: 'bg-warning/15 text-warning', solo_en_chat: 'bg-danger/10 text-danger', solo_registrada: 'bg-danger/10 text-danger' };
+const diffClass = (n) => (Math.abs(n) < 0.5 ? 'text-greige-ink' : n > 0 ? 'text-success' : 'text-danger');
+
+function CompareView({ comparison: c }) {
+  const [filter, setFilter] = useState('diferencias');
+  const advisors = useMemo(() => {
+    const m = new Map();
+    for (const d of c?.advisorDay ?? []) {
+      const a = m.get(d.advisor) ?? { advisor: d.advisor, registrado: 0, chat: 0, porValidar: 0, pendientes: 0 };
+      a.registrado += d.registrado; a.chat += d.chat; a.porValidar += d.porValidar; a.pendientes += d.pendientes;
+      m.set(d.advisor, a);
+    }
+    return [...m.values()].sort((x, y) => y.chat - x.chat);
+  }, [c]);
+  if (!c) return <p className="py-16 text-center text-sm text-greige-ink">Este análisis es anterior a la comparación. Pulsa "Analizar de nuevo".</p>;
+  const items = c.items.filter((i) => (filter === 'diferencias' ? i.status !== 'coincide' : filter === 'todas' || i.status === filter));
+  return (
+    <div className="space-y-5">
+      <p className="text-greige-ink">Del {c.from} al {c.to}. <strong className="text-ink">Registrado en el CRM</strong> es lo que las asesoras reportaron/marcaron como venta; <strong className="text-ink">Según chats</strong> solo cuenta ventas con comprobante y confirmación de la asesora.</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {[['Registrado en el CRM', fmtQ(c.totals.registrado)], ['Según chats (verificado)', fmtQ(c.totals.chat)], ['Diferencia', fmtQ(c.totals.diferencia)], ['De eso, por validar', fmtQ(c.totals.porValidar)], ['Pendiente de confirmar', fmtQ(c.totals.pendientes)]].map(([l, v]) => (
+          <div key={l} className="rounded-xl border border-line p-3"><p className="text-[11px] text-greige-ink">{l}</p><p className="mt-1 text-lg font-bold text-ink">{v}</p></div>
+        ))}
+      </div>
+      <div className="overflow-auto">
+        <p className="mb-2 font-semibold text-ink">Día por día</p>
+        <table className="w-full text-left">
+          <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Día</th><th className="py-2 text-right">CRM</th><th className="py-2 text-right">Chats</th><th className="py-2 text-right">Diferencia</th><th className="py-2 text-right">Por validar</th><th className="py-2 text-right">Pendiente</th><th className="py-2 text-right">Por revisar (CRM)</th></tr></thead>
+          <tbody>
+            {c.daily.filter((d) => d.registradoN || d.chatN || d.pendientesN || d.revisarN).map((d) => (
+              <tr key={d.day} className="border-b border-line-soft">
+                <td className="py-1.5 font-semibold text-ink">{d.day}</td>
+                <td className="py-1.5 text-right">{fmtQ(d.registrado)} <span className="text-[10px] text-greige-ink">({d.registradoN})</span></td>
+                <td className="py-1.5 text-right">{fmtQ(d.chat)} <span className="text-[10px] text-greige-ink">({d.chatN})</span></td>
+                <td className={`py-1.5 text-right font-semibold ${diffClass(d.diferencia)}`}>{fmtQ(d.diferencia)}</td>
+                <td className="py-1.5 text-right text-warning">{d.porValidar ? fmtQ(d.porValidar) : '—'}</td>
+                <td className="py-1.5 text-right text-warning">{d.pendientesN ? `${fmtQ(d.pendientes)} (${d.pendientesN})` : '—'}</td>
+                <td className="py-1.5 text-right text-greige-ink">{d.revisarN ? `${fmtQ(d.revisar)} (${d.revisarN})` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p className="mb-2 font-semibold text-ink">Por asesora (todo el periodo)</p>
+        <table className="w-full text-left">
+          <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">CRM</th><th className="py-2 text-right">Chats</th><th className="py-2 text-right">Diferencia</th><th className="py-2 text-right">Por validar</th><th className="py-2 text-right">Pendiente</th></tr></thead>
+          <tbody>
+            {advisors.map((a) => (
+              <tr key={a.advisor} className="border-b border-line-soft">
+                <td className="py-1.5 font-semibold text-ink">{a.advisor}</td><td className="py-1.5 text-right">{fmtQ(a.registrado)}</td><td className="py-1.5 text-right">{fmtQ(a.chat)}</td>
+                <td className={`py-1.5 text-right font-semibold ${diffClass(a.chat - a.registrado)}`}>{fmtQ(a.chat - a.registrado)}</td>
+                <td className="py-1.5 text-right text-warning">{a.porValidar ? fmtQ(a.porValidar) : '—'}</td><td className="py-1.5 text-right text-warning">{a.pendientes ? fmtQ(a.pendientes) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <p className="font-semibold text-ink">Venta por venta</p>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
+            <option value="diferencias">Solo lo que no coincide ({c.items.length - (c.counts.coincide ?? 0)})</option>
+            <option value="todas">Todas ({c.items.length})</option>
+            {Object.entries(COMPARE_LABEL).map(([k, l]) => <option key={k} value={k}>{l} ({c.counts[k] ?? 0})</option>)}
+          </select>
+          <span className="text-greige-ink">{items.length > 500 ? 'Se muestran 500; el Excel trae todas.' : ''}</span>
+        </div>
+        <table className="w-full text-left">
+          <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2 pr-2">Día</th><th className="py-2 pr-2">Cliente</th><th className="py-2 pr-2">El chat dice</th><th className="py-2 pr-2">El CRM tiene</th><th className="py-2">Resultado</th></tr></thead>
+          <tbody>
+            {items.slice(0, 500).map((i, k) => (
+              <tr key={k} className="border-b border-line-soft align-top">
+                <td className="whitespace-nowrap py-2 pr-2 text-ink">{i.day}</td>
+                <td className="py-2 pr-2 text-ink">{i.customer}<div className="text-[10px] text-greige-ink">{i.phone}</div></td>
+                <td className="py-2 pr-2 text-ink">{i.chatAmount != null || i.chatAdvisor ? (<>{fmtQ(i.chatAmount)} · {i.chatAdvisor ?? 'sin asesora'}<div className="text-[10px] text-greige-ink">{i.amountBasis === 'precio_aprobado' ? 'precio aprobado · por validar' : i.via ? `leído de ${i.via}` : ''}{!i.verified ? ' · sin confirmar' : ''}</div>{i.quotedAmounts?.length > 1 && <div className="text-[10px] text-warning">Cotizó: {i.quotedAmounts.map((q) => fmtQ(q)).join(' · ')}</div>}</>) : '—'}</td>
+                <td className="py-2 pr-2 text-ink">{i.registeredAmount != null ? (<>{fmtQ(i.registeredAmount)} · {i.registeredAdvisor}<div className="text-[10px] text-greige-ink">{i.registeredStatus}{i.locked ? ' · bloqueada' : ''}</div></>) : '—'}</td>
+                <td className="py-2"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${COMPARE_BADGE[i.status]}`}>{COMPARE_LABEL[i.status]}</span>{i.diffs?.length > 0 && <div className="mt-0.5 text-[10px] text-warning">{i.diffs.map((d) => DIFF_COMPARE[d] ?? d).join(', ')}</div>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

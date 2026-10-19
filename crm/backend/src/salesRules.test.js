@@ -401,3 +401,15 @@ test('una sola asesora de principio a fin no queda por validar', () => {
   ];
   assert.equal(buildEpisodes(eventos).episodes[0]?.attributionUncertain, false);
 });
+
+test('varias prendas cotizadas y confirmación sin comprobante: se listan las cifras y queda por validar', () => {
+  const eventos = [
+    adv(gt('18', '11:55'), 'Leydi', 'Q749 HOY Q374'),
+    adv(gt('18', '11:55'), 'Leydi', 'Q699 HOY Q349'),
+    adv(gt('18', '12:20'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/VEL1'),
+    adv(gt('18', '13:00'), 'Leydi', CANONICA),
+  ];
+  const [ep] = buildEpisodes(eventos).episodes;
+  assert.deepEqual(ep.quotedAmounts, [374, 349]);
+  assert.ok(ep.issues.includes('varias_cotizaciones'));
+});
