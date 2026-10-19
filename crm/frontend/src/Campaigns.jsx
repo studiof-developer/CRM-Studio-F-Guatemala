@@ -9,6 +9,7 @@ import {
   fetchWhatsappNumbers,
 } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
+import { guatemalaToday } from './lib/pipelinePeriod.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import Select from './components/Select.jsx';
 import Badge from './components/Badge.jsx';
@@ -243,6 +244,10 @@ function NewCampaignModal({ onClose, onSent }) {
   const [temperature, setTemperature] = useState('');
   const [order, setOrder] = useState('recent');
   const [count, setCount] = useState(50);
+  // 'count' = los N más recientes/antiguos; 'period' = todos los que cumplen el estado dentro de un rango de fechas.
+  const [audienceMode, setAudienceMode] = useState('count');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
   const [audienceCount, setAudienceCount] = useState(null);
   const [manualQuery, setManualQuery] = useState('');
   const [manualResults, setManualResults] = useState([]);
@@ -278,12 +283,14 @@ function NewCampaignModal({ onClose, onSent }) {
 
   useEffect(() => {
     if (!temperature) { setAudienceCount(null); return; }
+    const byPeriod = audienceMode === 'period';
+    if (byPeriod && !(periodFrom && periodTo)) { setAudienceCount(null); return; }
     let cancelled = false;
-    searchCampaignAudience(temperature, '', lineId ? Number(lineId) : undefined)
-      .then((rows) => { if (!cancelled) setAudienceCount(rows.length); })
-      .catch(() => {});
+    searchCampaignAudience(temperature, '', lineId ? Number(lineId) : undefined, byPeriod ? { periodFrom, periodTo, countOnly: true } : {})
+      .then((res) => { if (!cancelled) setAudienceCount(byPeriod ? res.count : res.length); })
+      .catch(() => { if (!cancelled) setAudienceCount(null); });
     return () => { cancelled = true; };
-  }, [temperature, lineId]);
+  }, [temperature, lineId, audienceMode, periodFrom, periodTo]);
 
   useEffect(() => {
     if (!manualQuery.trim()) { setManualResults([]); return; }
@@ -433,7 +440,7 @@ function NewCampaignModal({ onClose, onSent }) {
     else if (toAdd.length) showSuccess(parts.join(' · '));
   }
 
-  const totalRecipients = (temperature ? Math.min(count, audienceCount ?? count) : 0) + manualPicked.length;
+  const totalRecipients = (temperature ? (audienceMode === 'period' ? (audienceCount ?? 0) : Math.min(count, audienceCount ?? count)) : 0) + manualPicked.length;
   const canSend = !!lineId && !!template && !headerUnsupported && (!headerNeedsMedia || (headerMediaId && !headerUploading))
     && (temperature || manualPicked.length > 0) && totalRecipients > 0;
 
@@ -448,7 +455,9 @@ function NewCampaignModal({ onClose, onSent }) {
         templateName: template.name,
         templateLanguage: template.language,
         temperature: temperature || undefined,
-        count: temperature ? count : undefined,
+        count: temperature && audienceMode === 'count' ? count : undefined,
+        periodFrom: temperature && audienceMode === 'period' ? periodFrom : undefined,
+        periodTo: temperature && audienceMode === 'period' ? periodTo : undefined,
         order,
         customerIds: manualPicked.filter((p) => !p.isNew).map((p) => p.id),
         newRecipients: manualPicked.filter((p) => p.isNew).map((p) => ({ phone: p.phone, fullName: p.fullName, params: p.params })),
@@ -604,6 +613,25 @@ function NewCampaignModal({ onClose, onSent }) {
                 <label className="mb-1.5 block text-xs font-medium text-greige-ink">Audiencia masiva por temperatura</label>
                 <Select value={temperature} onChange={setTemperature} options={TEMP_OPTIONS} />
                 {temperature && (
+                  <div className="mt-2.5 inline-flex rounded-lg border border-line p-0.5 text-xs">
+                    <button
+                      onClick={() => setAudienceMode('count')}
+                      className={`rounded-md px-2.5 py-1.5 font-medium transition-colors ${audienceMode === 'count' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                    >
+                      Cantidad
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAudienceMode('period');
+                        if (!periodFrom || !periodTo) { const today = guatemalaToday(); setPeriodFrom(`${today.slice(0, 8)}01`); setPeriodTo(today); }
+                      }}
+                      className={`rounded-md px-2.5 py-1.5 font-medium transition-colors ${audienceMode === 'period' ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}
+                    >
+                      Período de estado
+                    </button>
+                  </div>
+                )}
+                {temperature && audienceMode === 'count' && (
                   <div className="mt-2.5 flex items-center gap-2.5">
                     <input
                       type="number"
@@ -615,6 +643,37 @@ function NewCampaignModal({ onClose, onSent }) {
                     <span className="text-xs text-greige-ink">
                       de {audienceCount ?? '…'} disponibles con esa temperatura
                     </span>
+                  </div>
+                )}
+                {temperature && audienceMode === 'period' && (
+                  <div className="mt-2.5 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <label className="flex items-center gap-1.5 text-xs text-greige-ink">Desde
+                        <input
+                          type="date"
+                          value={periodFrom}
+                          max={periodTo || undefined}
+                          onChange={(e) => setPeriodFrom(e.target.value)}
+                          className="rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-greige-ink">Hasta
+                        <input
+                          type="date"
+                          value={periodTo}
+                          min={periodFrom || undefined}
+                          onChange={(e) => setPeriodTo(e.target.value)}
+                          className="rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-greige-ink">
+                      {!periodFrom || !periodTo ? 'Elige las dos fechas.' : (
+                        <>
+                          <strong className="text-ink">{audienceCount ?? '…'}</strong> clientes que hoy siguen en este estado{temperature === 'tibio' ? ' y recibieron una cotización en esas fechas' : ' y llegaron a él en esas fechas'}. Se envía a todos, sin los que están en pausa de 42 h.
+                        </>
+                      )}
+                    </p>
                   </div>
                 )}
                 {temperature && (

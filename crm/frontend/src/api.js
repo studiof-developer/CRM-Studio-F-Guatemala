@@ -360,8 +360,10 @@ export async function uploadCampaignHeaderMedia(file, lineId) {
   return res.json();
 }
 
-export async function searchCampaignAudience(temperature, q, lineId) {
+export async function searchCampaignAudience(temperature, q, lineId, { periodFrom, periodTo, countOnly } = {}) {
   const params = new URLSearchParams();
+  if (periodFrom && periodTo) { params.set('periodFrom', periodFrom); params.set('periodTo', periodTo); }
+  if (countOnly) params.set('countOnly', '1');
   if (temperature) params.set('temperature', temperature);
   if (q) params.set('q', q);
   if (lineId) params.set('lineId', lineId);

@@ -290,15 +290,49 @@ router.post('/header-media', upload.single('file'), async (req, res, next) => {
 });
 
 // Powers both "cuántos hay disponibles" before sending and the manual add-by-search box.
+// "Período de estado": clientes que HOY están en la temperatura elegida y que estuvieron en ese estado dentro del
+// período (fechas en hora de Guatemala, ambas incluidas). Para tibio ("Cotización") significa que recibieron una
+// cotización en esas fechas: un mensaje de la asesora o del bot con un monto en Q, o una cotización del Cotizador.
+// Para las demás temperaturas, que su ticket cambió de etapa en esas fechas.
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+function periodRange(from, to) {
+  if (!YMD.test(from ?? '') || !YMD.test(to ?? '')) return null;
+  const a = new Date(`${from}T00:00:00-06:00`);
+  const b = new Date(`${to}T23:59:59.999-06:00`);
+  return a <= b ? { from: a, to: b } : null;
+}
+
+function periodClauseSql(temperature, range, params) {
+  params.push(range.from);
+  const f = params.length;
+  params.push(range.to);
+  const t = params.length;
+  if (temperature === 'tibio') {
+    return `(
+      c.whatsapp_number IN (
+        SELECT split_part(h.session_id, '__', 1) FROM n8n_chat_histories h
+        WHERE h.created_at >= $${f} AND h.created_at <= $${t} AND h.message->>'type' = 'ai'
+          AND h.message->>'content' ~ '(^|[^A-Za-z])Q ?[0-9]{2,5}'
+      )
+      OR EXISTS (SELECT 1 FROM quotes q WHERE q.customer_id = c.id AND q.created_at >= $${f} AND q.created_at <= $${t})
+    )`;
+  }
+  return `EXISTS (SELECT 1 FROM tickets tk WHERE tk.customer_id = c.id AND tk.updated_at >= $${f} AND tk.updated_at <= $${t})`;
+}
+
 router.get('/audience', async (req, res, next) => {
   try {
     const { temperature, q, lineId } = req.query;
     if (temperature && !VALID_TEMPERATURES.includes(temperature)) {
       return res.status(400).json({ error: 'invalid temperature' });
     }
+    const range = periodRange(req.query.periodFrom, req.query.periodTo);
+    if ((req.query.periodFrom || req.query.periodTo) && !range) return res.status(400).json({ error: 'Período inválido: usa fechas AAAA-MM-DD con "desde" antes de "hasta"' });
+    const countOnly = req.query.countOnly === '1';
     const params = [];
     const clauses = ['c.opted_out_campaigns = false'];
     if (temperature) { params.push(temperature); clauses.push(`(${EFFECTIVE_STATUS_SQL}) = $${params.length}`); }
+    if (temperature && range) clauses.push(periodClauseSql(temperature, range, params));
     if (q?.trim()) {
       params.push(`%${q.trim().toLowerCase()}%`);
       clauses.push(`(lower(c.full_name) LIKE $${params.length} OR c.whatsapp_number LIKE $${params.length})`);
@@ -324,7 +358,7 @@ router.get('/audience', async (req, res, next) => {
        FROM customers c
        WHERE ${clauses.join(' AND ')}
        ORDER BY c.full_name NULLS LAST
-       LIMIT 200`,
+       ${countOnly ? '' : 'LIMIT 200'}`,
       params
     );
     const cooldown = await getCooldownMap(parsedLineId);
@@ -336,7 +370,8 @@ router.get('/audience', async (req, res, next) => {
       id: r.id, fullName: r.full_name, phone: r.whatsapp_number, temperature: r.temperature,
       cooldownUntil: cooldown.get(r.whatsapp_number)?.toISOString() ?? null,
     }));
-    res.json(temperature && !q?.trim() ? withCooldown.filter((r) => !r.cooldownUntil) : withCooldown);
+    const result = temperature && !q?.trim() ? withCooldown.filter((r) => !r.cooldownUntil) : withCooldown;
+    res.json(countOnly ? { count: result.length } : result);
   } catch (err) { next(err); }
 });
 
@@ -720,7 +755,9 @@ async function resolveTemplate(templateName, templateLanguage, lineId) {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken, whatsappNumberId } = req.body ?? {};
+    const { templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken, whatsappNumberId, periodFrom, periodTo } = req.body ?? {};
+    const range = periodRange(periodFrom, periodTo);
+    if ((periodFrom || periodTo) && !range) return res.status(400).json({ error: 'Período inválido: usa fechas AAAA-MM-DD con "desde" antes de "hasta"' });
     if (!templateName?.trim() || !templateLanguage?.trim()) {
       return res.status(400).json({ error: 'templateName and templateLanguage required' });
     }
@@ -777,7 +814,8 @@ router.post('/', async (req, res, next) => {
       // Excluded in SQL, before the LIMIT, so a number in cooldown gets skipped over in
       // favor of the next eligible one in the same order — not just a shorter batch.
       const cooldownPhones = [...cooldown.keys()];
-      const queryParams = [temperature, count && count > 0 ? count : 100000, cooldownPhones];
+      // Con período se envía a TODOS los que cumplen (la cantidad no aplica).
+      const queryParams = [temperature, !range && count && count > 0 ? count : 100000, cooldownPhones];
       let lineClause = '';
       if (lineId) {
         queryParams.push(lineId);
@@ -794,17 +832,19 @@ router.post('/', async (req, res, next) => {
           )
         )`;
       }
+      const periodClause = range ? `AND ${periodClauseSql(temperature, range, queryParams)}` : '';
       const { rows } = await pool.query(
         `SELECT c.id, c.full_name, c.whatsapp_number
          FROM customers c
-         LEFT JOIN LATERAL (
-           SELECT max(h.created_at) AS last_seen FROM n8n_chat_histories h
-           WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'type' = 'human'
-         ) act ON true
+         LEFT JOIN (
+           SELECT split_part(h.session_id, '__', 1) AS phone, max(h.created_at) AS last_seen FROM n8n_chat_histories h
+           WHERE h.message->>'type' = 'human' GROUP BY 1
+         ) act ON act.phone = c.whatsapp_number
          WHERE (${EFFECTIVE_STATUS_SQL}) = $1
            AND NOT (c.whatsapp_number = ANY($3::text[]))
            AND c.opted_out_campaigns = false
            ${lineClause}
+           ${periodClause}
          ORDER BY act.last_seen ${sortOrder} NULLS LAST
          LIMIT $2`,
         queryParams
