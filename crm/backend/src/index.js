@@ -50,6 +50,17 @@ app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', c
 app.use(express.json({ limit: '25mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(cookieParser());
 
+// Slow-request log: any API call that takes over 1 s shows up in the container logs as 'SLOW ...' so a
+// "the CRM is slow" report can be traced to a specific endpoint (the SSE stream never finishes, so it never logs).
+app.use((req, res, next) => {
+  const started = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - started;
+    if (ms > 1000) console.warn(`SLOW ${req.method} ${req.originalUrl.split('?')[0]} ${res.statusCode} ${ms}ms`);
+  });
+  next();
+});
+
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', authRouter);

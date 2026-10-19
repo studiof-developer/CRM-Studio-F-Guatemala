@@ -9,6 +9,7 @@ import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js
 import { compressStoredAttachment } from '../attachmentCompression.js';
 import { broadcast } from '../events.js';
 import { isConfirmationMessage, confirmSaleByAdvisorMessage } from '../salesAttribution.js';
+import { fetchRecentThreads, FAST_LIST_MAX } from '../conversationList.js';
 
 // WhatsApp's own per-type caps (not ours) — checked again per-kind below, once we know
 // the file's mimetype. Multer's limit has to be a single outer bound before that, so it
@@ -505,7 +506,8 @@ router.get('/', async (req, res, next) => {
     // survive — skip the (expensive) query entirely instead of running it just to
     // discard every row below.
     const skipWhatsapp = channel && channel !== 'whatsapp';
-    const { rows } = skipWhatsapp ? { rows: [] } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
+    // Lista por defecto (las N más recientes): parte de los mensajes recientes, no de toda la tabla (ver conversationList.js).
+    const { rows } = skipWhatsapp ? { rows: [] } : limit && limit <= FAST_LIST_MAX ? { rows: await cachedRead(`list:fast:${limit}`, () => fetchRecentThreads(limit)) } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         SELECT h.session_id, h.id, h.message, h.created_at,
                COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id ~ '__line_[0-9]+' THEN (regexp_match(h.session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) AS line_id,
@@ -722,15 +724,18 @@ router.get('/unread-count', async (req, res, next) => {
     }
     const cacheKey = isAsesor ? `unread-count:${req.user.id}` : 'unread-count';
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
-      SELECT count(DISTINCT CASE 
-        WHEN h.session_id LIKE '%__line_%' THEN h.session_id
-        ELSE split_part(h.session_id, '__', 1) || '__line_1'
-      END)::int AS count
+      SELECT count(*)::int AS count FROM (
+      SELECT 1
       FROM n8n_chat_histories h
       LEFT JOIN conversation_reads cr ON cr.phone = split_part(h.session_id, '__', 1)
       WHERE h.message->>'type' = 'human'
         AND h.id > COALESCE(cr.last_read_message_id, 0)
         ${isAsesor ? `AND COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id ~ '__line_[0-9]+' THEN (regexp_match(h.session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) = ANY($1)` : ''}
+      GROUP BY CASE
+        WHEN h.session_id LIKE '%__line_%' THEN h.session_id
+        ELSE split_part(h.session_id, '__', 1) || '__line_1'
+      END
+      ) threads
     `, isAsesor ? [allowedLineIds] : []));
     res.json({ count: rows[0].count });
   } catch (err) { next(err); }
