@@ -2432,7 +2432,13 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
               {/* Status pill + advisor actions — own line on mobile (w-full forces
                   it), inline with everything above wherever there's room for it. */}
               <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
-                {thread.ticketStatus === 'esperando_asesor' && (
+                {thread.ticketStatus === 'difusion_enviada' && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-cyan-bg px-2.5 py-1 text-xs font-medium text-cyan">
+                    <Megaphone size={12} /> Difusión enviada — sin respuesta
+                  </span>
+                )}
+                {/* "difusion_enviada" también se puede tomar: sin este botón el chat quedaba bloqueado hasta que el cliente respondiera. */}
+                {['esperando_asesor', 'difusion_enviada'].includes(thread.ticketStatus) && (
                   <span
                     role="button"
                     onClick={(e) => { e.stopPropagation(); handleTake(); }}
@@ -2941,7 +2947,9 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                 <div className="border-t border-line bg-paper px-5 py-3 text-center text-xs text-greige-ink">
                   {thread.ticketStatus === 'esperando_asesor'
                     ? 'Este cliente está esperando un asesor — tómalo desde el botón de arriba para poder responder.'
-                    : 'El agente está atendiendo esta conversación con normalidad.'}
+                    : thread.ticketStatus === 'difusion_enviada'
+                      ? 'Se le envió una difusión y aún no responde. Toma la conversación desde el botón de arriba para escribirle: tu mensaje sale en cuanto el cliente responda.'
+                      : 'El agente está atendiendo esta conversación con normalidad.'}
                 </div>
               )}
               </div>
