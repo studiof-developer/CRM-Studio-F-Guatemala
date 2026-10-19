@@ -917,6 +917,36 @@ export async function crossCheckSalesNotebook(entries) {
   return (await res.json()).results;
 }
 
+// Cierre del día: lo pagado y lo pendiente de cada asesora hasta una hora de corte (HH:MM, hora de Guatemala).
+export async function fetchSalesClose(date, asOf) {
+  const qs = new URLSearchParams({ date, ...(asOf ? { asOf } : {}) });
+  const res = await apiFetch(`/api/sales/close?${qs}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo calcular el cierre');
+  return res.json();
+}
+
+export async function saveSalesClose({ date, asOf, label }) {
+  const res = await apiFetch('/api/sales/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, asOf, label }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo guardar el cierre');
+  return res.json();
+}
+
+export async function fetchSalesCloses(date) {
+  const res = await apiFetch(`/api/sales/closes${date ? `?date=${date}` : ''}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudieron cargar los cierres');
+  return res.json();
+}
+
+export async function fetchSalesCloseById(id) {
+  const res = await apiFetch(`/api/sales/closes/${id}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo cargar el cierre');
+  return (await res.json()).result;
+}
+
 // Un supervisor o administrador confirma (y puede corregir) el monto inferido del último precio aprobado.
 export async function validateSaleAmount(saleId, amount) {
   const res = await apiFetch(`/api/sales/${saleId}/validate-amount`, {

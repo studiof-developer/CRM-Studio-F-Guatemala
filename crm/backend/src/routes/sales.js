@@ -4,6 +4,7 @@ import { logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
 import { auditSales, rebuildSales } from '../salesAttribution.js';
 import { startAnalysisRun, getAnalysisRun, crossCheckNotebook } from '../salesAnalysis.js';
+import { computeClose, saveClose, listCloses, getClose } from '../salesClose.js';
 
 const router = Router();
 
@@ -741,6 +742,31 @@ router.get('/analysis/:id', requireRole('admin', 'supervisor'), async (req, res,
 
 // Contrasta lo que anotan las asesoras a mano (últimos 4 dígitos o nombre, medio, monto)
 // con lo que el chat realmente muestra.
+// Cierre del día: lo pagado y lo pendiente de cada asesora hasta una hora (corte). GET calcula sin guardar;
+// POST guarda el cierre (queda congelado); GET /closes lista los guardados.
+router.get('/close', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try { res.json(await computeClose({ day: req.query.date, asOf: req.query.asOf })); } catch (err) { err.status ? res.status(err.status).json({ error: err.message }) : next(err); }
+});
+
+router.post('/close', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const label = String(req.body?.label ?? '').trim().slice(0, 80) || `Cierre manual de ${req.user.fullName || req.user.username}`;
+    res.status(201).json(await saveClose({ day: req.body?.date, asOf: req.body?.asOf, label, userId: req.user.id }));
+  } catch (err) { err.status ? res.status(err.status).json({ error: err.message }) : next(err); }
+});
+
+router.get('/closes', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try { res.json(await listCloses(/^\d{4}-\d{2}-\d{2}$/.test(req.query.date ?? '') ? req.query.date : null)); } catch (err) { next(err); }
+});
+
+router.get('/closes/:id', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const close = await getClose(Number(req.params.id));
+    if (!close) return res.status(404).json({ error: 'Cierre no encontrado' });
+    res.json(close);
+  } catch (err) { next(err); }
+});
+
 router.post('/analysis/notebook', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];

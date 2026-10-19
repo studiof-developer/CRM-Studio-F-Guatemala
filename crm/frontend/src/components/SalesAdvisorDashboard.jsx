@@ -12,6 +12,7 @@ import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 import SalesAnalysisModal from './SalesAnalysisModal.jsx';
+import SalesCloseModal from './SalesCloseModal.jsx';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -114,6 +115,7 @@ export default function SalesAdvisorDashboard() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditApplying, setAuditApplying] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [auditData, setAuditData] = useState(null);
   const [auditTab, setAuditTab] = useState('corregir');
   const [copiedAudit, setCopiedAudit] = useState(false);
@@ -608,6 +610,15 @@ export default function SalesAdvisorDashboard() {
                 <span>Analizar chats vendidos</span>
               </button>
 
+          <button
+            onClick={() => setCloseOpen(true)}
+            title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
+            className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
+          >
+            <CheckCircle2 size={13} />
+            <span>Cierre del día</span>
+          </button>
+
               <button
                 onClick={handleOpenAudit}
                 disabled={auditLoading}
@@ -885,6 +896,15 @@ export default function SalesAdvisorDashboard() {
           >
             <FileText size={13} />
             <span>Analizar chats vendidos</span>
+          </button>
+
+          <button
+            onClick={() => setCloseOpen(true)}
+            title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
+            className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
+          >
+            <CheckCircle2 size={13} />
+            <span>Cierre del día</span>
           </button>
 
           <button
@@ -1534,6 +1554,7 @@ export default function SalesAdvisorDashboard() {
 
       {/* Modal de Auditoría Forense de Chats del 14 de Octubre */}
       <SalesAnalysisModal open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
+      <SalesCloseModal open={closeOpen} onClose={() => setCloseOpen(false)} />
 
       {auditData && (() => {
         const STATUS = {

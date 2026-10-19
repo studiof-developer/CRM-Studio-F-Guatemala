@@ -132,7 +132,9 @@ async function applyAttachments(events, ocr) {
 }
 
 // Hilo completo (o la ventana from..to) de un cliente en una línea, ya convertido en ventas.
-export async function buildThread(customer, lineId, { from = new Date(0), to = new Date(Date.now() + DAY), ocr = null } = {}) {
+// asOf = "como estaba el chat a esa hora": solo cuenta lo que ya había ocurrido (comprobantes, confirmaciones, medios de pago).
+export async function buildThread(customer, lineId, { from = new Date(0), to = new Date(Date.now() + DAY), ocr = null, asOf = null } = {}) {
+  if (asOf) to = new Date(asOf);
   const events = await loadEvents({ phone: customer.whatsapp_number, customerId: customer.id, lineId, from, to });
   if (lineId !== null) await applyAttachments(events, ocr);
   // Las cotizaciones formales del Cotizador (la tarjeta PNG con precios) son precios ofrecidos
@@ -147,18 +149,25 @@ export async function buildThread(customer, lineId, { from = new Date(0), to = n
   for (const q of quotes) {
     events.push({ id: -q.id, at: q.created_at, role: 'advisor', advisor: q.full_name ?? null, text: `Cotización formal. Total Q${q.grand_total}`, ocrAmount: null, via: null, voucher: false });
   }
-  return { events, ...buildEpisodes(events) };
+  return { events, ...buildEpisodes(events, { asOf }) };
 }
 
 // Todas las ventas reconstruidas de un cliente (todas sus líneas), con los nombres de asesora
 // normalizados al usuario del CRM.
-export async function analyzeCustomer(customer, { canonical = nameResolver(), ocr = null } = {}) {
+export async function analyzeCustomer(customer, { canonical = nameResolver(), ocr = null, asOf = null } = {}) {
   const rows = [];
+  const pending = [];
   const orphans = [];
   let resentReceipts = 0;
   for (const line of await threadLines(customer.whatsapp_number)) {
-    const t = await buildThread(customer, line, { ocr });
+    const t = await buildThread(customer, line, { ocr, asOf });
     resentReceipts += t.resentReceipts;
+    if (t.pending) {
+      pending.push({
+        ...t.pending, advisor: await canonical(t.pending.advisor), customerId: customer.id, customer: customer.full_name || customer.whatsapp_number,
+        phone: customer.whatsapp_number, last4: customer.whatsapp_number.slice(-4), line,
+      });
+    }
     for (const o of t.orphanReceipts) orphans.push({ ...o, line, customerId: customer.id, customer: customer.full_name || customer.whatsapp_number, phone: customer.whatsapp_number });
     for (const ep of t.episodes) {
       rows.push({
@@ -173,5 +182,5 @@ export async function analyzeCustomer(customer, { canonical = nameResolver(), oc
       });
     }
   }
-  return { rows, orphans, resentReceipts };
+  return { rows, orphans, resentReceipts, pending };
 }

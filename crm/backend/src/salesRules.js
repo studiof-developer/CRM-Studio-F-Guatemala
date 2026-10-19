@@ -80,7 +80,7 @@ export function receiptAmountInText(text) {
 
 export function guatemalaParts(date) {
   const g = new Date(new Date(date).getTime() + GT_OFFSET_MS);
-  return { ymd: g.toISOString().slice(0, 10), hour: g.getUTCHours(), dow: g.getUTCDay() };
+  return { ymd: g.toISOString().slice(0, 10), hour: g.getUTCHours(), minute: g.getUTCMinutes(), dow: g.getUTCDay() };
 }
 
 // Turnos reales: 8am–3pm y 3pm–9pm de lunes a sábado; el domingo atiende una sola persona.
@@ -208,7 +208,7 @@ const DAY_MS = 86400000;
 // y una prueba sin medios de pago ni confirmación se descarta como "orphan" (sin contexto).
 // events: ordenados o no; los del cliente traen ocrAmount (foto/PDF/texto con monto) y/o
 // voucher:true (comprobante reconocido sin monto) e image:true (adjunto sin monto leído).
-export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
+export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } = {}) {
   const sorted = sortedByTime(events);
   const episodes = [];
   const orphans = [];
@@ -296,5 +296,29 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
     ep.status = ep.verified ? 'verificada' : 'pendiente_de_confirmar';
     kept.push(ep);
   }
-  return { episodes: kept, resentReceipts: resent, orphanReceipts: orphans };
+  return { episodes: kept, resentReceipts: resent, orphanReceipts: orphans, pending: findPending(sorted, kept, asOf) };
+}
+
+// Venta PENDIENTE: la asesora entregó los medios de pago hace menos de 24 h y desde entonces no hay comprobante ni
+// confirmación. Es lo que las asesoras anotan como venta (link enviado) y todavía no está pagado. `asOf` es el corte:
+// el llamador ya recortó los eventos a esa hora; sin él se usa el último mensaje del hilo.
+function findPending(sorted, episodes, asOf) {
+  if (!sorted.length) return null;
+  const cutoff = asOf ? +new Date(asOf) : +new Date(sorted[sorted.length - 1].at);
+  const lastDone = episodes.reduce((m, ep) => Math.max(m, +new Date(ep.at), ep.confirmedAt ? +new Date(ep.confirmedAt) : 0), 0);
+  const payInfo = [...sorted].reverse().find((e) => e.role === 'advisor' && +new Date(e.at) <= cutoff
+    && cutoff - +new Date(e.at) <= PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
+  if (!payInfo || +new Date(payInfo.at) <= lastDone) return null;
+  const since = lastDone || null;
+  const price = approvedQuote(sorted, since, payInfo.at);
+  const cycle = sorted.filter((e) => +new Date(e.at) > lastDone && +new Date(e.at) <= +new Date(payInfo.at));
+  const quotedAmounts = [...new Set(cycle.filter((e) => e.role === 'advisor').map((e) => quotedAmountIn(e.text)).filter((v) => v != null))].slice(-6);
+  const quotedAt = price?.at ? +new Date(price.at) : null;
+  return {
+    at: payInfo.at, eventId: payInfo.id, advisor: payInfo.advisor, medium: paymentMedium(payInfo.text),
+    amount: price?.amount ?? null, quotedAmounts,
+    // "intención": el cliente aceptó explícitamente una cotización antes de recibir los medios de pago
+    customerAccepted: quotedAt != null && cycle.some((e) => e.role === 'customer' && +new Date(e.at) > quotedAt && acceptsOffer(e.text)),
+    customerReplied: sorted.some((e) => e.role === 'customer' && +new Date(e.at) > +new Date(payInfo.at) && +new Date(e.at) <= cutoff),
+  };
 }

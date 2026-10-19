@@ -418,3 +418,38 @@ test('el total de la cotización se lee aunque traiga (N prendas) y el ahorro de
   assert.equal(quotedAmountIn('🛍️ *Total a pagar (1 prenda): Q802.17*\n🎉 *¡Te ahorras Q152.83!*'), 802.17);
   assert.equal(quotedAmountIn('━━━\n🚚 Envío a domicilio: Q56.00\n🛍️ *Total a pagar (3 prendas): Q2297.00*'), 2297);
 });
+
+test('venta pendiente: medios de pago entregados sin comprobante ni confirmación', () => {
+  const eventos = [
+    adv(gt('18', '11:55'), 'Leydi', 'Q749 HOY Q374'),
+    adv(gt('18', '11:56'), 'Leydi', '¿Deseas llevarlo?'),
+    { id: ++n, at: gt('18', '12:05'), role: 'customer', advisor: null, text: 'Si lo quiero, transferencia', ocrAmount: null },
+    adv(gt('18', '12:10'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/VEL1'),
+  ];
+  const r = buildEpisodes(eventos, { asOf: gt('18', '16:00') });
+  assert.equal(r.episodes.length, 0);
+  assert.equal(r.pending.advisor, 'Leydi');
+  assert.equal(r.pending.medium, 'link');
+  assert.equal(r.pending.amount, 374);
+  assert.equal(r.pending.customerAccepted, true);
+});
+
+test('el pendiente se vuelve pagado cuando llega el comprobante, y a las 4 pm todavía era pendiente', () => {
+  const eventos = [
+    adv(gt('18', '12:10'), 'Leydi', 'Total Q374. Cuenta Banrural 4012345678'),
+    img(gt('18', '17:30'), 374),
+    adv(gt('18', '17:40'), 'Leydi', CANONICA),
+  ];
+  const a4pm = buildEpisodes(eventos.filter((e) => +new Date(e.at) <= +gt('18', '16:00')), { asOf: gt('18', '16:00') });
+  assert.equal(a4pm.episodes.length, 0);
+  assert.ok(a4pm.pending);
+  const cierre = buildEpisodes(eventos, { asOf: gt('18', '21:00') });
+  assert.equal(cierre.episodes.length, 1);
+  assert.equal(cierre.episodes[0].amount, 374);
+  assert.equal(cierre.pending, null);
+});
+
+test('medios de pago de hace más de 24 h no son una venta pendiente', () => {
+  const eventos = [adv(gt('16', '10:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539')];
+  assert.equal(buildEpisodes(eventos, { asOf: gt('18', '10:00') }).pending, null);
+});
