@@ -13,6 +13,7 @@ import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 import SalesCloseModal from './SalesCloseModal.jsx';
+import SalesToolsMenu from './SalesToolsMenu.jsx';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -602,41 +603,21 @@ export default function SalesAdvisorDashboard() {
               </button>
 
               <button
-                onClick={() => setAnalysisOpen(true)}
-                title="Reconstruye las ventas de todos los clientes en Pagado / Por despacho leyendo todo su historial de chat"
-                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+                onClick={() => setCloseOpen(true)}
+                title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
+                className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
               >
-                <FileText size={13} />
-                <span>Analizar chats vendidos</span>
+                <CheckCircle2 size={13} />
+                <span>Cierre del día</span>
               </button>
 
-          <button
-            onClick={() => setCloseOpen(true)}
-            title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
-            className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
-          >
-            <CheckCircle2 size={13} />
-            <span>Cierre del día</span>
-          </button>
-
-              <button
-                onClick={handleOpenAudit}
-                disabled={auditLoading}
-                title="Compara cada comprobante del chat contra las ventas registradas (asesora, día y monto) y corrige lo que no coincida"
-                className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white disabled:opacity-50"
-              >
-                {auditLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                <span>{auditLoading ? 'Auditando...' : 'Auditar ventas'}</span>
-              </button>
-
-              <button
-                onClick={exportDailyToExcel}
-                disabled={!dailyData?.daily?.length}
-                className="flex items-center gap-1.5 rounded-xl bg-success px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-opacity hover:opacity-95 disabled:opacity-50"
-              >
-                <Download size={13} />
-                <span>Exportar Excel</span>
-              </button>
+              <SalesToolsMenu
+                items={[
+                  { label: 'Descargar Excel', hint: 'Esta comparativa diaria', icon: Download, onClick: exportDailyToExcel, disabled: !dailyData?.daily?.length },
+                  { label: 'Analizar chats vendidos', hint: 'Reconstruye las ventas leyendo los chats; exporta los chats a texto', icon: FileText, onClick: () => setAnalysisOpen(true) },
+                  { label: auditLoading ? 'Auditando…' : 'Auditar ventas', hint: 'Compara comprobantes del chat con lo registrado y corrige', icon: Sparkles, onClick: handleOpenAudit, disabled: auditLoading, busy: auditLoading },
+                ]}
+              />
             </div>
           </div>
 
@@ -890,15 +871,6 @@ export default function SalesAdvisorDashboard() {
           </button>
 
           <button
-            onClick={() => setAnalysisOpen(true)}
-            title="Reconstruye las ventas de todos los clientes en Pagado / Por despacho leyendo todo su historial de chat"
-            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
-          >
-            <FileText size={13} />
-            <span>Analizar chats vendidos</span>
-          </button>
-
-          <button
             onClick={() => setCloseOpen(true)}
             title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
             className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
@@ -907,36 +879,14 @@ export default function SalesAdvisorDashboard() {
             <span>Cierre del día</span>
           </button>
 
-          <button
-            onClick={handleOpenAudit}
-            disabled={auditLoading}
-            title="Compara cada comprobante del chat contra las ventas registradas (asesora, día y monto) y corrige lo que no coincida"
-            className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent hover:text-white disabled:opacity-50"
-          >
-            {auditLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            <span>{auditLoading ? 'Auditando...' : 'Auditar ventas'}</span>
-          </button>
-
-          {/* Botón Copiar resumen para WhatsApp */}
-          <button
-            onClick={copySummaryToClipboard}
-            disabled={!salesData}
-            title="Copiar resumen para WhatsApp listo para pegar"
-            className="flex items-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-[#20ba5a] active:scale-95 disabled:opacity-50"
-          >
-            {copiedSummary ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copiedSummary ? '¡Copiado!' : 'Copiar para WhatsApp'}</span>
-          </button>
-
-          {/* Botón Exportar a Excel */}
-          <button
-            onClick={exportToExcel}
-            disabled={advisors.length === 0}
-            className="flex items-center gap-1.5 rounded-xl bg-success px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-opacity hover:opacity-95 disabled:opacity-50"
-          >
-            <Download size={13} />
-            <span>Excel</span>
-          </button>
+          <SalesToolsMenu
+            items={[
+              { label: copiedSummary ? '¡Copiado!' : 'Copiar resumen para WhatsApp', hint: 'Listo para pegar en el grupo', icon: copiedSummary ? Check : Copy, onClick: copySummaryToClipboard, disabled: !salesData },
+              { label: 'Descargar Excel', hint: 'Esta tabla de rendimiento', icon: Download, onClick: exportToExcel, disabled: advisors.length === 0 },
+              { label: 'Analizar chats vendidos', hint: 'Reconstruye las ventas leyendo los chats; exporta los chats a texto', icon: FileText, onClick: () => setAnalysisOpen(true) },
+              { label: auditLoading ? 'Auditando…' : 'Auditar ventas', hint: 'Compara comprobantes del chat con lo registrado y corrige', icon: Sparkles, onClick: handleOpenAudit, disabled: auditLoading, busy: auditLoading },
+            ]}
+          />
         </div>
       </div>
 
