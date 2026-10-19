@@ -197,7 +197,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
           <div className="border-b border-line px-5 py-3">
             <div className="mb-1 flex justify-between text-xs text-greige-ink"><span>Analizando chats…</span><span>{run.progress} / {run.total} clientes ({pct}%)</span></div>
             <div className="h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} /></div>
-            <p className="mt-1 text-[11px] text-greige-ink">Puede tardar varios minutos. Puedes cerrar esta ventana: el análisis sigue en el servidor.</p>
+            <p className="mt-1 text-[11px] text-greige-ink">Puede tardar bastante y usa CPU del servidor: conviene correrlo fuera del horario de las asesoras. Puedes cerrar esta ventana: el análisis sigue en el servidor.</p>
           </div>
         )}
 

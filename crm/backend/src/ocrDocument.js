@@ -6,7 +6,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { createWorker } from 'tesseract.js';
 import { UPLOAD_DIR } from './attachmentStorage.js';
-import { extractText, tesseractErrorHandler } from './ocrPayment.js';
+import { tesseractErrorHandler } from './ocrPayment.js';
 
 const execFileAsync = promisify(execFile);
 const GS_TIMEOUT_MS = 60_000;
@@ -64,13 +64,34 @@ async function pdfPagesAsPng(buffer, maxPages = 2) {
 }
 
 // Texto de una imagen o de un PDF (texto incrustado primero; si no hay, OCR de sus primeras páginas).
-export async function extractDocumentText(buffer, mimeType, recognize = extractText) {
+export async function extractDocumentText(buffer, mimeType, recognize = recognizeShared) {
   if (mimeType !== 'application/pdf') return recognize(buffer);
   const embedded = (await pdfEmbeddedText(buffer)).trim();
   if (embedded.replace(/\s+/g, '').length >= MIN_EMBEDDED_TEXT) return embedded;
   let text = embedded;
   for (const png of await pdfPagesAsPng(buffer)) text += `\n${await recognize(png)}`;
   return text;
+}
+
+// Lector compartido del flujo en vivo (cada imagen o PDF que llega): se crea en la primera lectura y se
+// cierra a los 60 s sin uso. Antes cada imagen creaba y destruía su propio Tesseract (hilo + modelo en español).
+const IDLE_CLOSE_MS = 60_000;
+let sharedSession = null;
+let idleTimer = null;
+export async function recognizeShared(buffer) {
+  clearTimeout(idleTimer);
+  sharedSession ??= createOcrSession().catch((err) => { sharedSession = null; throw err; });
+  const session = await sharedSession;
+  try {
+    return await session.recognize(buffer);
+  } finally {
+    idleTimer = setTimeout(() => {
+      const closing = sharedSession;
+      sharedSession = null;
+      closing?.then((s) => s.close()).catch(() => {});
+    }, IDLE_CLOSE_MS);
+    idleTimer.unref?.();
+  }
 }
 
 // Un solo lector Tesseract reutilizado: cargar el modelo en español por imagen (lo que hace

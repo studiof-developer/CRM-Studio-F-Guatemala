@@ -209,9 +209,9 @@ function SocialThreadPanel({
     return () => unsubscribe();
   }, [contactId, load, loadInfo]);
 
-  // Fast fallback polling (3s instead of 8s)
+  // SSE (above) is the fast path; this is only a safety net if that connection silently drops.
   useEffect(() => {
-    const id = setInterval(load, 3000);
+    const id = setInterval(load, 30000);
     return () => clearInterval(id);
   }, [load]);
 
