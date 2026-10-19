@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attributeAdvisor, latestQuote, startsNewCycle, isResentReceipt,
-  shiftOf, quotedAmountIn, givesPaymentInfo, isConfirmationMessage, buildEpisodes, paymentMedium,
+  shiftOf, quotedAmountIn, givesPaymentInfo, isConfirmationMessage, buildEpisodes, paymentMedium, receiptAmountInText, approvedQuote, acceptsOffer,
 } from './salesRules.js';
 
 // Helper: hora de Guatemala (UTC-6) -> instante UTC.
@@ -193,15 +193,166 @@ test('episodios: la asesora confirma antes de que llegue la foto = una sola vent
   assert.equal(episodes[0].type, 'comprobante');
 });
 
-test('episodios: marca imágenes sin monto leído y comprobantes sin medios de pago en el chat', () => {
-  const events = [adv(gt('14', '09:00'), 'Aura', 'Hola'), img(gt('14', '09:30')), img(gt('14', '09:40'), 350)];
-  const { episodes } = buildEpisodes(events);
-  assert.equal(episodes[0].imagesWithoutAmount, 1);
+const voucher = (at) => ({ id: ++n, at, role: 'customer', advisor: null, text: '', ocrAmount: null, image: true, voucher: true });
+const customerText = (at, text) => ({ id: ++n, at, role: 'customer', advisor: null, text, ocrAmount: receiptAmountInText(text) });
+const CANONICA = 'Gracias por elegir a STUDIO F! tu pedido ya esta en proceso de alistamiento 📦\n\nEl tiempo estimado de entrega es de 3 a 4 dias habiles sin contar sabados, domingos ni feriados.';
+
+test('episodios: un comprobante sin medios de pago ni confirmación no es venta (no es concluyente)', () => {
+  const { episodes, orphanReceipts } = buildEpisodes([adv(gt('14', '09:00'), 'Aura', 'Hola'), img(gt('14', '09:40'), 350)]);
+  assert.equal(episodes.length, 0);
+  assert.equal(orphanReceipts.length, 1);
+});
+
+test('episodios: sin medios de pago en el chat, la confirmación de la asesora sí valida el comprobante', () => {
+  const { episodes } = buildEpisodes([img(gt('14', '09:40'), 350), adv(gt('14', '10:00'), 'Aura', CANONICA)]);
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0].verified, true);
   assert.ok(episodes[0].issues.includes('sin_medios_de_pago_en_chat'));
+});
+
+test('episodios: comprobante con medios de pago pero sin confirmación queda pendiente, no verificado', () => {
+  const { episodes } = buildEpisodes([adv(gt('14', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'), img(gt('14', '10:00'), 539)]);
+  assert.equal(episodes[0].status, 'pendiente_de_confirmar');
+  assert.equal(episodes[0].verified, false);
+});
+
+test('episodios: el mensaje real "Gracias por elegir a STUDIO F" verifica la venta', () => {
+  assert.equal(isConfirmationMessage(CANONICA), true);
+  const { episodes } = buildEpisodes([
+    adv(gt('14', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'),
+    img(gt('14', '10:00'), 539),
+    adv(gt('14', '10:20'), 'Leydi', CANONICA),
+  ]);
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0].status, 'verificada');
+  assert.equal(episodes[0].confirmedBy, 'Leydi');
+  assert.equal(episodes[0].advisor, 'Aura'); // quien dio los medios de pago; Leydi solo verificó
+});
+
+test('episodios: lo que el cliente manda ANTES de recibir los medios de pago no es la prueba de esta compra', () => {
+  const eventos = [
+    img(gt('10', '09:00'), 539), // comprobante de una compra vieja / otra referencia
+    adv(gt('14', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q420'),
+    img(gt('14', '10:00'), 420),
+    adv(gt('14', '10:30'), 'Aura', CANONICA),
+  ];
+  const { episodes, orphanReceipts } = buildEpisodes(eventos);
+  assert.deepEqual(episodes.map((e) => e.amount), [420]);
+  assert.equal(orphanReceipts.length, 1);
+});
+
+test('episodios: el SMS del banco pegado como texto cuenta como prueba con su monto', () => {
+  const sms = 'Se realizo una compra con tu tarjeta de débito por Q 539.00 Monetaria ****4162 en UNIDAD DE TARJETA a las 14:02.';
+  assert.equal(receiptAmountInText(sms), 539);
+  const { episodes } = buildEpisodes([
+    adv(gt('18', '13:55'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/VEL130101196vx1kqwcj'),
+    customerText(gt('18', '14:03'), sms),
+    adv(gt('18', '14:10'), 'Leydi', CANONICA),
+  ]);
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0].amount, 539);
+  assert.equal(episodes[0].medium, 'link');
+  assert.equal(episodes[0].verified, true);
+});
+
+test('texto del cliente: solo vale con vocabulario bancario y monto', () => {
+  assert.equal(receiptAmountInText('ya hice la transferencia por Q539'), null);
+  assert.equal(receiptAmountInText('Transferencia realizada Monto Q 1,286.00'), 1286);
+  assert.equal(receiptAmountInText('Se realizó una compra por Q 80000'), null); // fuera de rango retail
+  assert.equal(receiptAmountInText('Hola buenas tardes'), null);
+});
+
+test('episodios: pago por link con voucher "Aprobada" del cliente queda respaldado; sin él se marca', () => {
+  const base = [
+    adv(gt('18', '13:00'), 'Leydi', 'El total es Q823'),
+    adv(gt('18', '13:05'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/abc'),
+  ];
+  const conVoucher = buildEpisodes([...base, voucher(gt('18', '13:30')), adv(gt('18', '13:40'), 'Leydi', CANONICA)]);
+  assert.equal(conVoucher.episodes[0].amount, 823);
+  assert.equal(conVoucher.episodes[0].voucher, true);
+  assert.ok(!conVoucher.episodes[0].issues.includes('sin_prueba_del_cliente'));
+  const sinNada = buildEpisodes([...base, adv(gt('18', '13:40'), 'Leydi', CANONICA)]);
+  assert.ok(sinNada.episodes[0].issues.includes('sin_prueba_del_cliente'));
+});
+
+test('episodios: la segunda compra se atribuye con lo ocurrido desde la primera, no con medios de pago viejos', () => {
+  const eventos = [
+    adv(gt('14', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'),
+    img(gt('14', '10:00'), 539),
+    adv(gt('14', '10:20'), 'Aura', CANONICA),
+    adv(gt('16', '15:30'), 'Leydi', 'Para esta compra el total es Q420'),
+    img(gt('16', '16:00'), 420),
+    adv(gt('16', '16:10'), 'Leydi', CANONICA),
+  ];
+  const { episodes } = buildEpisodes(eventos);
+  assert.deepEqual(episodes.map((e) => [e.amount, e.advisor, e.verified]), [[539, 'Aura', true], [420, 'Leydi', true]]);
 });
 
 test('medio de pago: link vs transferencia', () => {
   assert.equal(paymentMedium('Paga aquí https://x.co/1'), 'link');
   assert.equal(paymentMedium('Cuenta Banrural 4012345678'), 'transferencia');
   assert.equal(paymentMedium('Hola'), null);
+});
+
+const cm = (at, text) => ({ id: ++n, at, role: 'customer', advisor: null, text, ocrAmount: null });
+
+test('precio aprobado: el cliente acepta lo cotizado y se usa ese total', () => {
+  const eventos = [
+    adv(gt('18', '10:00'), 'Leydi', 'El jean talla 8 queda en Q420'),
+    cm(gt('18', '10:05'), 'Quiero entonces el jean talla 8 de la referencia'),
+    adv(gt('18', '10:10'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/abc'),
+  ];
+  assert.deepEqual(approvedQuote(eventos, null, gt('18', '11:00')), { amount: 420, at: gt('18', '10:00'), approved: true });
+});
+
+test('precio aprobado: si pide algo más y la asesora vuelve a cotizar, vale la última cotización aprobada', () => {
+  const eventos = [
+    adv(gt('18', '10:00'), 'Leydi', 'El jean talla 8 queda en Q420'),
+    cm(gt('18', '10:05'), 'Quiero ese. Y también la blusa'),
+    adv(gt('18', '10:08'), 'Leydi', 'Con la blusa el total es Q650'),
+    cm(gt('18', '10:10'), 'Listo, pásame el link'),
+    adv(gt('18', '10:12'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/abc'),
+  ];
+  assert.equal(approvedQuote(eventos, null, gt('18', '11:00')).amount, 650);
+});
+
+test('precio aprobado: darle los medios de pago implica que el total estaba acordado', () => {
+  const eventos = [adv(gt('18', '10:00'), 'Leydi', 'Total Q823'), adv(gt('18', '10:05'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/abc')];
+  assert.equal(approvedQuote(eventos, null, gt('18', '11:00')).approved, true);
+});
+
+test('precio aprobado: sin aceptación ni medios de pago se usa la última cotización pero marcada como no aprobada', () => {
+  const eventos = [adv(gt('18', '10:00'), 'Leydi', 'Total Q823'), cm(gt('18', '10:05'), 'Déjame pensarlo')];
+  assert.deepEqual(approvedQuote(eventos, null, gt('18', '11:00')), { amount: 823, at: gt('18', '10:00'), approved: false });
+  assert.equal(approvedQuote([], null, gt('18', '11:00')), null);
+});
+
+test('aceptación: "no quiero" no cuenta', () => {
+  assert.equal(acceptsOffer('Quiero el jean'), true);
+  assert.equal(acceptsOffer('no lo quiero, gracias'), false);
+  assert.equal(acceptsOffer('Déjame pensarlo'), false);
+});
+
+test('episodios: pago por link sin monto en el chat usa el precio aprobado y queda por validar', () => {
+  const eventos = [
+    adv(gt('18', '13:00'), 'Leydi', 'El jean talla 8 queda en Q420'),
+    cm(gt('18', '13:02'), 'Quiero entonces el jean talla 8 de la referencia'),
+    adv(gt('18', '13:05'), 'Leydi', 'Paga aquí https://pay.neolink.com.gt/abc'),
+    voucher(gt('18', '13:30')),
+    adv(gt('18', '13:40'), 'Leydi', CANONICA),
+  ];
+  const { episodes } = buildEpisodes(eventos);
+  const [ep] = episodes;
+  assert.equal(ep.amount, 420);
+  assert.equal(ep.amountBasis, 'precio_aprobado');
+  assert.equal(ep.priceApprovedByCustomer, true);
+  assert.ok(ep.issues.includes('monto_por_validar'));
+  assert.ok(!ep.issues.includes('precio_sin_aprobacion_del_cliente'));
+});
+
+test('episodios: con comprobante que trae el monto, la base es el documento y no se pide validar', () => {
+  const eventos = [adv(gt('18', '13:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'), img(gt('18', '14:00'), 539), adv(gt('18', '14:10'), 'Aura', CANONICA)];
+  const [ep] = buildEpisodes(eventos).episodes;
+  assert.equal(ep.amountBasis, 'comprobante');
+  assert.ok(!ep.issues.includes('monto_por_validar'));
 });

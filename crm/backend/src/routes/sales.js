@@ -10,6 +10,9 @@ const router = Router();
 // Solo las ventas confirmadas con monto suman a los totales; las "por revisar" se muestran
 // aparte (por_revisar) para que nadie las pierda de vista pero no inflen el cierre.
 const CONFIRMED = "s.status = 'confirmada' AND s.amount > 0";
+// Monto inferido del último precio aprobado por el cliente (pago por link sin monto en el chat): suma,
+// pero un supervisor o administrador debe validarlo contra lo depositado.
+const POR_VALIDAR = `${CONFIRMED} AND s.amount_basis = 'precio_aprobado' AND s.amount_validated_at IS NULL`;
 const GT_HOUR = "extract(hour from s.created_at AT TIME ZONE 'America/Guatemala')";
 const GT_DOW = "extract(dow from s.created_at AT TIME ZONE 'America/Guatemala')";
 const shiftSum = (cond, alias) => `COALESCE(SUM(s.amount) FILTER (WHERE ${CONFIRMED} AND ${cond}), 0)::numeric(10,2) AS ${alias}`;
@@ -245,6 +248,8 @@ router.get('/by-advisor', async (req, res, next) => {
          COALESCE(SUM(s.amount) FILTER (WHERE ${CONFIRMED}), 0)::numeric(10,2) AS total_quetzales,
          ROUND(COALESCE(AVG(s.amount) FILTER (WHERE ${CONFIRMED}), 0), 2)::numeric(10,2) AS ticket_promedio,
          COUNT(*) FILTER (WHERE s.status = 'revisar')::int AS por_revisar,
+         COUNT(*) FILTER (WHERE ${POR_VALIDAR})::int AS por_validar,
+         COALESCE(SUM(s.amount) FILTER (WHERE ${POR_VALIDAR}), 0)::numeric(10,2) AS por_validar_total,
          ${SHIFT_BUCKETS}
        FROM sales s
        WHERE true ${advisorFilterSql}
@@ -275,6 +280,8 @@ router.get('/by-advisor', async (req, res, next) => {
           total_quetzales: '0.00',
           ticket_promedio: '0.00',
           por_revisar: 0,
+          por_validar: 0,
+          por_validar_total: '0.00',
           turno_manana: '0.00',
           turno_tarde: '0.00',
           turno_domingo: '0.00',
@@ -303,6 +310,8 @@ router.get('/by-advisor', async (req, res, next) => {
         totalQuetzales: total,
         ticketPromedio: Number(a.ticket_promedio),
         porRevisar: Number(a.por_revisar),
+        porValidar: Number(a.por_validar),
+        porValidarTotal: Number(a.por_validar_total),
         turnos: {
           manana: Number(a.turno_manana),
           tarde: Number(a.turno_tarde),
@@ -367,6 +376,8 @@ router.get('/by-advisor', async (req, res, next) => {
          s.receipt_amount,
          s.amount_match,
          s.channel,
+         s.amount_basis,
+         s.amount_validated_at,
          c.full_name AS customer_name,
          c.whatsapp_number AS customer_phone
        FROM sales s
@@ -417,6 +428,8 @@ router.get('/by-advisor', async (req, res, next) => {
         receiptAmount: t.receipt_amount ? Number(t.receipt_amount) : null,
         amountMatch: t.amount_match,
         channel: t.channel || 'whatsapp',
+        amountBasis: t.amount_basis || null,
+        validated: !!t.amount_validated_at,
         createdAt: t.created_at,
       })),
       generatedAt: new Date().toISOString(),
@@ -655,6 +668,29 @@ router.get('/daily-breakdown', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/sales/:id/validate-amount { amount? }
+// Un supervisor o administrador confirma que el monto de una venta (inferido del último precio
+// aprobado por el cliente) coincide con lo depositado y validado en el banco; puede corregirlo.
+router.post('/:id/validate-amount', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const { rows: existing } = await pool.query('SELECT * FROM sales WHERE id = $1', [req.params.id]);
+    if (!existing.length) return res.status(404).json({ error: 'Venta no encontrada' });
+    const sale = existing[0];
+    const given = req.body?.amount;
+    const amount = given === undefined || given === null || given === '' ? Number(sale.amount) : Number(given);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) return res.status(400).json({ error: 'El monto debe estar entre Q1 y Q10,000' });
+    const { rows } = await pool.query(
+      `UPDATE sales SET amount = $2, status = CASE WHEN advisor_id IS NOT NULL OR advisor_name <> 'Sin atribuir' THEN 'confirmada' ELSE status END,
+              amount_validated_by = $3, amount_validated_at = now(), updated_at = now()
+       WHERE id = $1 RETURNING *`,
+      [sale.id, amount, req.user.id]
+    );
+    logBusinessAction(req.user, sale.customer_id, 'sale_updated',
+      `Monto validado Q${amount.toFixed(2)}${amount !== Number(sale.amount) ? ` (antes Q${Number(sale.amount).toFixed(2)})` : ''} por ${req.user.fullName || req.user.username}`);
+    res.json({ id: rows[0].id, amount: Number(rows[0].amount), validatedAt: rows[0].amount_validated_at });
+  } catch (err) { next(err); }
 });
 
 // GET /api/sales/audit?from=YYYY-MM-DD&to=YYYY-MM-DD[&lineId=]

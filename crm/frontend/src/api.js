@@ -916,3 +916,14 @@ export async function crossCheckSalesNotebook(entries) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo contrastar con el cuaderno');
   return (await res.json()).results;
 }
+
+// Un supervisor o administrador confirma (y puede corregir) el monto inferido del último precio aprobado.
+export async function validateSaleAmount(saleId, amount) {
+  const res = await apiFetch(`/api/sales/${saleId}/validate-amount`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo validar el monto');
+  return res.json();
+}

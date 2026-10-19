@@ -7,7 +7,8 @@ import { compressPdfBuffer } from '../pdfCompression.js';
 import { cleanSessionId, findConversationThread, getDefaultLineId } from './conversations.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { logBusinessAction } from '../auditLog.js';
-import { extractText, receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
+import { receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from '../ocrPayment.js';
+import { extractDocumentText, isPaymentVoucher } from '../ocrDocument.js';
 import { getSetting } from './settings.js';
 import { recordSaleFromReceipt } from '../salesAttribution.js';
 
@@ -34,7 +35,17 @@ async function confirmAutoPayment(customerId, paidMethod, detailNote, amount = n
 
     // La venta nace del comprobante (su fecha, su monto y la asesora que atendía en ese
     // momento) — ver salesAttribution.js.
-    if (messageId) await recordSaleFromReceipt({ messageId, amount: amount ? Number(amount) : null, paymentMethod: paidMethod });
+    if (messageId) {
+      // El motor lee el monto del propio mensaje; si el OCR no lo guardó (se confirmó contra lo cotizado), se guarda aquí.
+      if (amount) {
+        await pool.query(
+          `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric))
+           WHERE id = $1 AND (message->'additional_kwargs'->>'ocrAmount') IS NULL`,
+          [messageId, Number(amount)]
+        );
+      }
+      await recordSaleFromReceipt({ messageId, amount: amount ? Number(amount) : null });
+    }
     return true;
   }
   return false;
@@ -192,15 +203,23 @@ inboundRouter.post('/', async (req, res, next) => {
     // link). Safe to scope down to just "caliente y sin pagar" now that receiptContainsAmount
     // (ocrPayment.js) itself requires real receipt vocabulary AND a matching amount before
     // anything gets auto-confirmed — a photo of a garment or size chart still won't match.
-    if (kind === 'image') {
-      await processInboundImageOcr({ buffer, phone, inboundMessageId });
+    // Imagen o PDF: se lee en segundo plano y de uno en uno (varias fotos juntas no deben frenar el CRM);
+    // el cliente no espera a que termine.
+    if (kind === 'image' || mimeType === 'application/pdf') {
+      queueOcr(() => processInboundImageOcr({ buffer, phone, inboundMessageId, mimeType: storedMimeType }));
     }
 
     res.status(201).json({ attachmentId, sessionId: cleanSessionId(sessionId) });
   } catch (err) { next(err); }
 });
 
-export async function processInboundImageOcr({ buffer, phone, inboundMessageId }) {
+let ocrChain = Promise.resolve();
+function queueOcr(job) {
+  ocrChain = ocrChain.then(job).catch((err) => console.error('inbound OCR failed', err));
+  return ocrChain;
+}
+
+export async function processInboundImageOcr({ buffer, phone, inboundMessageId, mimeType = 'image/jpeg' }) {
   const contextHours = await getSetting('ocr_context_hours', 3);
   const extraReceiptKeywords = await getSetting('extra_receipt_keywords', []);
   const { rows: gated } = await pool.query(
@@ -232,17 +251,24 @@ export async function processInboundImageOcr({ buffer, phone, inboundMessageId }
     ? parseAmount(priceMatches[priceMatches.length - 1].replace(/^Q\s?/, ''))
     : null;
 
-  const ocrText = await extractText(buffer).catch((err) => {
+  const ocrText = await extractDocumentText(buffer, mimeType).catch((err) => {
     console.error('receipt OCR failed', err);
     return '';
   });
+  // El voucher "Aprobada" de NeoLink no trae monto pero prueba que el pago con link se aprobó.
+  if (isPaymentVoucher(ocrText)) {
+    await pool.query(
+      `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrVoucher}', 'true'::jsonb) WHERE id = $1`,
+      [inboundMessageId]
+    );
+  }
   const ocrSnippet = ocrText.replace(/\s+/g, ' ').trim().slice(0, 160);
   const ocrAmount = extractReceiptAmount(ocrText, extraReceiptKeywords);
 
   if (ocrAmount != null && ocrAmount > 0 && ocrAmount <= 10000) {
     await pool.query(
-      `UPDATE n8n_chat_histories SET message = jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)) WHERE id = $1`,
-      [inboundMessageId, ocrAmount]
+      `UPDATE n8n_chat_histories SET message = jsonb_set(jsonb_set(message, '{additional_kwargs,ocrAmount}', to_jsonb($2::numeric)), '{additional_kwargs,ocrKind}', to_jsonb($3::text)) WHERE id = $1`,
+      [inboundMessageId, ocrAmount, mimeType === 'application/pdf' ? 'pdf' : 'imagen']
     );
   }
 

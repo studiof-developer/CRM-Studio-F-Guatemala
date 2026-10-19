@@ -7,7 +7,7 @@ import {
   Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount } from '../api.js';
 import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
@@ -193,6 +193,21 @@ export default function SalesAdvisorDashboard() {
       alert(err.message);
     } finally {
       setEditBusy(false);
+    }
+  }
+
+  // El pago por link no deja el monto en el chat: se usó el último precio aprobado por el cliente y
+  // un supervisor/administrador confirma que coincide con lo depositado (o lo corrige).
+  async function handleValidateAmount(t) {
+    const input = window.prompt(`Confirma el monto realmente depositado/validado en el banco (Q).\nMonto actual: Q${Number(t.amount).toFixed(2)}`, String(t.amount));
+    if (input === null) return;
+    const amount = Number(String(input).replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) { alert('Escribe un monto válido.'); return; }
+    try {
+      await validateSaleAmount(t.id, amount);
+      loadData();
+    } catch (err) {
+      alert(err.message);
     }
   }
 
@@ -1054,6 +1069,9 @@ export default function SalesAdvisorDashboard() {
                                   .join(' · ')}
                               </div>
                             )}
+                            {a.porValidar > 0 && (
+                              <div className="mt-0.5 text-[10px] font-normal text-warning">Q{Math.round(a.porValidarTotal).toLocaleString('es-GT')} por validar ({a.porValidar})</div>
+                            )}
                           </td>
                           <td className="py-3 text-right font-medium text-ink">
                             Q {a.ticketPromedio.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
@@ -1247,6 +1265,18 @@ export default function SalesAdvisorDashboard() {
                               >
                                 <Pencil size={11} />
                               </button>
+                            </div>
+                          )}
+                          {t.amountBasis === 'precio_aprobado' && (
+                            <div className="mt-1 flex items-center gap-1">
+                              {t.validated ? (
+                                <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">Monto validado</span>
+                              ) : (
+                                <>
+                                  <span title="El pago por link no trae monto: se usó el último precio aprobado por el cliente" className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
+                                  <button type="button" onClick={() => handleValidateAmount(t)} className="rounded-lg border border-line px-2 py-0.5 text-[10px] font-semibold text-ink hover:bg-muted">Validar</button>
+                                </>
+                              )}
                             </div>
                           )}
                         </td>
@@ -1454,6 +1484,18 @@ export default function SalesAdvisorDashboard() {
                               ) : (
                                 <span>—</span>
                               )}
+                              {t.amountBasis === 'precio_aprobado' && (
+                                <div className="mt-1 flex items-center gap-1">
+                                  {t.validated ? (
+                                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">Monto validado</span>
+                                  ) : (
+                                    <>
+                                      <span title="El pago por link no trae monto: se usó el último precio aprobado por el cliente" className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
+                                      <button type="button" onClick={() => handleValidateAmount(t)} className="rounded-lg border border-line px-2 py-0.5 text-[10px] font-semibold text-ink hover:bg-muted">Validar</button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             <td className="py-2.5 whitespace-nowrap">
                               {renderStatusBadge(t.status)}
@@ -1499,12 +1541,15 @@ export default function SalesAdvisorDashboard() {
   sin_venta: ['Falta la venta', 'bg-danger/10 text-danger'],
   asesor_distinto: ['Asesora distinta', 'bg-warning/15 text-warning'],
   fecha_distinta: ['Fecha distinta', 'bg-warning/15 text-warning'],
+  monto_distinto: ['Monto distinto', 'bg-warning/15 text-warning'],
+  confirmacion_pendiente: ['Lista para confirmar', 'bg-success/10 text-success'],
+  sin_contexto: ['Sin medios de pago ni confirmación', 'bg-secondary text-greige-ink'],
   sin_evidencia: ['Sin comprobante', 'bg-danger/10 text-danger'],
   reenviado: ['Comprobante reenviado', 'bg-secondary text-greige-ink'],
   bloqueada: ['Bloqueada (calibrada a mano)', 'bg-secondary text-greige-ink'],
   historico_bloqueado: ['Histórico (antes del 16/10)', 'bg-secondary text-greige-ink'],
 };
-        const NEEDS_ACTION = ['sin_venta', 'asesor_distinto', 'fecha_distinta', 'sin_evidencia'];
+        const NEEDS_ACTION = ['sin_venta', 'asesor_distinto', 'fecha_distinta', 'monto_distinto', 'confirmacion_pendiente', 'sin_evidencia'];
         const rows = (auditData.items || []).filter((i) => (auditTab === 'corregir' ? NEEDS_ACTION.includes(i.status) : true));
         const pending = Object.values(auditData.plan || {}).reduce((a, b) => a + b, 0);
         const fmtDate = (d) => new Date(d).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -1581,7 +1626,7 @@ export default function SalesAdvisorDashboard() {
                   {auditData.applied
                     ? <span className="font-semibold text-success">Correcciones aplicadas. Las ventas sin comprobante quedaron "por revisar" (no suman al total).</span>
                     : pending > 0
-                      ? <span>Al aplicar: <strong>{auditData.plan.insertar}</strong> ventas nuevas · <strong>{auditData.plan.reasignar}</strong> reasignadas · <strong>{auditData.plan.marcarRevisar}</strong> pasan a "por revisar". No se borra nada.</span>
+                      ? <span>Al aplicar: <strong>{auditData.plan.insertar}</strong> ventas nuevas · <strong>{auditData.plan.reasignar}</strong> corregidas · <strong>{auditData.plan.promover}</strong> se confirman · <strong>{auditData.plan.marcarRevisar}</strong> pasan a "por revisar". No se borra nada.</span>
                       : <span>No hay nada que corregir.</span>}
                 </div>
                 <div className="flex items-center gap-2">

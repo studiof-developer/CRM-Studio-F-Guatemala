@@ -9,6 +9,9 @@ const ISSUE_LABEL = {
   monto_distinto_a_cotizacion: 'Monto distinto a lo cotizado',
   varias_asesoras: 'Varias asesoras en la venta',
   sin_asesora: 'Sin asesora',
+  sin_prueba_del_cliente: 'Sin prueba del cliente en el chat',
+  monto_por_validar: 'Monto por validar (precio aprobado)',
+  precio_sin_aprobacion_del_cliente: 'Precio sin aprobación explícita del cliente',
 };
 const SHIFT_LABEL = { manana: 'Mañana', tarde: 'Tarde', domingo: 'Domingo', fuera_de_turno: 'Fuera de turno' };
 const VERDICT = {
@@ -69,6 +72,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
   const [starting, setStarting] = useState(false);
   const [advisorFilter, setAdvisorFilter] = useState('');
   const [issueFilter, setIssueFilter] = useState('');
+  const [verifiedFilter, setVerifiedFilter] = useState('');
   const [notebookText, setNotebookText] = useState(NOTEBOOK_SEED);
   const [notebook, setNotebook] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -119,7 +123,8 @@ export default function SalesAnalysisModal({ open, onClose }) {
   const result = run?.status === 'done' ? run.result : null;
   const rows = useMemo(() => (result?.rows ?? []).filter((r) =>
     (!advisorFilter || (r.advisor ?? 'Sin atribuir') === advisorFilter) && (!issueFilter || r.issues.includes(issueFilter))
-  ), [result, advisorFilter, issueFilter]);
+    && (!verifiedFilter || (verifiedFilter === 'verificadas') === r.verified)
+  ), [result, advisorFilter, issueFilter, verifiedFilter]);
 
   function exportExcel() {
     const wb = XLSX.utils.book_new();
@@ -128,12 +133,15 @@ export default function SalesAnalysisModal({ open, onClose }) {
       ...result.byAdvisor.map((a) => [a.advisor, a.ventas, a.total, a.sinMonto, a.porTurno.manana ?? 0, a.porTurno.tarde ?? 0, a.porTurno.domingo ?? 0, a.porMedio.link ?? 0, a.porMedio.transferencia ?? 0]),
     ]), 'Por asesora');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Fecha', 'Turno', 'Cliente', 'Teléfono', 'Últimos 4', 'Línea', 'Tipo', 'Monto (Q)', 'Cotizado (Q)', 'Asesora', 'Regla', 'Dio medios de pago', 'Medio', 'Atendieron', 'Alertas'],
-      ...result.rows.map((r) => [fmtDate(r.at), SHIFT_LABEL[r.shift] ?? r.shift, r.customer, r.phone, r.last4, r.line, r.type, r.amount ?? '', r.quote ?? '', r.advisor ?? '', r.rule ?? '', r.paymentInfoBy ?? '', r.medium ?? '', r.touchedBy.join(', '), r.issues.map((i) => ISSUE_LABEL[i] ?? i).join('; ')]),
+      ['Fecha', 'Turno', 'Cliente', 'Teléfono', 'Últimos 4', 'Línea', 'Estado', 'Prueba', 'Base del monto', 'Monto (Q)', 'Cotizado (Q)', 'Asesora', 'Regla', 'Dio medios de pago', 'Confirmó', 'Medio', 'Atendieron', 'Alertas'],
+      ...result.rows.map((r) => [fmtDate(r.at), SHIFT_LABEL[r.shift] ?? r.shift, r.customer, r.phone, r.last4, r.line, r.verified ? 'Verificada' : 'Pendiente de confirmar', `${r.type === 'comprobante' ? 'Comprobante' : 'Confirmación'}${r.via ? ` (${r.via})` : ''}${r.voucher ? ' + voucher' : ''}`, r.amountBasis === 'precio_aprobado' ? 'Último precio aprobado por el cliente (por validar)' : (r.amountBasis === 'comprobante' ? `Leído de ${r.via ?? 'comprobante'}` : ''), r.amount ?? '', r.quote ?? '', r.advisor ?? '', r.rule ?? '', r.paymentInfoBy ?? '', r.confirmedBy ?? '', r.medium ?? '', r.touchedBy.join(', '), r.issues.map((i) => ISSUE_LABEL[i] ?? i).join('; ')]),
     ]), 'Ventas');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Cliente', 'Teléfono', 'Estado actual'], ...result.withoutEvidence.map((c) => [c.customer, c.phone, c.currentStatus]),
     ]), 'Pagados sin evidencia');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Fecha', 'Cliente', 'Teléfono', 'Monto leído (Q)', 'Motivo'], ...(result.orphans ?? []).map((o) => [fmtDate(o.at), o.customer, o.phone, o.amount ?? '', 'Llegó sin medios de pago previos ni confirmación de la asesora']),
+    ]), 'Pruebas sin contexto');
     XLSX.writeFile(wb, `analisis_chats_vendidos_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
@@ -220,19 +228,19 @@ export default function SalesAnalysisModal({ open, onClose }) {
             <p className="py-16 text-center text-sm text-greige-ink">{running ? 'Esperando el resultado…' : 'Aún no hay un análisis. Pulsa "Analizar todos los chats".'}</p>
           ) : tab === 'resumen' ? (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {[['Clientes analizados', result.customersAnalyzed], ['Ventas reconstruidas', result.ventas], ['Total reconstruido', fmtQ(result.totalQuetzales)], ['Pagados sin evidencia en el chat', result.clientesSinEvidencia]].map(([l, v]) => (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                {[['Clientes analizados', result.customersAnalyzed], ['Ventas verificadas por la asesora', result.ventas], ['Total verificado', fmtQ(result.totalQuetzales)], ['Pendientes de confirmar', result.ventasPendientes], ['Pagados sin evidencia en el chat', result.clientesSinEvidencia]].map(([l, v]) => (
                   <div key={l} className="rounded-xl border border-line p-3"><p className="text-[11px] text-greige-ink">{l}</p><p className="mt-1 text-lg font-bold text-ink">{v}</p></div>
                 ))}
               </div>
               <table className="w-full text-left">
-                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">Ventas</th><th className="py-2 text-right">Total</th><th className="py-2 text-right">Mañana</th><th className="py-2 text-right">Tarde</th><th className="py-2 text-right">Domingo</th><th className="py-2 text-right">Link</th><th className="py-2 text-right">Transf.</th><th className="py-2 text-right">Sin monto</th></tr></thead>
+                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">Ventas</th><th className="py-2 text-right">Total</th><th className="py-2 text-right">Mañana</th><th className="py-2 text-right">Tarde</th><th className="py-2 text-right">Domingo</th><th className="py-2 text-right">Link</th><th className="py-2 text-right">Transf.</th><th className="py-2 text-right">Sin monto</th><th className="py-2 text-right">Pend.</th><th className="py-2 text-right">Por validar</th></tr></thead>
                 <tbody>
                   {result.byAdvisor.map((a) => (
                     <tr key={a.advisor} className="border-b border-line-soft">
                       <td className="py-2 font-semibold text-ink">{a.advisor}</td><td className="py-2 text-right">{a.ventas}</td><td className="py-2 text-right font-semibold text-success">{fmtQ(a.total)}</td>
                       <td className="py-2 text-right">{fmtQ(a.porTurno.manana ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.tarde ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.domingo ?? 0)}</td>
-                      <td className="py-2 text-right">{a.porMedio.link ?? 0}</td><td className="py-2 text-right">{a.porMedio.transferencia ?? 0}</td><td className="py-2 text-right">{a.sinMonto || '—'}</td>
+                      <td className="py-2 text-right">{a.porMedio.link ?? 0}</td><td className="py-2 text-right">{a.porMedio.transferencia ?? 0}</td><td className="py-2 text-right">{a.sinMonto || '—'}</td><td className="py-2 text-right text-warning">{a.pendientes || '—'}</td><td className="py-2 text-right text-warning">{a.porValidar ? `${a.porValidar} (${fmtQ(a.porValidarTotal)})` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -240,7 +248,7 @@ export default function SalesAnalysisModal({ open, onClose }) {
               <div>
                 <p className="mb-2 font-semibold text-ink">Calidad de los datos (qué no se pudo comprobar en el chat)</p>
                 <ul className="grid gap-1.5 md:grid-cols-2">
-                  {[['Ventas sin medios de pago en el chat', result.quality.sinMediosDePagoEnChat], ['Ventas sin monto leído', result.quality.montoNoLeido], ['Monto distinto a lo cotizado', result.quality.montoDistintoACotizacion], ['Ventas con varias asesoras', result.quality.variasAsesoras], ['Ventas sin asesora', result.quality.sinAsesora], ['Imágenes del cliente sin monto leído', result.quality.imagenesSinMonto], ['Comprobantes reenviados (no duplican)', result.comprobantesReenviados]].map(([l, v]) => (
+                  {[['Pruebas pendientes de confirmar por la asesora', result.quality.pendientesDeConfirmar], ['Montos por validar (último precio aprobado, sin monto en el chat)', result.quality.montoPorValidar], ['Precio sin aprobación explícita del cliente', result.quality.precioSinAprobacion], ['Pruebas descartadas: sin medios de pago ni confirmación', result.quality.comprobantesSinContexto], ['Pagos por link sin prueba del cliente', result.quality.sinPruebaDelCliente], ['Ventas sin medios de pago en el chat', result.quality.sinMediosDePagoEnChat], ['Ventas sin monto leído', result.quality.montoNoLeido], ['Monto distinto a lo cotizado', result.quality.montoDistintoACotizacion], ['Ventas con varias asesoras', result.quality.variasAsesoras], ['Ventas sin asesora', result.quality.sinAsesora], ['Imágenes del cliente sin monto leído', result.quality.imagenesSinMonto], ['Comprobantes reenviados (no duplican)', result.comprobantesReenviados]].map(([l, v]) => (
                     <li key={l} className="flex justify-between rounded-lg bg-secondary px-3 py-1.5"><span className="text-greige-ink">{l}</span><strong className="text-ink">{v}</strong></li>
                   ))}
                 </ul>
@@ -252,6 +260,11 @@ export default function SalesAnalysisModal({ open, onClose }) {
                 <select value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
                   <option value="">Todas las asesoras</option>
                   {result.byAdvisor.map((a) => <option key={a.advisor} value={a.advisor}>{a.advisor}</option>)}
+                </select>
+                <select value={verifiedFilter} onChange={(e) => setVerifiedFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
+                  <option value="">Verificadas y pendientes</option>
+                  <option value="verificadas">Solo verificadas</option>
+                  <option value="pendientes">Solo pendientes de confirmar</option>
                 </select>
                 <select value={issueFilter} onChange={(e) => setIssueFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
                   <option value="">Todas las alertas</option>
@@ -265,8 +278,9 @@ export default function SalesAnalysisModal({ open, onClose }) {
                   {rows.slice(0, 500).map((r, i) => (
                     <tr key={i} className="border-b border-line-soft align-top">
                       <td className="whitespace-nowrap py-2 pr-2 text-ink">{fmtDate(r.at)}<div className="text-[10px] text-greige-ink">{SHIFT_LABEL[r.shift] ?? r.shift}</div></td>
-                      <td className="py-2 pr-2 text-ink">{r.customer}<div className="text-[10px] text-greige-ink">…{r.last4} · {r.type === 'comprobante' ? 'comprobante' : 'confirmación'}</div></td>
-                      <td className="whitespace-nowrap py-2 pr-2 text-right font-semibold text-ink">{fmtQ(r.amount)}<div className="text-[10px] font-normal text-greige-ink">{r.medium ?? ''}</div></td>
+                      <td className="py-2 pr-2 text-ink">{r.customer}<div className="text-[10px] text-greige-ink">…{r.last4} · {r.type === 'comprobante' ? 'comprobante' : 'confirmación'}{r.via ? ` (${r.via})` : ''}{r.voucher ? ' + voucher' : ''}</div>
+                        <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.verified ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning'}`}>{r.verified ? `Verificada${r.confirmedBy ? ` · ${r.confirmedBy}` : ''}` : 'Pendiente de confirmar'}</span></td>
+                      <td className="whitespace-nowrap py-2 pr-2 text-right font-semibold text-ink">{fmtQ(r.amount)}<div className="text-[10px] font-normal text-greige-ink">{[r.medium, r.amountBasis === 'precio_aprobado' ? 'precio aprobado · por validar' : (r.via ? `leído de ${r.via}` : null)].filter(Boolean).join(' · ')}</div></td>
                       <td className="py-2 pr-2 text-ink">{r.advisor ?? '—'}<div className="text-[10px] text-greige-ink">{(r.rule ?? '').replace(/_/g, ' ')}</div></td>
                       <td className="py-2 pr-2 text-ink">{r.paymentInfoBy ?? '—'}</td>
                       <td className="py-2 text-[10px] text-warning">{r.issues.map((x) => ISSUE_LABEL[x] ?? x).join(' · ')}</td>
