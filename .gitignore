@@ -4,3 +4,6 @@ node_modules/
 crm/frontend/dist/
 *.xlsx
 ~$*.xlsx
+
+# Exportaciones de chats de clientes para revisión manual (datos personales: nunca al repositorio)
+exports/

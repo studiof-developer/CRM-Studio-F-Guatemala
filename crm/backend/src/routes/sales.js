@@ -5,6 +5,7 @@ import { requireRole } from '../auth.js';
 import { auditSales, rebuildSales } from '../salesAttribution.js';
 import { startAnalysisRun, getAnalysisRun, crossCheckNotebook } from '../salesAnalysis.js';
 import { computeClose, saveClose, listCloses, getClose } from '../salesClose.js';
+import { exportChats } from '../salesChatExport.js';
 
 const router = Router();
 
@@ -765,6 +766,22 @@ router.get('/closes/:id', requireRole('admin', 'supervisor'), async (req, res, n
     if (!close) return res.status(404).json({ error: 'Cierre no encontrado' });
     res.json(close);
   } catch (err) { next(err); }
+});
+
+// Exporta (texto plano) los chats de los clientes en Pagado / Por despacho del período, con lo que leyó el motor y lo
+// registrado en el CRM, para revisarlos a mano. Se escribe por partes: con cientos de chats no cabe en una sola respuesta.
+router.get('/export-chats', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  const { from, to } = req.query;
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  if (!ymd.test(from ?? '') || !ymd.test(to ?? '')) return res.status(400).json({ error: 'Usa fechas AAAA-MM-DD (desde y hasta)' });
+  try {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="chats_pagados_despacho_${from}_${to}.txt"`);
+    await exportChats({ from, to, write: (s) => res.write(s) });
+    res.end();
+  } catch (err) {
+    if (res.headersSent) { res.write(`\nERROR: ${err.message}\n`); res.end(); } else next(err);
+  }
 });
 
 router.post('/analysis/notebook', requireRole('admin', 'supervisor'), async (req, res, next) => {

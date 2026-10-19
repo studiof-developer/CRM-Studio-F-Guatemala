@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, RefreshCw, Download, Play, ClipboardList } from 'lucide-react';
-import { startSalesAnalysis, fetchSalesAnalysis, crossCheckSalesNotebook } from '../api.js';
+import { startSalesAnalysis, fetchSalesAnalysis, crossCheckSalesNotebook, downloadSalesChatExport } from '../api.js';
+import { guatemalaToday } from '../lib/pipelinePeriod.js';
 
 const ISSUE_LABEL = {
   sin_medios_de_pago_en_chat: 'Sin medios de pago recientes (24 h) en el chat',
@@ -78,6 +79,9 @@ export default function SalesAnalysisModal({ open, onClose }) {
   const [notebookText, setNotebookText] = useState(NOTEBOOK_SEED);
   const [notebook, setNotebook] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [exportFrom, setExportFrom] = useState(() => `${guatemalaToday().slice(0, 8)}01`);
+  const [exportTo, setExportTo] = useState(() => guatemalaToday());
+  const [exporting, setExporting] = useState(false);
   const timer = useRef(null);
 
   const load = async (id = 'latest') => {
@@ -114,6 +118,11 @@ export default function SalesAnalysisModal({ open, onClose }) {
       const { id } = await startSalesAnalysis();
       await load(id);
     } catch (err) { setError(err.message); } finally { setStarting(false); }
+  }
+
+  async function exportChats() {
+    setExporting(true); setError(null);
+    try { await downloadSalesChatExport(exportFrom, exportTo); } catch (err) { setError(err.message); } finally { setExporting(false); }
   }
 
   async function checkNotebook() {
@@ -200,6 +209,15 @@ export default function SalesAnalysisModal({ open, onClose }) {
             <p className="mt-1 text-[11px] text-greige-ink">Puede tardar bastante y usa CPU del servidor: conviene correrlo fuera del horario de las asesoras. Puedes cerrar esta ventana: el análisis sigue en el servidor.</p>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-2 text-xs text-greige-ink">
+          <span className="font-semibold text-ink">Exportar los chats de Pagado / Por despacho (.txt) para revisarlos a mano:</span>
+          <label className="flex items-center gap-1">Desde <input type="date" value={exportFrom} max={exportTo} onChange={(e) => setExportFrom(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink" /></label>
+          <label className="flex items-center gap-1">Hasta <input type="date" value={exportTo} min={exportFrom} onChange={(e) => setExportTo(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink" /></label>
+          <button type="button" onClick={exportChats} disabled={exporting || !exportFrom || !exportTo} className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-1 font-semibold text-ink hover:bg-muted disabled:opacity-50">
+            {exporting ? <RefreshCw size={12} className="animate-spin" /> : <Download size={12} />}<span>{exporting ? 'Exportando…' : 'Exportar chats'}</span>
+          </button>
+        </div>
 
         <div className="flex gap-1 border-b border-line px-5 py-2 text-xs font-semibold">
           {[['resumen', 'Resumen por asesora'], ['comparar', 'Comparar con el CRM'], ['ventas', 'Ventas reconstruidas'], ['cuaderno', 'Contrastar con cuadernos']].map(([k, label]) => (

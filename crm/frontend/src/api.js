@@ -919,6 +919,20 @@ export async function crossCheckSalesNotebook(entries) {
   return (await res.json()).results;
 }
 
+// Descarga (.txt) los chats de Pagado / Por despacho del período, con lo que leyó el motor, para revisarlos a mano.
+export async function downloadSalesChatExport(from, to) {
+  const res = await apiFetch(`/api/sales/export-chats?from=${from}&to=${to}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo exportar los chats');
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `chats_pagados_despacho_${from}_${to}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Cierre del día: lo pagado y lo pendiente de cada asesora hasta una hora de corte (HH:MM, hora de Guatemala).
 export async function fetchSalesClose(date, asOf) {
   const qs = new URLSearchParams({ date, ...(asOf ? { asOf } : {}) });
