@@ -42,9 +42,9 @@ export default function SalesCloseModal({ open, onClose }) {
   function exportExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Asesora', 'Pagado (Q)', 'Ventas pagadas', 'De eso, por validar (Q)', 'Comprobantes sin confirmar', 'Pendiente (Q)', 'Ventas pendientes', 'Pendientes sin monto', 'Solo medios enviados', 'Registrado en el CRM (Q)', 'Diferencia (Q)'],
-      ...result.advisors.map((a) => [a.advisor, a.pagado, a.pagadoN, a.porValidar, a.sinConfirmarN, a.pendiente, a.pendienteN, a.pendienteSinMontoN, a.soloMediosN, a.registrado, a.diferencia]),
-      ['TOTAL', result.totals.pagado, result.totals.pagadoN, result.totals.porValidar, result.totals.sinConfirmarN, result.totals.pendiente, result.totals.pendienteN, result.totals.pendienteSinMontoN, result.totals.soloMediosN, result.totals.registrado, result.totals.diferencia],
+      ['Asesora', 'Pagado (Q)', 'Ventas pagadas', 'Mañana (Q)', 'Tarde (Q)', 'Domingo (Q)', 'Fuera de turno (Q)', 'De eso, por validar (Q)', 'Comprobantes sin confirmar', 'Pendiente (Q)', 'Ventas pendientes', 'Pendientes sin monto', 'Solo medios enviados', 'Registrado en el CRM (Q)', 'Diferencia (Q)'],
+      ...result.advisors.map((a) => [a.advisor, a.pagado, a.pagadoN, a.manana, a.tarde, a.domingo, a.fueraDeTurno, a.porValidar, a.sinConfirmarN, a.pendiente, a.pendienteN, a.pendienteSinMontoN, a.soloMediosN, a.registrado, a.diferencia]),
+      ['TOTAL', result.totals.pagado, result.totals.pagadoN, result.totals.manana, result.totals.tarde, result.totals.domingo, result.totals.fueraDeTurno, result.totals.porValidar, result.totals.sinConfirmarN, result.totals.pendiente, result.totals.pendienteN, result.totals.pendienteSinMontoN, result.totals.soloMediosN, result.totals.registrado, result.totals.diferencia],
     ]), 'Resumen');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Hora', 'Asesora', 'Cliente', 'Últimos 4', 'Monto (Q)', 'Medio', 'Base del monto', 'Confirmó', 'Dio medios de pago'],
@@ -133,7 +133,7 @@ export default function SalesCloseModal({ open, onClose }) {
                   {result.advisors.map((a) => (
                     <tr key={a.advisor} onClick={() => setOpenAdvisor(openAdvisor === a.advisor ? null : a.advisor)} className="cursor-pointer border-b border-line-soft hover:bg-secondary/50">
                       <td className="py-2 font-semibold text-ink">{a.advisor}</td>
-                      <td className="py-2 text-right font-semibold text-success">{fmtQ(a.pagado)} <span className="text-[10px] font-normal text-greige-ink">({a.pagadoN})</span></td>
+                      <td className="py-2 text-right font-semibold text-success">{fmtQ(a.pagado)} <span className="text-[10px] font-normal text-greige-ink">({a.pagadoN})</span><div className="text-[10px] font-normal text-greige-ink">{[a.manana > 0 && `Mañana ${fmtQ(a.manana)}`, a.tarde > 0 && `Tarde ${fmtQ(a.tarde)}`, a.domingo > 0 && `Dom. ${fmtQ(a.domingo)}`, a.fueraDeTurno > 0 && `Fuera de turno ${fmtQ(a.fueraDeTurno)}`].filter(Boolean).join(' · ')}</div></td>
                       <td className="py-2 text-right text-warning">{a.porValidarN ? `${fmtQ(a.porValidar)} (${a.porValidarN})` : '—'}</td>
                       <td className="py-2 text-right text-warning">{a.sinConfirmarN || '—'}</td>
                       <td className="py-2 text-right">{a.pendienteN ? `${fmtQ(a.pendiente)} (${a.pendienteN})` : '—'}{a.pendienteSinMontoN ? <span className="text-[10px] text-greige-ink"> · {a.pendienteSinMontoN} sin monto</span> : null}</td>

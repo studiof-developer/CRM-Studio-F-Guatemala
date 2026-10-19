@@ -17,7 +17,7 @@ export function summarizeClose({ day, asOf, rows, pending, sales }) {
   const get = (name) => {
     const key = name ?? 'Sin atribuir';
     if (!by.has(key)) {
-      by.set(key, { advisor: key, pagado: 0, pagadoN: 0, porValidar: 0, porValidarN: 0, sinConfirmarN: 0, pendiente: 0, pendienteN: 0, pendienteSinMontoN: 0, soloMediosN: 0, registrado: 0, registradoN: 0 });
+      by.set(key, { advisor: key, pagado: 0, pagadoN: 0, manana: 0, tarde: 0, domingo: 0, fueraDeTurno: 0, porValidar: 0, porValidarN: 0, sinConfirmarN: 0, pendiente: 0, pendienteN: 0, pendienteSinMontoN: 0, soloMediosN: 0, registrado: 0, registradoN: 0 });
     }
     return by.get(key);
   };
@@ -31,6 +31,8 @@ export function summarizeClose({ day, asOf, rows, pending, sales }) {
     const a = get(r.advisor);
     const amount = r.amount ?? 0;
     a.pagado += amount; a.pagadoN++;
+    const turno = { manana: 'manana', tarde: 'tarde', domingo: 'domingo' }[r.shift] ?? 'fueraDeTurno';
+    a[turno] += amount;
     if (porValidar(r)) { a.porValidar += amount; a.porValidarN++; }
     if (r.type === 'comprobante' && !r.verified) a.sinConfirmarN++;
     paid.push(r);
@@ -59,7 +61,7 @@ export function summarizeClose({ day, asOf, rows, pending, sales }) {
   const sum = (k) => round2(advisors.reduce((t, a) => t + a[k], 0));
   return {
     day, asOf,
-    totals: Object.fromEntries(['pagado', 'pagadoN', 'porValidar', 'porValidarN', 'sinConfirmarN', 'pendiente', 'pendienteN', 'pendienteSinMontoN', 'soloMediosN', 'registrado', 'registradoN', 'diferencia'].map((k) => [k, sum(k)])),
+    totals: Object.fromEntries(['pagado', 'pagadoN', 'manana', 'tarde', 'domingo', 'fueraDeTurno', 'porValidar', 'porValidarN', 'sinConfirmarN', 'pendiente', 'pendienteN', 'pendienteSinMontoN', 'soloMediosN', 'registrado', 'registradoN', 'diferencia'].map((k) => [k, sum(k)])),
     advisors, paid, pending: pend,
   };
 }

@@ -40,7 +40,7 @@ export function createLazyOcrRunner({ maxReads = Infinity } = {}) {
         [att.id, amount, voucher, snippet]
       );
       await sleep(Math.min(Date.now() - t0, 4000));
-      return { amount, voucher };
+      return { amount, voucher, snippet };
     },
     async close() {
       if (session) await session.close();

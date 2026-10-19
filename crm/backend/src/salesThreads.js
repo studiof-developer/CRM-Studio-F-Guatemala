@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { buildEpisodes, receiptAmountInText, givesPaymentInfo } from './salesRules.js';
+import { buildEpisodes, receiptAmountInText, givesPaymentInfo, isPaymentInfoImageText, PAYMENT_IMAGE_MARKER, PAYINFO_FRESH_MS } from './salesRules.js';
 
 // Carga el hilo de UN cliente en UNA línea y lo convierte en ventas (episodios). Lo usan el
 // motor en vivo, la auditoría y el análisis histórico: una sola definición de "qué es una venta".
@@ -131,12 +131,41 @@ async function applyAttachments(events, ocr) {
   }
 }
 
+// Imágenes que mandó la asesora sin texto (típico: la tarjeta "MEDIOS DE PAGO"). Solo se miran las de las 24 h previas a
+// un comprobante del cliente o al final del hilo (cierre / pendientes): son las que pueden ser los medios de pago de esa
+// compra. Si la imagen dice "medios de pago" o nombra un banco, el evento cuenta como que la asesora dio los medios de pago.
+async function applyAdvisorImages(events, ocr) {
+  const anchors = events.filter((e) => e.role === 'customer' && (e.ocrAmount || e.voucher)).map((e) => +new Date(e.at));
+  if (events.length) anchors.push(+new Date(events[events.length - 1].at));
+  const near = (t) => anchors.some((a) => t <= a && a - t <= PAYINFO_FRESH_MS);
+  const candidates = events.filter((e) => e.role === 'advisor' && e.id > 0 && !givesPaymentInfo(e.text) && near(+new Date(e.at)));
+  if (!candidates.length) return;
+  const { rows } = await pool.query(
+    `SELECT a.id, a.n8n_message_id, a.mime_type, a.file_path, o.snippet, (o.attachment_id IS NOT NULL) AS cached
+     FROM message_attachments a LEFT JOIN attachment_ocr o ON o.attachment_id = a.id
+     WHERE a.n8n_message_id = ANY($1::int[]) AND a.kind = 'image' ORDER BY a.id`,
+    [candidates.map((e) => e.id)]
+  );
+  const byMessage = new Map();
+  for (const r of rows) byMessage.set(Number(r.n8n_message_id), [...(byMessage.get(Number(r.n8n_message_id)) ?? []), r]);
+  for (const e of candidates) {
+    for (const att of (byMessage.get(e.id) ?? []).slice(0, 2)) {
+      let snippet = att.cached ? att.snippet : null;
+      if (!att.cached && ocr) {
+        const read = await ocr.run(att);
+        if (!read.skipped) snippet = read.snippet;
+      }
+      if (isPaymentInfoImageText(snippet)) { e.text = `${e.text ?? ''} ${PAYMENT_IMAGE_MARKER}`.trim(); break; }
+    }
+  }
+}
+
 // Hilo completo (o la ventana from..to) de un cliente en una línea, ya convertido en ventas.
 // asOf = "como estaba el chat a esa hora": solo cuenta lo que ya había ocurrido (comprobantes, confirmaciones, medios de pago).
 export async function buildThread(customer, lineId, { from = new Date(0), to = new Date(Date.now() + DAY), ocr = null, asOf = null } = {}) {
   if (asOf) to = new Date(asOf);
   const events = await loadEvents({ phone: customer.whatsapp_number, customerId: customer.id, lineId, from, to });
-  if (lineId !== null) await applyAttachments(events, ocr);
+  if (lineId !== null) { await applyAttachments(events, ocr); await applyAdvisorImages(events, ocr); }
   // Las cotizaciones formales del Cotizador (la tarjeta PNG con precios) son precios ofrecidos
   // igual que los que la asesora escribe en el chat.
   const { rows: quotes } = await pool.query(

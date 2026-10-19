@@ -25,7 +25,15 @@ export function isConfirmationMessage(text) {
 
 // Entregar medios de pago = dar datos concretos (cuenta, link, "puedes pagar por X").
 // Preguntar "¿cómo quiere pagar?" NO cuenta, igual que en el trigger de Caliente.
-const PAYMENT_INFO_RE = /(n[uú]mero\s+de\s+cuenta|cuenta\s+(monetaria|de\s+ahorros?|corriente)|\bcta\.?\s*(no\.?|#)?\s*\d|https?:\/\/|puedes?\s+pagar\s+(por|con)|a\s+nombre\s+de|banrural|banco\s+industrial|\bbac\b|neolink|\b\d{8,}\b)/i;
+const PAYMENT_INFO_RE = /(n[uú]mero\s+de\s+cuenta|cuenta\s+(monetaria|de\s+ahorros?|corriente)|\bcta\.?\s*(no\.?|#)?\s*\d|https?:\/\/|puedes?\s+pagar\s+(por|con)|a\s+nombre\s+de|banrural|banco\s+industrial|\bbac\b|neolink|\b\d{8,}\b|\[medios-de-pago\])/i;
+
+// Imagen que la asesora manda con los medios de pago (la tarjeta "MEDIOS DE PAGO" con las cuentas): no trae texto en
+// el chat, así que se reconoce por lo que dice la imagen (OCR) y se marca con [medios-de-pago] en el texto del evento.
+const PAYMENT_IMAGE_RE = /(medios\s+de\s+pago|n[uú]mero\s+de\s+cuenta|cuenta\s+monetaria|banrural|banco\s+industrial|\bbac\b|credomatic)/i;
+export const PAYMENT_IMAGE_MARKER = '[medios-de-pago]';
+export function isPaymentInfoImageText(ocrText) {
+  return PAYMENT_IMAGE_RE.test(ocrText ?? '');
+}
 
 export function givesPaymentInfo(text) {
   return PAYMENT_INFO_RE.test(text ?? '');

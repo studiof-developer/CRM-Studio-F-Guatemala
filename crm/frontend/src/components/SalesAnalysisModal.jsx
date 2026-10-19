@@ -131,8 +131,8 @@ export default function SalesAnalysisModal({ open, onClose }) {
   function exportExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Asesora', 'Ventas', 'Total (Q)', 'Sin monto', 'Mañana (Q)', 'Tarde (Q)', 'Domingo (Q)', 'Link', 'Transferencia'],
-      ...result.byAdvisor.map((a) => [a.advisor, a.ventas, a.total, a.sinMonto, a.porTurno.manana ?? 0, a.porTurno.tarde ?? 0, a.porTurno.domingo ?? 0, a.porMedio.link ?? 0, a.porMedio.transferencia ?? 0]),
+      ['Asesora', 'Ventas', 'Total (Q)', 'Sin monto', 'Mañana (Q)', 'Tarde (Q)', 'Domingo (Q)', 'Fuera de turno (Q)', 'Link', 'Transferencia'],
+      ...result.byAdvisor.map((a) => [a.advisor, a.ventas, a.total, a.sinMonto, a.porTurno.manana ?? 0, a.porTurno.tarde ?? 0, a.porTurno.domingo ?? 0, a.porTurno.fuera_de_turno ?? 0, a.porMedio.link ?? 0, a.porMedio.transferencia ?? 0]),
     ]), 'Por asesora');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Fecha', 'Turno', 'Cliente', 'Teléfono', 'Últimos 4', 'Línea', 'Estado', 'Prueba', 'Base del monto', 'Monto (Q)', 'Cotizado (Q)', 'Asesora', 'Regla', 'Dio medios de pago', 'Confirmó', 'Medio', 'Atendieron', 'Alertas'],
@@ -253,12 +253,12 @@ export default function SalesAnalysisModal({ open, onClose }) {
                 ))}
               </div>
               <table className="w-full text-left">
-                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">Ventas</th><th className="py-2 text-right">Total</th><th className="py-2 text-right">Mañana</th><th className="py-2 text-right">Tarde</th><th className="py-2 text-right">Domingo</th><th className="py-2 text-right">Link</th><th className="py-2 text-right">Transf.</th><th className="py-2 text-right">Sin monto</th><th className="py-2 text-right">Pend.</th><th className="py-2 text-right">Por validar</th></tr></thead>
+                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">Ventas</th><th className="py-2 text-right">Total</th><th className="py-2 text-right">Mañana</th><th className="py-2 text-right">Tarde</th><th className="py-2 text-right">Domingo</th><th className="py-2 text-right">Fuera turno</th><th className="py-2 text-right">Link</th><th className="py-2 text-right">Transf.</th><th className="py-2 text-right">Sin monto</th><th className="py-2 text-right">Pend.</th><th className="py-2 text-right">Por validar</th></tr></thead>
                 <tbody>
                   {result.byAdvisor.map((a) => (
                     <tr key={a.advisor} className="border-b border-line-soft">
                       <td className="py-2 font-semibold text-ink">{a.advisor}</td><td className="py-2 text-right">{a.ventas}</td><td className="py-2 text-right font-semibold text-success">{fmtQ(a.total)}</td>
-                      <td className="py-2 text-right">{fmtQ(a.porTurno.manana ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.tarde ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.domingo ?? 0)}</td>
+                      <td className="py-2 text-right">{fmtQ(a.porTurno.manana ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.tarde ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.domingo ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.fuera_de_turno ?? 0)}</td>
                       <td className="py-2 text-right">{a.porMedio.link ?? 0}</td><td className="py-2 text-right">{a.porMedio.transferencia ?? 0}</td><td className="py-2 text-right">{a.sinMonto || '—'}</td><td className="py-2 text-right text-warning">{a.pendientes || '—'}</td><td className="py-2 text-right text-warning">{a.porValidar ? `${a.porValidar} (${fmtQ(a.porValidarTotal)})` : '—'}</td>
                     </tr>
                   ))}
