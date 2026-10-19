@@ -1,3 +1,5 @@
+import fs from 'fs';
+import { createHash } from 'crypto';
 import { pool } from './db.js';
 import { loadEvents, threadLines, analyzeCustomer, nameResolver, defaultLineId } from './salesThreads.js';
 
@@ -15,14 +17,23 @@ const oneLine = (s) => String(s ?? '').replace(/\s*\n\s*/g, ' ⏎ ').trim();
 async function attachmentsByMessage(ids) {
   if (!ids.length) return new Map();
   const { rows } = await pool.query(
-    `SELECT a.n8n_message_id, a.kind, a.mime_type, o.amount, o.voucher, o.snippet, (o.attachment_id IS NOT NULL) AS read
+    `SELECT a.n8n_message_id, a.kind, a.mime_type, a.file_path, o.amount, o.voucher, o.snippet, (o.attachment_id IS NOT NULL) AS read
      FROM message_attachments a LEFT JOIN attachment_ocr o ON o.attachment_id = a.id
      WHERE a.n8n_message_id = ANY($1::int[]) ORDER BY a.id`,
     [ids]
   );
   const map = new Map();
-  for (const r of rows) map.set(Number(r.n8n_message_id), [...(map.get(Number(r.n8n_message_id)) ?? []), r]);
+  for (const r of rows) {
+    // Huella corta del archivo: la misma imagen enviada muchas veces (la tarjeta de medios de pago, una guía de tallas) se
+    // reconoce por tener la misma huella aunque el OCR no la haya leído.
+    r.hash = await fileHash(r.file_path);
+    map.set(Number(r.n8n_message_id), [...(map.get(Number(r.n8n_message_id)) ?? []), r]);
+  }
   return map;
+}
+
+async function fileHash(path) {
+  try { return createHash('sha1').update(await fs.promises.readFile(path)).digest('hex').slice(0, 8); } catch { return null; }
 }
 
 function describeAttachment(a) {
@@ -35,7 +46,7 @@ function describeAttachment(a) {
     if (a.snippet) bits.push(`texto: "${oneLine(a.snippet).slice(0, 110)}"`);
     if (a.amount == null && !a.voucher && !a.snippet) bits.push('el OCR no encontró texto');
   }
-  return `[${kind}: ${bits.join(' · ')}]`;
+  return `[${kind}${a.hash ? ` #${a.hash}` : ''}: ${bits.join(' · ')}]`;
 }
 
 export async function exportChats({ from, to, write }) {
@@ -48,6 +59,14 @@ export async function exportChats({ from, to, write }) {
      FROM customers c
      WHERE c.manual_status IN ('pagado', 'despacho')
         OR EXISTS (SELECT 1 FROM sales s WHERE s.customer_id = c.id AND s.created_at >= $1 AND s.created_at <= $2)
+        -- también los chats donde la asesora mandó medios de pago en el período, aunque el cliente no esté en Pagado /
+        -- Por despacho (ventas pendientes, o pagadas que nadie movió de columna)
+        OR c.whatsapp_number IN (
+          SELECT split_part(h.session_id, '__', 1) FROM n8n_chat_histories h
+          WHERE h.created_at >= $1 AND h.created_at <= $2 AND h.message->>'type' = 'ai'
+            AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+            AND h.message->>'content' ~* '(https?://|neolink|banrural|banco industrial|n[uú]mero de cuenta|a nombre de)'
+        )
      ORDER BY c.id`,
     [start, end]
   );
