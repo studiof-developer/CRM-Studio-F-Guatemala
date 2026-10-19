@@ -192,6 +192,7 @@ export async function confirmSaleByAdvisorMessage({ customerId, user, channel = 
               advisor_id = COALESCE(advisor_id, $3)
        WHERE id = (SELECT id FROM sales WHERE customer_id = $1 AND status = 'revisar' AND amount > 0
                      AND NOT attribution_locked AND created_at >= now() - interval '7 days'
+                     AND COALESCE(notes, '') NOT LIKE '%Sin comprobante ni confirmación%'
                    ORDER BY id DESC LIMIT 1)
        RETURNING *`,
       [customerId, user.fullName, user.id ?? null]
