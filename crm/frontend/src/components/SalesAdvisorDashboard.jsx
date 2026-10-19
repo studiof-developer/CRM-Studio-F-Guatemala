@@ -1545,11 +1545,12 @@ export default function SalesAdvisorDashboard() {
   confirmacion_pendiente: ['Lista para confirmar', 'bg-success/10 text-success'],
   sin_contexto: ['Sin medios de pago ni confirmación', 'bg-secondary text-greige-ink'],
   sin_evidencia: ['Sin comprobante', 'bg-danger/10 text-danger'],
+  duplicada: ['Duplicada', 'bg-danger/10 text-danger'],
   reenviado: ['Comprobante reenviado', 'bg-secondary text-greige-ink'],
   bloqueada: ['Bloqueada (calibrada a mano)', 'bg-secondary text-greige-ink'],
   historico_bloqueado: ['Histórico (antes del 16/10)', 'bg-secondary text-greige-ink'],
 };
-        const NEEDS_ACTION = ['sin_venta', 'asesor_distinto', 'fecha_distinta', 'monto_distinto', 'confirmacion_pendiente', 'sin_evidencia'];
+        const NEEDS_ACTION = ['sin_venta', 'asesor_distinto', 'fecha_distinta', 'monto_distinto', 'confirmacion_pendiente', 'sin_evidencia', 'duplicada'];
         const rows = (auditData.items || []).filter((i) => (auditTab === 'corregir' ? NEEDS_ACTION.includes(i.status) : true));
         const pending = Object.values(auditData.plan || {}).reduce((a, b) => a + b, 0);
         const fmtDate = (d) => new Date(d).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -1609,11 +1610,11 @@ export default function SalesAdvisorDashboard() {
                               {(STATUS[i.status] || [i.status])[0]}
                             </span>
                           </td>
-                          <td className="whitespace-nowrap py-2 pr-3 text-ink">{fmtDate(i.at)}<div className="text-[10px] text-greige-ink">{SHIFT[i.shift] || i.shift}</div></td>
+                          <td className="whitespace-nowrap py-2 pr-3 text-ink">{fmtDate(i.at)}<div className="text-[10px] text-greige-ink">{SHIFT[i.shift] || i.shift}</div>{i.confirmedAt && <div className="text-[10px] text-greige-ink">Confirmó {i.confirmedBy ?? 'la asesora'} · {fmtDate(i.confirmedAt)}</div>}</td>
                           <td className="py-2 pr-3 text-ink">{i.customer}<div className="text-[10px] text-greige-ink">{i.phone}</div></td>
                           <td className="whitespace-nowrap py-2 pr-3 text-right font-semibold text-ink">Q {Number(i.amount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-2 pr-3 text-ink">{i.expectedAdvisor || '—'}{i.rule && <div className="text-[10px] text-greige-ink">{i.rule.replace(/_/g, ' ')}</div>}</td>
-                          <td className="py-2 text-ink">{i.recordedAdvisor || '—'}{i.recordedAt && <div className="text-[10px] text-greige-ink">{fmtDate(i.recordedAt)}</div>}</td>
+                          <td className="py-2 pr-3 text-ink">{i.duplicateOf ? (<>Es la misma venta del {fmtDate(i.duplicateOf.at)}<div className="text-[10px] text-greige-ink">{i.duplicateOf.advisor} · Q {Number(i.duplicateOf.amount).toLocaleString('es-GT', { minimumFractionDigits: 2 })}</div></>) : (<>{i.expectedAdvisor || '—'}{i.rule && <div className="text-[10px] text-greige-ink">{i.rule.replace(/_/g, ' ')}</div>}{i.via && <div className="text-[10px] text-greige-ink">leído de {i.via}{i.voucher ? ' + voucher' : ''}</div>}</>)}</td>
+                          <td className="py-2 text-ink">{i.recordedAdvisor || '—'}{i.recordedAt && <div className="text-[10px] text-greige-ink">{fmtDate(i.recordedAt)}</div>}{i.recordedAmount != null && i.status === 'monto_distinto' && <div className="text-[10px] font-semibold text-warning">Q {Number(i.recordedAmount).toLocaleString('es-GT', { minimumFractionDigits: 2 })} registrado</div>}</td>
                         </tr>
                       ))}
                     </tbody>

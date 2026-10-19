@@ -51,7 +51,7 @@ function matchesReceiptKeywords(ocrText, extraKeywords = []) {
 // every separator instead of treating the last one as a decimal point. Otherwise,
 // whichever separator appears LAST is the decimal point; any earlier one is a
 // thousands separator and gets dropped.
-export function parseAmount(raw) {
+function parseAmountCore(raw) {
   // Callers pass whole regex matches like "Q2.486,00"; a leading "Q"/"Q." made parseFloat
   // return NaN, which silently dropped every unlabeled Q-prefixed amount.
   raw = String(raw).replace(/^[^\d]+/, '');
@@ -59,12 +59,23 @@ export function parseAmount(raw) {
   const lastDot = raw.lastIndexOf('.');
   const lastSep = Math.max(lastComma, lastDot);
   if (lastSep !== -1 && raw.length - lastSep - 1 === 3) {
-    return Math.round(parseFloat(raw.replace(/[.,]/g, '')));
+    return parseFloat(raw.replace(/[.,]/g, ''));
   }
   const normalized = lastComma > lastDot
     ? raw.replace(/\./g, '').replace(',', '.')
     : raw.replace(/,/g, '');
-  return Math.round(parseFloat(normalized));
+  return parseFloat(normalized);
+}
+
+// Para comparar contra lo cotizado (que se escribe en quetzales enteros).
+export function parseAmount(raw) {
+  return Math.round(parseAmountCore(raw));
+}
+
+// Para guardar lo que dice un comprobante: con centavos (Q349.50 no es Q350). Una venta se
+// verifica contra lo realmente depositado.
+export function parseAmountExact(raw) {
+  return Math.round(parseAmountCore(raw) * 100) / 100;
 }
 
 // Whether the amount the advisor quoted in chat shows up anywhere in the receipt's
@@ -93,19 +104,19 @@ export function extractReceiptAmount(ocrText, extraKeywords = []) {
   if (!ocrText || !matchesReceiptKeywords(ocrText, extraKeywords)) return null;
   const labeled = ocrText.match(MONTO_AMOUNT_RE);
   if (labeled) {
-    const val = parseAmount(labeled[1]);
+    const val = parseAmountExact(labeled[1]);
     if (val > 0 && val <= 10000) return val;
   }
   // No explicit "Monto" label — prefer numbers with decimals or preceded by Q.
   // Cap at 10,000 Q (retail limit) to avoid mistaking bank authorization codes
   // (e.g. 91161), account numbers or document references for amounts.
   const decimals = (ocrText.match(/(?:Q\.?\s*)?\d[\d.,]*[.,]\d{2}\b/g) ?? [])
-    .map(parseAmount)
+    .map(parseAmountExact)
     .filter((n) => Number.isFinite(n) && n > 0 && n <= 10000);
   if (decimals.length) return Math.max(...decimals);
 
   const qNumbers = (ocrText.match(/Q\.?\s*\d[\d.,]*/gi) ?? [])
-    .map(parseAmount)
+    .map(parseAmountExact)
     .filter((n) => Number.isFinite(n) && n > 0 && n <= 10000);
   return qNumbers.length ? Math.max(...qNumbers) : null;
 }

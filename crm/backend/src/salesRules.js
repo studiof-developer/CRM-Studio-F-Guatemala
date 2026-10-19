@@ -6,7 +6,7 @@
 // hasta el momento en que le dio los medios de pago o el cliente envió su comprobante. La
 // fecha y el monto salen del comprobante (o de la confirmación del asesor), nunca de la
 // hora en que alguien abrió el chat o hizo clic después.
-import { parseAmount } from './ocrPayment.js';
+import { parseAmountExact as parseAmount } from './ocrPayment.js';
 
 const GT_OFFSET_MS = -6 * 3600 * 1000; // Guatemala no tiene horario de verano
 

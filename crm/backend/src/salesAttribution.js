@@ -104,6 +104,43 @@ async function markCustomerPaid(customer, method) {
   );
 }
 
+// Una venta de un motor anterior para este mismo comprobante (mismo cliente, mismo monto, el mismo
+// día o el siguiente): se enlaza a su evidencia, se le pone la fecha del comprobante y se
+// confirma, en vez de crear un duplicado con la fecha de la confirmación de la asesora.
+async function adoptExistingSale(customerId, ep, amount, advisor) {
+  const { rows } = await pool.query(
+    `SELECT * FROM sales WHERE customer_id = $1 AND NOT attribution_locked AND evidence_message_id IS NULL
+       AND created_at BETWEEN $2::timestamptz - interval '36 hours' AND $2::timestamptz + interval '36 hours'
+       AND ($3::numeric IS NULL OR amount = 0 OR abs(amount - $3::numeric) <= 1)
+     ORDER BY abs(extract(epoch FROM created_at - $2::timestamptz)) LIMIT 1`,
+    [customerId, ep.at, amount ?? null]
+  );
+  const sale = rows[0];
+  if (!sale) return null;
+  const legacy = sale.evidence_type === null || sale.evidence_type === 'legacy';
+  const exact = ep.type === 'comprobante' && amount > 0;
+  const finalAmount = exact ? amount : Number(sale.amount) || amount || 0;
+  const confirmed = ep.verified && finalAmount > 0 && (advisor.name || sale.advisor_name !== 'Sin atribuir');
+  const evType = ep.type === 'comprobante' ? 'receipt_ocr' : 'advisor_confirmation';
+  const { rows: upd } = await pool.query(
+    `UPDATE sales SET
+        evidence_type = CASE WHEN $2::boolean THEN $3 ELSE evidence_type END,
+        evidence_message_id = CASE WHEN $2::boolean THEN $4::bigint ELSE evidence_message_id END,
+        created_at = CASE WHEN $2::boolean THEN $5::timestamptz ELSE created_at END,
+        amount = $6::numeric,
+        receipt_amount = CASE WHEN $7::boolean THEN $6::numeric ELSE receipt_amount END,
+        amount_basis = CASE WHEN $7::boolean THEN 'comprobante' ELSE amount_basis END,
+        advisor_name = CASE WHEN advisor_name = 'Sin atribuir' AND $8::text IS NOT NULL THEN $8 ELSE advisor_name END,
+        advisor_id = CASE WHEN advisor_id IS NULL AND $9::int IS NOT NULL THEN $9 ELSE advisor_id END,
+        status = CASE WHEN $10::boolean THEN 'confirmada' ELSE status END,
+        confirmed_at = CASE WHEN $10::boolean AND confirmed_at IS NULL THEN now() ELSE confirmed_at END,
+        updated_at = now()
+      WHERE id = $1 RETURNING *`,
+    [sale.id, legacy, evType, ep.eventId, ep.at, finalAmount, exact, advisor.name ?? null, advisor.id ?? null, !!confirmed]
+  );
+  return upd[0] ?? null;
+}
+
 // Crea la venta de un episodio reconstruido del chat. Solo queda "confirmada" si la asesora ya
 // verificó el pago, hay monto y hay asesora; si no, "por revisar" y no suma a los totales.
 async function saleFromEpisode(customer, ep, lineId, { clickUser = null } = {}) {
@@ -129,6 +166,8 @@ async function saleFromEpisode(customer, ep, lineId, { clickUser = null } = {}) 
   }
   const social = String(customer.whatsapp_number).startsWith('social:');
   const receipt = ep.type === 'comprobante' ? ep.amount : null;
+  const adopted = await adoptExistingSale(customer.id, ep, amount, advisor);
+  if (adopted) return adopted;
   return insertSale({
     customerId: customer.id, ticketId: ticket?.id, advisorId: advisor.id, advisorName: advisor.name,
     amount: amount ?? 0, paymentMethod: customer.paid_method ?? (ep.medium === 'link' ? 'tarjeta' : 'transferencia'), quoteId,
@@ -339,7 +378,7 @@ export async function auditSales({ from, to, lineId = null }) {
       const item = {
         receiptId: ep.eventId, at: ep.at, customerId: customer.id, customer: ep.customer, phone: ep.phone, line: ep.line,
         amount: ep.amount, type: ep.type, verified: ep.verified, medium: ep.medium, shift: ep.shift, issues: ep.issues,
-        expectedAdvisor: ep.advisor, rule: ep.rule, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
+        expectedAdvisor: ep.advisor, rule: ep.rule, confirmedBy: ep.confirmedBy, confirmedAt: ep.confirmedAt, via: ep.via, voucher: ep.voucher, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
       };
       if (new Date(ep.at) < LOCK_BEFORE) { items.push({ ...item, status: 'historico_bloqueado' }); continue; }
       if (!sale) { items.push({ ...item, status: 'sin_venta' }); continue; }
@@ -359,7 +398,7 @@ export async function auditSales({ from, to, lineId = null }) {
 
   // Ventas sin ninguna prueba ni confirmación en el chat que las respalde (y que nadie calibró a mano).
   const { rows: unbacked } = await pool.query(
-    `SELECT s.id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
+    `SELECT s.id, s.customer_id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
      FROM sales s JOIN customers c ON c.id = s.customer_id
      WHERE s.created_at >= $1 AND s.created_at <= $2 AND NOT s.attribution_locked
        AND s.evidence_message_id IS NULL AND COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'
@@ -368,7 +407,21 @@ export async function auditSales({ from, to, lineId = null }) {
   );
   for (const s of unbacked) {
     if (claimed.has(s.id)) continue;
-    items.push({ status: 'sin_evidencia', saleId: s.id, at: s.created_at, customer: s.full_name || s.whatsapp_number, phone: s.whatsapp_number, amount: Number(s.amount), recordedAdvisor: s.advisor_name, shift: shiftOf(s.created_at) });
+    // ¿Es la misma compra ya registrada con su comprobante (típico: la venta se duplicó el día que
+    // la asesora mandó el "Gracias por elegir…")? Se compara con cualquier otra venta confirmada.
+    const { rows: orig } = await pool.query(
+      `SELECT o.id, o.created_at, o.advisor_name, o.amount FROM sales o
+       WHERE o.customer_id = $1 AND o.id <> $2 AND o.status = 'confirmada' AND abs(o.amount - $3::numeric) <= 1
+         AND o.created_at BETWEEN $4::timestamptz - interval '3 days' AND $4::timestamptz + interval '3 days'
+         AND (o.created_at < $4::timestamptz OR o.evidence_message_id IS NOT NULL)
+       ORDER BY o.created_at LIMIT 1`,
+      [s.customer_id, s.id, s.amount, s.created_at]
+    );
+    items.push({
+      status: orig.length ? 'duplicada' : 'sin_evidencia', saleId: s.id, at: s.created_at, customer: s.full_name || s.whatsapp_number,
+      phone: s.whatsapp_number, amount: Number(s.amount), recordedAdvisor: s.advisor_name, shift: shiftOf(s.created_at),
+      duplicateOf: orig[0] ? { saleId: orig[0].id, at: orig[0].created_at, advisor: orig[0].advisor_name, amount: Number(orig[0].amount) } : null,
+    });
   }
 
   const counts = items.reduce((acc, i) => ({ ...acc, [i.status]: (acc[i.status] ?? 0) + 1 }), {});
@@ -378,7 +431,7 @@ export async function auditSales({ from, to, lineId = null }) {
 const STATUS_LABEL = {
   ok: 'OK', sin_venta: 'FALTA VENTA', asesor_distinto: 'ASESORA DISTINTA', fecha_distinta: 'FECHA DISTINTA',
   monto_distinto: 'MONTO DISTINTO', confirmacion_pendiente: 'LISTA PARA CONFIRMAR', sin_evidencia: 'SIN COMPROBANTE',
-  sin_contexto: 'SIN MEDIOS DE PAGO NI CONFIRMACIÓN', bloqueada: 'BLOQUEADA (calibrada a mano)', historico_bloqueado: 'HISTÓRICO (antes del 16/10)',
+  duplicada: 'DUPLICADA', sin_contexto: 'SIN MEDIOS DE PAGO NI CONFIRMACIÓN', bloqueada: 'BLOQUEADA (calibrada a mano)', historico_bloqueado: 'HISTÓRICO (antes del 16/10)',
 };
 
 function buildAuditText({ from, to, counts, items }) {
@@ -390,6 +443,7 @@ function buildAuditText({ from, to, counts, items }) {
     lines.push(
       `[${STATUS_LABEL[i.status] ?? i.status}] ${gt(i.at)} (${i.shift}) ${i.customer} ${i.phone ?? ''} Q${i.amount ?? '?'}${i.verified === false ? ' · sin confirmación de la asesora' : ''}`,
       i.expectedAdvisor !== undefined ? `   debería: ${i.expectedAdvisor ?? 'sin atribuir'} (${i.rule})` : '',
+      i.duplicateOf ? `   ya existe la venta #${i.duplicateOf.saleId} de ${i.duplicateOf.advisor} por Q${i.duplicateOf.amount} (${gt(i.duplicateOf.at)})` : '',
       i.recordedAdvisor ? `   registrada: ${i.recordedAdvisor}${i.recordedAt ? ' · ' + gt(i.recordedAt) : ''}${i.recordedAmount != null ? ' · Q' + i.recordedAmount : ''}` : '',
     );
   }
@@ -406,7 +460,7 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
     else if (['asesor_distinto', 'fecha_distinta', 'monto_distinto'].includes(i.status)) plan.reasignar++;
     else if (i.status === 'confirmacion_pendiente') plan.promover++;
     else if (i.status === 'ok' && !i.linked && i.saleId) plan.vincular++;
-    else if (i.status === 'sin_evidencia') plan.marcarRevisar++;
+    else if (i.status === 'sin_evidencia' || i.status === 'duplicada') plan.marcarRevisar++;
   }
   if (!apply) return { applied: false, plan, ...audit };
 
@@ -434,12 +488,14 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
         [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null]
       );
-    } else if (i.status === 'sin_evidencia') {
+    } else if (i.status === 'sin_evidencia' || i.status === 'duplicada') {
+      const note = i.duplicateOf
+        ? ` [Duplicada de la venta #${i.duplicateOf.saleId} (${i.duplicateOf.advisor}): revisar]`
+        : ' [Sin comprobante ni confirmación en el chat: revisar]';
       await pool.query(
-        `UPDATE sales SET status = 'revisar', updated_at = now(),
-                notes = COALESCE(notes, '') || ' [Sin comprobante ni confirmación en el chat: revisar]'
+        `UPDATE sales SET status = 'revisar', updated_at = now(), notes = COALESCE(notes, '') || $2
          WHERE id = $1 AND NOT attribution_locked AND status <> 'revisar'`,
-        [i.saleId]
+        [i.saleId, note]
       );
     }
   }

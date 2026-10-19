@@ -147,3 +147,9 @@ test('parses a plain integer with no separator at all', () => {
 test('guesses deposito from a Banrural teller slip', () => {
   assert.equal(guessPaidMethod(BANRURAL_DEPOSIT_SLIP), 'deposito');
 });
+
+test('un comprobante guarda los centavos exactos (Q349.50 no es Q350)', () => {
+  assert.equal(extractReceiptAmount('Neolink Medio de pago: Contado Monto: (Q) 349.50 pagado electronicamente'), 349.5);
+  assert.equal(extractReceiptAmount('Comprobante Referencia 12345 Monto Q 734.30'), 734.3);
+  assert.equal(extractReceiptAmount('Comprobante de pago. Referencia: 987654321. Q2.486,00 pagado.'), 2486);
+});
