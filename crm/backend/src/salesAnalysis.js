@@ -10,6 +10,13 @@ import { compareWithRegistered } from './salesComparison.js';
 // confirmación de la asesora. No escribe nada en ventas ni en clientes: guarda el informe en
 // sales_analysis_runs y el resultado de leer cada adjunto en attachment_ocr (caché).
 const STALE_MS = 5 * 60 * 1000;
+const CUSTOMER_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Si un cliente tarda demasiado se omite (queda en el log) y el análisis sigue con el siguiente.
+const withTimeout = (promise, ms, label) => {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timeout ${label}`)), ms); })]).finally(() => clearTimeout(timer));
+};
 
 // Por defecto: desde el día 1 del mes pasado hasta hoy (hora de Guatemala).
 export function defaultPeriod(now = new Date()) {
@@ -75,7 +82,8 @@ async function runAnalysis(runId, period) {
     for (let i = 0; i < customers.length; i++) {
       const c = customers[i];
       try {
-        const r = await analyzeCustomer(c, { canonical, ocr });
+        console.log(`analysis ${runId}: cliente ${i + 1}/${customers.length} (id ${c.id})`);
+        const r = await withTimeout(analyzeCustomer(c, { canonical, ocr }), CUSTOMER_TIMEOUT_MS, `cliente ${c.id}`);
         resent += r.resentReceipts;
         orphans.push(...r.orphans);
         if (r.rows.length) rows.push(...r.rows);

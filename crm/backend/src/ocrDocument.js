@@ -6,10 +6,11 @@ import path from 'path';
 import crypto from 'crypto';
 import { createWorker } from 'tesseract.js';
 import { UPLOAD_DIR } from './attachmentStorage.js';
-import { extractText } from './ocrPayment.js';
+import { extractText, tesseractErrorHandler } from './ocrPayment.js';
 
 const execFileAsync = promisify(execFile);
 const GS_TIMEOUT_MS = 60_000;
+const RECOGNIZE_TIMEOUT_MS = 45_000;
 // Un PDF "de verdad" (generado por el banco) trae el texto incrustado; uno escaneado o una foto
 // metida en PDF no, y ahí hay que rasterizar y pasar OCR. Por debajo de este largo se asume escaneado.
 const MIN_EMBEDDED_TEXT = 40;
@@ -75,9 +76,22 @@ export async function extractDocumentText(buffer, mimeType, recognize = extractT
 // Un solo lector Tesseract reutilizado: cargar el modelo en español por imagen (lo que hace
 // extractText) sería lo que más tarde en un recorrido de miles de adjuntos.
 export async function createOcrSession() {
-  const worker = await createWorker('spa', 1, { cachePath: UPLOAD_DIR });
+  const make = () => createWorker('spa', 1, { cachePath: UPLOAD_DIR, errorHandler: tesseractErrorHandler });
+  let worker = await make();
   return {
-    recognize: async (buffer) => (await worker.recognize(buffer)).data.text,
+    // Una imagen que cuelga al lector no puede frenar todo el recorrido: pasado el tiempo se reinicia el lector y se salta.
+    recognize: async (buffer) => {
+      let timer;
+      try {
+        const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('OCR timeout')), RECOGNIZE_TIMEOUT_MS); });
+        return (await Promise.race([worker.recognize(buffer), timeout])).data.text;
+      } catch (err) {
+        if (err.message === 'OCR timeout') { await worker.terminate().catch(() => {}); worker = await make(); }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     close: () => worker.terminate(),
   };
 }

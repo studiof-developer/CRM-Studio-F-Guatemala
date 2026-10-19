@@ -8,8 +8,10 @@ import { UPLOAD_DIR } from './attachmentStorage.js';
 // cachePath reuses the same persistent uploads volume attachmentStorage.js already
 // writes to — without it, Tesseract defaults to the process's cwd and re-downloads its
 // ~3MB Spanish model on every container restart instead of once.
+export const tesseractErrorHandler = (err) => console.error('tesseract worker error:', String(err).slice(0, 200));
+
 export async function extractText(buffer) {
-  const worker = await createWorker('spa', 1, { cachePath: UPLOAD_DIR });
+  const worker = await createWorker('spa', 1, { cachePath: UPLOAD_DIR, errorHandler: tesseractErrorHandler });
   try {
     const { data } = await worker.recognize(buffer);
     return data.text;
