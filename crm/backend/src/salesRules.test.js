@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attributeAdvisor, latestQuote, startsNewCycle, isResentReceipt,
-  shiftOf, quotedAmountIn, givesPaymentInfo, isConfirmationMessage,
+  shiftOf, quotedAmountIn, givesPaymentInfo, isConfirmationMessage, buildEpisodes, paymentMedium,
 } from './salesRules.js';
 
 // Helper: hora de Guatemala (UTC-6) -> instante UTC.
@@ -130,4 +130,78 @@ test('un comprobante viejo reenviado después de OTRA compra también es reenví
 test('frases de confirmación', () => {
   assert.equal(isConfirmationMessage('Gracias por su compra'), true);
   assert.equal(isConfirmationMessage('¿Cómo quieres pagar?'), false);
+});
+
+const img = (at, ocrAmount = null) => ({ id: ++n, at, role: 'customer', advisor: null, text: '', ocrAmount, image: true });
+
+test('episodios: venta por transferencia con cambio de turno y seguimiento posterior', () => {
+  const events = [
+    adv(gt('14', '09:00'), 'Aura', 'Tu total es Q539'),
+    adv(gt('14', '09:10'), 'Aura', 'Cuenta Banrural 4012345678'),
+    adv(gt('14', '15:30'), 'Leydi', 'Hola, sigues interesada?'),
+    img(gt('14', '16:00'), 539),
+    adv(gt('14', '16:30'), 'Leydi', 'Tu pedido ya está en proceso de alistamiento Q539'),
+  ];
+  const { episodes } = buildEpisodes(events);
+  assert.equal(episodes.length, 1);
+  const [ep] = episodes;
+  assert.equal(ep.advisor, 'Aura');
+  assert.equal(ep.paymentInfoBy, 'Aura');
+  assert.equal(ep.medium, 'transferencia');
+  assert.equal(ep.amount, 539);
+  assert.equal(ep.shift, 'tarde');
+  assert.deepEqual(ep.touchedBy.sort(), ['Aura', 'Leydi']);
+  assert.ok(ep.issues.includes('varias_asesoras'));
+  assert.equal(ep.confirmedBy, 'Leydi'); // el "alistamiento" confirma, no crea otra venta
+});
+
+test('episodios: pago por link sin imagen se ancla en la confirmación y toma el monto cotizado', () => {
+  const events = [
+    adv(gt('14', '11:00'), 'Aura', 'El total es Q873'),
+    adv(gt('14', '11:05'), 'Aura', 'Paga aquí https://neolink.example/abc'),
+    adv(gt('14', '12:03'), 'Aura', 'Pago recibido, gracias por su compra'),
+  ];
+  const { episodes } = buildEpisodes(events);
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0].type, 'confirmacion');
+  assert.equal(episodes[0].amount, 873);
+  assert.equal(episodes[0].medium, 'link');
+  assert.equal(episodes[0].advisor, 'Aura');
+});
+
+test('episodios: comprobante reenviado no duplica; compra nueva con otra cotización sí', () => {
+  const events = [
+    adv(gt('14', '09:10'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'),
+    img(gt('14', '10:00'), 539),
+    img(gt('14', '10:05'), 539),
+    adv(gt('16', '09:00'), 'Leydi', 'Nueva compra, total Q420. Cuenta Banrural 4012345678'),
+    img(gt('16', '10:00'), 420),
+  ];
+  const { episodes, resentReceipts } = buildEpisodes(events);
+  assert.equal(resentReceipts, 1);
+  assert.deepEqual(episodes.map((e) => [e.amount, e.advisor]), [[539, 'Aura'], [420, 'Leydi']]);
+});
+
+test('episodios: la asesora confirma antes de que llegue la foto = una sola venta', () => {
+  const events = [
+    adv(gt('14', '09:00'), 'Aura', 'Total Q700 cuenta Banrural 4012345678'),
+    adv(gt('14', '10:00'), 'Aura', 'Pago recibido'),
+    img(gt('14', '10:20'), 700),
+  ];
+  const { episodes } = buildEpisodes(events);
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0].type, 'comprobante');
+});
+
+test('episodios: marca imágenes sin monto leído y comprobantes sin medios de pago en el chat', () => {
+  const events = [adv(gt('14', '09:00'), 'Aura', 'Hola'), img(gt('14', '09:30')), img(gt('14', '09:40'), 350)];
+  const { episodes } = buildEpisodes(events);
+  assert.equal(episodes[0].imagesWithoutAmount, 1);
+  assert.ok(episodes[0].issues.includes('sin_medios_de_pago_en_chat'));
+});
+
+test('medio de pago: link vs transferencia', () => {
+  assert.equal(paymentMedium('Paga aquí https://x.co/1'), 'link');
+  assert.equal(paymentMedium('Cuenta Banrural 4012345678'), 'transferencia');
+  assert.equal(paymentMedium('Hola'), null);
 });

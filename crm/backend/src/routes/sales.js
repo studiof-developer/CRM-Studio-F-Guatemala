@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
 import { auditSales, rebuildSales } from '../salesAttribution.js';
+import { startAnalysisRun, getAnalysisRun, crossCheckNotebook } from '../salesAnalysis.js';
 
 const router = Router();
 
@@ -679,6 +680,34 @@ router.post('/rebuild', requireRole('admin', 'supervisor'), async (req, res, nex
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
+});
+
+// Análisis histórico de TODOS los chats de clientes que compraron (solo lectura; corre en
+// segundo plano y guarda el informe para reabrirlo).
+router.post('/analysis', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try { res.status(202).json(await startAnalysisRun(req.user?.id)); } catch (err) { next(err); }
+});
+
+router.get('/analysis/latest', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try { res.json(await getAnalysisRun(null, { full: req.query.full === '1' })); } catch (err) { next(err); }
+});
+
+router.get('/analysis/:id', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const run = await getAnalysisRun(Number(req.params.id), { full: req.query.full === '1' });
+    if (!run) return res.status(404).json({ error: 'Análisis no encontrado' });
+    res.json(run);
+  } catch (err) { next(err); }
+});
+
+// Contrasta lo que anotan las asesoras a mano (últimos 4 dígitos o nombre, medio, monto)
+// con lo que el chat realmente muestra.
+router.post('/analysis/notebook', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+    if (!entries.length) return res.status(400).json({ error: 'entries es requerido' });
+    res.json({ results: await crossCheckNotebook(entries) });
+  } catch (err) { next(err); }
 });
 
 export default router;

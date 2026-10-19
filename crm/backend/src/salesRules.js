@@ -132,3 +132,81 @@ export function isResentReceipt({ amount, recentSales = [], events, atTime }) {
   const latestAt = new Date(Math.max(...inWindow.map((s) => +new Date(s.at))));
   return !startsNewCycle(events, latestAt, atTime);
 }
+
+// --- Reconstrucción de las ventas de UN hilo completo (análisis histórico) ---------------
+
+// 'link' = pago con tarjeta por enlace (NeoLink); 'transferencia' = cuenta bancaria.
+export function paymentMedium(text) {
+  if (/https?:\/\/|neolink/i.test(text ?? '')) return 'link';
+  if (givesPaymentInfo(text)) return 'transferencia';
+  return null;
+}
+
+const DAY_MS = 86400000;
+
+// Un episodio es una venta reconstruida del chat. Se ancla en el comprobante del cliente
+// (imagen con monto leído) o, si el pago no deja imagen (link/tarjeta), en el mensaje en
+// que la asesora lo confirma después de una cotización o medios de pago nuevos.
+// events: ordenados o no; los del cliente pueden traer `image:true` (adjunto sin monto leído).
+export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
+  const sorted = sortedByTime(events);
+  const episodes = [];
+  let resent = 0;
+
+  const describe = (anchor, type, amount) => {
+    const prevAt = episodes.length ? episodes[episodes.length - 1].at : null;
+    const t = +new Date(anchor.at);
+    const windowStart = prevAt ? +new Date(prevAt) : t - lookbackMs;
+    const payInfo = [...sorted].reverse().find(
+      (e) => e.role === 'advisor' && +new Date(e.at) <= t && +new Date(e.at) >= t - lookbackMs && givesPaymentInfo(e.text)
+    );
+    const attribution = attributeAdvisor(sorted, anchor.at);
+    const touched = [...new Set(sorted
+      .filter((e) => e.role === 'advisor' && e.advisor && +new Date(e.at) > windowStart && +new Date(e.at) <= t)
+      .map((e) => e.advisor))];
+    const quote = latestQuote(sorted, prevAt, anchor.at);
+    const imagesWithoutAmount = sorted.filter(
+      (e) => e.role === 'customer' && e.image && !e.ocrAmount && +new Date(e.at) > windowStart && +new Date(e.at) <= t
+    ).length;
+    const issues = [];
+    if (!payInfo) issues.push('sin_medios_de_pago_en_chat');
+    if (amount == null) issues.push('monto_no_leido');
+    if (amount != null && quote != null && Math.abs(amount - quote) >= 0.5) issues.push('monto_distinto_a_cotizacion');
+    if (touched.length > 1) issues.push('varias_asesoras');
+    if (!attribution) issues.push('sin_asesora');
+    return {
+      type, at: anchor.at, eventId: anchor.id, amount, quote,
+      advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null,
+      paymentInfoBy: payInfo?.advisor ?? null, paymentInfoAt: payInfo?.at ?? null,
+      medium: payInfo ? paymentMedium(payInfo.text) : null,
+      touchedBy: touched, shift: shiftOf(anchor.at), imagesWithoutAmount, issues,
+    };
+  };
+
+  for (const e of sorted) {
+    const last = episodes[episodes.length - 1];
+    if (e.role === 'customer' && inRetailRange(e.ocrAmount)) {
+      // La asesora ya había confirmado el pago antes de que llegara la foto: es la misma venta
+      // y el comprobante es la cifra real.
+      if (last && last.type === 'confirmacion' && +new Date(e.at) - +new Date(last.at) <= 2 * DAY_MS) {
+        episodes.pop();
+        episodes.push({ ...describe(e, 'comprobante', e.ocrAmount), confirmedAt: last.at });
+        continue;
+      }
+      const recent = episodes.filter((x) => x.amount).map((x) => ({ at: x.at, amount: x.amount }));
+      if (isResentReceipt({ amount: e.ocrAmount, recentSales: recent, events: sorted, atTime: e.at })) { resent++; continue; }
+      episodes.push(describe(e, 'comprobante', e.ocrAmount));
+    } else if (e.role === 'advisor' && isConfirmationMessage(e.text)) {
+      // Confirma un comprobante que llegó hace poco: no es otra venta.
+      if (last && !last.confirmedAt && +new Date(e.at) - +new Date(last.at) <= 2 * DAY_MS) {
+        last.confirmedAt = e.at;
+        last.confirmedBy = e.advisor;
+        continue;
+      }
+      if (startsNewCycle(sorted, last?.at ?? null, e.at)) {
+        episodes.push(describe(e, 'confirmacion', latestQuote(sorted, last?.at ?? null, e.at)));
+      }
+    }
+  }
+  return { episodes, resentReceipts: resent };
+}

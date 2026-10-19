@@ -19,12 +19,12 @@ const LOOKBACK_MS = 7 * DAY;
 const GRACE_MS = 2 * 3600000;
 export const LOCK_BEFORE = new Date('2026-10-16T00:00:00-06:00');
 
-async function defaultLineId() {
+export async function defaultLineId() {
   const { rows } = await pool.query('SELECT id FROM whatsapp_numbers WHERE is_active = true ORDER BY id ASC LIMIT 1');
   return rows[0]?.id ?? 1;
 }
 
-function lineFromSession(sessionId) {
+export function lineFromSession(sessionId) {
   const m = /__line_(\d+)/.exec(sessionId ?? '');
   return m ? Number(m[1]) : null;
 }
@@ -43,7 +43,7 @@ function toChatEvent(row) {
 
 // Mensajes de UN hilo (cliente + línea). El hilo de la línea por defecto también incluye
 // los session_id viejos sin "__line_" — misma regla que usa Conversaciones.
-async function loadEvents({ phone, customerId, lineId, from, to }) {
+export async function loadEvents({ phone, customerId, lineId, from, to }) {
   if (String(phone ?? '').startsWith('social:')) {
     const { rows } = await pool.query(
       `SELECT sm.id, sm.created_at, sm.direction, sm.body, sm.advisor_name
@@ -117,7 +117,7 @@ async function recentSales(customerId, lineId, before) {
 
 // El nombre que aparece en el chat es el full_name con el que la asesora inició sesión;
 // si es un nombre corto/antiguo ("Leydi"), se acepta solo si identifica a una única usuaria.
-async function resolveAdvisor(name) {
+export async function resolveAdvisor(name) {
   const exact = await pool.query(
     'SELECT id, full_name FROM users WHERE lower(full_name) = lower($1) OR lower(username) = lower($1) LIMIT 2', [name]
   );

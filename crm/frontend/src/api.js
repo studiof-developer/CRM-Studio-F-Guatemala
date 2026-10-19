@@ -894,4 +894,25 @@ export async function rebuildSales({ from, to, lineId, apply = false }) {
   return res.json();
 }
 
+// Análisis histórico (solo lectura) de los chats de clientes que compraron.
+export async function startSalesAnalysis() {
+  const res = await apiFetch('/api/sales/analysis', { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo iniciar el análisis');
+  return res.json();
+}
 
+export async function fetchSalesAnalysis(id = 'latest', { full = false } = {}) {
+  const res = await apiFetch(`/api/sales/analysis/${id}${full ? '?full=1' : ''}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo cargar el análisis');
+  return res.json();
+}
+
+export async function crossCheckSalesNotebook(entries) {
+  const res = await apiFetch('/api/sales/analysis/notebook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entries }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo contrastar con el cuaderno');
+  return (await res.json()).results;
+}

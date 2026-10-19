@@ -1,0 +1,283 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
+import { X, RefreshCw, Download, Play, ClipboardList } from 'lucide-react';
+import { startSalesAnalysis, fetchSalesAnalysis, crossCheckSalesNotebook } from '../api.js';
+
+const ISSUE_LABEL = {
+  sin_medios_de_pago_en_chat: 'Sin medios de pago en el chat',
+  monto_no_leido: 'Monto no leído',
+  monto_distinto_a_cotizacion: 'Monto distinto a lo cotizado',
+  varias_asesoras: 'Varias asesoras en la venta',
+  sin_asesora: 'Sin asesora',
+};
+const SHIFT_LABEL = { manana: 'Mañana', tarde: 'Tarde', domingo: 'Domingo', fuera_de_turno: 'Fuera de turno' };
+const VERDICT = {
+  coincide: ['Coincide', 'bg-success/10 text-success'],
+  con_diferencias: ['Con diferencias', 'bg-warning/15 text-warning'],
+  sin_venta_en_chat: ['Sin venta en el chat', 'bg-danger/10 text-danger'],
+  cliente_no_encontrado: ['Cliente no encontrado', 'bg-danger/10 text-danger'],
+};
+const DIFF_LABEL = { asesora_distinta: 'asesora distinta', monto_distinto: 'monto distinto', medio_distinto: 'medio distinto' };
+
+// Transcripción de los cuadernos a mano (fotos del 14, 15 y 18 de octubre). Es editable: lo que
+// no se lee bien en la foto hay que corregirlo aquí antes de contrastar.
+const NOTEBOOK_SEED = `# fecha | asesora | últimos 4 dígitos o nombre | medio (link / transferencia) | monto
+# Transcrito de las fotos de los cuadernos; corrige lo que no se lea bien.
+2026-10-18 | Leydi | 2915 | link |
+2026-10-18 | Leydi | Marina Reyes | transferencia |
+ | Leydi | Diana Aldana | transferencia |
+ | Leydi | 6020 | transferencia |
+ | Leydi | Dayana | link |
+ | Leydi | 7170 | transferencia |
+ | Leydi | 2633 | link |
+2026-10-15 | Leydi | 6693 | link |
+2026-10-15 | Leydi | Patricia | link |
+2026-10-15 | Leydi | 4595 | link |
+2026-10-15 | Leydi | Susy | transferencia |
+2026-10-14 | Leydi | 1059 | transferencia | 898
+2026-10-14 | Leydi | 7107 | transferencia | 349
+2026-10-14 | Aura | 4947 | | 1286
+2026-10-14 | Aura | 8666 | |
+2026-10-14 | Aura | 5352 | | 349
+2026-10-14 | Aura | 1882 | |
+2026-10-14 | Aura | 5625 | | 750
+2026-10-14 | Aura | 0037 | | 974.5
+2026-10-14 | Aura | 7851 | | 705
+2026-10-14 | Aura | 4291 | | 974`;
+
+function parseNotebook(text) {
+  return text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')).map((l) => {
+    const [date, advisor, ref, medium, amount] = l.split('|').map((x) => x.trim());
+    const n = Number(String(amount ?? '').replace(',', '.'));
+    return {
+      date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined,
+      advisor: advisor || undefined,
+      ref,
+      medium: /^(link|transferencia)$/i.test(medium) ? medium.toLowerCase() : undefined,
+      amount: Number.isFinite(n) && n > 0 ? n : undefined,
+    };
+  }).filter((e) => e.ref);
+}
+
+const fmtQ = (n) => (n == null ? '—' : `Q ${Number(n).toLocaleString('es-GT', { minimumFractionDigits: 2 })}`);
+const fmtDate = (d) => new Date(d).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+
+export default function SalesAnalysisModal({ open, onClose }) {
+  const [run, setRun] = useState(null);
+  const [tab, setTab] = useState('resumen');
+  const [error, setError] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [advisorFilter, setAdvisorFilter] = useState('');
+  const [issueFilter, setIssueFilter] = useState('');
+  const [notebookText, setNotebookText] = useState(NOTEBOOK_SEED);
+  const [notebook, setNotebook] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const timer = useRef(null);
+
+  const load = async (id = 'latest') => {
+    try {
+      const r = await fetchSalesAnalysis(id, { full: true });
+      setRun(r);
+      return r;
+    } catch (err) { setError(err.message); return null; }
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setError(null);
+    load();
+    return () => clearTimeout(timer.current);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mientras corre, consulta el avance cada 3 s (sin traer el informe completo).
+  useEffect(() => {
+    if (!open || run?.status !== 'running' || run.stalled) return undefined;
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await fetchSalesAnalysis(run.id);
+        if (r.status === 'running') setRun((prev) => ({ ...prev, ...r }));
+        else await load(run.id);
+      } catch (err) { setError(err.message); }
+    }, 3000);
+    return () => clearTimeout(timer.current);
+  }, [open, run]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function start() {
+    setStarting(true); setError(null);
+    try {
+      const { id } = await startSalesAnalysis();
+      await load(id);
+    } catch (err) { setError(err.message); } finally { setStarting(false); }
+  }
+
+  async function checkNotebook() {
+    setChecking(true); setError(null);
+    try { setNotebook(await crossCheckSalesNotebook(parseNotebook(notebookText))); }
+    catch (err) { setError(err.message); } finally { setChecking(false); }
+  }
+
+  const result = run?.status === 'done' ? run.result : null;
+  const rows = useMemo(() => (result?.rows ?? []).filter((r) =>
+    (!advisorFilter || (r.advisor ?? 'Sin atribuir') === advisorFilter) && (!issueFilter || r.issues.includes(issueFilter))
+  ), [result, advisorFilter, issueFilter]);
+
+  function exportExcel() {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Asesora', 'Ventas', 'Total (Q)', 'Sin monto', 'Mañana (Q)', 'Tarde (Q)', 'Domingo (Q)', 'Link', 'Transferencia'],
+      ...result.byAdvisor.map((a) => [a.advisor, a.ventas, a.total, a.sinMonto, a.porTurno.manana ?? 0, a.porTurno.tarde ?? 0, a.porTurno.domingo ?? 0, a.porMedio.link ?? 0, a.porMedio.transferencia ?? 0]),
+    ]), 'Por asesora');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Fecha', 'Turno', 'Cliente', 'Teléfono', 'Últimos 4', 'Línea', 'Tipo', 'Monto (Q)', 'Cotizado (Q)', 'Asesora', 'Regla', 'Dio medios de pago', 'Medio', 'Atendieron', 'Alertas'],
+      ...result.rows.map((r) => [fmtDate(r.at), SHIFT_LABEL[r.shift] ?? r.shift, r.customer, r.phone, r.last4, r.line, r.type, r.amount ?? '', r.quote ?? '', r.advisor ?? '', r.rule ?? '', r.paymentInfoBy ?? '', r.medium ?? '', r.touchedBy.join(', '), r.issues.map((i) => ISSUE_LABEL[i] ?? i).join('; ')]),
+    ]), 'Ventas');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Cliente', 'Teléfono', 'Estado actual'], ...result.withoutEvidence.map((c) => [c.customer, c.phone, c.currentStatus]),
+    ]), 'Pagados sin evidencia');
+    XLSX.writeFile(wb, `analisis_chats_vendidos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  if (!open) return null;
+  const running = run?.status === 'running' && !run.stalled;
+  const pct = run?.total ? Math.min(100, Math.round((run.progress / run.total) * 100)) : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-line bg-paper shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-line p-5">
+          <div>
+            <h3 className="text-base font-bold text-ink">Análisis de chats de clientes que compraron</h3>
+            <p className="mt-0.5 text-xs text-greige-ink">
+              Recorre todo el historial de los clientes en Pagado / Por despacho y reconstruye cada venta: comprobante, quién dio los medios de pago, monto y turno. Solo lee; no cambia ventas.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {result && (
+              <button type="button" onClick={exportExcel} className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted">
+                <Download size={13} /><span>Excel</span>
+              </button>
+            )}
+            <button type="button" onClick={start} disabled={starting || running} className="flex items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50">
+              {starting || running ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+              <span>{running ? 'Analizando...' : result ? 'Analizar de nuevo' : 'Analizar todos los chats'}</span>
+            </button>
+            <button type="button" onClick={onClose} className="rounded-xl p-2 text-greige-ink hover:bg-muted hover:text-ink" title="Cerrar"><X size={20} /></button>
+          </div>
+        </div>
+
+        {error && <p className="border-b border-line bg-danger/10 px-5 py-2 text-xs text-danger">{error}</p>}
+        {run?.status === 'error' && <p className="border-b border-line bg-danger/10 px-5 py-2 text-xs text-danger">El análisis falló: {run.error}</p>}
+        {run?.stalled && <p className="border-b border-line bg-warning/15 px-5 py-2 text-xs text-warning">El análisis anterior se interrumpió (probablemente por un reinicio del servidor). Vuelve a iniciarlo.</p>}
+        {running && (
+          <div className="border-b border-line px-5 py-3">
+            <div className="mb-1 flex justify-between text-xs text-greige-ink"><span>Analizando chats…</span><span>{run.progress} / {run.total} clientes ({pct}%)</span></div>
+            <div className="h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} /></div>
+            <p className="mt-1 text-[11px] text-greige-ink">Puede tardar varios minutos. Puedes cerrar esta ventana: el análisis sigue en el servidor.</p>
+          </div>
+        )}
+
+        <div className="flex gap-1 border-b border-line px-5 py-2 text-xs font-semibold">
+          {[['resumen', 'Resumen por asesora'], ['ventas', 'Ventas reconstruidas'], ['cuaderno', 'Contrastar con cuadernos']].map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 transition-colors ${tab === k ? 'bg-secondary text-ink' : 'text-greige-ink hover:text-ink'}`}>{label}</button>
+          ))}
+        </div>
+
+        <div className="min-h-[260px] flex-1 overflow-auto px-5 py-4 text-xs">
+          {tab === 'cuaderno' ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              <div>
+                <p className="mb-1 flex items-center gap-1.5 font-semibold text-ink"><ClipboardList size={14} />Anotaciones de los cuadernos (una por línea)</p>
+                <textarea value={notebookText} onChange={(e) => setNotebookText(e.target.value)} spellCheck={false} className="h-72 w-full rounded-xl border border-line bg-paper p-3 font-mono text-[11px] text-ink outline-none focus:border-accent" />
+                <button type="button" onClick={checkNotebook} disabled={checking} className="mt-2 flex items-center gap-1.5 rounded-xl bg-accent px-4 py-1.5 font-semibold text-white hover:opacity-90 disabled:opacity-50">
+                  {checking ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}<span>{checking ? 'Contrastando…' : 'Contrastar con los chats'}</span>
+                </button>
+              </div>
+              <div>
+                {!notebook ? <p className="py-10 text-center text-greige-ink">Cada anotación se busca por los últimos 4 dígitos (o el nombre) y se compara con la venta que el chat muestra: asesora, medio y monto.</p> : (
+                  <table className="w-full text-left">
+                    <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2 pr-2">Cuaderno</th><th className="py-2 pr-2">Resultado</th><th className="py-2">El chat dice</th></tr></thead>
+                    <tbody>
+                      {notebook.map((r, i) => (
+                        <tr key={i} className="border-b border-line-soft align-top">
+                          <td className="py-2 pr-2 text-ink">{r.entry.ref}<div className="text-[10px] text-greige-ink">{[r.entry.date, r.entry.advisor, r.entry.medium, r.entry.amount && fmtQ(r.entry.amount)].filter(Boolean).join(' · ')}</div></td>
+                          <td className="py-2 pr-2">
+                            <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${(VERDICT[r.verdict] || ['', ''])[1]}`}>{(VERDICT[r.verdict] || [r.verdict])[0]}</span>
+                            {r.diffs?.length > 0 && <div className="mt-0.5 text-[10px] text-warning">{r.diffs.map((d) => DIFF_LABEL[d] ?? d).join(', ')}</div>}
+                            {r.matches.length > 1 && <div className="mt-0.5 text-[10px] text-greige-ink">{r.matches.length} clientes coinciden</div>}
+                          </td>
+                          <td className="py-2 text-ink">
+                            {r.sale ? (<>{r.sale.advisor ?? 'Sin asesora'} · {fmtQ(r.sale.amount)} · {r.sale.medium ?? 'medio ?'}<div className="text-[10px] text-greige-ink">{fmtDate(r.sale.at)} · {SHIFT_LABEL[r.sale.shift] ?? r.sale.shift}{r.sale.paymentInfoBy ? ` · medios de pago: ${r.sale.paymentInfoBy}` : ''}</div></>)
+                              : r.matches[0] ? <span className="text-greige-ink">{r.matches[0].customer} ({r.matches[0].status ?? 'sin estado'})</span> : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          ) : !result ? (
+            <p className="py-16 text-center text-sm text-greige-ink">{running ? 'Esperando el resultado…' : 'Aún no hay un análisis. Pulsa "Analizar todos los chats".'}</p>
+          ) : tab === 'resumen' ? (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[['Clientes analizados', result.customersAnalyzed], ['Ventas reconstruidas', result.ventas], ['Total reconstruido', fmtQ(result.totalQuetzales)], ['Pagados sin evidencia en el chat', result.clientesSinEvidencia]].map(([l, v]) => (
+                  <div key={l} className="rounded-xl border border-line p-3"><p className="text-[11px] text-greige-ink">{l}</p><p className="mt-1 text-lg font-bold text-ink">{v}</p></div>
+                ))}
+              </div>
+              <table className="w-full text-left">
+                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2">Asesora</th><th className="py-2 text-right">Ventas</th><th className="py-2 text-right">Total</th><th className="py-2 text-right">Mañana</th><th className="py-2 text-right">Tarde</th><th className="py-2 text-right">Domingo</th><th className="py-2 text-right">Link</th><th className="py-2 text-right">Transf.</th><th className="py-2 text-right">Sin monto</th></tr></thead>
+                <tbody>
+                  {result.byAdvisor.map((a) => (
+                    <tr key={a.advisor} className="border-b border-line-soft">
+                      <td className="py-2 font-semibold text-ink">{a.advisor}</td><td className="py-2 text-right">{a.ventas}</td><td className="py-2 text-right font-semibold text-success">{fmtQ(a.total)}</td>
+                      <td className="py-2 text-right">{fmtQ(a.porTurno.manana ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.tarde ?? 0)}</td><td className="py-2 text-right">{fmtQ(a.porTurno.domingo ?? 0)}</td>
+                      <td className="py-2 text-right">{a.porMedio.link ?? 0}</td><td className="py-2 text-right">{a.porMedio.transferencia ?? 0}</td><td className="py-2 text-right">{a.sinMonto || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div>
+                <p className="mb-2 font-semibold text-ink">Calidad de los datos (qué no se pudo comprobar en el chat)</p>
+                <ul className="grid gap-1.5 md:grid-cols-2">
+                  {[['Ventas sin medios de pago en el chat', result.quality.sinMediosDePagoEnChat], ['Ventas sin monto leído', result.quality.montoNoLeido], ['Monto distinto a lo cotizado', result.quality.montoDistintoACotizacion], ['Ventas con varias asesoras', result.quality.variasAsesoras], ['Ventas sin asesora', result.quality.sinAsesora], ['Imágenes del cliente sin monto leído', result.quality.imagenesSinMonto], ['Comprobantes reenviados (no duplican)', result.comprobantesReenviados]].map(([l, v]) => (
+                    <li key={l} className="flex justify-between rounded-lg bg-secondary px-3 py-1.5"><span className="text-greige-ink">{l}</span><strong className="text-ink">{v}</strong></li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <select value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
+                  <option value="">Todas las asesoras</option>
+                  {result.byAdvisor.map((a) => <option key={a.advisor} value={a.advisor}>{a.advisor}</option>)}
+                </select>
+                <select value={issueFilter} onChange={(e) => setIssueFilter(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-ink">
+                  <option value="">Todas las alertas</option>
+                  {Object.entries(ISSUE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <span className="self-center text-greige-ink">{rows.length} ventas{rows.length > 500 ? ' (se muestran 500; el Excel trae todas)' : ''}</span>
+              </div>
+              <table className="w-full text-left">
+                <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-2 pr-2">Fecha / turno</th><th className="py-2 pr-2">Cliente</th><th className="py-2 pr-2 text-right">Monto</th><th className="py-2 pr-2">Asesora</th><th className="py-2 pr-2">Dio medios de pago</th><th className="py-2">Alertas</th></tr></thead>
+                <tbody>
+                  {rows.slice(0, 500).map((r, i) => (
+                    <tr key={i} className="border-b border-line-soft align-top">
+                      <td className="whitespace-nowrap py-2 pr-2 text-ink">{fmtDate(r.at)}<div className="text-[10px] text-greige-ink">{SHIFT_LABEL[r.shift] ?? r.shift}</div></td>
+                      <td className="py-2 pr-2 text-ink">{r.customer}<div className="text-[10px] text-greige-ink">…{r.last4} · {r.type === 'comprobante' ? 'comprobante' : 'confirmación'}</div></td>
+                      <td className="whitespace-nowrap py-2 pr-2 text-right font-semibold text-ink">{fmtQ(r.amount)}<div className="text-[10px] font-normal text-greige-ink">{r.medium ?? ''}</div></td>
+                      <td className="py-2 pr-2 text-ink">{r.advisor ?? '—'}<div className="text-[10px] text-greige-ink">{(r.rule ?? '').replace(/_/g, ' ')}</div></td>
+                      <td className="py-2 pr-2 text-ink">{r.paymentInfoBy ?? '—'}</td>
+                      <td className="py-2 text-[10px] text-warning">{r.issues.map((x) => ISSUE_LABEL[x] ?? x).join(' · ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

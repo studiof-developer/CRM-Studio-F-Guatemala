@@ -11,6 +11,7 @@ import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesB
 import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
+import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -112,6 +113,7 @@ export default function SalesAdvisorDashboard() {
   // Auditoría de ventas contra el chat (reemplaza al "Re-analizar chats" y a la auditoría del 14/10)
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditApplying, setAuditApplying] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [auditData, setAuditData] = useState(null);
   const [auditTab, setAuditTab] = useState('corregir');
   const [copiedAudit, setCopiedAudit] = useState(false);
@@ -583,6 +585,15 @@ export default function SalesAdvisorDashboard() {
               </button>
 
               <button
+                onClick={() => setAnalysisOpen(true)}
+                title="Reconstruye las ventas de todos los clientes en Pagado / Por despacho leyendo todo su historial de chat"
+                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+              >
+                <FileText size={13} />
+                <span>Analizar chats vendidos</span>
+              </button>
+
+              <button
                 onClick={handleOpenAudit}
                 disabled={auditLoading}
                 title="Compara cada comprobante del chat contra las ventas registradas (asesora, día y monto) y corrige lo que no coincida"
@@ -850,6 +861,15 @@ export default function SalesAdvisorDashboard() {
             className="flex items-center justify-center rounded-xl border border-line bg-paper p-2 text-greige-ink transition-colors hover:bg-muted hover:text-ink disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={() => setAnalysisOpen(true)}
+            title="Reconstruye las ventas de todos los clientes en Pagado / Por despacho leyendo todo su historial de chat"
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
+          >
+            <FileText size={13} />
+            <span>Analizar chats vendidos</span>
           </button>
 
           <button
@@ -1471,6 +1491,8 @@ export default function SalesAdvisorDashboard() {
       )}
 
       {/* Modal de Auditoría Forense de Chats del 14 de Octubre */}
+      <SalesAnalysisModal open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
+
       {auditData && (() => {
         const STATUS = {
   ok: ['Correcta', 'bg-success/10 text-success'],
