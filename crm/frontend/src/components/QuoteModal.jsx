@@ -221,43 +221,36 @@ export default function QuoteModal({
     return itemsTotalAfterDiscount + (Math.max(0, Number(shippingCost) || 0));
   }, [itemsTotalAfterDiscount, shippingCost]);
 
-  // Genera el texto para el mensaje de WhatsApp / Red Social
+  // Genera el texto para el mensaje de WhatsApp / Red Social. Corto a propósito: el detalle ya va en la tarjeta
+  // (imagen); aquí solo folio, prendas, envío y total. Se conserva "Total a pagar: Q…" porque el motor de
+  // ventas lee ese total del chat.
   function buildQuoteMessageText(quoteNumber) {
-    const brand = activeLine?.label || 'Studio F';
-    let text = `✨ *Cotización ${brand}* ✨\nFolio: *${quoteNumber}*\n\n`;
+    let text = `✨ *Cotización ${quoteNumber}*
+
+`;
 
     items.forEach((item) => {
       const qty = Math.max(1, Number(item.quantity) || 1);
-      const detail = [
-        item.size ? `Talla ${item.size}` : '',
-        item.color ? `Color ${item.color}` : '',
-        qty > 1 ? `${qty} uds` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-
-      text += `👗 *${item.name || 'Prenda'}* (Ref: \`${item.sku || 'N/A'}\`)${detail ? ` — _${detail}_` : ''}\n`;
-      text += `• Precio regular: Q${Number(item.unitPrice || 0).toFixed(2)}\n`;
-      if (Number(item.discountPct) > 0) {
-        text += `• Descuento: *-${Number(item.discountPct)}%*\n`;
-      }
-      text += `• Subtotal: *Q${((Number(item.finalPrice) || 0) * qty).toFixed(2)}*\n\n`;
+      const detail = [item.size ? `Talla ${item.size}` : '', item.color, qty > 1 ? `x${qty}` : ''].filter(Boolean).join(' · ');
+      const regular = (Number(item.unitPrice) || 0) * qty;
+      const final = (Number(item.finalPrice) || 0) * qty;
+      const price = Number(item.discountPct) > 0
+        ? `Q${regular.toFixed(2)} → *Q${final.toFixed(2)}* (-${Number(item.discountPct)}%)`
+        : `*Q${final.toFixed(2)}*`;
+      text += `👗 ${item.name || 'Prenda'}${detail ? ` · ${detail}` : ''}
+${price}
+`;
     });
 
-    const totalPieces = items.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
-    text += `━━━━━━━━━━━━━━━━━━━\n`;
-    if (Number(shippingCost) > 0) {
-      text += `🚚 Envío a domicilio: Q${Number(shippingCost).toFixed(2)}\n`;
-    }
-    text += `🛍️ *Total a pagar (${totalPieces} prenda${totalPieces !== 1 ? 's' : ''}): Q${grandTotal.toFixed(2)}*\n`;
-    if (discountTotal > 0) {
-      text += `🎉 *¡Te ahorras Q${discountTotal.toFixed(2)}!*\n`;
-    }
-    if (customNote.trim()) {
-      text += `📌 _${customNote.trim()}_\n`;
-    }
-    text += `━━━━━━━━━━━━━━━━━━━\n`;
-    text += `_Cotización válida por 48 horas sujeta a disponibilidad de existencias._`;
+    if (Number(shippingCost) > 0) text += `🚚 Envío: Q${Number(shippingCost).toFixed(2)}
+`;
+    if (customNote.trim()) text += `📌 ${customNote.trim()}
+`;
+    text += `
+🛍️ *Total a pagar: Q${grandTotal.toFixed(2)}*`;
+    if (discountTotal > 0) text += ` (ahorras Q${discountTotal.toFixed(2)})`;
+    text += `
+_Válida 48 h, sujeta a existencias._`;
 
     return text;
   }
@@ -735,7 +728,7 @@ export default function QuoteModal({
                     Envío a domicilio (Q)
                   </label>
                   <div className="flex items-center gap-1.5">
-                    {[0, 25, 35].map((cost) => (
+                    {[0, 56].map((cost) => (
                       <button
                         key={cost}
                         type="button"
