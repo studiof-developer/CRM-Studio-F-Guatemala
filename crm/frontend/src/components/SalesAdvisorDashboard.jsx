@@ -1267,13 +1267,13 @@ export default function SalesAdvisorDashboard() {
                               </button>
                             </div>
                           )}
-                          {t.amountBasis === 'precio_aprobado' && (
+                          {(t.amountBasis === 'precio_aprobado' || t.attributionUncertain) && (
                             <div className="mt-1 flex items-center gap-1">
                               {t.validated ? (
                                 <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">Monto validado</span>
                               ) : (
                                 <>
-                                  <span title="El pago por link no trae monto: se usó el último precio aprobado por el cliente" className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
+                                  <span title={t.attributionUncertain ? 'Otra asesora tomó el chat después de los medios de pago: un supervisor confirma de quién es la venta' : 'El pago por link no trae monto: se usó el último precio aprobado por el cliente'} className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
                                   <button type="button" onClick={() => handleValidateAmount(t)} className="rounded-lg border border-line px-2 py-0.5 text-[10px] font-semibold text-ink hover:bg-muted">Validar</button>
                                 </>
                               )}
@@ -1484,13 +1484,13 @@ export default function SalesAdvisorDashboard() {
                               ) : (
                                 <span>—</span>
                               )}
-                              {t.amountBasis === 'precio_aprobado' && (
+                              {(t.amountBasis === 'precio_aprobado' || t.attributionUncertain) && (
                                 <div className="mt-1 flex items-center gap-1">
                                   {t.validated ? (
                                     <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">Monto validado</span>
                                   ) : (
                                     <>
-                                      <span title="El pago por link no trae monto: se usó el último precio aprobado por el cliente" className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
+                                      <span title={t.attributionUncertain ? 'Otra asesora tomó el chat después de los medios de pago: un supervisor confirma de quién es la venta' : 'El pago por link no trae monto: se usó el último precio aprobado por el cliente'} className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">Por validar</span>
                                       <button type="button" onClick={() => handleValidateAmount(t)} className="rounded-lg border border-line px-2 py-0.5 text-[10px] font-semibold text-ink hover:bg-muted">Validar</button>
                                     </>
                                   )}

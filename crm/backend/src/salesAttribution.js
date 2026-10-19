@@ -72,8 +72,8 @@ async function insertSale(s) {
     `INSERT INTO sales (
        customer_id, ticket_id, advisor_id, advisor_name, amount, payment_method, quote_id, notes,
        whatsapp_number_id, created_at, status, amount_source, quoted_amount, receipt_amount,
-       amount_match, attributed_by, confirmed_at, channel, evidence_type, evidence_message_id, amount_basis
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+       amount_match, attributed_by, confirmed_at, channel, evidence_type, evidence_message_id, amount_basis, attribution_uncertain
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      ON CONFLICT (evidence_type, evidence_message_id) WHERE evidence_message_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [
@@ -81,7 +81,7 @@ async function insertSale(s) {
       s.paymentMethod ?? null, s.quoteId ?? null, s.notes ?? null, s.lineId ?? null, s.at,
       s.status, s.amountSource ?? null, s.quotedAmount ?? null, s.receiptAmount ?? null,
       s.amountMatch ?? null, s.rule, s.status === 'confirmada' ? s.at : null, s.channel ?? 'whatsapp',
-      s.evidenceType, s.evidenceId ?? null, s.amountBasis ?? null,
+      s.evidenceType, s.evidenceId ?? null, s.amountBasis ?? null, !!s.attributionUncertain,
     ]
   );
   return rows[0] ?? null;
@@ -135,9 +135,10 @@ async function adoptExistingSale(customerId, ep, amount, advisor) {
         advisor_id = CASE WHEN advisor_id IS NULL AND $9::int IS NOT NULL THEN $9 ELSE advisor_id END,
         status = CASE WHEN $10::boolean THEN 'confirmada' ELSE status END,
         confirmed_at = CASE WHEN $10::boolean AND confirmed_at IS NULL THEN now() ELSE confirmed_at END,
+        attribution_uncertain = CASE WHEN amount_validated_at IS NULL THEN $11::boolean ELSE attribution_uncertain END,
         updated_at = now()
       WHERE id = $1 RETURNING *`,
-    [sale.id, legacy, evType, ep.eventId, ep.at, finalAmount, exact, advisor.name ?? null, advisor.id ?? null, !!confirmed]
+    [sale.id, legacy, evType, ep.eventId, ep.at, finalAmount, exact, advisor.name ?? null, advisor.id ?? null, !!confirmed, !!ep.attributionUncertain]
   );
   return upd[0] ?? null;
 }
@@ -179,7 +180,7 @@ async function saleFromEpisode(customer, ep, lineId, { clickUser = null } = {}) 
     amountSource: amount ? source : null, quotedAmount: ep.quote ?? null, receiptAmount: receipt,
     amountMatch: ep.quote != null && receipt != null ? Math.abs(ep.quote - receipt) < 0.5 : null, rule: rule ?? 'sin_atribuir',
     channel: social ? 'social' : 'whatsapp', evidenceType: ep.type === 'comprobante' ? 'receipt_ocr' : (social ? 'social_confirmation' : 'advisor_confirmation'),
-    evidenceId: ep.eventId, amountBasis: basis,
+    evidenceId: ep.eventId, amountBasis: basis, attributionUncertain: ep.attributionUncertain,
   });
 }
 
@@ -382,14 +383,15 @@ export async function auditSales({ from, to, lineId = null }) {
       const item = {
         receiptId: ep.eventId, at: ep.at, customerId: customer.id, customer: ep.customer, phone: ep.phone, line: ep.line,
         amount: ep.amount, type: ep.type, verified: ep.verified, medium: ep.medium, shift: ep.shift, issues: ep.issues,
-        expectedAdvisor: ep.advisor, rule: ep.rule, confirmedBy: ep.confirmedBy, confirmedAt: ep.confirmedAt, via: ep.via, voucher: ep.voucher, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
+        expectedAdvisor: ep.advisor, rule: ep.rule, attributionUncertain: ep.attributionUncertain, confirmedBy: ep.confirmedBy, confirmedAt: ep.confirmedAt, via: ep.via, voucher: ep.voucher, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
       };
       if (new Date(ep.at) < LOCK_BEFORE) { items.push({ ...item, status: 'historico_bloqueado' }); continue; }
       if (!sale) { items.push({ ...item, status: 'sin_venta' }); continue; }
       item.recordedAdvisor = sale.advisor_name;
       item.recordedAt = sale.created_at;
       item.recordedAmount = Number(sale.amount);
-      const wrongAdvisor = ep.advisor && !sameAdvisor(ep.advisor, sale.advisor_name);
+      // Un supervisor ya validó esta venta (y pudo elegir la asesora): el motor no la vuelve a mover.
+      const wrongAdvisor = ep.advisor && !sale.amount_validated_at && !sameAdvisor(ep.advisor, sale.advisor_name);
       const wrongAmount = ep.type === 'comprobante' && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
       const wrongDate = guatemalaParts(sale.created_at).ymd !== guatemalaParts(ep.at).ymd;
       const promotable = sale.status === 'revisar' && ep.verified && (ep.amount > 0 || Number(sale.amount) > 0);
@@ -481,18 +483,20 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
       const useReceiptAmount = i.type === 'comprobante' && i.amount > 0;
       await pool.query(
         `UPDATE sales SET created_at = $2, confirmed_at = CASE WHEN $8::boolean THEN $2 ELSE confirmed_at END,
-                advisor_name = COALESCE($3, advisor_name), advisor_id = COALESCE($4, advisor_id),
+                advisor_name = CASE WHEN amount_validated_at IS NULL THEN COALESCE($3, advisor_name) ELSE advisor_name END,
+                advisor_id = CASE WHEN amount_validated_at IS NULL THEN COALESCE($4, advisor_id) ELSE advisor_id END,
                 attributed_by = COALESCE($5, attributed_by),
                 amount = CASE WHEN $9::boolean THEN $10::numeric ELSE amount END,
                 receipt_amount = CASE WHEN $9::boolean THEN $10::numeric ELSE receipt_amount END,
                 amount_source = CASE WHEN $9::boolean THEN 'ocr' ELSE amount_source END,
                 amount_basis = CASE WHEN $9::boolean THEN 'comprobante' ELSE amount_basis END,
+                attribution_uncertain = CASE WHEN amount_validated_at IS NULL THEN $11::boolean ELSE attribution_uncertain END,
                 status = CASE WHEN $8::boolean AND (CASE WHEN $9::boolean THEN $10::numeric ELSE amount END) > 0 THEN 'confirmada' ELSE status END,
                 evidence_type = COALESCE(evidence_type, $6), evidence_message_id = COALESCE(evidence_message_id, $7),
                 updated_at = now()
          WHERE id = $1 AND NOT attribution_locked
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
-        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null]
+        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null, !!i.attributionUncertain]
       );
     } else if (i.status === 'sin_evidencia' || i.status === 'duplicada') {
       const note = i.duplicateOf

@@ -379,3 +379,25 @@ test('medios de pago del mismo día siguen mandando (cambio de turno)', () => {
   ];
   assert.equal(buildEpisodes(eventos).episodes[0]?.advisor, 'Aura');
 });
+
+test('otra asesora toma el chat después de los medios de pago: la venta queda por validar', () => {
+  const eventos = [
+    adv(gt('17', '10:21'), 'Luisa', 'https://pay.neolink.com.gt/VEL130042900'),
+    adv(gt('17', '16:30'), 'Aura', ''), // imagen de "medios de pago" sin texto
+    img(gt('17', '16:38'), 349.5),
+    adv(gt('17', '16:55'), 'Aura', CANONICA),
+  ];
+  const [ep] = buildEpisodes(eventos).episodes;
+  assert.equal(ep.advisor, 'Luisa');
+  assert.equal(ep.attributionUncertain, true);
+  assert.ok(ep.issues.includes('asesora_por_validar'));
+});
+
+test('una sola asesora de principio a fin no queda por validar', () => {
+  const eventos = [
+    adv(gt('17', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'),
+    img(gt('17', '10:00'), 539),
+    adv(gt('17', '10:20'), 'Aura', CANONICA),
+  ];
+  assert.equal(buildEpisodes(eventos).episodes[0]?.attributionUncertain, false);
+});

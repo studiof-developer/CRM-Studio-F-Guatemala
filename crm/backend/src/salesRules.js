@@ -234,6 +234,9 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
     if (type === 'confirmacion' && approvedPrice && !approvedPrice.approved) issues.push('precio_sin_aprobacion_del_cliente');
     if (amount != null && quote != null && Math.abs(amount - quote) >= 0.5) issues.push('monto_distinto_a_cotizacion');
     if (touched.length > 1) issues.push('varias_asesoras');
+    // Otra asesora habló después de los medios de pago y antes de la prueba: no está claro de quién es la venta.
+    const handoff = !!payInfo && cycle.some((e) => e.role === 'advisor' && e.advisor && +new Date(e.at) > +new Date(payInfo.at) && e.advisor !== payInfo.advisor);
+    if (handoff) issues.push('asesora_por_validar');
     if (!attribution) issues.push('sin_asesora');
     if (type === 'confirmacion' && !voucher && !proof.some((e) => e.image || e.ocrAmount)) issues.push('sin_prueba_del_cliente');
     return {
@@ -241,7 +244,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS } = {}) {
       // Cómo se obtuvo el monto: leído de un documento (imagen/PDF/texto del banco) o inferido del precio aprobado.
       amountBasis: amount == null ? null : (type === 'comprobante' ? 'comprobante' : 'precio_aprobado'),
       priceApprovedByCustomer: type === 'confirmacion' ? (approvedPrice?.approved ?? null) : null,
-      advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null,
+      advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null, attributionUncertain: handoff,
       paymentInfoBy: payInfo?.advisor ?? null, paymentInfoAt: payInfo?.at ?? null,
       medium: payInfo ? paymentMedium(payInfo.text) : null, voucher,
       touchedBy: touched, shift: shiftOf(anchor.at), imagesWithoutAmount, issues,

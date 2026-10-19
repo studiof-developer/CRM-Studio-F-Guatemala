@@ -14,7 +14,7 @@ function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }
   const by = {};
   const quality = {
     pendientesDeConfirmar: 0, montoPorValidar: 0, comprobantesSinContexto: orphans.length, sinMediosDePagoEnChat: 0, montoNoLeido: 0,
-    montoDistintoACotizacion: 0, variasAsesoras: 0, sinAsesora: 0, sinPruebaDelCliente: 0, precioSinAprobacion: 0, imagenesSinMonto: 0,
+    montoDistintoACotizacion: 0, variasAsesoras: 0, asesoraPorValidar: 0, sinAsesora: 0, sinPruebaDelCliente: 0, precioSinAprobacion: 0, imagenesSinMonto: 0,
   };
   const advisorOf = (r) => r.advisor ?? 'Sin atribuir';
   for (const r of rows) {
@@ -25,13 +25,13 @@ function summarize({ rows, orphans, withoutEvidence, resent, customersAnalyzed }
       a.porTurno[r.shift] = (a.porTurno[r.shift] ?? 0) + (r.amount ?? 0);
       a.porMedio[r.medium ?? 'sin_dato'] = (a.porMedio[r.medium ?? 'sin_dato'] ?? 0) + 1;
       a.porRegla[r.rule ?? 'sin_atribuir'] = (a.porRegla[r.rule ?? 'sin_atribuir'] ?? 0) + 1;
-      if (r.amountBasis === 'precio_aprobado') { a.porValidar++; a.porValidarTotal += r.amount ?? 0; quality.montoPorValidar++; }
+      if (r.amountBasis === 'precio_aprobado' || r.attributionUncertain) { a.porValidar++; a.porValidarTotal += r.amount ?? 0; quality.montoPorValidar++; }
     } else {
       a.pendientes++;
       a.pendienteTotal += r.amount ?? 0;
       quality.pendientesDeConfirmar++;
     }
-    for (const [issue, key] of [['sin_medios_de_pago_en_chat', 'sinMediosDePagoEnChat'], ['monto_no_leido', 'montoNoLeido'], ['monto_distinto_a_cotizacion', 'montoDistintoACotizacion'], ['varias_asesoras', 'variasAsesoras'], ['sin_asesora', 'sinAsesora'], ['sin_prueba_del_cliente', 'sinPruebaDelCliente'], ['precio_sin_aprobacion_del_cliente', 'precioSinAprobacion']]) {
+    for (const [issue, key] of [['sin_medios_de_pago_en_chat', 'sinMediosDePagoEnChat'], ['monto_no_leido', 'montoNoLeido'], ['monto_distinto_a_cotizacion', 'montoDistintoACotizacion'], ['varias_asesoras', 'variasAsesoras'], ['asesora_por_validar', 'asesoraPorValidar'], ['sin_asesora', 'sinAsesora'], ['sin_prueba_del_cliente', 'sinPruebaDelCliente'], ['precio_sin_aprobacion_del_cliente', 'precioSinAprobacion']]) {
       if (r.issues.includes(issue)) quality[key]++;
     }
     quality.imagenesSinMonto += r.imagesWithoutAmount;

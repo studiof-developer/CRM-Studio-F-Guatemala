@@ -8,6 +8,7 @@ const ISSUE_LABEL = {
   monto_no_leido: 'Monto no leído',
   monto_distinto_a_cotizacion: 'Monto distinto a lo cotizado',
   varias_asesoras: 'Varias asesoras en la venta',
+  asesora_por_validar: 'Otra asesora tomó el chat tras los medios de pago (por validar)',
   sin_asesora: 'Sin asesora',
   sin_prueba_del_cliente: 'Sin prueba del cliente en el chat',
   monto_por_validar: 'Monto por validar (precio aprobado)',

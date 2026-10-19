@@ -12,7 +12,8 @@ const router = Router();
 const CONFIRMED = "s.status = 'confirmada' AND s.amount > 0";
 // Monto inferido del último precio aprobado por el cliente (pago por link sin monto en el chat): suma,
 // pero un supervisor o administrador debe validarlo contra lo depositado.
-const POR_VALIDAR = `${CONFIRMED} AND s.amount_basis = 'precio_aprobado' AND s.amount_validated_at IS NULL`;
+// También queda por validar la venta cuya asesora no es clara (otra tomó el chat tras los medios de pago).
+const POR_VALIDAR = `${CONFIRMED} AND (s.amount_basis = 'precio_aprobado' OR s.attribution_uncertain) AND s.amount_validated_at IS NULL`;
 const GT_HOUR = "extract(hour from s.created_at AT TIME ZONE 'America/Guatemala')";
 const GT_DOW = "extract(dow from s.created_at AT TIME ZONE 'America/Guatemala')";
 const shiftSum = (cond, alias) => `COALESCE(SUM(s.amount) FILTER (WHERE ${CONFIRMED} AND ${cond}), 0)::numeric(10,2) AS ${alias}`;
@@ -378,6 +379,7 @@ router.get('/by-advisor', async (req, res, next) => {
          s.channel,
          s.amount_basis,
          s.amount_validated_at,
+         s.attribution_uncertain,
          c.full_name AS customer_name,
          c.whatsapp_number AS customer_phone
        FROM sales s
@@ -430,6 +432,7 @@ router.get('/by-advisor', async (req, res, next) => {
         channel: t.channel || 'whatsapp',
         amountBasis: t.amount_basis || null,
         validated: !!t.amount_validated_at,
+        attributionUncertain: !!t.attribution_uncertain,
         createdAt: t.created_at,
       })),
       generatedAt: new Date().toISOString(),
