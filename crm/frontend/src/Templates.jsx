@@ -8,6 +8,7 @@ import { useLiveEvent } from './lib/liveEvents.js';
 import Select from './components/Select.jsx';
 import Badge from './components/Badge.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
+import TemplatesHelp from './TemplatesHelp.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
 // Marketing > Plantillas: administra las plantillas de WhatsApp de Meta sin entrar a Meta — lista con filtros, estado y
@@ -264,6 +265,7 @@ export default function Templates() {
   const [deleting, setDeleting] = useState(false);
   const [detail, setDetail] = useState(null); // { name, stats | null }
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     fetchWhatsappNumbers().then((wns) => { setLines(wns); if (wns.length) setLineId(String(wns[0].id)); }).catch(() => {});
@@ -323,6 +325,8 @@ export default function Templates() {
       <section className="rounded-2xl border border-line bg-paper p-4 md:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setHelpOpen(true)} aria-label="Cómo funciona esta sección" title="Cómo funciona esta sección"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-accent transition-colors hover:bg-accent-soft"><Info size={16} /></button>
             <label className="text-xs font-medium text-greige-ink">Línea de WhatsApp:</label>
             {lines.length > 0 && <Select value={lineId} onChange={setLineId} options={lines.map((l) => ({ value: String(l.id), label: l.label || `Línea ${l.id}` }))} className="w-48" />}
           </div>
@@ -395,6 +399,8 @@ export default function Templates() {
         </div>
         {list.length > limit && <button type="button" onClick={() => setLimit(limit + 40)} className="mx-auto mt-4 block text-sm font-semibold text-accent hover:underline">Mostrar más ({list.length - limit})</button>}
       </section>
+
+      <TemplatesHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <ConfirmDialog
         open={!!toDelete}
