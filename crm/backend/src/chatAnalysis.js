@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { lineFromSession } from './salesThreads.js';
+import { lineFromSession, defaultLineId } from './salesThreads.js';
 
 // Vista "Análisis": lee los chats que ya están guardados (n8n_chat_histories) y los clasifica en los casos que pide
 // administración — pauta de nueva colección, pauta con % de descuento, preguntas por guía, cambios de talla o prenda,
@@ -21,6 +21,17 @@ const RE_CAMBIO = new RegExp(
 );
 
 const uniq = (list) => [...new Set(list)];
+
+// Mensajes de una línea: el session_id lleva "__line_N"; los viejos, sin ese sufijo, son de la línea por defecto (la misma
+// regla que usa Conversaciones). Agrega los parámetros a `params` y devuelve el pedazo de SQL (vacío si no hay línea).
+function lineCondition(lineId, defaultLine, params, alias) {
+  if (!lineId) return '';
+  params.push(String(lineId));
+  const a = params.length;
+  params.push(Number(lineId) === Number(defaultLine));
+  const b = params.length;
+  return ` AND (${alias}.session_id ~ ('__line_' || $${a}::text || '(__|$)') OR ($${b}::boolean AND ${alias}.session_id !~ '__line_'))`;
+}
 
 // chat = { firstMessageAt, firstReferral, messages: [{ at, inWindow, role, text, referral }] }; win = { from, to }.
 export function classifyChat(chat, win) {
@@ -58,11 +69,13 @@ export function classifyChat(chat, win) {
 
 // Carga los chats con mensajes en [from, to] (más el contexto desde ctxFrom, marcado inWindow = false). Con `phones` solo esos
 // clientes y con `allHistory` todo su historial; con `light` omite adjuntos, tickets y ventas (la lista no los necesita).
-async function loadChats({ from, to, ctxFrom, phones = null, allHistory = false, light = false }) {
+async function loadChats({ from, to, ctxFrom, phones = null, allHistory = false, light = false, lineId = null }) {
+  const defaultLine = await defaultLineId();
   const params = [to];
   let where = 'h.created_at <= $1';
   if (!allHistory) { params.push(ctxFrom); where += ` AND h.created_at >= $${params.length}`; }
   if (phones) { params.push(phones.map((p) => `${p}%`)); where += ` AND h.session_id LIKE ANY($${params.length}::text[])`; }
+  where += lineCondition(lineId, defaultLine, params, 'h');
   const { rows: msgs } = await pool.query(
     `SELECT h.id, h.session_id, h.created_at, h.message FROM n8n_chat_histories h WHERE ${where} ORDER BY h.created_at, h.id`,
     params
@@ -82,29 +95,35 @@ async function loadChats({ from, to, ctxFrom, phones = null, allHistory = false,
   const patterns = keys.map((p) => `${p}%`);
   const ids = light ? [] : [...byPhone.values()].flat().map((r) => r.id);
   const empty = Promise.resolve({ rows: [] });
+  const refParams = [patterns];
+  const refLine = lineCondition(lineId, defaultLine, refParams, 'h');
+  const seenParams = [patterns];
+  const seenLine = lineCondition(lineId, defaultLine, seenParams, 'h');
   const [customers, tickets, sales, attachments, firstRef, firstSeen] = await Promise.all([
     pool.query(light ? 'SELECT id, whatsapp_number, full_name FROM customers WHERE whatsapp_number = ANY($1::text[])' : 'SELECT * FROM customers WHERE whatsapp_number = ANY($1::text[])', [keys]),
     light ? empty : pool.query(
       `SELECT t.customer_id, t.id, t.status, t.assigned_advisor, t.handoff_reason, t.whatsapp_number_id, t.created_at, t.updated_at, t.first_response_at
        FROM tickets t JOIN customers c ON c.id = t.customer_id WHERE c.whatsapp_number = ANY($1::text[]) ORDER BY t.id DESC LIMIT 60`, [keys]),
     light ? empty : pool.query(
-      `SELECT s.customer_id, s.amount, s.status, s.advisor_name, s.created_at
+      `SELECT s.customer_id, s.amount, s.status, s.advisor_name, s.created_at, s.whatsapp_number_id
        FROM sales s JOIN customers c ON c.id = s.customer_id WHERE c.whatsapp_number = ANY($1::text[]) ORDER BY s.created_at DESC LIMIT 60`, [keys]),
     light ? empty : pool.query(
       `SELECT a.n8n_message_id, a.kind, a.mime_type, a.filename, o.amount, o.snippet
        FROM message_attachments a LEFT JOIN attachment_ocr o ON o.attachment_id = a.id WHERE a.n8n_message_id = ANY($1::int[]) ORDER BY a.id`, [ids]),
     pool.query(
-      `SELECT DISTINCT ON (split_part(session_id, '__', 1)) split_part(session_id, '__', 1) AS phone, created_at, message->'additional_kwargs'->'referral' AS referral
-       FROM n8n_chat_histories WHERE session_id LIKE ANY($1::text[]) AND message->'additional_kwargs'->'referral' IS NOT NULL
-       ORDER BY split_part(session_id, '__', 1), id`, [patterns]),
+      `SELECT DISTINCT ON (split_part(h.session_id, '__', 1)) split_part(h.session_id, '__', 1) AS phone, h.created_at, h.message->'additional_kwargs'->'referral' AS referral
+       FROM n8n_chat_histories h WHERE h.session_id LIKE ANY($1::text[]) AND h.message->'additional_kwargs'->'referral' IS NOT NULL${refLine}
+       ORDER BY split_part(h.session_id, '__', 1), h.id`, refParams),
     pool.query(
-      `SELECT split_part(session_id, '__', 1) AS phone, min(created_at) AS first_at, count(*)::int AS total
-       FROM n8n_chat_histories WHERE session_id LIKE ANY($1::text[]) GROUP BY 1`, [patterns]),
+      `SELECT split_part(h.session_id, '__', 1) AS phone, min(h.created_at) AS first_at, count(*)::int AS total
+       FROM n8n_chat_histories h WHERE h.session_id LIKE ANY($1::text[])${seenLine} GROUP BY 1`, seenParams),
   ]);
 
   const group = (rows, key) => { const m = new Map(); for (const r of rows) { if (!m.has(r[key])) m.set(r[key], []); m.get(r[key]).push(r); } return m; };
-  const ticketsBy = group(tickets.rows, 'customer_id');
-  const salesBy = group(sales.rows, 'customer_id');
+  // con una línea elegida, los tickets y ventas también son solo de esa línea (sin línea guardada = la línea por defecto)
+  const ofLine = (r) => !lineId || Number(r.whatsapp_number_id ?? defaultLine) === Number(lineId);
+  const ticketsBy = group(tickets.rows.filter(ofLine), 'customer_id');
+  const salesBy = group(sales.rows.filter(ofLine), 'customer_id');
   const attBy = group(attachments.rows, 'n8n_message_id');
   const refBy = new Map(firstRef.rows.map((r) => [r.phone, r]));
   const seenBy = new Map(firstSeen.rows.map((r) => [r.phone, r]));
@@ -126,7 +145,7 @@ async function loadChats({ from, to, ctxFrom, phones = null, allHistory = false,
         return {
           id: r.id, at: r.created_at, inWindow: +r.created_at >= +from,
           role: m.type === 'human' ? 'customer' : (m.type === 'ai' && kw.sentBy === 'advisor' ? 'advisor' : 'bot'),
-          advisor: kw.advisorName ?? null, line: lineFromSession(r.session_id), text: m.content ?? '',
+          advisor: kw.advisorName ?? null, line: lineFromSession(r.session_id) ?? defaultLine, text: m.content ?? '',
           referral: kw.referral ?? null, campaignId: kw.campaignId ?? null,
           attachments: (attBy.get(r.id) ?? []).map((a) => ({ kind: a.kind, mime: a.mime_type, name: a.filename, amount: a.amount, text: a.snippet })),
         };
@@ -136,8 +155,8 @@ async function loadChats({ from, to, ctxFrom, phones = null, allHistory = false,
 }
 
 // Lista liviana: una fila por cliente con lo que se detectó. La conversación completa se pide aparte (chatDetail).
-export async function analyzeWindow({ from, to, ctxFrom }) {
-  const chats = await loadChats({ from, to, ctxFrom: ctxFrom < from ? ctxFrom : from, light: true });
+export async function analyzeWindow({ from, to, ctxFrom, lineId = null }) {
+  const chats = await loadChats({ from, to, ctxFrom: ctxFrom < from ? ctxFrom : from, light: true, lineId });
   const win = { from, to };
   const items = chats.map((c) => {
     const k = classifyChat(c, win);
@@ -146,15 +165,15 @@ export async function analyzeWindow({ from, to, ctxFrom }) {
     return {
       phone: c.phone, name: c.customer?.full_name ?? null, ...k,
       msgsInWindow: inWin.length, lastAt: last.at, lastRole: last.role, lastText: String(last.text ?? '').slice(0, 160),
-      lastLine: [...c.messages].reverse().find((m) => m.line)?.line ?? null,
+      lines: uniq(inWin.map((m) => m.line)),
     };
   });
   items.sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
-  return { window: { from, to }, items };
+  return { window: { from, to }, lineId, items };
 }
 
-export async function chatDetail({ phone, from, to }) {
-  const [chat] = await loadChats({ from, to, ctxFrom: from, phones: [phone], allHistory: true });
+export async function chatDetail({ phone, from, to, lineId = null }) {
+  const [chat] = await loadChats({ from, to, ctxFrom: from, phones: [phone], allHistory: true, lineId });
   if (!chat) return null;
   return { ...chat, analysis: classifyChat(chat, { from, to }) };
 }

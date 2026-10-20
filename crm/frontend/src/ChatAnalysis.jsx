@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Loader2, Download, MessageSquare } from 'lucide-react';
-import { fetchChatAnalysis, fetchChatAnalysisDetail } from './api.js';
+import { fetchChatAnalysis, fetchChatAnalysisDetail, fetchWhatsappNumbers } from './api.js';
 import Select from './components/Select.jsx';
 import { showError } from './components/Toast.jsx';
 
@@ -46,6 +46,8 @@ const subKeysOf = (it, cat) => (cat === 'desc' ? it.pcts.map((p) => `${p}%`) : [
 
 export default function ChatAnalysis({ onOpenConversation }) {
   const [preset, setPreset] = useState('ayer9');
+  const [lines, setLines] = useState([]);
+  const [lineId, setLineId] = useState(''); // '' = todas las líneas
   const [range, setRange] = useState(() => presetRange('ayer9'));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -56,15 +58,18 @@ export default function ChatAnalysis({ onOpenConversation }) {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const run = useCallback(async (from, to) => {
+  const run = useCallback(async (from, to, line) => {
     setLoading(true); setSelected(null); setDetail(null); setCat('all'); setSub('all');
-    try { setData(await fetchChatAnalysis(from.toISOString(), to.toISOString())); }
+    try { setData(await fetchChatAnalysis(from.toISOString(), to.toISOString(), line || undefined)); }
     catch (err) { showError(err.message); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { run(range[0], range[1]); /* solo al abrir: después se analiza con el botón */ // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { run(range[0], range[1], lineId); /* solo al abrir: después se analiza con el botón o al cambiar de línea */ // eslint-disable-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { fetchWhatsappNumbers().then(setLines).catch(() => {}); }, []);
+  const lineLabel = (id) => lines.find((l) => Number(l.id) === Number(id))?.label || `Línea ${id}`;
+  function changeLine(v) { setLineId(v); run(range[0], range[1], v); }
 
   function changePreset(v) {
     setPreset(v);
@@ -89,7 +94,7 @@ export default function ChatAnalysis({ onOpenConversation }) {
 
   async function openChat(phone) {
     setSelected(phone); setDetail(null); setDetailLoading(true);
-    try { setDetail(await fetchChatAnalysisDetail(phone, data.window.from, data.window.to)); }
+    try { setDetail(await fetchChatAnalysisDetail(phone, data.window.from, data.window.to, lineId || undefined)); }
     catch (err) { showError(err.message); }
     finally { setDetailLoading(false); }
   }
@@ -111,15 +116,16 @@ export default function ChatAnalysis({ onOpenConversation }) {
           <p className="mt-1 text-sm text-greige-ink">Clasifica los chats ya guardados: pautas, guías, cambios y clientes que retoman. Solo lectura.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          <div className="w-48"><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-greige">Línea</label><Select value={lineId} onChange={changeLine} options={[{ value: '', label: 'Todas las líneas' }, ...lines.map((l) => ({ value: String(l.id), label: l.label || `Línea ${l.id}` }))]} /></div>
           <div className="w-56"><Select value={preset} onChange={changePreset} options={PRESETS} /></div>
           <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-greige">Desde<input type="datetime-local" className={input} value={toInput(range[0])} onChange={(e) => setEdge(0, e.target.value)} /></label>
           <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-greige">Hasta<input type="datetime-local" className={input} value={toInput(range[1])} onChange={(e) => setEdge(1, e.target.value)} /></label>
-          <button type="button" onClick={() => run(range[0], range[1])} disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60">
+          <button type="button" onClick={() => run(range[0], range[1], lineId)} disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Analizar
           </button>
         </div>
       </div>
-      <p className="mb-4 text-xs text-greige">Hora de Guatemala. Máximo 7 días por consulta.{data && ` · ${items.length} chats con mensajes en el período.`}</p>
+      <p className="mb-4 text-xs text-greige">Hora de Guatemala. Máximo 7 días por consulta.{data && ` · ${lineId ? lineLabel(lineId) : 'Todas las líneas'} · ${items.length} chats con mensajes en el período.`}</p>
 
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <button type="button" onClick={() => { setCat('all'); setSub('all'); }} aria-pressed={cat === 'all'} className={`rounded-2xl border p-4 text-left transition ${cat === 'all' ? 'border-accent bg-accent text-white' : 'border-line bg-paper hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'}`}>
@@ -157,6 +163,7 @@ export default function ChatAnalysis({ onOpenConversation }) {
                 <div className="mt-0.5 truncate text-[13px] text-greige-ink">{it.lastRole === 'customer' ? '' : '↪ '}{it.lastText || '(adjunto)'}</div>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {it.cats.map((c) => <span key={c} className={`rounded-full px-2 py-px text-[11px] font-bold ${TAG_BY_ID[c]}`}>{SHORT[c]}</span>)}
+                  {!lineId && lines.length > 1 && it.lines.map((l) => <span key={l} className="rounded-full border border-line px-2 py-px text-[11px] font-bold text-greige-ink">{lineLabel(l)}</span>)}
                   {it.isNew && <span className="rounded-full bg-black/[0.06] px-2 py-px text-[11px] font-bold text-greige-ink dark:bg-white/[0.1]">Nuevo</span>}
                   {it.viaAd && <span className="rounded-full bg-black/[0.06] px-2 py-px text-[11px] font-bold text-greige-ink dark:bg-white/[0.1]">Pauta</span>}
                 </div>
@@ -168,7 +175,7 @@ export default function ChatAnalysis({ onOpenConversation }) {
         <div className="min-w-0">
           {!selected && <div className="grid min-h-[320px] place-content-center rounded-2xl border border-dashed border-line p-8 text-center text-sm text-greige">Elige un chat de la lista para ver la ficha del cliente, de dónde llegó y la conversación.</div>}
           {selected && detailLoading && <div className="grid min-h-[320px] place-content-center rounded-2xl border border-line bg-paper p-8 text-sm text-greige"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}
-          {detail && !detailLoading && <ChatDetail detail={detail} windowFrom={data.window.from} onOpenConversation={onOpenConversation} />}
+          {detail && !detailLoading && <ChatDetail detail={detail} windowFrom={data.window.from} onOpenConversation={onOpenConversation} lines={lines} />}
         </div>
       </div>
     </div>
@@ -178,7 +185,7 @@ export default function ChatAnalysis({ onOpenConversation }) {
 const HIDDEN_FIELDS = new Set(['id', 'whatsapp_number']);
 const fmtField = (k, v) => (/_at$/.test(k) && typeof v === 'string' ? niceDate(v) : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : String(v));
 
-function ChatDetail({ detail, windowFrom, onOpenConversation }) {
+function ChatDetail({ detail, windowFrom, onOpenConversation, lines }) {
   const { customer: cu, analysis: a } = detail;
   const fields = Object.entries(cu ?? {}).filter(([k, v]) => !HIDDEN_FIELDS.has(k) && v !== null && v !== '');
   const ref = detail.firstReferral;
@@ -236,7 +243,7 @@ function ChatDetail({ detail, windowFrom, onOpenConversation }) {
               {m.attachments.map((at, i) => <span key={i} className="mt-1 block rounded-lg bg-paper px-2 py-1 text-xs font-semibold">📎 {at.kind}{at.amount != null && ` · monto leído Q${Number(at.amount).toFixed(2)}`}{at.text && ` · “${String(at.text).slice(0, 140)}”`}</span>)}
               {m.referral && <span className="mt-1 block rounded-lg bg-warn/10 px-2 py-1 text-xs"><b>Llegó por anuncio</b> {[m.referral.headline, m.referral.body].filter(Boolean).join(' — ')}{m.referral.source_id && ` · ID ${m.referral.source_id}`}</span>}
               {m.campaignId && <span className="mt-1 block rounded-lg bg-paper px-2 py-1 text-xs font-semibold">Difusión #{m.campaignId}</span>}
-              <span className="mt-0.5 block text-[11px] text-greige-ink">{m.role === 'customer' ? 'Cliente' : m.role === 'advisor' ? (m.advisor ?? 'Asesora') : 'Bot'} · {hhmm(m.at)}{m.line ? ` · línea ${m.line}` : ''}</span>
+              <span className="mt-0.5 block text-[11px] text-greige-ink">{m.role === 'customer' ? 'Cliente' : m.role === 'advisor' ? (m.advisor ?? 'Asesora') : 'Bot'} · {hhmm(m.at)}{m.line ? ` · ${lines.find((l) => Number(l.id) === Number(m.line))?.label || `línea ${m.line}`}` : ''}</span>
             </div>
           );
           return parts;
