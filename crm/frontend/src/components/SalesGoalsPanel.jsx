@@ -24,7 +24,7 @@ const toneOf = (status) => (status === 'behind' ? 'bg-danger' : status === 'on_t
 // barra es lo esperado a hoy: pasar de ella es ir adelantada.
 export default function SalesGoalsPanel({ goals, canEdit, onEdit }) {
   return (
-    <div className="mt-6 grid gap-4">
+    <div className="grid gap-4">
       {goals.map((g) => {
         const expectedPct = (g.day / g.days) * 100;
         const [teamLabel, teamClass] = STATUS[g.team.status];
@@ -49,7 +49,7 @@ export default function SalesGoalsPanel({ goals, canEdit, onEdit }) {
               <Bar pct={g.team.pct} expectedPct={expectedPct} tone={toneOf(g.team.status)} />
             </div>
 
-            <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <ul className="mt-5 grid gap-4 sm:grid-cols-2">
               {g.advisors.map((a) => {
                 const [label, cls] = STATUS[a.status];
                 return (

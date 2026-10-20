@@ -11,7 +11,7 @@ export default function AdvisorCards({ advisors, onOpen }) {
     return <p className="rounded-2xl border border-line bg-paper p-8 text-center text-sm text-greige-ink">No se registraron ventas en este período. Cuando haya pagos en los chats, aparecerán aquí.</p>;
   }
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {advisors.map((a) => (
         <article key={a.advisorName} className="flex flex-col rounded-2xl border border-line bg-paper p-5 transition-shadow hover:shadow-md">
           <div className="flex items-start justify-between gap-3">

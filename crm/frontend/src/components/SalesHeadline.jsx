@@ -13,7 +13,7 @@ export default function SalesHeadline({ title, summary, previous, porValidarTota
   const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
 
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-success/20 bg-gradient-to-br from-success-bg/60 via-paper to-paper p-6 md:p-8">
+    <section className="overflow-hidden rounded-3xl border border-success/20 bg-gradient-to-br from-success-bg/60 via-paper to-paper p-6 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-greige-ink">{title}</p>

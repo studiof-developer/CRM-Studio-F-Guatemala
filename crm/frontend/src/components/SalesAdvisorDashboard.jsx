@@ -21,6 +21,7 @@ import SalesHeadline from './SalesHeadline.jsx';
 import AdvisorCards from './AdvisorCards.jsx';
 import SalesGoalsPanel from './SalesGoalsPanel.jsx';
 import SoldItemsModal from './SoldItemsModal.jsx';
+import SalesInsights from './SalesInsights.jsx';
 import { periodRange, previousPeriod, sumUntil, periodTitle } from '../lib/salesCompare.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
@@ -534,6 +535,9 @@ export default function SalesAdvisorDashboard() {
         </div>
       )}
 
+      {/* Reporte en dos columnas (pantalla ancha): total y asesoras a la izquierda; meta y detalle a la derecha */}
+      <div className={`mt-6 grid gap-6 ${viewMode === 'tarjetas' ? 'xl:grid-cols-12' : ''}`}>
+        <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-7' : ''}`}>
       {/* Tarjeta principal: total del período y comparación */}
       <SalesHeadline
         title={periodTitle(period, periodRange(period, from, to, guatemalaToday()))}
@@ -545,22 +549,9 @@ export default function SalesAdvisorDashboard() {
         onShowItems={() => setItemsOpen(true)}
       />
 
-      {/* Cumplimiento del mes contra la meta (solo las líneas que tienen meta) */}
-      {(() => {
-        const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
-        if (visible.length) return <SalesGoalsPanel goals={visible} canEdit={canManage} onEdit={openGoalEdit} />;
-        if (canManage && goalsData && !(goalsData.goals ?? []).length && whatsappNumbers.length) {
-          return (
-            <button type="button" onClick={() => openGoalEdit(null)} className="mt-6 w-full rounded-2xl border border-dashed border-line p-4 text-center text-sm font-semibold text-accent hover:bg-accent-soft">
-              Definir la meta mensual por asesora
-            </button>
-          );
-        }
-        return null;
-      })()}
 
       {/* Resultado por asesora: tarjetas (por defecto) o tabla completa */}
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-ink">Resultado por asesora</h3>
         <div className="inline-flex rounded-xl border border-line bg-paper p-1 text-xs" role="group" aria-label="Forma de ver el resultado">
           {[['tarjetas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2]].map(([key, label, Icon]) => (
@@ -747,6 +738,27 @@ export default function SalesAdvisorDashboard() {
 
         </>
       )}
+
+        </div>
+        <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-5' : ''}`}>
+      {/* Cumplimiento del mes contra la meta (solo las líneas que tienen meta) */}
+      {(() => {
+        const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
+        if (visible.length) return <SalesGoalsPanel goals={visible} canEdit={canManage} onEdit={openGoalEdit} />;
+        if (canManage && goalsData && !(goalsData.goals ?? []).length && whatsappNumbers.length) {
+          return (
+            <button type="button" onClick={() => openGoalEdit(null)} className="w-full rounded-2xl border border-dashed border-line p-4 text-center text-sm font-semibold text-accent hover:bg-accent-soft">
+              Definir la meta mensual por asesora
+            </button>
+          );
+        }
+        return null;
+      })()}
+
+
+          <SalesInsights daily={salesData?.daily ?? []} methods={salesData?.paymentMethods ?? []} total={summary.totalQuetzales} />
+        </div>
+      </div>
 
       {/* Detalle Transaccional de Ventas (Auditoría Gerencial) */}
       <div className="mt-6 rounded-2xl border border-line bg-paper p-4 md:p-5">
