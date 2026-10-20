@@ -931,6 +931,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
       pool.query(`
         SELECT round(avg(extract(epoch FROM (t.first_response_at - t.created_at)))/60) AS avg_min
         FROM tickets t JOIN customers c ON c.id = t.customer_id
+        WHERE t.first_response_at IS NOT NULL ${responseDateClause}
       `, responseParams),
       // Conversaciones totales que tuvieron actividad humana hoy (nuevas + recurrentes)
       pool.query(`
