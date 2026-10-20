@@ -44,7 +44,7 @@ function formatDateTime(iso) {
 
 export default function Campaigns({ user, onOpenConversation }) {
   const [tab, setTab] = useState('pipeline');
-  const isAdmin = user?.role === 'admin';
+  const canManageTemplates = user?.role === 'admin' || user?.role === 'supervisor';
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -61,7 +61,7 @@ export default function Campaigns({ user, onOpenConversation }) {
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
             { key: 'metaStrategy', label: 'Estrategia Meta & Costos', icon: ShieldCheck },
-            ...(isAdmin ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
+            ...(canManageTemplates ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -80,7 +80,7 @@ export default function Campaigns({ user, onOpenConversation }) {
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'metaStrategy' && <MetaStrategyTab />}
-        {tab === 'templates' && isAdmin && <TemplatesTab />}
+        {tab === 'templates' && canManageTemplates && <TemplatesTab />}
       </div>
     </div>
   );

@@ -193,8 +193,8 @@ router.get('/templates', async (req, res, next) => {
 // Every status (PENDING/APPROVED/REJECTED), not just APPROVED — this is the
 // Configuración > Plantillas management view, not the campaign composer's picker
 // above, so a template still in review or bounced back needs to show up too.
-// Admin-only: creating/deleting a Meta template is account-wide, not a single send.
-router.get('/templates/manage', requireRole('admin'), async (req, res, next) => {
+// Admin and supervisor (widened from admin-only 2026-10-20): creating/deleting a Meta template is account-wide, not a single send.
+router.get('/templates/manage', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
     const templates = await whatsapp.listTemplates(lineId);
@@ -230,7 +230,7 @@ function sequentialParamCount(text) {
 // Body-only (no header/footer/buttons) — matches whatsapp.js's createTemplate scope.
 // Lands as PENDING; Meta reviews it (minutes to ~1 day) before it's usable — this
 // endpoint only submits the request, it can't make Meta approve it faster.
-router.post('/templates', requireRole('admin'), async (req, res, next) => {
+router.post('/templates', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const { name, category, bodyText, bodyExamples, lineId } = req.body ?? {};
     if (!TEMPLATE_NAME_RE.test(name ?? '')) {
@@ -261,7 +261,7 @@ router.post('/templates', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/templates/:name', requireRole('admin'), async (req, res, next) => {
+router.delete('/templates/:name', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
     await whatsapp.deleteTemplate(req.params.name, lineId);
