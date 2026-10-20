@@ -49,7 +49,7 @@ export default function SalesGoalsPanel({ goals, canEdit, onEdit }) {
               <Bar pct={g.team.pct} expectedPct={expectedPct} tone={toneOf(g.team.status)} />
             </div>
 
-            <ul className="mt-5 grid gap-4 md:grid-cols-2">
+            <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {g.advisors.map((a) => {
                 const [label, cls] = STATUS[a.status];
                 return (

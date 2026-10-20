@@ -232,13 +232,13 @@ export default function Dashboard() {
     };
   }, [data]);
 
-  if (error) return <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-danger md:px-8">{error}</div>;
-  if (!data) return <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground md:px-8">Cargando…</div>;
+  if (error) return <div className="mx-auto w-full max-w-[1800px] px-4 py-8 text-sm text-danger md:px-8">{error}</div>;
+  if (!data) return <div className="mx-auto w-full max-w-[1800px] px-4 py-8 text-sm text-muted-foreground md:px-8">Cargando…</div>;
 
   const { kpis } = data;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-[1800px]">
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-paper px-4 pb-4 pt-8 md:px-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
@@ -280,19 +280,18 @@ export default function Dashboard() {
           <p className="text-xs text-muted-foreground">Volumen de tickets, tiempos de respuesta y embudo del pipeline.</p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} featured />
-        <MetricCard icon={UserPlus} label="Registros esta semana" value={kpis.registrosSemana} />
-        <MetricCard icon={CircleDollarSign} label="Clientes marcados como Pagado" value={kpis.clientesPagados} />
-        <MetricCard icon={LifeBuoy} label="Tickets pendientes" value={kpis.ticketsPendientes} accent={kpis.ticketsPendientes > 0} />
-      </div>
+        {/* Cifras clave: una sola franja que usa todo el ancho */}
+        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <MetricCard icon={Users} label="Clientes totales" value={kpis.clientesTotales} featured />
+          <MetricCard icon={UserPlus} label="Registros esta semana" value={kpis.registrosSemana} />
+          <MetricCard icon={CircleDollarSign} label="Clientes marcados como Pagado" value={kpis.clientesPagados} />
+          <MetricCard icon={LifeBuoy} label="Tickets pendientes" value={kpis.ticketsPendientes} accent={kpis.ticketsPendientes > 0} />
+          <MetricCard icon={Timer} label="Tiempo de primera respuesta (30d)" value={formatMinutes(kpis.tiempoRespuestaMin)} />
+          <MetricCard icon={CheckCircle2} label="Tiempo de resolución (30d)" value={formatMinutes(kpis.tiempoResolucionMin)} />
+        </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <MetricCard icon={Timer} label="Tiempo de primera respuesta (30d)" value={formatMinutes(kpis.tiempoRespuestaMin)} />
-        <MetricCard icon={CheckCircle2} label="Tiempo de resolución (30d)" value={formatMinutes(kpis.tiempoResolucionMin)} />
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Gráficas: 1 columna en celular, 2 en pantalla mediana y 3 en pantalla ancha */}
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <ChartCard title="Clientes por etapa">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
@@ -303,6 +302,7 @@ export default function Dashboard() {
           </div>
         </ChartCard>
 
+
         <ChartCard title="Tickets por estado">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
@@ -312,9 +312,7 @@ export default function Dashboard() {
             />
           </div>
         </ChartCard>
-      </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="Conversaciones nuevas, últimos 14 días">
           <div style={{ position: 'relative', height: 200 }}>
             <canvas
@@ -324,6 +322,7 @@ export default function Dashboard() {
             />
           </div>
         </ChartCard>
+
 
         <ChartCard title="Tickets resueltos por asesor (30d)">
           {data.advisorActivity.length === 0 ? (
@@ -338,10 +337,8 @@ export default function Dashboard() {
             </div>
           )}
         </ChartCard>
-      </div>
 
-      {data.pautaByDay && (
-        <div className="mb-6 grid grid-cols-1 gap-6">
+        {data.pautaByDay && (
           <ChartCard title="Mensajes por pauta, últimos 14 días">
             {data.pautaByDay.length === 0 ? (
               <p className="text-sm text-muted-foreground">Todavía no ha llegado ningún mensaje desde un anuncio en este período.</p>
@@ -355,11 +352,8 @@ export default function Dashboard() {
               </div>
             )}
           </ChartCard>
-        </div>
-      )}
-
-      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Medio de pago (clientes marcados como Pagado)">
+        )}
+        <ChartCard title="Medio de pago (clientes marcados como Pagado)" className={data.pautaByDay ? '' : 'xl:col-span-2'}>
           {data.paidMethods.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay clientes marcados como Pagado con medio registrado.</p>
           ) : (
@@ -373,7 +367,12 @@ export default function Dashboard() {
           )}
         </ChartCard>
 
-        <div className="rounded-2xl border border-border bg-paper p-6">
+
+        </div>
+
+        {/* Motivos de handoff y tickets recientes lado a lado */}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-paper p-6 xl:col-span-1">
           <h3 className="mb-4 text-sm font-medium text-muted-foreground">Motivos de handoff más comunes (30d)</h3>
           {data.handoffReasons.length === 0 && (
             <p className="text-sm text-muted-foreground">Todavía no hay tickets en este período.</p>
@@ -387,35 +386,35 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-      </div>
 
-      <div className="rounded-2xl border border-border bg-paper p-6">
-        <h3 className="mb-4 text-sm font-medium text-muted-foreground">Tickets recientes</h3>
-        {data.recentTickets.length === 0 && (
-          <p className="text-sm text-muted-foreground">Todavía no hay tickets.</p>
-        )}
-        <div className="flex flex-col divide-y divide-border">
-          {data.recentTickets.map((t) => {
-            const meta = TICKET_STATUS_META[t.status];
-            const Icon = meta?.icon;
-            return (
-              <div key={t.id} className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{t.customerName}</p>
-                  <p className="truncate text-xs text-muted-foreground">{t.handoffReason || '—'}</p>
+        <div className="rounded-2xl border border-border bg-paper p-6 xl:col-span-2">
+          <h3 className="mb-4 text-sm font-medium text-muted-foreground">Tickets recientes</h3>
+          {data.recentTickets.length === 0 && (
+            <p className="text-sm text-muted-foreground">Todavía no hay tickets.</p>
+          )}
+          <div className="flex flex-col divide-y divide-border">
+            {data.recentTickets.map((t) => {
+              const meta = TICKET_STATUS_META[t.status];
+              const Icon = meta?.icon;
+              return (
+                <div key={t.id} className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{t.customerName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{t.handoffReason || '—'}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {t.assignedAdvisor && <span className="text-xs text-muted-foreground">{t.assignedAdvisor}</span>}
+                    <Badge variant={meta?.variant ?? 'neutral'}>
+                      {Icon && <Icon size={11} className="mr-1 inline" />}
+                      {meta?.label ?? t.status}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  {t.assignedAdvisor && <span className="text-xs text-muted-foreground">{t.assignedAdvisor}</span>}
-                  <Badge variant={meta?.variant ?? 'neutral'}>
-                    {Icon && <Icon size={11} className="mr-1 inline" />}
-                    {meta?.label ?? t.status}
-                  </Badge>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+        </div>
       </div>
     </div>
   );
@@ -444,9 +443,9 @@ function MetricCard({ icon: Icon, label, value, accent, featured }) {
   );
 }
 
-function ChartCard({ title, children }) {
+function ChartCard({ title, children, className = '' }) {
   return (
-    <div className="rounded-2xl border border-border bg-paper p-6">
+    <div className={`rounded-2xl border border-border bg-paper p-6 ${className}`}>
       <h3 className="mb-4 text-sm font-medium text-muted-foreground">{title}</h3>
       {children}
     </div>
