@@ -919,12 +919,6 @@ export async function deleteSale(saleId) {
   return res.json();
 }
 
-export async function fetchDailySalesBreakdown(filters = {}) {
-  const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v != null && v !== '')).toString();
-  const res = await apiFetch(`/api/sales/daily-breakdown${qs ? `?${qs}` : ''}`);
-  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el desglose diario de ventas');
-  return res.json();
-}
 
 // Auditoría contra el chat: sin apply solo muestra qué corregiría; con apply:true lo aplica.
 // Nunca borra ventas ni toca las bloqueadas (calibradas a mano antes del 16/10).
@@ -1039,5 +1033,24 @@ export async function fetchChatAnalysis(from, to, lineId) {
 export async function fetchChatAnalysisDetail(phone, from, to, lineId) {
   const res = await apiFetch(`/api/chat-analysis/${encodeURIComponent(phone)}?${new URLSearchParams({ from, to, ...(lineId ? { lineId } : {}) })}`);
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el chat');
+  return res.json();
+}
+
+// Cumplimiento mensual por asesora contra la meta de cada línea, y su edición (administración / supervisión).
+export async function fetchSalesGoals() {
+  const res = await apiFetch('/api/sales/goals');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las metas');
+  return res.json();
+}
+
+export async function saveSalesGoal(lineId, monthly) {
+  const res = await apiFetch('/api/sales/goals', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lineId, monthly }) });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al guardar la meta');
+}
+
+// Prendas vendidas en el período (y la línea), sacadas de las cotizaciones de cada venta.
+export async function fetchSoldItems(filters = {}) {
+  const res = await apiFetch(`/api/sales/items?${new URLSearchParams(filters)}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar las prendas');
   return res.json();
 }

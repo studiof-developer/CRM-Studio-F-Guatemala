@@ -6,6 +6,9 @@ import { auditSales, rebuildSales } from '../salesAttribution.js';
 import { startAnalysisRun, getAnalysisRun, crossCheckNotebook } from '../salesAnalysis.js';
 import { computeClose, saveClose, listCloses, getClose } from '../salesClose.js';
 import { exportChats } from '../salesChatExport.js';
+import { lineSessionSql, defaultLineId } from '../salesThreads.js';
+import { getGoals, saveGoal, buildGoalRows, monthClock } from '../salesGoals.js';
+import { aggregateItems } from '../salesItems.js';
 
 const router = Router();
 
@@ -28,33 +31,41 @@ const SHIFT_BUCKETS = [
 ].join(', ');
 
 // Builds the date and line filter for sales queries using Guatemala local timezone
-function buildSalesFilter(period, from, to, lineId, params = []) {
-  const clauses = [
-    `COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'`,
-  ];
-
+// Cláusulas del período (hora de Guatemala) sobre una columna de fecha: las ventas usan s.created_at y los mensajes h.created_at.
+function periodClauses(col, period, from, to, params) {
+  const gtNow = "(now() AT TIME ZONE 'America/Guatemala')";
+  const gtStart = (expr) => `((${expr}) AT TIME ZONE 'America/Guatemala')`;
+  const clauses = [];
   if (period === 'ayer') {
-    clauses.push(`s.created_at >= (date_trunc('day', (now() AT TIME ZONE 'America/Guatemala') - interval '1 day') AT TIME ZONE 'America/Guatemala')`);
-    clauses.push(`s.created_at < (date_trunc('day', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ${gtStart(`date_trunc('day', ${gtNow} - interval '1 day')`)}`);
+    clauses.push(`${col} < ${gtStart(`date_trunc('day', ${gtNow})`)}`);
   } else if (period === 'esta_semana') {
-    clauses.push(`s.created_at >= (date_trunc('week', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ${gtStart(`date_trunc('week', ${gtNow})`)}`);
   } else if (period === 'este_mes') {
-    clauses.push(`s.created_at >= (date_trunc('month', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ${gtStart(`date_trunc('month', ${gtNow})`)}`);
   } else if (period === 'mes_anterior') {
-    clauses.push(`s.created_at >= (date_trunc('month', (now() AT TIME ZONE 'America/Guatemala') - interval '1 month') AT TIME ZONE 'America/Guatemala')`);
-    clauses.push(`s.created_at < (date_trunc('month', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ${gtStart(`date_trunc('month', ${gtNow} - interval '1 month')`)}`);
+    clauses.push(`${col} < ${gtStart(`date_trunc('month', ${gtNow})`)}`);
   } else if (period === 'personalizado' && from) {
     params.push(from);
-    clauses.push(`s.created_at >= ($${params.length}::date AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ($${params.length}::date AT TIME ZONE 'America/Guatemala')`);
     if (to) {
       params.push(to);
-      clauses.push(`s.created_at < (($${params.length}::date + interval '1 day') AT TIME ZONE 'America/Guatemala')`);
+      clauses.push(`${col} < (($${params.length}::date + interval '1 day') AT TIME ZONE 'America/Guatemala')`);
     }
   } else {
     // Default: 'hoy' (el día de hoy en hora local de Guatemala)
-    clauses.push(`s.created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Guatemala') AT TIME ZONE 'America/Guatemala')`);
-    clauses.push(`s.created_at < ((date_trunc('day', now() AT TIME ZONE 'America/Guatemala') + interval '1 day') AT TIME ZONE 'America/Guatemala')`);
+    clauses.push(`${col} >= ${gtStart(`date_trunc('day', ${gtNow})`)}`);
+    clauses.push(`${col} < ${gtStart(`date_trunc('day', ${gtNow}) + interval '1 day'`)}`);
   }
+  return clauses;
+}
+
+function buildSalesFilter(period, from, to, lineId, params = []) {
+  const clauses = [
+    `COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'`,
+    ...periodClauses('s.created_at', period, from, to, params),
+  ];
 
   if (lineId) {
     params.push(Number(lineId));
@@ -213,6 +224,28 @@ router.get('/customer/:customerId', async (req, res, next) => {
   }
 });
 
+async function advisorsToShow({ period, from, to, lineId }) {
+  const { rows: users } = await pool.query(
+    `SELECT u.full_name, u.role, COALESCE(array_agg(uwn.whatsapp_number_id) FILTER (WHERE uwn.whatsapp_number_id IS NOT NULL), '{}') AS lines
+     FROM users u LEFT JOIN user_whatsapp_numbers uwn ON uwn.user_id = u.id
+     WHERE u.role IN ('asesor', 'supervisor', 'admin') AND u.full_name IS NOT NULL GROUP BY u.id`
+  );
+  const params = [];
+  const when = periodClauses('h.created_at', period, from, to, params).join(' AND ');
+  const onLine = lineSessionSql(lineId, await defaultLineId(), params, 'h');
+  // atender = escribir como asesora en el CRM (no las difusiones de Marketing, que llevan campaignId)
+  const { rows: sent } = await pool.query(
+    `SELECT DISTINCT lower(h.message->'additional_kwargs'->>'advisorName') AS name FROM n8n_chat_histories h
+     WHERE h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+       AND h.message->'additional_kwargs'->>'campaignId' IS NULL AND h.message->'additional_kwargs'->>'advisorName' IS NOT NULL
+       AND ${when}${onLine}`,
+    params
+  );
+  const names = sent.map((r) => r.name);
+  const attended = (full) => { const f = full.toLowerCase(); return names.some((n) => n === f || f.startsWith(`${n} `)); };
+  return users.filter((u) => (u.role === 'asesor' ? !lineId || u.lines.includes(Number(lineId)) : attended(u.full_name))).map((u) => u.full_name);
+}
+
 // GET /api/sales/by-advisor
 // Métricas gerenciales consolidadas por asesor
 router.get('/by-advisor', async (req, res, next) => {
@@ -261,16 +294,9 @@ router.get('/by-advisor', async (req, res, next) => {
       advisorParams
     );
 
-    // Las asesoras siempre aparecen en el ranking aunque lleven 0 ventas; si se filtra por
-    // línea, solo las que tienen esa línea asignada.
-    const { rows: uAdvs } = await pool.query(
-      `SELECT DISTINCT u.full_name FROM users u
-       LEFT JOIN user_whatsapp_numbers uwn ON uwn.user_id = u.id
-       WHERE u.role IN ('asesor', 'supervisor') AND u.full_name IS NOT NULL
-         AND ($1::int IS NULL OR uwn.whatsapp_number_id = $1::int)`,
-      [lineId ? Number(lineId) : null]
-    );
-    const knownAdvisors = uAdvs.map((u) => u.full_name);
+    // Aparecen aunque lleven 0 ventas: las asesoras (las de la línea, si se filtra una) y, si es supervisor o administrador,
+    // solo cuando atendió chats en el período (en esa línea, si se filtra una), no por tener todas las líneas asignadas.
+    const knownAdvisors = await advisorsToShow({ period, from, to, lineId });
 
     const existingNames = new Set(advisorRows.map(a => a.advisor_name.toLowerCase()));
     for (const name of knownAdvisors) {
@@ -448,6 +474,64 @@ router.get('/by-advisor', async (req, res, next) => {
 
 // PATCH /api/sales/:id
 // Permite actualizar el monto o medio de pago de una venta
+// Cumplimiento mensual: por cada línea con meta, lo vendido en el mes por cada asesora contra su meta (independiente del
+// período que se esté viendo). GET para todos; la meta la cambian administración y supervisión.
+router.get('/goals', async (req, res, next) => {
+  try {
+    const goals = await getGoals();
+    const { month, day, days } = monthClock();
+    const out = [];
+    for (const [lineId, g] of Object.entries(goals)) {
+      const params = [];
+      const filter = buildSalesFilter('este_mes', null, null, lineId, params);
+      const [totals, advisors, line] = await Promise.all([
+        pool.query(
+          `SELECT COALESCE(NULLIF(TRIM(s.advisor_name), ''), 'Sin Asignar') AS name, COALESCE(SUM(s.amount), 0) AS total, COUNT(*)::int AS count
+           FROM sales s WHERE ${CONFIRMED} ${filter} GROUP BY 1`, params),
+        pool.query(
+          `SELECT u.full_name AS name FROM users u JOIN user_whatsapp_numbers uwn ON uwn.user_id = u.id
+           WHERE u.role = 'asesor' AND u.full_name IS NOT NULL AND uwn.whatsapp_number_id = $1`, [Number(lineId)]),
+        pool.query('SELECT label FROM whatsapp_numbers WHERE id = $1', [Number(lineId)]),
+      ]);
+      out.push({ lineId: Number(lineId), lineLabel: line.rows[0]?.label ?? `Línea ${lineId}`, monthly: Number(g.monthly), month, day, days, ...buildGoalRows({ advisors: advisors.rows, totals: totals.rows, goal: Number(g.monthly), day, days }) });
+    }
+    res.json({ goals: out, canEdit: ['admin', 'supervisor'].includes(req.user.role) });
+  } catch (err) { next(err); }
+});
+
+// body: { lineId, monthly } — monthly vacío o 0 quita la meta de esa línea.
+router.put('/goals', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    await saveGoal(req.body?.lineId, req.body?.monthly, req.user.id);
+    logBusinessAction(req.user, null, 'sales_goal_updated', `línea ${req.body?.lineId}: Q${req.body?.monthly || 0} al mes por asesora`);
+    res.json({ ok: true });
+  } catch (err) { err.status ? res.status(err.status).json({ error: err.message }) : next(err); }
+});
+
+// Prendas vendidas en el período (y la línea): sale de la cotización de cada venta; las ventas sin cotización se cuentan aparte.
+router.get('/items', async (req, res, next) => {
+  try {
+    const { period = 'hoy', from, to, lineId } = req.query;
+    const params = [];
+    const filter = buildSalesFilter(period, from, to, lineId, params);
+    const { rows } = await pool.query(
+      `SELECT s.id AS sale_id, s.amount, q.id AS quote_id, q.grand_total, qi.sku, qi.name, qi.size, qi.quantity, qi.final_price
+       FROM sales s
+       LEFT JOIN LATERAL (
+         SELECT q2.id, q2.grand_total FROM quotes q2
+         WHERE q2.id = s.quote_id
+            OR (s.quote_id IS NULL AND q2.customer_id = s.customer_id AND q2.created_at <= s.created_at AND q2.created_at >= s.created_at - interval '30 days')
+         ORDER BY (q2.id = s.quote_id) DESC NULLS LAST, q2.created_at DESC LIMIT 1
+       ) q ON true
+       LEFT JOIN quote_items qi ON qi.quote_id = q.id
+       WHERE ${CONFIRMED} ${filter}
+       ORDER BY s.created_at DESC, qi.id`,
+      params
+    );
+    res.json(aggregateItems(rows));
+  } catch (err) { next(err); }
+});
+
 router.patch('/:id', async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query(`SELECT * FROM sales WHERE id = $1`, [req.params.id]);
@@ -548,139 +632,6 @@ router.delete('/:id', async (req, res, next) => {
     );
 
     res.json({ ok: true, deletedSaleId: sale.id });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /api/sales/daily-breakdown
-// Retorna un análisis consolidado día por día comparando ventas de asesoras
-router.get('/daily-breakdown', async (req, res, next) => {
-  try {
-    const { from = '2026-09-01', to = '2026-10-31', lineId } = req.query;
-
-    const params = [from, to];
-    let lineClause = '';
-    if (lineId) {
-      params.push(Number(lineId));
-      lineClause = `AND s.whatsapp_number_id = $${params.length}`;
-    }
-
-    // Consulta detallada por día y asesora
-    const { rows: advisorDailyRows } = await pool.query(
-      `SELECT
-         date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-         COALESCE(s.advisor_name, 'Sin asesor') AS advisor_name,
-         COUNT(*)::int AS ventas,
-         COALESCE(SUM(s.amount), 0)::numeric(10,2) AS monto
-       FROM sales s
-       WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
-         AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
-         AND s.status = 'confirmada' AND s.amount > 0
-         AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
-         ${lineClause}
-       GROUP BY day, s.advisor_name
-       ORDER BY day ASC, monto DESC`,
-      params
-    );
-
-    // Consulta global consolidada día por día
-    const { rows } = await pool.query(
-      `SELECT
-         date_trunc('day', s.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-         COUNT(*) FILTER (WHERE s.advisor_name ILIKE '%Leydi%')::int AS leydi_ventas,
-         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name ILIKE '%Leydi%'), 0)::numeric(10,2) AS leydi_monto,
-         COUNT(*) FILTER (WHERE s.advisor_name ILIKE '%Aura%')::int AS aura_ventas,
-         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name ILIKE '%Aura%'), 0)::numeric(10,2) AS aura_monto,
-         COUNT(*) FILTER (WHERE s.advisor_name NOT ILIKE '%Leydi%' AND s.advisor_name NOT ILIKE '%Aura%')::int AS otros_ventas,
-         COALESCE(SUM(s.amount) FILTER (WHERE s.advisor_name NOT ILIKE '%Leydi%' AND s.advisor_name NOT ILIKE '%Aura%'), 0)::numeric(10,2) AS otros_monto,
-         COUNT(*)::int AS total_ventas,
-         COALESCE(SUM(s.amount), 0)::numeric(10,2) AS total_monto
-       FROM sales s
-       WHERE s.created_at >= ($1::date AT TIME ZONE 'America/Guatemala')
-         AND s.created_at < (($2::date + interval '1 day') AT TIME ZONE 'America/Guatemala')
-         AND s.status = 'confirmada' AND s.amount > 0
-         AND COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'
-         ${lineClause}
-       GROUP BY day
-       ORDER BY day ASC`,
-      params
-    );
-
-    // Mapeo dinámico por día
-    const dayMap = new Map();
-    for (const r of advisorDailyRows) {
-      const dayKey = r.day.toISOString ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
-      if (!dayMap.has(dayKey)) dayMap.set(dayKey, {});
-      dayMap.get(dayKey)[r.advisor_name] = {
-        ventas: Number(r.ventas),
-        monto: Number(r.monto),
-      };
-    }
-
-    let totalLeydiVentas = 0;
-    let totalLeydiMonto = 0;
-    let totalAuraVentas = 0;
-    let totalAuraMonto = 0;
-    let totalVentas = 0;
-    let totalMonto = 0;
-
-    const advisorTotals = {};
-
-    for (const r of advisorDailyRows) {
-      if (!advisorTotals[r.advisor_name]) {
-        advisorTotals[r.advisor_name] = { ventas: 0, monto: 0 };
-      }
-      advisorTotals[r.advisor_name].ventas += Number(r.ventas);
-      advisorTotals[r.advisor_name].monto += Number(r.monto);
-    }
-
-    const daily = rows.map((r) => {
-      const lV = Number(r.leydi_ventas);
-      const lM = Number(r.leydi_monto);
-      const aV = Number(r.aura_ventas);
-      const aM = Number(r.aura_monto);
-      const tV = Number(r.total_ventas);
-      const tM = Number(r.total_monto);
-
-      totalLeydiVentas += lV;
-      totalLeydiMonto += lM;
-      totalAuraVentas += aV;
-      totalAuraMonto += aM;
-      totalVentas += tV;
-      totalMonto += tM;
-
-      const dayKey = r.day.toISOString ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
-
-      return {
-        day: r.day,
-        leydi: { ventas: lV, monto: lM },
-        aura: { ventas: aV, monto: aM },
-        otros: { ventas: Number(r.otros_ventas), monto: Number(r.otros_monto) },
-        total: { ventas: tV, monto: tM },
-        byAdvisor: dayMap.get(dayKey) || {},
-      };
-    });
-
-    res.json({
-      from,
-      to,
-      summary: {
-        totalVentas,
-        totalMonto,
-        leydi: { ventas: totalLeydiVentas, monto: totalLeydiMonto },
-        aura: { ventas: totalAuraVentas, monto: totalAuraMonto },
-        advisors: Object.entries(advisorTotals)
-          .map(([name, data]) => ({
-            name,
-            ventas: data.ventas,
-            monto: Number(data.monto.toFixed(2)),
-            promedio: data.ventas > 0 ? Number((data.monto / data.ventas).toFixed(2)) : 0,
-          }))
-          .sort((a, b) => b.monto - a.monto),
-      },
-      daily,
-    });
   } catch (err) {
     next(err);
   }

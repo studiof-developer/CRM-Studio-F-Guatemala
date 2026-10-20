@@ -10,6 +10,17 @@ export async function defaultLineId() {
   return rows[0]?.id ?? 1;
 }
 
+// SQL para los mensajes de una línea: el session_id lleva "__line_N"; los viejos, sin ese sufijo, son de la línea por defecto
+// (la misma regla que usa Conversaciones). Agrega los parámetros a `params`; sin línea devuelve ''.
+export function lineSessionSql(lineId, defaultLine, params, alias) {
+  if (!lineId) return '';
+  params.push(String(lineId));
+  const a = params.length;
+  params.push(Number(lineId) === Number(defaultLine));
+  const b = params.length;
+  return ` AND (${alias}.session_id ~ ('__line_' || $${a}::text || '(__|$)') OR ($${b}::boolean AND ${alias}.session_id !~ '__line_'))`;
+}
+
 export function lineFromSession(sessionId) {
   const m = /__line_(\d+)/.exec(sessionId ?? '');
   return m ? Number(m[1]) : null;

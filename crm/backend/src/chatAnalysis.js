@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { lineFromSession, defaultLineId } from './salesThreads.js';
+import { lineFromSession, defaultLineId, lineSessionSql as lineCondition } from './salesThreads.js';
 
 // Vista "Análisis": lee los chats que ya están guardados (n8n_chat_histories) y los clasifica en los casos que pide
 // administración — pauta de nueva colección, pauta con % de descuento, preguntas por guía, cambios de talla o prenda,
@@ -21,17 +21,6 @@ const RE_CAMBIO = new RegExp(
 );
 
 const uniq = (list) => [...new Set(list)];
-
-// Mensajes de una línea: el session_id lleva "__line_N"; los viejos, sin ese sufijo, son de la línea por defecto (la misma
-// regla que usa Conversaciones). Agrega los parámetros a `params` y devuelve el pedazo de SQL (vacío si no hay línea).
-function lineCondition(lineId, defaultLine, params, alias) {
-  if (!lineId) return '';
-  params.push(String(lineId));
-  const a = params.length;
-  params.push(Number(lineId) === Number(defaultLine));
-  const b = params.length;
-  return ` AND (${alias}.session_id ~ ('__line_' || $${a}::text || '(__|$)') OR ($${b}::boolean AND ${alias}.session_id !~ '__line_'))`;
-}
 
 // chat = { firstMessageAt, firstReferral, messages: [{ at, inWindow, role, text, referral }] }; win = { from, to }.
 export function classifyChat(chat, win) {

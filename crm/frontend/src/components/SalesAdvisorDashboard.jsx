@@ -7,7 +7,7 @@ import {
   Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText, LayoutGrid, Table2
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount, fetchMe } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, rebuildSales, validateSaleAmount, fetchMe, fetchSalesGoals, saveSalesGoal } from '../api.js';
 import ReassignAdvisor from './ReassignAdvisor.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import { showError, showSuccess } from './Toast.jsx';
@@ -19,6 +19,8 @@ import SalesCloseModal from './SalesCloseModal.jsx';
 import SalesToolsMenu from './SalesToolsMenu.jsx';
 import SalesHeadline from './SalesHeadline.jsx';
 import AdvisorCards from './AdvisorCards.jsx';
+import SalesGoalsPanel from './SalesGoalsPanel.jsx';
+import SoldItemsModal from './SoldItemsModal.jsx';
 import { periodRange, previousPeriod, sumUntil, periodTitle } from '../lib/salesCompare.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
@@ -42,13 +44,6 @@ const PERIOD_OPTIONS = [
   { value: 'esta_semana', label: 'Esta semana' },
   { value: 'este_mes', label: 'Este mes' },
   { value: 'mes_anterior', label: 'Mes anterior' },
-  { value: 'personalizado', label: 'Personalizado' },
-];
-
-const DAILY_RANGE_OPTIONS = [
-  { value: 'sep_oct', label: 'Septiembre y Octubre' },
-  { value: 'septiembre', label: 'Septiembre 2026' },
-  { value: 'octubre', label: 'Octubre 2026' },
   { value: 'personalizado', label: 'Personalizado' },
 ];
 
@@ -93,7 +88,6 @@ function renderStatusBadge(status) {
 }
 
 export default function SalesAdvisorDashboard() {
-  const [activeTab, setActiveTab] = useState('ranking'); // 'ranking' | 'daily'
   const [period, setPeriod] = useState('hoy');
   const [from, setFrom] = useState(guatemalaToday());
   const [to, setTo] = useState(guatemalaToday());
@@ -114,14 +108,9 @@ export default function SalesAdvisorDashboard() {
   function changeView(v) { setViewMode(v); try { localStorage.setItem('sales:view', v); } catch { /* sin almacenamiento: no se recuerda */ } }
   const [previous, setPrevious] = useState(null); // { label, total, loading } — el período contra el que se compara
   const [updatedAt, setUpdatedAt] = useState(null);
-
-  // Estados para la comparativa diaria Leydi vs Aura
-  const [dailyRange, setDailyRange] = useState('sep_oct');
-  const [dailyFrom, setDailyFrom] = useState('2026-09-01');
-  const [dailyTo, setDailyTo] = useState('2026-10-31');
-  const [dailyData, setDailyData] = useState(null);
-  const [dailyLoading, setDailyLoading] = useState(false);
-  const [dailyError, setDailyError] = useState(null);
+  const [goalsData, setGoalsData] = useState(null); // { goals: [...] } — cumplimiento del mes por línea con meta
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [goalEdit, setGoalEdit] = useState(null); // { lineId, monthly, error } — ventana "Meta mensual"
 
   // Auditoría de ventas contra el chat (reemplaza al "Re-analizar chats" y a la auditoría del 14/10)
   const [auditLoading, setAuditLoading] = useState(false);
@@ -159,7 +148,6 @@ export default function SalesAdvisorDashboard() {
     try {
       setAuditData(await rebuildSales({ from: auditData.from, to: auditData.to, lineId, apply: true }));
       loadData();
-      loadDailyData();
     } catch (err) {
       showError(err.message || 'Error al aplicar las correcciones');
     } finally {
@@ -301,6 +289,23 @@ export default function SalesAdvisorDashboard() {
     loadData();
   }, [loadData]);
 
+  const loadGoals = useCallback(() => { fetchSalesGoals().then(setGoalsData).catch(() => setGoalsData(null)); }, []);
+  useEffect(() => { loadGoals(); }, [loadGoals, salesData]); // se refresca junto con las ventas
+
+  function openGoalEdit(goal) {
+    setGoalEdit({ lineId: String(goal?.lineId ?? lineId ?? whatsappNumbers[0]?.id ?? ''), monthly: String(goal?.monthly ?? 77500), error: null });
+  }
+  async function confirmGoal() {
+    try {
+      await saveSalesGoal(Number(goalEdit.lineId), goalEdit.monthly.trim() === '' ? 0 : Number(goalEdit.monthly.replace(',', '.')));
+      showSuccess('Meta guardada');
+      setGoalEdit(null);
+      loadGoals();
+    } catch (err) {
+      setGoalEdit((g) => ({ ...g, error: err.message }));
+    }
+  }
+
   // Contra qué va el total: ayer a esta misma hora, la semana pasada, el mes pasado… (ver lib/salesCompare.js)
   useEffect(() => {
     if (!salesData) return undefined;
@@ -414,100 +419,6 @@ export default function SalesAdvisorDashboard() {
     XLSX.writeFile(wb, fileName);
   }
 
-  const loadDailyData = useCallback(() => {
-    setDailyLoading(true);
-    setDailyError(null);
-    let f = dailyFrom;
-    let t = dailyTo;
-    if (dailyRange === 'septiembre') {
-      f = '2026-09-01';
-      t = '2026-09-30';
-    } else if (dailyRange === 'octubre') {
-      f = '2026-10-01';
-      t = '2026-10-31';
-    } else if (dailyRange === 'sep_oct') {
-      f = '2026-09-01';
-      t = '2026-10-31';
-    }
-    const filters = { from: f, to: t };
-    if (lineId) filters.lineId = lineId;
-
-    fetchDailySalesBreakdown(filters)
-      .then((data) => {
-        setDailyData(data);
-        setDailyLoading(false);
-      })
-      .catch((err) => {
-        setDailyError(err.message);
-        setDailyLoading(false);
-      });
-  }, [dailyRange, dailyFrom, dailyTo, lineId]);
-
-  useEffect(() => {
-    if (activeTab === 'daily') {
-      loadDailyData();
-    }
-  }, [activeTab, loadDailyData]);
-
-
-  function exportDailyToExcel() {
-    if (!dailyData || !dailyData.daily || dailyData.daily.length === 0) return;
-
-    const wb = XLSX.utils.book_new();
-    const headers = [
-      'Fecha',
-      'Ventas Leydi',
-      'Total Leydi (Q)',
-      'Ventas Aura',
-      'Total Aura (Q)',
-      'Otras Ventas',
-      'Otros Monto (Q)',
-      'Total Ventas',
-      'Total Monto (Q)',
-    ];
-
-    const rows = dailyData.daily.map((d) => [
-      String(d.day).slice(0, 10),
-      d.leydi.ventas,
-      d.leydi.monto,
-      d.aura.ventas,
-      d.aura.monto,
-      d.otros.ventas,
-      d.otros.monto,
-      d.total.ventas,
-      d.total.monto,
-    ]);
-
-    const sum = dailyData.summary;
-    rows.push([
-      'TOTAL CONSOLIDADO',
-      sum?.leydi?.ventas || 0,
-      sum?.leydi?.monto || 0,
-      sum?.aura?.ventas || 0,
-      sum?.aura?.monto || 0,
-      '',
-      '',
-      sum?.totalVentas || 0,
-      sum?.totalMonto || 0,
-    ]);
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = [
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 16 },
-      { wch: 14 },
-      { wch: 18 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, 'Comparativa Diaria');
-
-    const fileName = `ventas_diarias_leydi_vs_aura_${dailyData.from}_al_${dailyData.to}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-  }
 
   const summary = salesData?.summary || { totalQuetzales: 0, totalClientes: 0, totalVentas: 0, ticketPromedio: 0 };
   const advisors = salesData?.advisors || [];
@@ -515,298 +426,7 @@ export default function SalesAdvisorDashboard() {
 
   return (
     <div className="mb-8 rounded-3xl border border-line bg-paper p-5 shadow-sm md:p-6">
-      {/* Selector de Pestaña Principal */}
-      <div className="mb-6 flex flex-wrap items-center gap-2 border-b border-line pb-4">
-        <button
-          onClick={() => setActiveTab('ranking')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-            activeTab === 'ranking'
-              ? 'bg-ink text-paper shadow-sm'
-              : 'text-greige-ink hover:bg-paper hover:text-ink'
-          }`}
-        >
-          <Trophy size={15} />
-          <span>Rendimiento por Asesor</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('daily')}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-            activeTab === 'daily'
-              ? 'bg-accent text-white shadow-sm'
-              : 'text-greige-ink hover:bg-paper hover:text-ink'
-          }`}
-        >
-          <Calendar size={15} />
-          <span>Comparativa Diaria (Leydi vs Aura)</span>
-        </button>
-      </div>
-
-      {activeTab === 'daily' ? (
-        <div>
-          {/* Header & Filtros Comparativa Diaria */}
-          <div className="flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
-                  <Calendar size={20} />
-                </span>
-                <h2 className="text-xl font-bold tracking-tight text-ink">
-                  Comparativa Diaria de Ventas — Leydi vs Aura
-                </h2>
-              </div>
-              <p className="mt-1 text-xs text-greige-ink">
-                Desglose día a día de ventas atribuidas según las conversaciones activas de WhatsApp para Septiembre y Octubre.
-              </p>
-            </div>
-
-            {/* Barra de Filtros Diaria */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex rounded-xl border border-line bg-paper p-1 text-xs">
-                {DAILY_RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setDailyRange(opt.value)}
-                    className={`rounded-lg px-3 py-1.5 font-medium transition-all ${
-                      dailyRange === opt.value
-                        ? 'bg-accent text-white shadow-xs'
-                        : 'text-greige-ink hover:text-ink'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-
-              {dailyRange === 'personalizado' && (
-                <div className="flex items-center gap-1.5 rounded-xl border border-line bg-paper px-2.5 py-1 text-xs">
-                  <Calendar size={13} className="text-greige-ink" />
-                  <input
-                    type="date"
-                    value={dailyFrom}
-                    onChange={(e) => setDailyFrom(e.target.value)}
-                    className="bg-transparent text-xs text-ink focus:outline-none"
-                  />
-                  <span className="text-greige-ink">—</span>
-                  <input
-                    type="date"
-                    value={dailyTo}
-                    onChange={(e) => setDailyTo(e.target.value)}
-                    className="bg-transparent text-xs text-ink focus:outline-none"
-                  />
-                </div>
-              )}
-
-              {whatsappNumbers.length > 0 && (
-                <select
-                  value={lineId}
-                  onChange={(e) => setLineId(e.target.value)}
-                  className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink focus:border-accent focus:outline-none"
-                >
-                  <option value="">Todas las líneas</option>
-                  {whatsappNumbers.map((num) => (
-                    <option key={num.id} value={num.id}>
-                      Línea: {num.label || num.display_phone_number || num.phone_number}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <button
-                onClick={loadDailyData}
-                disabled={dailyLoading}
-                title="Actualizar datos"
-                className="flex items-center justify-center rounded-xl border border-line bg-paper p-2 text-greige-ink transition-colors hover:bg-muted hover:text-ink disabled:opacity-50"
-              >
-                <RefreshCw size={14} className={dailyLoading ? 'animate-spin' : ''} />
-              </button>
-
-              <button
-                onClick={() => setCloseOpen(true)}
-                title="Pagado y pendiente de cada asesora en un día, hasta la hora de corte (4 pm, 9 pm…), leído de los chats"
-                className="flex items-center gap-1.5 rounded-xl border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-all hover:bg-success hover:text-white"
-              >
-                <CheckCircle2 size={13} />
-                <span>Cierre del día</span>
-              </button>
-
-              <SalesToolsMenu
-                items={[
-                  { label: 'Descargar Excel', hint: 'Esta comparativa diaria', icon: Download, onClick: exportDailyToExcel, disabled: !dailyData?.daily?.length },
-                  { label: 'Analizar chats vendidos', hint: 'Reconstruye las ventas leyendo los chats; exporta los chats a texto', icon: FileText, onClick: () => setAnalysisOpen(true) },
-                  { label: auditLoading ? 'Auditando…' : 'Auditar ventas', hint: 'Compara comprobantes del chat con lo registrado y corrige', icon: Sparkles, onClick: handleOpenAudit, disabled: auditLoading, busy: auditLoading },
-                ]}
-              />
-            </div>
-          </div>
-
-          {dailyError && (
-            <div className="mt-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-xs font-medium text-danger">
-              Error al cargar comparativa diaria: {dailyError}
-            </div>
-          )}
-
-          {/* KPI Cards Leydi vs Aura */}
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Tarjeta Leydi */}
-            <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-transparent p-4">
-              <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
-                <span className="text-[11px] font-bold uppercase tracking-wider">Leydi Laura Mosquera</span>
-                <span className="rounded-lg bg-blue-500/10 px-2 py-0.5 text-xs font-bold">
-                  {dailyData?.summary?.leydi?.ventas ?? 0} ventas
-                </span>
-              </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-ink">
-                Q {(dailyData?.summary?.leydi?.monto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-              </p>
-              <p className="mt-1 text-[11px] text-greige-ink">
-                Total ventas registradas en sus turnos
-              </p>
-            </div>
-
-            {/* Tarjeta Aura */}
-            <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-transparent p-4">
-              <div className="flex items-center justify-between text-purple-600 dark:text-purple-400">
-                <span className="text-[11px] font-bold uppercase tracking-wider">Aura</span>
-                <span className="rounded-lg bg-purple-500/10 px-2 py-0.5 text-xs font-bold">
-                  {dailyData?.summary?.aura?.ventas ?? 0} ventas
-                </span>
-              </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-ink">
-                Q {(dailyData?.summary?.aura?.monto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-              </p>
-              <p className="mt-1 text-[11px] text-greige-ink">
-                Total ventas registradas en sus turnos
-              </p>
-            </div>
-
-            {/* Tarjeta Total General */}
-            <div className="rounded-2xl border border-success-bg/80 bg-gradient-to-br from-success-bg/40 to-success-bg/10 p-4">
-              <div className="flex items-center justify-between text-success">
-                <span className="text-[11px] font-bold uppercase tracking-wider">Total Consolidado</span>
-                <span className="rounded-lg bg-success-bg px-2 py-0.5 text-xs font-bold">
-                  {dailyData?.summary?.totalVentas ?? 0} ventas
-                </span>
-              </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-success">
-                Q {(dailyData?.summary?.totalMonto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-              </p>
-              <p className="mt-1 text-[11px] text-greige-ink">
-                Suma global de ambos turnos y asesoras
-              </p>
-            </div>
-          </div>
-
-          {/* Tabla Comparativa Día por Día */}
-          <div className="mt-6 rounded-2xl border border-line bg-paper p-4 md:p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-ink">Tabla Comparativa Día por Día</h3>
-                <p className="text-[11px] text-greige-ink">
-                  Comparación directa entre Leydi y Aura para cada fecha de Septiembre y Octubre
-                </p>
-              </div>
-              <span className="text-xs font-medium text-greige-ink">
-                {dailyData?.daily?.length || 0} días registrados
-              </span>
-            </div>
-
-            {dailyLoading ? (
-              <div className="flex items-center justify-center py-12 text-xs text-greige-ink">
-                <RefreshCw size={18} className="mr-2 animate-spin text-accent" />
-                Cargando datos diarios...
-              </div>
-            ) : !dailyData?.daily || dailyData.daily.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-greige-ink">
-                <Calendar size={32} className="mb-2 opacity-40" />
-                <p className="text-sm font-medium">No hay registros de ventas para el rango seleccionado.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-line text-[11px] uppercase tracking-wider text-greige-ink">
-                      <th className="pb-2.5 pl-2">Fecha</th>
-                      <th className="pb-2.5 text-center text-blue-600 dark:text-blue-400">Leydi Ventas</th>
-                      <th className="pb-2.5 text-right text-blue-600 dark:text-blue-400">Leydi Total (Q)</th>
-                      <th className="pb-2.5 text-center text-purple-600 dark:text-purple-400">Aura Ventas</th>
-                      <th className="pb-2.5 text-right text-purple-600 dark:text-purple-400">Aura Total (Q)</th>
-                      <th className="pb-2.5 text-center">Total Ventas</th>
-                      <th className="pb-2.5 pr-2 text-right">Monto Total (Q)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line/60">
-                    {dailyData.daily.map((d) => (
-                      <tr key={d.day} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
-                        <td className="py-2.5 pl-2 font-medium text-ink whitespace-nowrap">
-                          {formatDayLabel(d.day)}
-                        </td>
-                        <td className="py-2.5 text-center font-semibold text-blue-600 dark:text-blue-400">
-                          {d.leydi.ventas > 0 ? (
-                            <span className="rounded-full bg-blue-500/10 px-2 py-0.5 font-bold">
-                              {d.leydi.ventas}
-                            </span>
-                          ) : (
-                            <span className="text-greige-ink font-normal">0</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 text-right font-medium text-ink whitespace-nowrap">
-                          Q {d.leydi.monto.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2.5 text-center font-semibold text-purple-600 dark:text-purple-400">
-                          {d.aura.ventas > 0 ? (
-                            <span className="rounded-full bg-purple-500/10 px-2 py-0.5 font-bold">
-                              {d.aura.ventas}
-                            </span>
-                          ) : (
-                            <span className="text-greige-ink font-normal">0</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 text-right font-medium text-ink whitespace-nowrap">
-                          Q {d.aura.monto.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2.5 text-center font-bold text-ink">
-                          <span className="rounded-full bg-secondary px-2.5 py-0.5">
-                            {d.total.ventas}
-                          </span>
-                        </td>
-                        <td className="py-2.5 pr-2 text-right font-bold text-success whitespace-nowrap">
-                          Q {d.total.monto.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-line bg-secondary/30 font-bold text-ink">
-                      <td className="py-3 pl-2 uppercase tracking-wide text-xs">
-                        TOTALES
-                      </td>
-                      <td className="py-3 text-center text-blue-600 dark:text-blue-400 text-sm">
-                        {dailyData.summary?.leydi?.ventas ?? 0}
-                      </td>
-                      <td className="py-3 text-right text-blue-600 dark:text-blue-400 text-sm whitespace-nowrap">
-                        Q {(dailyData.summary?.leydi?.monto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3 text-center text-purple-600 dark:text-purple-400 text-sm">
-                        {dailyData.summary?.aura?.ventas ?? 0}
-                      </td>
-                      <td className="py-3 text-right text-purple-600 dark:text-purple-400 text-sm whitespace-nowrap">
-                        Q {(dailyData.summary?.aura?.monto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3 text-center text-sm">
-                        {dailyData.summary?.totalVentas ?? 0}
-                      </td>
-                      <td className="py-3 pr-2 text-right text-success text-sm whitespace-nowrap">
-                        Q {(dailyData.summary?.totalMonto ?? 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
+      <>
           {/* Encabezado y Filtros */}
           <div className="flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -869,10 +489,10 @@ export default function SalesAdvisorDashboard() {
               onChange={(e) => setLineId(e.target.value)}
               className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink focus:border-accent focus:outline-none"
             >
-              <option value="">📊 Todas las líneas (Consolidado)</option>
+              <option value="">Todas las líneas</option>
               {whatsappNumbers.map((num) => (
                 <option key={num.id} value={num.id}>
-                  Línea: {num.label || num.display_phone_number || num.phone_number}
+                  {num.label || num.display_phone_number || num.phone_number}
                 </option>
               ))}
             </select>
@@ -922,7 +542,22 @@ export default function SalesAdvisorDashboard() {
         porValidarTotal={advisors.reduce((n, a) => n + (a.porValidarTotal || 0), 0)}
         porValidarCount={advisors.reduce((n, a) => n + (a.porValidar || 0), 0)}
         updatedAt={updatedAt}
+        onShowItems={() => setItemsOpen(true)}
       />
+
+      {/* Cumplimiento del mes contra la meta (solo las líneas que tienen meta) */}
+      {(() => {
+        const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
+        if (visible.length) return <SalesGoalsPanel goals={visible} canEdit={canManage} onEdit={openGoalEdit} />;
+        if (canManage && goalsData && !(goalsData.goals ?? []).length && whatsappNumbers.length) {
+          return (
+            <button type="button" onClick={() => openGoalEdit(null)} className="mt-6 w-full rounded-2xl border border-dashed border-line p-4 text-center text-sm font-semibold text-accent hover:bg-accent-soft">
+              Definir la meta mensual por asesora
+            </button>
+          );
+        }
+        return null;
+      })()}
 
       {/* Resultado por asesora: tarjetas (por defecto) o tabla completa */}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
@@ -1261,7 +896,6 @@ export default function SalesAdvisorDashboard() {
         )}
       </div>
       </>
-      )}
 
       {/* Modal de Detalle Transaccional por Asesora */}
       {selectedAdvisorDetail && (
@@ -1512,6 +1146,42 @@ export default function SalesAdvisorDashboard() {
               className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-accent"
             />
             {validating.error && <p className="mt-1 text-xs font-medium text-danger">{validating.error}</p>}
+          </div>
+        )}
+      </ConfirmDialog>
+      <SoldItemsModal
+        open={itemsOpen}
+        onClose={() => setItemsOpen(false)}
+        title={periodTitle(period, periodRange(period, from, to, guatemalaToday())) + (lineId ? ` · ${whatsappNumbers.find((n) => String(n.id) === String(lineId))?.label ?? 'línea'}` : ' · todas las líneas')}
+        filters={{ period, ...(period === 'personalizado' ? { from, to } : {}), ...(lineId ? { lineId } : {}) }}
+      />
+      <ConfirmDialog
+        open={!!goalEdit}
+        title="Meta mensual por asesora"
+        message="Cuánto debe vender cada asesora de esa línea al mes. Se compara con lo vendido en el mes corrido."
+        confirmLabel="Guardar meta"
+        onConfirm={confirmGoal}
+        onCancel={() => setGoalEdit(null)}
+      >
+        {goalEdit && (
+          <div className="grid gap-3">
+            <div>
+              <label className="text-xs font-medium text-greige-ink">Línea</label>
+              <select value={goalEdit.lineId} onChange={(e) => setGoalEdit((g) => ({ ...g, lineId: e.target.value }))} className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-accent">
+                {whatsappNumbers.map((n) => <option key={n.id} value={n.id}>{n.label || n.display_phone_number || `Línea ${n.id}`}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-greige-ink">Meta mensual por asesora (Q)</label>
+              <input
+                type="number" min="0" step="100" autoFocus value={goalEdit.monthly}
+                onChange={(e) => setGoalEdit((g) => ({ ...g, monthly: e.target.value, error: null }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmGoal(); }}
+                className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+              />
+              <p className="mt-1 text-[11px] text-greige">Déjalo vacío para quitar la meta de esa línea.</p>
+              {goalEdit.error && <p className="mt-1 text-xs font-medium text-danger">{goalEdit.error}</p>}
+            </div>
           </div>
         )}
       </ConfirmDialog>

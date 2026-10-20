@@ -1,11 +1,11 @@
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Minus, Shirt } from 'lucide-react';
 import { deltaPct } from '../lib/salesCompare.js';
 
 const q = (n) => `Q ${Number(n || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Tarjeta principal de la vista gerencial de ventas: el total en grande, cómo va contra el período comparable y tres cifras
 // de apoyo. Lo "por validar" se avisa aparte para que nadie lea el total como definitivo sin saberlo.
-export default function SalesHeadline({ title, summary, previous, porValidarTotal, porValidarCount, updatedAt }) {
+export default function SalesHeadline({ title, summary, previous, porValidarTotal, porValidarCount, updatedAt, onShowItems }) {
   const current = summary.totalQuetzales;
   const pct = previous?.total != null ? deltaPct(current, previous.total) : null;
   const up = pct != null && pct > 0.05, down = pct != null && pct < -0.05;
@@ -47,7 +47,14 @@ export default function SalesHeadline({ title, summary, previous, porValidarTota
           Incluye {q(porValidarTotal)} por validar ({porValidarCount} venta{porValidarCount === 1 ? '' : 's'}): el monto sale del precio aprobado o la asesora no es clara. Un supervisor las confirma.
         </p>
       )}
-      {updatedAt && <p className="mt-3 text-[11px] text-greige">Actualizado a las {updatedAt}</p>}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {updatedAt ? <p className="text-[11px] text-greige">Actualizado a las {updatedAt}</p> : <span />}
+        {onShowItems && (
+          <button type="button" onClick={onShowItems} className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-3.5 py-2 text-xs font-semibold text-ink shadow-xs transition-colors hover:border-accent hover:text-accent">
+            <Shirt size={14} /> Ver prendas vendidas
+          </button>
+        )}
+      </div>
     </section>
   );
 }
