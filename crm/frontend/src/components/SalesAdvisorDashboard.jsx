@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
@@ -7,7 +7,7 @@ import {
   Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText, LayoutGrid, Table2
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, rebuildSales, validateSaleAmount, fetchMe, fetchSalesGoals, saveSalesGoal } from '../api.js';
+import { fetchWhatsappNumbers, updateSale, rebuildSales, validateSaleAmount, fetchMe, saveSalesGoal } from '../api.js';
 import ReassignAdvisor from './ReassignAdvisor.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import { showError, showSuccess } from './Toast.jsx';
@@ -18,11 +18,12 @@ import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 import SalesCloseModal from './SalesCloseModal.jsx';
 import SalesToolsMenu from './SalesToolsMenu.jsx';
 import SalesHeadline from './SalesHeadline.jsx';
-import AdvisorCards from './AdvisorCards.jsx';
+import AdvisorRanking from './AdvisorRanking.jsx';
+import useSalesReport from '../lib/useSalesReport.js';
 import SalesGoalsPanel from './SalesGoalsPanel.jsx';
 import SoldItemsModal from './SoldItemsModal.jsx';
 import SalesInsights from './SalesInsights.jsx';
-import { periodRange, previousPeriod, sumUntil, periodTitle } from '../lib/salesCompare.js';
+import { periodRange, periodTitle } from '../lib/salesCompare.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -89,14 +90,8 @@ function renderStatusBadge(status) {
 }
 
 export default function SalesAdvisorDashboard() {
-  const [period, setPeriod] = useState('hoy');
-  const [from, setFrom] = useState(guatemalaToday());
-  const [to, setTo] = useState(guatemalaToday());
-  const [lineId, setLineId] = useState('');
+  const { period, setPeriod, from, setFrom, to, setTo, lineId, setLineId, salesData, loading, error, updatedAt, previous, goalsData, loadData, loadGoals } = useSalesReport();
   const [whatsappNumbers, setWhatsappNumbers] = useState([]);
-  const [salesData, setSalesData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [showTransactions, setShowTransactions] = useState(false);
   const [editingSaleId, setEditingSaleId] = useState(null);
   const [editAmountVal, setEditAmountVal] = useState('');
@@ -107,9 +102,6 @@ export default function SalesAdvisorDashboard() {
   // Vista gerencial: tarjetas por asesora (por defecto) o la tabla completa con su gráfica. Se recuerda por navegador.
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('sales:view') || 'tarjetas'; } catch { return 'tarjetas'; } });
   function changeView(v) { setViewMode(v); try { localStorage.setItem('sales:view', v); } catch { /* sin almacenamiento: no se recuerda */ } }
-  const [previous, setPrevious] = useState(null); // { label, total, loading } — el período contra el que se compara
-  const [updatedAt, setUpdatedAt] = useState(null);
-  const [goalsData, setGoalsData] = useState(null); // { goals: [...] } — cumplimiento del mes por línea con meta
   const [itemsOpen, setItemsOpen] = useState(false);
   const [goalEdit, setGoalEdit] = useState(null); // { lineId, monthly, error } — ventana "Meta mensual"
 
@@ -264,35 +256,6 @@ export default function SalesAdvisorDashboard() {
     fetchWhatsappNumbers().then(setWhatsappNumbers).catch(() => {});
   }, []);
 
-  const loadData = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    const filters = { period };
-    if (period === 'personalizado') {
-      filters.from = from;
-      filters.to = to;
-    }
-    if (lineId) filters.lineId = lineId;
-
-    fetchSalesByAdvisor(filters)
-      .then((data) => {
-        setSalesData(data);
-        setUpdatedAt(new Date().toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit' }));
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, [period, from, to, lineId]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const loadGoals = useCallback(() => { fetchSalesGoals().then(setGoalsData).catch(() => setGoalsData(null)); }, []);
-  useEffect(() => { loadGoals(); }, [loadGoals, salesData]); // se refresca junto con las ventas
-
   function openGoalEdit(goal) {
     setGoalEdit({ lineId: String(goal?.lineId ?? lineId ?? whatsappNumbers[0]?.id ?? ''), monthly: String(goal?.monthly ?? 77500), error: null });
   }
@@ -306,19 +269,6 @@ export default function SalesAdvisorDashboard() {
       setGoalEdit((g) => ({ ...g, error: err.message }));
     }
   }
-
-  // Contra qué va el total: ayer a esta misma hora, la semana pasada, el mes pasado… (ver lib/salesCompare.js)
-  useEffect(() => {
-    if (!salesData) return undefined;
-    let cancelled = false;
-    const range = periodRange(period, from, to, guatemalaToday());
-    const prev = previousPeriod(period, range, new Date(Date.now() - 6 * 3600000).toISOString().slice(11, 16));
-    setPrevious({ label: prev.label, total: null, loading: true });
-    fetchSalesByAdvisor({ period: 'personalizado', from: prev.from, to: prev.to, ...(lineId ? { lineId } : {}) })
-      .then((d) => { if (!cancelled) setPrevious({ label: prev.label, total: prev.untilTime ? sumUntil(d.transactions, prev.untilTime) : d.summary.totalQuetzales, loading: false }); })
-      .catch(() => { if (!cancelled) setPrevious(null); });
-    return () => { cancelled = true; };
-  }, [salesData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dibuja gráfico de barras de ventas por asesor
   useEffect(() => {
@@ -424,6 +374,30 @@ export default function SalesAdvisorDashboard() {
   const summary = salesData?.summary || { totalQuetzales: 0, totalClientes: 0, totalVentas: 0, ticketPromedio: 0 };
   const advisors = salesData?.advisors || [];
   const transactions = salesData?.transactions || [];
+
+  // Cumplimiento del mes contra la meta (solo las líneas que tienen meta); administración puede definirla
+  const goalsNode = (() => {
+        const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
+        if (visible.length) return <SalesGoalsPanel goals={visible} canEdit={canManage} onEdit={openGoalEdit} />;
+        if (canManage && goalsData && !(goalsData.goals ?? []).length && whatsappNumbers.length) {
+          return (
+            <button type="button" onClick={() => openGoalEdit(null)} className="w-full rounded-2xl border border-dashed border-line p-4 text-center text-sm font-semibold text-accent hover:bg-accent-soft">
+              Definir la meta mensual por asesora
+            </button>
+          );
+        }
+        return null;
+      })();
+  const viewToggle = (
+        <div className="inline-flex rounded-xl border border-line bg-paper p-1 text-xs" role="group" aria-label="Forma de ver el resultado">
+          {[['tarjetas', 'Ranking', LayoutGrid], ['tabla', 'Tabla', Table2]].map(([key, label, Icon]) => (
+            <button key={key} type="button" aria-pressed={viewMode === key} onClick={() => changeView(key)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition-all ${viewMode === key ? 'bg-accent text-white shadow-xs' : 'text-greige-ink hover:text-ink'}`}>
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
+  );
 
   return (
     <div className="mb-8 rounded-3xl border border-line bg-paper p-5 shadow-sm md:p-6">
@@ -535,10 +509,8 @@ export default function SalesAdvisorDashboard() {
         </div>
       )}
 
-      {/* Arriba, lado a lado: el general (izquierda) y las asesoras (derecha). Abajo: la meta y el apoyo (medios de pago, ventas por día) */}
+      {/* Reporte: franja de resumen arriba y debajo tarjetas independientes (ranking, meta y apoyo), cada una con su propio alto */}
       <div className="mt-6 grid gap-6">
-        <div className={`grid gap-6 ${viewMode === 'tarjetas' ? 'xl:grid-cols-12' : ''}`}>
-          <div className={`min-w-0 ${viewMode === 'tarjetas' ? 'xl:col-span-5' : ''}`}>
       {/* Tarjeta principal: total del período y comparación */}
       <SalesHeadline
         title={periodTitle(period, periodRange(period, from, to, guatemalaToday()))}
@@ -550,28 +522,18 @@ export default function SalesAdvisorDashboard() {
         onShowItems={() => setItemsOpen(true)}
       />
 
-
+        {viewMode === 'tarjetas' ? (
+          <div className="grid items-start gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            <AdvisorRanking advisors={advisors} onOpen={(a, filter) => { setSelectedAdvisorDetail(a); setAdvisorDetailFilter(filter); }} action={viewToggle} />
+            <div className="min-w-0">{goalsNode}</div>
+            <div className="min-w-0 space-y-6">
+              <SalesInsights daily={salesData?.daily ?? []} methods={salesData?.paymentMethods ?? []} total={summary.totalQuetzales} />
+            </div>
           </div>
-          <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-7' : ''}`}>
-      {/* Resultado por asesora: tarjetas (por defecto) o tabla completa */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-ink">Resultado por asesora</h3>
-        <div className="inline-flex rounded-xl border border-line bg-paper p-1 text-xs" role="group" aria-label="Forma de ver el resultado">
-          {[['tarjetas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2]].map(([key, label, Icon]) => (
-            <button key={key} type="button" aria-pressed={viewMode === key} onClick={() => changeView(key)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-all ${viewMode === key ? 'bg-accent text-white shadow-xs' : 'text-greige-ink hover:text-ink'}`}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {viewMode === 'tarjetas' ? (
-        <div className="mt-3">
-          <AdvisorCards advisors={advisors} onOpen={(a, filter) => { setSelectedAdvisorDetail(a); setAdvisorDetailFilter(filter); }} />
-        </div>
-      ) : (
-        <>
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+        ) : (
+          <>
+            <div className="flex justify-end">{viewToggle}</div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Tabla Ranking de Asesores */}
         <div className="lg:col-span-7">
           <div className="rounded-2xl border border-line bg-paper p-4 md:p-5">
@@ -739,33 +701,14 @@ export default function SalesAdvisorDashboard() {
         </div>
       </div>
 
-        </>
-      )}
-
-          </div>
-        </div>
-        <div className="grid items-start gap-6 xl:grid-cols-2">
-          <div className="min-w-0">
-      {/* Cumplimiento del mes contra la meta (solo las líneas que tienen meta) */}
-      {(() => {
-        const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
-        if (visible.length) return <SalesGoalsPanel goals={visible} canEdit={canManage} onEdit={openGoalEdit} />;
-        if (canManage && goalsData && !(goalsData.goals ?? []).length && whatsappNumbers.length) {
-          return (
-            <button type="button" onClick={() => openGoalEdit(null)} className="w-full rounded-2xl border border-dashed border-line p-4 text-center text-sm font-semibold text-accent hover:bg-accent-soft">
-              Definir la meta mensual por asesora
-            </button>
-          );
-        }
-        return null;
-      })()}
-
-
-          </div>
-          <div className="min-w-0 space-y-6">
-          <SalesInsights daily={salesData?.daily ?? []} methods={salesData?.paymentMethods ?? []} total={summary.totalQuetzales} />
-          </div>
-        </div>
+            <div className="grid items-start gap-6 xl:grid-cols-2">
+              <div className="min-w-0">{goalsNode}</div>
+              <div className="min-w-0 space-y-6">
+                <SalesInsights daily={salesData?.daily ?? []} methods={salesData?.paymentMethods ?? []} total={summary.totalQuetzales} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Detalle Transaccional de Ventas (Auditoría Gerencial) */}
