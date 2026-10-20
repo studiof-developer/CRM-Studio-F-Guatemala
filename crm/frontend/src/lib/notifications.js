@@ -53,6 +53,34 @@ export function playChime() {
 }
 
 /**
+ * Alarma urgente (tres pitidos agudos): para avisos que no pueden pasar desapercibidos, como el saldo de WhatsApp.
+ * Mejor esfuerzo: sin audio o con la pestaña silenciada no suena.
+ */
+export function playAlarm() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const start = now + i * 0.32;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(i % 2 ? 740 : 880, start);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
+      gain.gain.setValueAtTime(0.22, start + 0.2);
+      gain.gain.linearRampToValueAtTime(0, start + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    }
+  } catch (err) {
+    console.warn('playAlarm: audio context error', err);
+  }
+}
+
+/**
  * Requests notification permission from the browser.
  * Call once on login — subsequent calls are no-ops if permission is already granted/denied.
  * Returns the final permission state: 'granted' | 'denied' | 'default'.

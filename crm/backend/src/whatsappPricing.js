@@ -47,9 +47,7 @@ async function graphGet(path, token) {
 // Total + per-category message cost over [since, until] (YYYY-MM-DD each, Guatemala
 // calendar days). Array-type Graph API params want a JSON-encoded array, not repeated
 // key=value pairs (same convention metaAds.js's time_range needs for an object).
-export async function fetchMessageCost(since, until) {
-  const creds = await getActiveCredentials().catch(() => null);
-  if (!creds?.wabaId) return null;
+async function fetchPoints(creds, since, until) {
   const start = Math.floor(new Date(`${since}T00:00:00-06:00`).getTime() / 1000);
   const end = Math.floor(new Date(`${until}T23:59:59-06:00`).getTime() / 1000);
   const params = new URLSearchParams({
@@ -60,7 +58,20 @@ export async function fetchMessageCost(since, until) {
     dimensions: JSON.stringify(['PRICING_CATEGORY']),
   });
   const body = await graphGet(`${creds.wabaId}/pricing_analytics?${params}`, creds.token);
-  const points = body.data?.[0]?.data_points ?? [];
+  return body.data?.[0]?.data_points ?? [];
+}
+
+// Costo en USD (la moneda en que Meta cobra la API) de [since, until]: con eso se estima el saldo pendiente de pago.
+export async function fetchMessageCostUsd(since, until) {
+  const creds = await getActiveCredentials().catch(() => null);
+  if (!creds?.wabaId) return null;
+  return (await fetchPoints(creds, since, until)).reduce((t, p) => t + (p.cost ?? 0), 0);
+}
+
+export async function fetchMessageCost(since, until) {
+  const creds = await getActiveCredentials().catch(() => null);
+  if (!creds?.wabaId) return null;
+  const points = await fetchPoints(creds, since, until);
 
   let totalCost = 0;
   let billableVolume = 0;

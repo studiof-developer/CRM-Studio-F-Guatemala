@@ -25,6 +25,7 @@ const Brands = lazy(() => import('./Brands.jsx'));
 // tab here is: nothing pays for the chat UI's bundle weight until it's actually used.
 const ChatPopup = lazy(() => import('./components/ChatPopup.jsx'));
 import { Logo } from './components/Logo.jsx';
+import MetaBillingAlert from './components/MetaBillingAlert.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 
 // Catches the one real failure mode lazy tabs add: someone has the app open across a
@@ -330,6 +331,7 @@ export default function App() {
       {/* Toast visuals live in components/Toast.jsx (showSuccess/showError) — this
           just mounts the portal and positions it. */}
       <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
+      <MetaBillingAlert role={user.role} />
 
       {/* Always-visible launcher for the admin test sandbox — kept out of the nav list
           entirely (see TEST_TABS above) so it doesn't compete for space with the pages

@@ -3,6 +3,7 @@
 // originates (an advisor typing/attaching something in Conversations).
 import { pool } from './db.js';
 import { decryptToken } from './tokenCrypto.js';
+import { broadcast } from './events.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 
@@ -83,6 +84,16 @@ const REQUEST_TIMEOUT_MS = 20000;
 const UPLOAD_TIMEOUT_MS = 90000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Meta responde 131042 cuando la cuenta de WhatsApp Business no puede enviar por un problema de pago: se anota (para la alerta
+// de facturación) y se avisa en vivo a las pantallas abiertas.
+function noteIfPaymentBlocked(body) {
+  if (!/"code"\s*:\s*131042/.test(body)) return;
+  pool.query(`INSERT INTO app_settings (key, value, updated_at) VALUES ('meta_billing_blocked_at', to_jsonb(now()::text), now())
+    ON CONFLICT (key) DO UPDATE SET value = to_jsonb(now()::text), updated_at = now()`)
+    .then(() => broadcast('billing_alert', '{}'))
+    .catch((err) => console.error('could not record payment block', err.message));
+}
+
 async function graphFetch(path, options, token, timeoutMs = REQUEST_TIMEOUT_MS) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let res;
@@ -101,6 +112,7 @@ async function graphFetch(path, options, token, timeoutMs = REQUEST_TIMEOUT_MS) 
     }
     if (res.ok) return res.json();
     const body = await res.text();
+    noteIfPaymentBlocked(body);
     if (!RETRYABLE_STATUS.has(res.status) || attempt === MAX_ATTEMPTS) {
       throw new Error(`WhatsApp API ${res.status}: ${body}`);
     }

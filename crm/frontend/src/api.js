@@ -933,6 +933,19 @@ export async function downloadSalesChatExport(from, to) {
   URL.revokeObjectURL(url);
 }
 
+// Facturación de la API de WhatsApp (Meta): estado y alertas de saldo; owed = el "Saldo actual" que muestra Meta.
+export async function fetchMetaBilling(fresh = false) {
+  const res = await apiFetch(`/api/billing/meta${fresh ? '?fresh=1' : ''}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo consultar la facturación de Meta');
+  return res.json();
+}
+
+export async function saveMetaBilling(body) {
+  const res = await apiFetch('/api/billing/meta', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo guardar');
+  return res.json();
+}
+
 // Cierre del día: lo pagado y lo pendiente de cada asesora hasta una hora de corte (HH:MM, hora de Guatemala).
 export async function fetchSalesClose(date, asOf) {
   const qs = new URLSearchParams({ date, ...(asOf ? { asOf } : {}) });
