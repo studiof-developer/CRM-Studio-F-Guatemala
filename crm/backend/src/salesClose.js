@@ -88,7 +88,7 @@ export async function computeClose({ day, asOf: hhmm = null, now = new Date() })
     [new Date(+start - 24 * 3600000), asOf]
   );
   const canonical = nameResolver();
-  const ocr = createLazyOcrRunner({ maxReads: 40 });
+  const ocr = createLazyOcrRunner({ maxReads: 100 });
   const rows = [];
   const pending = [];
   try {

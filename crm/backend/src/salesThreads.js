@@ -134,11 +134,22 @@ async function applyAttachments(events, ocr) {
 // Imágenes que mandó la asesora sin texto (típico: la tarjeta "MEDIOS DE PAGO"). Solo se miran las de las 24 h previas a
 // un comprobante del cliente o al final del hilo (cierre / pendientes): son las que pueden ser los medios de pago de esa
 // compra. Si la imagen dice "medios de pago" o nombra un banco, el evento cuenta como que la asesora dio los medios de pago.
+// La tarjeta de medios de pago se manda justo después de que el cliente elige cómo pagar ("transferencia", "link") o de que la
+// asesora lo pregunta. Mirar solo esas imágenes evita gastar lecturas OCR en cada foto de catálogo del día (en el cierre del
+// 19 de oct. el tope se agotaba con 547 chats y los medios de pago en imagen de varias ventas quedaban sin leer).
+const PAYMENT_CHOICE_RE = /(transfer|dep[oó]sito|\blink\b|enlace|tarjeta|cuenta)/i;
+const ASKED_PAYMENT_RE = /link\s+o\s+transferencia|c[oó]mo\s+(deseas|quieres|prefieres)\s+pagar/i;
+function followsPaymentChoice(events, e) {
+  const t = +new Date(e.at);
+  return events.some((x) => +new Date(x.at) < t && +new Date(x.at) >= t - 45 * 60000
+    && ((x.role === 'customer' && PAYMENT_CHOICE_RE.test(x.text ?? '')) || (x.role === 'advisor' && ASKED_PAYMENT_RE.test(x.text ?? ''))));
+}
+
 async function applyAdvisorImages(events, ocr) {
   const anchors = events.filter((e) => e.role === 'customer' && (e.ocrAmount || e.voucher)).map((e) => +new Date(e.at));
   if (events.length) anchors.push(+new Date(events[events.length - 1].at));
   const near = (t) => anchors.some((a) => t <= a && a - t <= PAYINFO_FRESH_MS);
-  const candidates = events.filter((e) => e.role === 'advisor' && e.id > 0 && !givesPaymentInfo(e.text) && near(+new Date(e.at)));
+  const candidates = events.filter((e) => e.role === 'advisor' && e.id > 0 && !givesPaymentInfo(e.text) && near(+new Date(e.at)) && followsPaymentChoice(events, e));
   if (!candidates.length) return;
   const { rows } = await pool.query(
     `SELECT a.id, a.n8n_message_id, a.mime_type, a.file_path, o.snippet, (o.attachment_id IS NOT NULL) AS cached
