@@ -9,7 +9,7 @@ const TEAM_STATUS = { met: ['Meta cumplida', 'text-success', 'bg-success'], ahea
 // Contenedor del resumen general del reporte de ventas: el total del período y cómo va contra el período comparable, las cifras
 // de apoyo, los medios de pago y, a la derecha, las acciones (prendas vendidas y meta mensual) con el avance de la meta del equipo.
 // Lo "por validar" se avisa aparte para que nadie lea el total como definitivo sin saberlo.
-export default function SalesHeadline({ title, summary, previous, porValidarTotal, porValidarCount, updatedAt, methods, goals, canEdit, canDefine, onShowItems, onGoal }) {
+export default function SalesHeadline({ title, summary, previous, porValidarTotal, porValidarCount, updatedAt, methods, goals, canEdit, canDefine, pending, onShowItems, onShowPending, onGoal }) {
   const current = summary.totalQuetzales;
   const pct = previous?.total != null ? deltaPct(current, previous.total) : null;
   const up = pct != null && pct > 0.05, down = pct != null && pct < -0.05;
@@ -37,13 +37,24 @@ export default function SalesHeadline({ title, summary, previous, porValidarTota
                     </>
                   ))}
           </div>
-          <dl className="mt-4 flex items-center gap-8">
+          <dl className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3">
             {[['Ventas', summary.totalVentas], ['Clientes', summary.totalClientes], ['Ticket promedio', q(summary.ticketPromedio)]].map(([label, value]) => (
               <div key={label}>
                 <dt className="text-[11px] font-semibold uppercase tracking-wider text-greige-ink">{label}</dt>
                 <dd className="mt-0.5 text-xl font-bold tracking-tight text-ink">{value}</dd>
               </div>
             ))}
+            {pending && (
+              <div>
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-warn">Pendiente de pago</dt>
+                <dd className="mt-0.5">
+                  <button type="button" onClick={onShowPending} title="Ver los links de pago enviados que todavía no se pagan" className="text-left text-xl font-bold tracking-tight text-warn hover:underline">
+                    {q(pending.total)}
+                    <span className="ml-1.5 text-xs font-semibold text-greige-ink">{pending.count} link{pending.count === 1 ? '' : 's'}{pending.unknownCount ? ` · ${pending.unknownCount} sin monto` : ''}</span>
+                  </button>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 

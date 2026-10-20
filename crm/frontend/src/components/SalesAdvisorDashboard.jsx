@@ -21,6 +21,7 @@ import SalesHeadline from './SalesHeadline.jsx';
 import AdvisorMetrics from './AdvisorMetrics.jsx';
 import useSalesReport from '../lib/useSalesReport.js';
 import SoldItemsModal from './SoldItemsModal.jsx';
+import PendingPaymentsModal from './PendingPaymentsModal.jsx';
 import DailySalesCard from './SalesInsights.jsx';
 import { periodRange, periodTitle } from '../lib/salesCompare.js';
 
@@ -102,6 +103,7 @@ export default function SalesAdvisorDashboard() {
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('sales:view') || 'tarjetas'; } catch { return 'tarjetas'; } });
   function changeView(v) { setViewMode(v); try { localStorage.setItem('sales:view', v); } catch { /* sin almacenamiento: no se recuerda */ } }
   const [itemsOpen, setItemsOpen] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
   const [goalEdit, setGoalEdit] = useState(null); // { lineId, monthly, error } — ventana "Meta mensual"
 
   // Auditoría de ventas contra el chat (reemplaza al "Re-analizar chats" y a la auditoría del 14/10)
@@ -512,12 +514,14 @@ export default function SalesAdvisorDashboard() {
         goals={visibleGoals}
         canEdit={canManage}
         canDefine={canDefineGoal}
+        pending={salesData?.pending ?? null}
         onShowItems={() => setItemsOpen(true)}
+        onShowPending={() => setPendingOpen(true)}
         onGoal={openGoalEdit}
       />
 
         {viewMode === 'tarjetas' ? (
-          <AdvisorMetrics advisors={advisors} goals={visibleGoals} onOpen={(a, filter) => { setSelectedAdvisorDetail(a); setAdvisorDetailFilter(filter); }} action={viewToggle} />
+          <AdvisorMetrics advisors={advisors} goals={visibleGoals} pending={salesData?.pending ?? null} onShowPending={() => setPendingOpen(true)} onOpen={(a, filter) => { setSelectedAdvisorDetail(a); setAdvisorDetailFilter(filter); }} action={viewToggle} />
         ) : (
           <>
             <div className="flex justify-end">{viewToggle}</div>
@@ -1094,6 +1098,7 @@ export default function SalesAdvisorDashboard() {
           </div>
         )}
       </ConfirmDialog>
+      <PendingPaymentsModal open={pendingOpen} onClose={() => setPendingOpen(false)} pending={salesData?.pending ?? null} />
       <SoldItemsModal
         open={itemsOpen}
         onClose={() => setItemsOpen(false)}

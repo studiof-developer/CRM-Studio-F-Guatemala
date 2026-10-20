@@ -2,6 +2,7 @@ import { pool } from './db.js';
 import { guatemalaParts } from './salesRules.js';
 import { analyzeCustomer, nameResolver } from './salesThreads.js';
 import { createLazyOcrRunner } from './ocrRunner.js';
+import { applyLinkAmounts } from './paymentLinks.js';
 
 // CIERRE DEL DÍA: lo que cada asesora lleva vendido en un día "hasta una hora" (corte). Se calcula leyendo los
 // chats como estaban a esa hora: Pagado = comprobante del cliente (monto exacto) o confirmación de la asesora;
@@ -122,6 +123,8 @@ export async function computeClose({ day, asOf: hhmm = null, now = new Date() })
   } finally {
     await ocr.close();
   }
+  // el monto de un pendiente pagado por link es el que dice la página del link (si se puede leer)
+  await applyLinkAmounts(pending).catch((err) => console.error('close: link amounts', err.message));
   const { rows: sales } = await pool.query(
     `SELECT id, customer_id, created_at, amount, status, advisor_name, advisor_override_at FROM sales
      WHERE created_at >= $1 AND created_at <= $2`, [new Date(+start - 86400000), new Date(+asOf + 86400000)]

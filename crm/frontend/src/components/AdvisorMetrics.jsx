@@ -36,9 +36,10 @@ function GoalBlock({ goal, monthly, day, days }) {
 
 // Métricas de cada asesora en mosaico (las columnas se ajustan solas al ancho). Con meta mensual, cada tarjeta lleva su avance.
 // Las asesoras sin ventas quedan en una línea desplegable. onOpen(asesora, filtro) abre su detalle; `action` es el interruptor Mosaico | Tabla.
-export default function AdvisorMetrics({ advisors, goals, onOpen, action }) {
+export default function AdvisorMetrics({ advisors, goals, pending, onOpen, onShowPending, action }) {
   const [showIdle, setShowIdle] = useState(false);
-  const active = advisors.filter((a) => a.cantidadVentas > 0 || a.porRevisar > 0);
+  const pendingOf = (name) => Object.entries(pending?.byAdvisor ?? {}).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1] ?? null;
+  const active = advisors.filter((a) => a.cantidadVentas > 0 || a.porRevisar > 0 || pendingOf(a.advisorName));
   const idle = advisors.filter((a) => !active.includes(a));
 
   const goalOf = (name) => {
@@ -65,6 +66,7 @@ export default function AdvisorMetrics({ advisors, goals, onOpen, action }) {
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(290px,1fr))]">
             {active.map((a) => {
               const g = goalOf(a.advisorName);
+              const pend = pendingOf(a.advisorName);
               return (
                 <article key={a.advisorName} className="flex min-w-0 flex-col rounded-2xl border border-line bg-paper p-5 transition-shadow hover:shadow-md">
                   <div className="flex items-start justify-between gap-3">
@@ -84,11 +86,12 @@ export default function AdvisorMetrics({ advisors, goals, onOpen, action }) {
 
                   {g && <GoalBlock {...g} />}
 
-                  {(a.turnos || a.porValidar > 0 || a.porRevisar > 0) && (
+                  {(a.turnos || a.porValidar > 0 || a.porRevisar > 0 || pend) && (
                     <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
                       {a.turnos && TURNOS.filter(([, k]) => a.turnos[k] > 0).map(([label, k]) => (
                         <span key={k} className="rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-greige-ink dark:bg-white/[0.08]">{label} {q0(a.turnos[k])}</span>
                       ))}
+                      {pend && <button type="button" onClick={onShowPending} className="rounded-full bg-warn/15 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/25">Pendiente de pago {q0(pend.total)} · {pend.count} link{pend.count === 1 ? '' : 's'}</button>}
                       {a.porValidar > 0 && <span className="rounded-full bg-warn/10 px-2.5 py-1 text-[11px] font-semibold text-warn">{q0(a.porValidarTotal)} por validar</span>}
                       {a.porRevisar > 0 && (
                         <button type="button" onClick={() => onOpen(a, 'revisar')} className="rounded-full bg-warn/15 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/25">{a.porRevisar} por revisar</button>

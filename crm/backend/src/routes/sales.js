@@ -9,6 +9,7 @@ import { exportChats } from '../salesChatExport.js';
 import { lineSessionSql, defaultLineId } from '../salesThreads.js';
 import { getGoals, saveGoal, buildGoalRows, monthClock } from '../salesGoals.js';
 import { aggregateItems } from '../salesItems.js';
+import { syncRecentPaymentLinks, pendingPayments } from '../paymentLinks.js';
 
 const router = Router();
 
@@ -419,6 +420,14 @@ router.get('/by-advisor', async (req, res, next) => {
       transParams
     );
 
+    // Pendiente de pago: links de NeoLink mandados en las últimas 24 h sin venta registrada después. Leer los links nuevos puede
+    // tardar unos segundos (se abre la página de pago); se espera como máximo 6 s y el resto se completa en la siguiente carga.
+    let pending = null;
+    try {
+      await Promise.race([syncRecentPaymentLinks(), new Promise((resolve) => setTimeout(resolve, 6000))]);
+      pending = await pendingPayments({ lineId });
+    } catch (err) { console.error('pending payments', err.message); }
+
     res.json({
       period,
       from: from || null,
@@ -431,6 +440,7 @@ router.get('/by-advisor', async (req, res, next) => {
         ticketPromedio: ticketPromedioGlobal,
       },
       advisors,
+      pending,
       daily: dailyRows.map((r) => ({
         day: r.day,
         totalQuetzales: Number(r.total_quetzales),
