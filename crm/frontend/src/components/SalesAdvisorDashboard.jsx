@@ -4,19 +4,22 @@ import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
   FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check,
-  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText
+  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText, LayoutGrid, Table2
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount, fetchMe } from '../api.js';
 import ReassignAdvisor from './ReassignAdvisor.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import { showError, showSuccess } from './Toast.jsx';
-import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
+import { guatemalaToday } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 import SalesCloseModal from './SalesCloseModal.jsx';
 import SalesToolsMenu from './SalesToolsMenu.jsx';
+import SalesHeadline from './SalesHeadline.jsx';
+import AdvisorCards from './AdvisorCards.jsx';
+import { periodRange, previousPeriod, sumUntil, periodTitle } from '../lib/salesCompare.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -106,6 +109,11 @@ export default function SalesAdvisorDashboard() {
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [selectedAdvisorDetail, setSelectedAdvisorDetail] = useState(null);
   const [advisorDetailFilter, setAdvisorDetailFilter] = useState('todas');
+  // Vista gerencial: tarjetas por asesora (por defecto) o la tabla completa con su gráfica. Se recuerda por navegador.
+  const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('sales:view') || 'tarjetas'; } catch { return 'tarjetas'; } });
+  function changeView(v) { setViewMode(v); try { localStorage.setItem('sales:view', v); } catch { /* sin almacenamiento: no se recuerda */ } }
+  const [previous, setPrevious] = useState(null); // { label, total, loading } — el período contra el que se compara
+  const [updatedAt, setUpdatedAt] = useState(null);
 
   // Estados para la comparativa diaria Leydi vs Aura
   const [dailyRange, setDailyRange] = useState('sep_oct');
@@ -129,19 +137,7 @@ export default function SalesAdvisorDashboard() {
 
   // Mismo periodo que muestra el ranking, expresado como fechas (el servidor admite hasta 31 días).
   function auditRange() {
-    const today = guatemalaToday();
-    if (period === 'personalizado') return { from, to };
-    if (period === 'ayer') { const y = addDays(today, -1); return { from: y, to: y }; }
-    if (period === 'esta_semana') {
-      const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
-      return { from: addDays(today, -((dow + 6) % 7)), to: today }; // la semana empieza el lunes
-    }
-    if (period === 'este_mes') return { from: `${today.slice(0, 8)}01`, to: today };
-    if (period === 'mes_anterior') {
-      const [y, m] = today.split('-').map(Number);
-      return monthBounds(m === 1 ? y - 1 : y, m === 1 ? 12 : m - 1);
-    }
-    return { from: today, to: today };
+    return periodRange(period, from, to, guatemalaToday());
   }
 
   async function handleOpenAudit() {
@@ -292,6 +288,7 @@ export default function SalesAdvisorDashboard() {
     fetchSalesByAdvisor(filters)
       .then((data) => {
         setSalesData(data);
+        setUpdatedAt(new Date().toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit' }));
         setLoading(false);
       })
       .catch((err) => {
@@ -303,6 +300,19 @@ export default function SalesAdvisorDashboard() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Contra qué va el total: ayer a esta misma hora, la semana pasada, el mes pasado… (ver lib/salesCompare.js)
+  useEffect(() => {
+    if (!salesData) return undefined;
+    let cancelled = false;
+    const range = periodRange(period, from, to, guatemalaToday());
+    const prev = previousPeriod(period, range, new Date(Date.now() - 6 * 3600000).toISOString().slice(11, 16));
+    setPrevious({ label: prev.label, total: null, loading: true });
+    fetchSalesByAdvisor({ period: 'personalizado', from: prev.from, to: prev.to, ...(lineId ? { lineId } : {}) })
+      .then((d) => { if (!cancelled) setPrevious({ label: prev.label, total: prev.untilTime ? sumUntil(d.transactions, prev.untilTime) : d.summary.totalQuetzales, loading: false }); })
+      .catch(() => { if (!cancelled) setPrevious(null); });
+    return () => { cancelled = true; };
+  }, [salesData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dibuja gráfico de barras de ventas por asesor
   useEffect(() => {
@@ -592,7 +602,7 @@ export default function SalesAdvisorDashboard() {
                   onChange={(e) => setLineId(e.target.value)}
                   className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink focus:border-accent focus:outline-none"
                 >
-                  <option value="">📊 Todas las líneas (Consolidado)</option>
+                  <option value="">Todas las líneas</option>
                   {whatsappNumbers.map((num) => (
                     <option key={num.id} value={num.id}>
                       Línea: {num.label || num.display_phone_number || num.phone_number}
@@ -805,11 +815,11 @@ export default function SalesAdvisorDashboard() {
                   <Trophy size={20} />
                 </span>
                 <h2 className="text-xl font-bold tracking-tight text-ink">
-                  Rendimiento de Ventas por Asesor
+                  Ventas del equipo
                 </h2>
               </div>
               <p className="mt-1 text-xs text-greige-ink">
-                Medición de ventas en Quetzales (Q), clientes únicos cerrados y ticket promedio por cada asesor.
+                Cuánto se vendió, quién lo vendió y cómo va frente al período anterior. Se calcula de los pagos que aparecen en los chats.
               </p>
             </div>
 
@@ -904,66 +914,34 @@ export default function SalesAdvisorDashboard() {
         </div>
       )}
 
-      {/* Tarjetas KPI de Resumen General */}
-      <div className="mt-6 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        {/* Total Quetzales */}
-        <div className="rounded-2xl border border-success-bg/80 bg-gradient-to-br from-success-bg/40 to-success-bg/10 p-4 text-ink">
-          <div className="flex items-center justify-between text-success">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Total Vendido</span>
-            <CircleDollarSign size={18} />
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-success">
-            Q {summary.totalQuetzales.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="mt-1 text-[11px] text-greige-ink">
-            Suma neta del período seleccionado
-          </p>
-        </div>
+      {/* Tarjeta principal: total del período y comparación */}
+      <SalesHeadline
+        title={periodTitle(period, periodRange(period, from, to, guatemalaToday()))}
+        summary={summary}
+        previous={previous}
+        porValidarTotal={advisors.reduce((n, a) => n + (a.porValidarTotal || 0), 0)}
+        porValidarCount={advisors.reduce((n, a) => n + (a.porValidar || 0), 0)}
+        updatedAt={updatedAt}
+      />
 
-        {/* Clientes Únicos Cerrados */}
-        <div className="rounded-2xl border border-line bg-paper p-4 text-ink">
-          <div className="flex items-center justify-between text-greige-ink">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Clientes Cerrados</span>
-            <Users size={18} />
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-ink">
-            {summary.totalClientes}
-          </p>
-          <p className="mt-1 text-[11px] text-greige-ink">
-            Clientes únicos con compra
-          </p>
-        </div>
-
-        {/* Total Transacciones */}
-        <div className="rounded-2xl border border-line bg-paper p-4 text-ink">
-          <div className="flex items-center justify-between text-greige-ink">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Ventas Realizadas</span>
-            <ShoppingBag size={18} />
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-ink">
-            {summary.totalVentas}
-          </p>
-          <p className="mt-1 text-[11px] text-greige-ink">
-            Total órdenes / compras cerradas
-          </p>
-        </div>
-
-        {/* Ticket Promedio */}
-        <div className="rounded-2xl border border-line bg-paper p-4 text-ink">
-          <div className="flex items-center justify-between text-greige-ink">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Ticket Promedio</span>
-            <TrendingUp size={18} />
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-ink">
-            Q {summary.ticketPromedio.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="mt-1 text-[11px] text-greige-ink">
-            Promedio generado por venta
-          </p>
+      {/* Resultado por asesora: tarjetas (por defecto) o tabla completa */}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-ink">Resultado por asesora</h3>
+        <div className="inline-flex rounded-xl border border-line bg-paper p-1 text-xs" role="group" aria-label="Forma de ver el resultado">
+          {[['tarjetas', 'Tarjetas', LayoutGrid], ['tabla', 'Tabla', Table2]].map(([key, label, Icon]) => (
+            <button key={key} type="button" aria-pressed={viewMode === key} onClick={() => changeView(key)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-all ${viewMode === key ? 'bg-accent text-white shadow-xs' : 'text-greige-ink hover:text-ink'}`}>
+              <Icon size={13} /> {label}
+            </button>
+          ))}
         </div>
       </div>
-
-      {/* Leaderboard y Gráfico */}
+      {viewMode === 'tarjetas' ? (
+        <div className="mt-3">
+          <AdvisorCards advisors={advisors} onOpen={(a, filter) => { setSelectedAdvisorDetail(a); setAdvisorDetailFilter(filter); }} />
+        </div>
+      ) : (
+        <>
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Tabla Ranking de Asesores */}
         <div className="lg:col-span-7">
@@ -1131,6 +1109,9 @@ export default function SalesAdvisorDashboard() {
           </div>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Detalle Transaccional de Ventas (Auditoría Gerencial) */}
       <div className="mt-6 rounded-2xl border border-line bg-paper p-4 md:p-5">
