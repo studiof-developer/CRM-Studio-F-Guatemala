@@ -28,9 +28,9 @@ test('el marcador de imagen de medios de pago cuenta como que la asesora los dio
   assert.equal(ep.attributionUncertain, true); // dos asesoras dieron medios de pago: un supervisor lo confirma
 });
 
-test('cambio de turno: los medios de pago los dio Leydi (26 h antes), Aura solo recibe el comprobante: es de Leydi', () => {
+test('cambio de turno: los medios de pago los dio Leydi en la mañana, Aura solo recibe el comprobante en la tarde: es de Leydi', () => {
   const eventos = [
-    adv(gt('18', '13:30'), 'Leydi', PAYMENT_IMAGE_MARKER),
+    adv(gt('19', '10:30'), 'Leydi', PAYMENT_IMAGE_MARKER),
     adv(gt('19', '15:36'), 'Aura', 'Quedo atenta al comprobante para separarte de una vez'),
     proof(gt('19', '15:47'), 988),
     adv(gt('19', '15:55'), 'Aura', 'Gracias por elegir a STUDIO F! tu pedido ya esta en proceso de alistamiento'),
