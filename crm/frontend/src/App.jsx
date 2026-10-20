@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2 } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2, Search } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import { playChime, requestNotificationPermission, showDesktopNotification } from './lib/notifications.js';
@@ -13,6 +13,7 @@ const Customers = lazy(() => import('./Customers.jsx'));
 const Users = lazy(() => import('./Users.jsx'));
 const Catalog = lazy(() => import('./Catalog.jsx'));
 const Audit = lazy(() => import('./Audit.jsx'));
+const ChatAnalysis = lazy(() => import('./ChatAnalysis.jsx'));
 const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
 const Campaigns = lazy(() => import('./Campaigns.jsx'));
 const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
@@ -68,6 +69,7 @@ const BASE_TABS = {
 // Admin and supervisor only.
 const AUDIT_TABS = {
   audit: { label: 'Auditoría', icon: ShieldCheck, Component: Audit },
+  analysis: { label: 'Análisis', icon: Search, Component: ChatAnalysis },
 };
 
 // Admin and supervisor only — a broadcast reaches many customers at once and costs real
@@ -101,7 +103,7 @@ const SETTINGS_TABS = {
 const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
 const NAV_GROUPS = [
   { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns'] },
-  { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
+  { key: 'admin', title: 'Administración', keys: ['audit', 'analysis', 'users', 'companies', 'brands', 'whatsappNumbers'] },
 ];
 
 // Every tab reachable at its own bookmarkable URL — an explicit map rather than
@@ -119,6 +121,7 @@ const TAB_PATHS = {
   quickReplies: '/respuestas-rapidas',
   campaigns: '/difusion',
   audit: '/auditoria',
+  analysis: '/analisis',
   users: '/usuarios',
   companies: '/empresas',
   brands: '/marcas',

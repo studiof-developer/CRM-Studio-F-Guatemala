@@ -986,3 +986,16 @@ export async function validateSaleAmount(saleId, amount) {
   if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo validar el monto');
   return res.json();
 }
+
+// Análisis de chats (admin / supervisor): lista clasificada del período y, aparte, la ficha y conversación de un cliente.
+export async function fetchChatAnalysis(from, to) {
+  const res = await apiFetch(`/api/chat-analysis?${new URLSearchParams({ from, to })}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el análisis');
+  return res.json();
+}
+
+export async function fetchChatAnalysisDetail(phone, from, to) {
+  const res = await apiFetch(`/api/chat-analysis/${encodeURIComponent(phone)}?${new URLSearchParams({ from, to })}`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el chat');
+  return res.json();
+}
