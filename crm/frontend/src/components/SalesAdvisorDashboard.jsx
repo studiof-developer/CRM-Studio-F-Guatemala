@@ -7,7 +7,8 @@ import {
   Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount } from '../api.js';
+import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount, fetchMe } from '../api.js';
+import ReassignAdvisor from './ReassignAdvisor.jsx';
 import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
@@ -117,6 +118,9 @@ export default function SalesAdvisorDashboard() {
   const [auditApplying, setAuditApplying] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  // Solo administradores y supervisores pueden corregir a mano la asesora de una venta.
+  const [canManage, setCanManage] = useState(false);
+  useEffect(() => { fetchMe().then((u) => setCanManage(['admin', 'supervisor'].includes(u?.role))).catch(() => {}); }, []);
   const [auditData, setAuditData] = useState(null);
   const [auditTab, setAuditTab] = useState('corregir');
   const [copiedAudit, setCopiedAudit] = useState(false);
@@ -1184,6 +1188,7 @@ export default function SalesAdvisorDashboard() {
                             <ArrowRight size={10} className="text-greige-ink" />
                           </a>
                           <p className="text-[11px] text-greige-ink">{t.customerPhone}</p>
+                          {canManage && <ReassignAdvisor saleId={t.id} current={t.advisorName} overridden={t.advisorOverridden} options={advisors.map((a) => a.advisorName)} onDone={loadData} />}
                         </td>
                         <td className="py-2.5 font-bold text-success whitespace-nowrap">
                           {editingSaleId === t.id ? (
@@ -1391,6 +1396,7 @@ export default function SalesAdvisorDashboard() {
                                 <ExternalLink size={10} className="text-greige-ink" />
                               </a>
                               <p className="text-[11px] text-greige-ink">{t.customerPhone}</p>
+                          {canManage && <ReassignAdvisor saleId={t.id} current={t.advisorName} overridden={t.advisorOverridden} options={advisors.map((a) => a.advisorName)} onDone={loadData} />}
                             </td>
                             <td className="py-2.5 font-bold text-success whitespace-nowrap">
                               {editingSaleId === t.id ? (

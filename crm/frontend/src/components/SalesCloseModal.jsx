@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { X, RefreshCw, Download, Save } from 'lucide-react';
 import { fetchSalesClose, saveSalesClose, fetchSalesCloses, fetchSalesCloseById } from '../api.js';
 import { guatemalaToday } from '../lib/pipelinePeriod.js';
+import ReassignAdvisor from './ReassignAdvisor.jsx';
 
 const fmtQ = (n) => (n == null ? '—' : `Q ${Number(n).toLocaleString('es-GT', { minimumFractionDigits: 2 })}`);
 const fmtTime = (d) => new Date(d).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -154,7 +155,7 @@ export default function SalesCloseModal({ open, onClose }) {
                     <div>
                       <p className="mb-1 font-semibold text-ink">{openAdvisor}: pagadas ({paid.length})</p>
                       <table className="w-full text-left">
-                        <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-1.5">Hora</th><th className="py-1.5">Cliente</th><th className="py-1.5 text-right">Monto</th><th className="py-1.5">Dio medios de pago</th><th className="py-1.5">Confirmación</th></tr></thead>
+                        <thead><tr className="border-b border-line text-[11px] uppercase tracking-wide text-greige-ink"><th className="py-1.5">Hora</th><th className="py-1.5">Cliente</th><th className="py-1.5 text-right">Monto</th><th className="py-1.5">Dio medios de pago</th><th className="py-1.5">Confirmación</th><th className="py-1.5">Asesora de la venta</th></tr></thead>
                         <tbody>{paid.map((r, i) => (
                           <tr key={i} className="border-b border-line-soft align-top">
                             <td className="whitespace-nowrap py-1.5 text-ink">{fmtTime(r.at)}</td>
@@ -162,6 +163,7 @@ export default function SalesCloseModal({ open, onClose }) {
                             <td className="whitespace-nowrap py-1.5 text-right font-semibold text-ink">{fmtQ(r.amount)}<div className="text-[10px] font-normal text-greige-ink">{[r.medium, basisLabel(r)].filter(Boolean).join(' · ')}</div></td>
                             <td className="py-1.5 text-ink">{r.paymentInfoBy ?? '—'}</td>
                             <td className="py-1.5">{r.verified ? <span className="text-success">{r.confirmedBy ?? 'Confirmada'}</span> : <span className="text-warning">Sin confirmar</span>}</td>
+                            <td className="py-1.5">{r.saleId ? <ReassignAdvisor saleId={r.saleId} current={r.advisor} overridden={r.advisorOverridden} options={result.advisorNames ?? []} onDone={calculate} /> : <span className="text-[11px] text-greige-ink">Sin venta registrada en el CRM</span>}</td>
                           </tr>
                         ))}</tbody>
                       </table>

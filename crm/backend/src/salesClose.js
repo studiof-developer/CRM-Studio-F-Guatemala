@@ -76,6 +76,24 @@ export function closeCutoff(day, hhmm = null, now = new Date()) {
   return guatemalaParts(now).ymd === day ? now : endOfDay;
 }
 
+// Enlaza cada venta pagada del día con la venta registrada del mismo cliente (±36 h, mismo monto ±Q1 o, si no, la más cercana).
+// Si un administrador corrigió a mano la asesora de esa venta, esa corrección manda sobre lo que lee el motor.
+export function linkSales(rows, sales, day) {
+  const claimed = new Set();
+  const gap = (s, r) => Math.abs(+new Date(s.created_at) - +new Date(r.at));
+  for (const r of rows) {
+    if (guatemalaParts(r.at).ymd !== day) continue;
+    const mine = sales.filter((s) => !claimed.has(s.id) && s.customer_id === r.customerId && gap(s, r) <= 36 * 3600000);
+    const s = mine.filter((x) => r.amount == null || Math.abs(Number(x.amount) - r.amount) <= 1).sort((a, b) => gap(a, r) - gap(b, r))[0]
+      ?? mine.sort((a, b) => gap(a, r) - gap(b, r))[0];
+    if (!s) continue;
+    claimed.add(s.id);
+    r.saleId = s.id;
+    r.registeredAdvisor = s.advisorCanonical ?? s.advisor_name;
+    if (s.advisor_override_at) { r.advisor = r.registeredAdvisor; r.advisorOverridden = true; }
+  }
+}
+
 export async function computeClose({ day, asOf: hhmm = null, now = new Date() }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day ?? '')) throw Object.assign(new Error('La fecha debe ser AAAA-MM-DD'), { status: 400 });
   const asOf = closeCutoff(day, hhmm, now);
@@ -105,10 +123,13 @@ export async function computeClose({ day, asOf: hhmm = null, now = new Date() })
     await ocr.close();
   }
   const { rows: sales } = await pool.query(
-    `SELECT id, customer_id, created_at, amount, status, advisor_name FROM sales WHERE created_at >= $1 AND created_at <= $2`, [start, asOf]
+    `SELECT id, customer_id, created_at, amount, status, advisor_name, advisor_override_at FROM sales
+     WHERE created_at >= $1 AND created_at <= $2`, [new Date(+start - 86400000), new Date(+asOf + 86400000)]
   );
   for (const s of sales) s.advisorCanonical = (await canonical(s.advisor_name)) ?? s.advisor_name;
-  return { ...summarizeClose({ day, asOf: asOf.toISOString(), rows, pending, sales }), customersAnalyzed: customers.length, generatedAt: new Date().toISOString() };
+  linkSales(rows, sales, day);
+  const { rows: names } = await pool.query("SELECT full_name FROM users WHERE role IN ('asesor', 'supervisor') ORDER BY full_name");
+  return { ...summarizeClose({ day, asOf: asOf.toISOString(), rows, pending, sales }), advisorNames: names.map((n) => n.full_name), customersAnalyzed: customers.length, generatedAt: new Date().toISOString() };
 }
 
 export async function saveClose({ day, asOf, label = null, userId = null }) {

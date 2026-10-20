@@ -398,7 +398,7 @@ export async function auditSales({ from, to, lineId = null }) {
       item.recordedAt = sale.created_at;
       item.recordedAmount = Number(sale.amount);
       // Un supervisor ya validó esta venta (y pudo elegir la asesora): el motor no la vuelve a mover.
-      const wrongAdvisor = ep.advisor && !sale.amount_validated_at && !sameAdvisor(ep.advisor, sale.advisor_name);
+      const wrongAdvisor = ep.advisor && !sale.amount_validated_at && !sale.advisor_override_at && !sameAdvisor(ep.advisor, sale.advisor_name);
       const wrongAmount = ep.type === 'comprobante' && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
       const wrongDate = guatemalaParts(sale.created_at).ymd !== guatemalaParts(ep.at).ymd;
       const promotable = sale.status === 'revisar' && ep.verified && (ep.amount > 0 || Number(sale.amount) > 0);
@@ -490,8 +490,8 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
       const useReceiptAmount = i.type === 'comprobante' && i.amount > 0;
       await pool.query(
         `UPDATE sales SET created_at = $2, confirmed_at = CASE WHEN $8::boolean THEN $2 ELSE confirmed_at END,
-                advisor_name = CASE WHEN amount_validated_at IS NULL THEN COALESCE($3, advisor_name) ELSE advisor_name END,
-                advisor_id = CASE WHEN amount_validated_at IS NULL THEN COALESCE($4, advisor_id) ELSE advisor_id END,
+                advisor_name = CASE WHEN amount_validated_at IS NULL AND advisor_override_at IS NULL THEN COALESCE($3, advisor_name) ELSE advisor_name END,
+                advisor_id = CASE WHEN amount_validated_at IS NULL AND advisor_override_at IS NULL THEN COALESCE($4, advisor_id) ELSE advisor_id END,
                 attributed_by = COALESCE($5, attributed_by),
                 amount = CASE WHEN $9::boolean THEN $10::numeric ELSE amount END,
                 receipt_amount = CASE WHEN $9::boolean THEN $10::numeric ELSE receipt_amount END,

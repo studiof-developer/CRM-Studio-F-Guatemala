@@ -382,6 +382,7 @@ router.get('/by-advisor', async (req, res, next) => {
          s.amount_basis,
          s.amount_validated_at,
          s.attribution_uncertain,
+         s.advisor_override_at,
          c.full_name AS customer_name,
          c.whatsapp_number AS customer_phone
        FROM sales s
@@ -435,6 +436,7 @@ router.get('/by-advisor', async (req, res, next) => {
         amountBasis: t.amount_basis || null,
         validated: !!t.amount_validated_at,
         attributionUncertain: !!t.attribution_uncertain,
+        advisorOverridden: !!t.advisor_override_at,
         createdAt: t.created_at,
       })),
       generatedAt: new Date().toISOString(),
@@ -475,9 +477,18 @@ router.patch('/:id', async (req, res, next) => {
       values.push(status);
       updates.push(`status = $${values.length}`);
     }
+    let advisorChange = '';
     if (advisorName !== undefined && (req.user.role === 'admin' || req.user.role === 'supervisor')) {
-      values.push(advisorName);
-      updates.push(`advisor_name = $${values.length}`);
+      const { rows: u } = await pool.query('SELECT id, full_name FROM users WHERE lower(full_name) = lower($1) LIMIT 1', [String(advisorName).trim()]);
+      if (!u.length) return res.status(400).json({ error: 'Esa asesora no existe en el CRM' });
+      if (u[0].full_name !== sale.advisor_name) {
+        // Corrección manual: queda fija, el motor y las auditorías ya no la mueven (advisor_override_at).
+        values.push(u[0].full_name); updates.push(`advisor_name = $${values.length}`);
+        values.push(u[0].id); updates.push(`advisor_id = $${values.length}`);
+        values.push(req.user.id); updates.push(`advisor_override_by = $${values.length}`);
+        updates.push('advisor_override_at = now()', "attributed_by = 'manual'", 'attribution_uncertain = false');
+        advisorChange = ` · asesora ${sale.advisor_name} → ${u[0].full_name}`;
+      }
     }
 
     if (!updates.length) return res.status(400).json({ error: 'Nada para actualizar' });
@@ -494,7 +505,7 @@ router.patch('/:id', async (req, res, next) => {
       req.user,
       sale.customer_id,
       'sale_updated',
-      `Venta #${sale.id} actualizada: Q${Number(rows[0].amount).toFixed(2)} por ${req.user.fullName || req.user.username}`
+      `Venta #${sale.id} actualizada: Q${Number(rows[0].amount).toFixed(2)}${advisorChange} por ${req.user.fullName || req.user.username}`
     );
 
     res.json({
