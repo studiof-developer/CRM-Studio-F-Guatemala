@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Trash2, Info, Workflow, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Workflow, ShieldCheck } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
 import MetaStrategyTab from './MetaStrategyTab.jsx';
+import Templates from './Templates.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
   uploadCampaignHeaderMedia, retryCampaignFailed,
-  fetchTemplatesManage, createWhatsappTemplate, deleteWhatsappTemplate,
   fetchWhatsappNumbers,
 } from './api.js';
 import { TEMP_META, BUCKET_ORDER } from './lib/temperature.js';
@@ -80,7 +80,7 @@ export default function Campaigns({ user, onOpenConversation }) {
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'metaStrategy' && <MetaStrategyTab />}
-        {tab === 'templates' && canManageTemplates && <TemplatesTab />}
+        {tab === 'templates' && canManageTemplates && <Templates />}
       </div>
     </div>
   );
@@ -305,10 +305,11 @@ function NewCampaignModal({ onClose, onSent }) {
 
   const template = templates?.find((t) => `${t.name}__${t.language}` === templateKey);
   const pickedIds = new Set(manualPicked.map((p) => p.id));
-  const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT'];
+  const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT', 'VIDEO'];
   const headerUnsupported = template?.headerFormat && !SUPPORTED_HEADER_FORMATS.includes(template.headerFormat);
   const headerIsDocument = template?.headerFormat === 'DOCUMENT';
-  const headerNeedsMedia = template?.headerFormat === 'IMAGE' || headerIsDocument;
+  const headerIsVideo = template?.headerFormat === 'VIDEO';
+  const headerNeedsMedia = template?.headerFormat === 'IMAGE' || headerIsDocument || headerIsVideo;
   // {{2}} and beyond — a tracking number, an order code — need a real value per
   // recipient (backend rejects a segment/existing-customer audience for these), so this
   // mode only offers the paste-a-list flow below, not "audiencia por temperatura" or
@@ -334,7 +335,7 @@ function NewCampaignModal({ onClose, onSent }) {
     setHeaderFilename(file.name);
     // A document doesn't get a thumbnail preview — just its filename (below) — so
     // there's no point creating a throwaway blob URL for it.
-    if (!headerIsDocument) setHeaderPreviewUrl(URL.createObjectURL(file));
+    if (!headerIsDocument && !headerIsVideo) setHeaderPreviewUrl(URL.createObjectURL(file));
     setHeaderUploading(true);
     try {
       const { mediaId, headerImageToken: token } = await uploadCampaignHeaderMedia(file, lineId ? Number(lineId) : undefined);
@@ -531,16 +532,16 @@ function NewCampaignModal({ onClose, onSent }) {
             )}
             {headerUnsupported && (
               <p className="mt-2 text-xs font-medium text-danger">
-                Esta plantilla tiene un encabezado de tipo {template.headerFormat} — todavía no está soportado, solo imágenes y documentos.
+                Esta plantilla tiene un encabezado de tipo {template.headerFormat} — todavía no está soportado.
               </p>
             )}
             {headerNeedsMedia && (
               <div className="mt-2">
                 <label className="mb-1 block text-xs font-medium text-greige-ink">
-                  {headerIsDocument ? 'Documento del encabezado (obligatorio)' : 'Imagen del encabezado (obligatoria)'}
+                  {headerIsDocument ? 'Documento del encabezado (obligatorio)' : headerIsVideo ? 'Video del encabezado (obligatorio)' : 'Imagen del encabezado (obligatoria)'}
                 </label>
                 <div className="flex items-center gap-3">
-                  {headerIsDocument ? (
+                  {headerIsDocument || headerIsVideo ? (
                     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-greige">
                       <FileText size={18} />
                     </span>
@@ -553,20 +554,20 @@ function NewCampaignModal({ onClose, onSent }) {
                   )}
                   <div className="flex flex-col gap-1">
                     <label className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                      {headerUploading ? <Loader2 size={13} className="animate-spin" /> : headerIsDocument ? <FileText size={13} /> : <ImageIcon size={13} />}
+                      {headerUploading ? <Loader2 size={13} className="animate-spin" /> : headerIsDocument || headerIsVideo ? <FileText size={13} /> : <ImageIcon size={13} />}
                       {headerUploading
                         ? 'Subiendo…'
                         : headerMediaId
-                          ? (headerIsDocument ? 'Cambiar documento' : 'Cambiar imagen')
-                          : (headerIsDocument ? 'Subir documento (PDF)' : 'Subir imagen')}
+                          ? (headerIsDocument ? 'Cambiar documento' : headerIsVideo ? 'Cambiar video' : 'Cambiar imagen')
+                          : (headerIsDocument ? 'Subir documento (PDF)' : headerIsVideo ? 'Subir video (MP4)' : 'Subir imagen')}
                       <input
                         type="file"
-                        accept={headerIsDocument ? '.pdf,application/pdf' : 'image/*'}
+                        accept={headerIsDocument ? '.pdf,application/pdf' : headerIsVideo ? 'video/mp4' : 'image/*'}
                         className="hidden"
                         onChange={(e) => handleHeaderFile(e.target.files?.[0])}
                       />
                     </label>
-                    {headerIsDocument && headerFilename && (
+                    {(headerIsDocument || headerIsVideo) && headerFilename && (
                       <span className="truncate text-[11px] text-greige-ink">{headerFilename}</span>
                     )}
                   </div>
@@ -787,244 +788,6 @@ function NewCampaignModal({ onClose, onSent }) {
         danger
         onConfirm={handleSend}
         onCancel={() => setConfirmOpen(false)}
-      />
-    </div>
-  );
-}
-
-const TEMPLATE_STATUS_META = {
-  APPROVED: { variant: 'success', label: 'Aprobada' },
-  PENDING: { variant: 'warning', label: 'En revisión' },
-  REJECTED: { variant: 'danger', label: 'Rechazada' },
-};
-const TEMPLATE_CATEGORIES = [
-  { value: 'MARKETING', label: 'Marketing' },
-  { value: 'UTILITY', label: 'Utilidad' },
-];
-const EMPTY_TEMPLATE_FORM = { name: '', category: 'MARKETING', bodyText: '', examples: {} };
-
-// How many {{n}} variables the body currently has — the highest number used, not just a
-// count, so a template mid-edit (e.g. only {{1}} and {{3}} typed so far) still shows a
-// box for {{2}} rather than silently skipping it. The backend enforces the real
-// no-gaps rule (1, 2, 3… in order) on submit.
-function detectParamCount(bodyText) {
-  const matches = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
-  return matches.length ? Math.max(...matches) : 0;
-}
-
-function TemplatesTab() {
-  const [lines, setLines] = useState([]);
-  const [selectedLine, setSelectedLine] = useState('');
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState(null);
-  const [form, setForm] = useState(EMPTY_TEMPLATE_FORM);
-  const [formError, setFormError] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [confirmDeleteName, setConfirmDeleteName] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    fetchWhatsappNumbers().then((wns) => {
-      setLines(wns);
-      if (wns.length > 0) setSelectedLine(String(wns[0].id));
-    }).catch(() => {});
-  }, []);
-
-  const load = useCallback(() => {
-    if (!selectedLine) return;
-    setLoading(true);
-    setListError(null);
-    fetchTemplatesManage(selectedLine ? Number(selectedLine) : undefined)
-      .then(setTemplates)
-      .catch((err) => setListError(err.message))
-      .finally(() => setLoading(false));
-  }, [selectedLine]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const paramCount = detectParamCount(form.bodyText);
-
-  async function handleCreate(e) {
-    e.preventDefault();
-    setCreating(true);
-    setFormError(null);
-    try {
-      const bodyExamples = Array.from({ length: paramCount }, (_, i) => form.examples[i + 1] ?? '');
-      await createWhatsappTemplate({
-        name: form.name,
-        category: form.category,
-        bodyText: form.bodyText,
-        bodyExamples,
-        lineId: selectedLine ? Number(selectedLine) : undefined,
-      });
-      setForm(EMPTY_TEMPLATE_FORM);
-      load();
-      showSuccess('Plantilla enviada a revisión de Meta');
-    } catch (err) {
-      setFormError(err.message);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleDelete() {
-    setDeleting(true);
-    try {
-      await deleteWhatsappTemplate(confirmDeleteName, selectedLine ? Number(selectedLine) : undefined);
-      load();
-      showSuccess('Plantilla eliminada');
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      setDeleting(false);
-      setConfirmDeleteName(null);
-    }
-  }
-
-  const previewBody = form.bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => form.examples[n] || `{{${n}}}`);
-
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-      <section className="rounded-2xl border border-line bg-paper p-4 md:p-8">
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-line-soft bg-black/[0.02] p-3 text-xs text-greige-ink dark:bg-white/[0.03]">
-          <Info size={14} className="mt-0.5 shrink-0 text-accent" />
-          <span>
-            Una vez que Meta aprueba una plantilla, su texto ya no se puede editar — solo eliminarla y crear una nueva.
-            Una plantilla nueva queda "En revisión" hasta que Meta la aprueba (minutos a ~1 día).
-          </span>
-        </div>
-
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft pb-3">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-greige-ink">Línea de WhatsApp:</label>
-            {lines.length > 0 && (
-              <Select
-                value={selectedLine}
-                onChange={setSelectedLine}
-                options={lines.map((l) => ({ value: String(l.id), label: l.label || `Línea ${l.id}` }))}
-                className="w-48"
-              />
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={load}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-medium text-greige-ink shadow-sm transition-colors hover:text-ink"
-          >
-            <RefreshCw size={12} /> Actualizar
-          </button>
-        </div>
-
-        {listError && <p className="text-sm text-danger">{listError}</p>}
-        {loading && <p className="py-6 text-center text-sm text-greige-ink">Cargando plantillas de Meta…</p>}
-        {!loading && !listError && templates.length === 0 && (
-          <p className="py-6 text-center text-sm text-greige-ink">Sin plantillas todavía en esta línea.</p>
-        )}
-
-        <ul className="flex flex-col gap-2">
-          {templates.map((t) => {
-            const statusMeta = TEMPLATE_STATUS_META[t.status] ?? { variant: 'neutral', label: t.status };
-            return (
-              <li key={t.name} className="rounded-xl border border-line p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
-                      <span className="truncate">{t.name}</span>
-                      <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-greige-ink">{t.body}</p>
-                    {t.status === 'REJECTED' && t.rejectedReason && (
-                      <p className="mt-1.5 text-xs text-danger">Motivo de Meta: {t.rejectedReason}</p>
-                    )}
-                  </div>
-                  <Button type="button" variant="danger" onClick={() => setConfirmDeleteName(t.name)}>
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section className="h-fit rounded-2xl border border-line bg-paper p-4 md:p-6">
-        <h2 className="text-lg font-semibold text-ink">Nueva plantilla</h2>
-        <p className="mt-1 text-xs text-greige-ink">
-          Línea: <strong className="text-ink">{lines.find((l) => String(l.id) === selectedLine)?.label || 'Línea seleccionada'}</strong> · Solo texto por ahora (sin encabezado, botones ni pie).
-        </p>
-
-        <form onSubmit={handleCreate} className="mt-4">
-          <label className="mb-1.5 block text-sm font-medium text-ink">Nombre</label>
-          <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
-            placeholder="promo_septiembre"
-            required
-            className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
-          />
-          <p className="mt-1 text-xs text-greige">Solo minúsculas, números y guion bajo — sin espacios.</p>
-
-          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Categoría</label>
-          <Select value={form.category} onChange={(category) => setForm({ ...form, category })} options={TEMPLATE_CATEGORIES} />
-
-          <label className="mb-1.5 mt-4 block text-sm font-medium text-ink">Mensaje</label>
-          <textarea
-            value={form.bodyText}
-            onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
-            placeholder={'Hola {{1}}, tu guía es {{2}}…'}
-            required
-            rows={5}
-            maxLength={1024}
-            className="w-full resize-none rounded-lg border border-line px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-accent"
-          />
-          <p className="mt-1 text-xs text-greige">
-            <code>{'{{1}}'}</code> es siempre el nombre del cliente. <code>{'{{2}}'}</code>, <code>{'{{3}}'}</code>… son valores distintos por cliente
-            (ej. un número de guía) que se piden al armar la difusión — deben ir en orden, sin saltarse ninguno.
-          </p>
-
-          {paramCount > 0 && (
-            <div className="mt-3 flex flex-col gap-2">
-              <p className="text-xs font-medium text-ink">Meta pide un valor de ejemplo por variable, para revisarla:</p>
-              {Array.from({ length: paramCount }, (_, i) => i + 1).map((n) => (
-                <div key={n} className="flex items-center gap-2">
-                  <span className="w-9 shrink-0 text-xs font-medium text-greige-ink">{`{{${n}}}`}</span>
-                  <input
-                    value={form.examples[n] ?? ''}
-                    onChange={(e) => setForm({ ...form, examples: { ...form.examples, [n]: e.target.value } })}
-                    placeholder={n === 1 ? 'María' : 'GUIA-00123'}
-                    required
-                    className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {form.bodyText && (
-            <div className="mt-3 rounded-lg border border-dashed border-line-soft p-3 text-sm text-ink">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-greige">Vista previa</p>
-              {previewBody}
-            </div>
-          )}
-
-          {formError && <p className="mt-3 text-sm text-danger">{formError}</p>}
-
-          <Button type="submit" disabled={creating} className="mt-4">
-            {creating ? 'Enviando…' : 'Enviar a revisión'}
-          </Button>
-        </form>
-      </section>
-
-      <ConfirmDialog
-        open={confirmDeleteName !== null}
-        title="Eliminar plantilla"
-        message={`Esta acción no se puede deshacer. "${confirmDeleteName}" dejará de estar disponible para nuevos envíos (los mensajes ya enviados no se ven afectados).`}
-        confirmLabel="Eliminar"
-        danger
-        busy={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => setConfirmDeleteName(null)}
       />
     </div>
   );

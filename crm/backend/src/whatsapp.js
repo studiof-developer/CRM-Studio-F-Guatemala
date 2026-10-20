@@ -5,7 +5,7 @@ import { pool } from './db.js';
 import { decryptToken } from './tokenCrypto.js';
 import { broadcast } from './events.js';
 
-const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
+const GRAPH_BASE = process.env.GRAPH_BASE_URL || 'https://graph.facebook.com/v20.0';
 
 // Legacy env vars — kept as a fallback only, so an existing deployment keeps
 // sending real messages right up until an admin adds a number in Configuración.
@@ -162,7 +162,9 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
   const creds = await getActiveCredentials(toPhone, lineId);
   const headerMediaParam = headerFormat === 'DOCUMENT'
     ? { type: 'document', document: { id: headerMediaId, filename: headerFilename || 'documento.pdf' } }
-    : { type: 'image', image: { id: headerMediaId } };
+    : headerFormat === 'VIDEO'
+      ? { type: 'video', video: { id: headerMediaId } }
+      : { type: 'image', image: { id: headerMediaId } };
   const components = [
     ...(headerMediaId ? [{ type: 'header', parameters: [headerMediaParam] }] : []),
     ...(bodyParams.length ? [{ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) }] : []),
@@ -179,51 +181,94 @@ export async function sendTemplate(toPhone, templateName, languageCode, bodyPara
   }, creds.token);
 }
 
+async function templateCreds(lineId) {
+  const creds = await getActiveCredentials(undefined, lineId);
+  if (!creds.wabaId) {
+    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
+  }
+  return creds;
+}
+
 // Live from Meta rather than mirrored in our own DB — a template's approval status
 // changes on Meta's side (review, reclassification, pause) and a stale local copy is
 // exactly how a campaign could try to send with a template that no longer works.
+// Sigue la paginación de Meta (hasta 1000 plantillas) y pide también la calidad y los cambios de categoría; si Meta
+// rechazara alguno de esos campos extra para esta cuenta, repite con los básicos en vez de dejar la lista vacía.
+const TEMPLATE_FIELDS_BASE = 'id,name,status,category,language,components,rejected_reason';
+const TEMPLATE_FIELDS_FULL = `${TEMPLATE_FIELDS_BASE},quality_score,correct_category,previous_category`;
 export async function listTemplates(lineId) {
-  const creds = await getActiveCredentials(undefined, lineId);
-  if (!creds.wabaId) {
-    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
+  const creds = await templateCreds(lineId);
+  const readAll = async (fields) => {
+    const all = [];
+    let after = null;
+    for (let page = 0; page < 10; page++) {
+      const { data, paging } = await graphFetch(
+        `${creds.wabaId}/message_templates?fields=${fields}&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+        { method: 'GET' },
+        creds.token
+      );
+      all.push(...(data ?? []));
+      after = paging?.next ? paging?.cursors?.after : null;
+      if (!after) break;
+    }
+    return all;
+  };
+  try { return await readAll(TEMPLATE_FIELDS_FULL); } catch (err) {
+    if (!/\(#100\)|nonexisting field|Unsupported get request/i.test(String(err.message))) throw err;
+    return readAll(TEMPLATE_FIELDS_BASE);
   }
-  const { data } = await graphFetch(
-    `${creds.wabaId}/message_templates?fields=name,status,category,language,components,rejected_reason&limit=100`,
-    { method: 'GET' },
-    creds.token
-  );
-  return data ?? [];
 }
 
-// Body-only for now (no header/footer/buttons) — matches the only thing this CRM's own
-// send path (sendTemplate above, campaigns.js) actually fills in: the customer's name as
-// a single {{1}}. A template needing more than that isn't creatable here yet.
-// New templates land as PENDING and Meta reviews them (minutes to ~1 day) before they're
-// usable — this call only submits it, listTemplates() above is how the real status shows up.
-// Meta REQUIRES an example value for every {{n}} placeholder or the request is rejected
-// outright, not just flagged — bodyExample supplies that.
-export async function createTemplate({ name, category, language, bodyText, bodyExample, lineId }) {
-  const creds = await getActiveCredentials(undefined, lineId);
-  if (!creds.wabaId) {
-    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
-  }
-  const component = { type: 'BODY', text: bodyText };
-  if (bodyExample?.length) component.example = { body_text: [bodyExample] };
+// `components` ya viene armado y validado (whatsappTemplates.js buildComponents). Una plantilla nueva queda PENDING hasta
+// que Meta la revisa (minutos a ~1 día); listTemplates() es la forma de ver su estado real.
+export async function createTemplate({ name, category, language, components, lineId }) {
+  const creds = await templateCreds(lineId);
   return graphFetch(`${creds.wabaId}/message_templates`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, language, category, components: [component] }),
+    body: JSON.stringify({ name, language, category, components }),
   }, creds.token);
 }
 
-// Meta deletes by name across every language variant of that template, not one row —
-// there's no per-language delete in this API.
-export async function deleteTemplate(name, lineId) {
-  const creds = await getActiveCredentials(undefined, lineId);
-  if (!creds.wabaId) {
-    throw new Error('Falta el ID de la cuenta de WhatsApp Business (waba_id) — configúralo en Configuración.');
-  }
-  return graphFetch(`${creds.wabaId}/message_templates?name=${encodeURIComponent(name)}`, { method: 'DELETE' }, creds.token);
+// Editar una plantilla ya creada (aprobada, rechazada o pausada). Meta limita las ediciones de una aprobada (1 por día y
+// 10 por mes) y no deja cambiar su categoría; una rechazada se corrige y se vuelve a enviar a revisión.
+export async function updateTemplate({ templateId, components, category, lineId }) {
+  const creds = await templateCreds(lineId);
+  return graphFetch(`${templateId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ components, ...(category ? { category } : {}) }),
+  }, creds.token);
+}
+
+// Con hsmId borra solo ese idioma; sin él, Meta borra todos los idiomas de ese nombre.
+export async function deleteTemplate(name, lineId, hsmId) {
+  const creds = await templateCreds(lineId);
+  return graphFetch(`${creds.wabaId}/message_templates?name=${encodeURIComponent(name)}${hsmId ? `&hsm_id=${encodeURIComponent(hsmId)}` : ''}`, { method: 'DELETE' }, creds.token);
+}
+
+// Meta pide un archivo de ejemplo para el encabezado de imagen / video / documento, y solo acepta un "handle" de su API de
+// carga reanudable (no un media id de los envíos). Hace falta el ID de la app: META_APP_ID, o se lee del propio token.
+let cachedAppId = null;
+async function appIdFor(token) {
+  if (process.env.META_APP_ID) return process.env.META_APP_ID;
+  if (cachedAppId) return cachedAppId;
+  const info = await graphFetch(`debug_token?input_token=${encodeURIComponent(token)}`, { method: 'GET' }, token);
+  if (!info?.data?.app_id) throw new Error('No se pudo saber el ID de la app de Meta. Agrega la variable META_APP_ID en Dokploy.');
+  cachedAppId = String(info.data.app_id);
+  return cachedAppId;
+}
+
+export async function uploadTemplateSample(buffer, mimeType, filename, lineId) {
+  const creds = await templateCreds(lineId);
+  const appId = await appIdFor(creds.token);
+  const session = await graphFetch(
+    `${appId}/uploads?file_length=${buffer.length}&file_type=${encodeURIComponent(mimeType)}&file_name=${encodeURIComponent(filename || 'ejemplo')}`,
+    { method: 'POST' }, creds.token
+  );
+  const uploaded = await graphFetch(session.id, { method: 'POST', headers: { Authorization: `OAuth ${creds.token}`, file_offset: '0' }, body: buffer }, creds.token, UPLOAD_TIMEOUT_MS);
+  if (!uploaded?.h) throw new Error('Meta no devolvió el identificador del archivo de ejemplo');
+  return uploaded.h;
 }
 
 export async function uploadMedia(buffer, mimeType, toPhone, lineId, filename) {

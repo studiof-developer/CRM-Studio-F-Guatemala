@@ -11,6 +11,7 @@ import { requireRole } from '../auth.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
+import { buildComponents, validateNew, describeTemplate, LANGUAGES, CATEGORIES } from '../whatsappTemplates.js';
 
 const router = Router();
 // Was capped at a flat 5MB back when a header could only ever be an IMAGE (WhatsApp's own
@@ -83,9 +84,8 @@ function countBodyParams(template) {
 // Meta rejects the send outright if the template defines a media header and none is
 // attached — "(#132012) ... expected IMAGE, received UNKNOWN" — so the picker needs to
 // know up front whether it has to ask for one. IMAGE and DOCUMENT (e.g. a PDF catalog)
-// are supported; a VIDEO header template will show clearly as unsupported rather than
-// fail silently at send time.
-const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT'];
+// and VIDEO are supported.
+const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT', 'VIDEO'];
 function getHeaderFormat(template) {
   return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
 }
@@ -190,84 +190,132 @@ router.get('/templates', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Every status (PENDING/APPROVED/REJECTED), not just APPROVED — this is the
-// Configuración > Plantillas management view, not the campaign composer's picker
-// above, so a template still in review or bounced back needs to show up too.
-// Admin and supervisor (widened from admin-only 2026-10-20): creating/deleting a Meta template is account-wide, not a single send.
+// ---- Gestión de plantillas de WhatsApp (Marketing > Plantillas) — administración y supervisión ----
+// La lista trae TODOS los estados (también en revisión, rechazada o pausada), a diferencia del selector de /templates de
+// arriba que solo ofrece las aprobadas. Crear, editar o borrar una plantilla afecta a toda la cuenta de Meta, no a un envío.
+const lineOf = (q) => (q.lineId ? Number(q.lineId) : undefined);
+
+// Los errores de Meta llegan como "WhatsApp API 400: {json}"; se muestran con el texto que Meta da para el usuario.
+function metaError(err) {
+  const m = /^WhatsApp API (\d+): ([\s\S]*)$/.exec(err.message ?? '');
+  if (!m) return err;
+  try {
+    const e = JSON.parse(m[2]).error ?? {};
+    return Object.assign(new Error(e.error_user_msg || e.error_user_title || e.message || err.message), { status: Number(m[1]) >= 500 ? 502 : 400 });
+  } catch { return err; }
+}
+const sendError = (res, next, err) => { const e = metaError(err); e.status ? res.status(e.status).json({ error: e.message }) : next(e); };
+const specOf = (b) => ({ header: b.header, body: b.body, footer: b.footer, buttons: b.buttons });
+
 router.get('/templates/manage', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
-    const templates = await whatsapp.listTemplates(lineId);
-    res.json(templates.map((t) => ({
-      name: t.name,
-      language: t.language,
-      category: t.category,
-      status: t.status,
-      rejectedReason: t.rejected_reason ?? null,
-      body: t.components?.find((c) => c.type === 'BODY')?.text ?? '',
-      headerFormat: getHeaderFormat(t),
-    })));
+    const templates = await whatsapp.listTemplates(lineOf(req.query));
+    res.json({ templates: templates.map(describeTemplate), languages: LANGUAGES, categories: CATEGORIES });
+  } catch (err) { sendError(res, next, err); }
+});
+
+// Lo que cada plantilla ha hecho en las difusiones de este CRM (no es el panel de métricas de Meta): envíos, entregados,
+// leídos y fallidos, sumando todas las difusiones que la usaron.
+router.get('/templates/stats', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT ca.template_name AS name, count(DISTINCT ca.id)::int AS campaigns, count(h.id)::int AS sent,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' IN ('delivered','read'))::int AS delivered,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'read')::int AS read,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'failed')::int AS failed,
+              max(ca.created_at) AS last_used
+       FROM campaigns ca
+       LEFT JOIN n8n_chat_histories h ON h.message->'additional_kwargs'->>'campaignId' = ca.id::text
+       GROUP BY ca.template_name`
+    );
+    res.json(Object.fromEntries(rows.map((r) => [r.name, { campaigns: r.campaigns, sent: r.sent, delivered: r.delivered, read: r.read, failed: r.failed, lastUsed: r.last_used }])));
   } catch (err) { next(err); }
 });
 
-// Meta's own naming rule — lowercase letters/digits/underscores only, no spaces.
-const TEMPLATE_NAME_RE = /^[a-z0-9_]{1,512}$/;
-const TEMPLATE_CATEGORIES = ['MARKETING', 'UTILITY'];
+// Además de lo anterior, cuántos clientes respondieron en las 72 horas siguientes al envío (se calcula solo al pedirlo).
+router.get('/templates/:name/stats', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT count(h.id)::int AS sent,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' IN ('delivered','read'))::int AS delivered,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'read')::int AS read,
+              count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'failed')::int AS failed,
+              count(*) FILTER (WHERE rp.replied)::int AS replied,
+              count(DISTINCT ca.id)::int AS campaigns
+       FROM campaigns ca
+       JOIN n8n_chat_histories h ON h.message->'additional_kwargs'->>'campaignId' = ca.id::text
+       LEFT JOIN LATERAL (
+         SELECT EXISTS (
+           SELECT 1 FROM n8n_chat_histories r
+           WHERE r.session_id = h.session_id AND r.message->>'type' = 'human'
+             AND r.created_at > h.created_at AND r.created_at <= h.created_at + interval '72 hours'
+         ) AS replied
+       ) rp ON true
+       WHERE ca.template_name = $1`,
+      [req.params.name]
+    );
+    res.json(rows[0]);
+  } catch (err) { next(err); }
+});
 
-// {{1}}, {{2}}, {{3}}... in order, no gaps and no repeats — Meta itself requires this
-// shape (a placeholder numbered out of sequence is rejected at review). {{1}} is always
-// the customer's name on send (campaigns.js's sendToRecipient); {{2}} and beyond need a
-// per-recipient value supplied at send time — see "envío de guías" in the broadcast
-// composer (Campaigns.jsx) for how those get filled in.
-function sequentialParamCount(text) {
-  const matches = [...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
-  if (!matches.length) return 0;
-  const uniqueSorted = [...new Set(matches)].sort((a, b) => a - b);
-  const isSequential = uniqueSorted.every((n, i) => n === i + 1);
-  return isSequential ? uniqueSorted.length : -1;
-}
+// Avisos que Meta manda por webhook (aprobada, rechazada, pausada, cambio de calidad o de categoría).
+router.get('/templates/events', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, template_name, language, event, detail, created_at FROM whatsapp_template_events ORDER BY id DESC LIMIT 40`
+    );
+    res.json(rows.map((r) => ({ id: r.id, name: r.template_name, language: r.language, event: r.event, detail: r.detail, at: r.created_at })));
+  } catch (err) { next(err); }
+});
 
-// Body-only (no header/footer/buttons) — matches whatsapp.js's createTemplate scope.
-// Lands as PENDING; Meta reviews it (minutes to ~1 day) before it's usable — this
-// endpoint only submits the request, it can't make Meta approve it faster.
+// Archivo de ejemplo para el encabezado de imagen / video / documento: Meta lo pide para revisar la plantilla.
+const SAMPLE_LIMITS = { 'image/jpeg': 5, 'image/png': 5, 'video/mp4': 16, 'application/pdf': 100 };
+router.post('/templates/sample', requireRole('admin', 'supervisor'), upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Falta el archivo de ejemplo.' });
+    const maxMb = SAMPLE_LIMITS[req.file.mimetype];
+    if (!maxMb) return res.status(400).json({ error: 'Formato no admitido. Usa JPG o PNG (imagen), MP4 (video) o PDF (documento).' });
+    if (req.file.size > maxMb * 1024 * 1024) return res.status(400).json({ error: `El archivo pesa más de ${maxMb} MB.` });
+    const handle = await whatsapp.uploadTemplateSample(req.file.buffer, req.file.mimetype, req.file.originalname, lineOf(req.body));
+    res.json({ handle });
+  } catch (err) { sendError(res, next, err); }
+});
+
+// Body: { name, category, language, header, body: {text, examples}, footer, buttons, lineId } — ver whatsappTemplates.js.
+// Queda en revisión; Meta la aprueba en minutos o hasta ~1 día, este envío no puede acelerarlo.
 router.post('/templates', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const { name, category, bodyText, bodyExamples, lineId } = req.body ?? {};
-    if (!TEMPLATE_NAME_RE.test(name ?? '')) {
-      return res.status(400).json({ error: 'El nombre solo puede tener minúsculas, números y guion bajo (_), sin espacios.' });
-    }
-    if (!TEMPLATE_CATEGORIES.includes(category)) {
-      return res.status(400).json({ error: 'Categoría inválida.' });
-    }
-    const text = (bodyText ?? '').trim();
-    if (!text || text.length > 1024) {
-      return res.status(400).json({ error: 'El texto es obligatorio y debe tener 1024 caracteres o menos.' });
-    }
-    const paramCount = sequentialParamCount(text);
-    if (paramCount < 0) {
-      return res.status(400).json({ error: 'Las variables deben ser {{1}}, {{2}}, {{3}}... en orden, sin saltos ni repetidas.' });
-    }
-    const examples = Array.isArray(bodyExamples) ? bodyExamples.map((v) => String(v ?? '').trim()) : [];
-    if (paramCount > 0 && (examples.length !== paramCount || examples.some((v) => !v))) {
-      return res.status(400).json({ error: `Esta plantilla tiene ${paramCount} variable(s) — completa un valor de ejemplo para cada una.` });
-    }
-    const result = await whatsapp.createTemplate({
-      name, category, language: 'es', bodyText: text,
-      bodyExample: paramCount ? examples : undefined,
-      lineId: lineId ? Number(lineId) : undefined,
-    });
-    logBusinessAction(req.user, null, 'whatsapp_template_created', `${name} (${category}, ${paramCount} variable${paramCount === 1 ? '' : 's'})`);
+    const b = req.body ?? {};
+    const language = b.language || 'es';
+    validateNew({ name: b.name, category: b.category, language });
+    const components = buildComponents(specOf(b));
+    const result = await whatsapp.createTemplate({ name: b.name, category: b.category, language, components, lineId: lineOf(b) });
+    logBusinessAction(req.user, null, 'whatsapp_template_created', `${b.name} (${b.category}, ${language})`);
     res.status(201).json(result);
-  } catch (err) { next(err); }
+  } catch (err) { sendError(res, next, err); }
 });
 
+// Editar una plantilla existente (por el id que le da Meta). Una aprobada admite 1 edición al día y 10 al mes, y no cambia de categoría.
+router.put('/templates/:id', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    if (!/^\d{5,25}$/.test(req.params.id)) return res.status(400).json({ error: 'Plantilla inválida.' });
+    const b = req.body ?? {};
+    if (b.category && !CATEGORIES.includes(b.category)) return res.status(400).json({ error: 'Categoría inválida.' });
+    const components = buildComponents(specOf(b));
+    const result = await whatsapp.updateTemplate({ templateId: req.params.id, components, category: b.category, lineId: lineOf(b) });
+    logBusinessAction(req.user, null, 'whatsapp_template_updated', `${b.name ?? req.params.id} (${b.language ?? ''})`);
+    res.json(result);
+  } catch (err) { sendError(res, next, err); }
+});
+
+// Con ?hsmId borra solo ese idioma; sin él, todos los idiomas con ese nombre.
 router.delete('/templates/:name', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
-    const lineId = req.query.lineId ? Number(req.query.lineId) : undefined;
-    await whatsapp.deleteTemplate(req.params.name, lineId);
-    logBusinessAction(req.user, null, 'whatsapp_template_deleted', req.params.name);
+    const hsmId = /^\d{5,25}$/.test(req.query.hsmId ?? '') ? req.query.hsmId : undefined;
+    await whatsapp.deleteTemplate(req.params.name, lineOf(req.query), hsmId);
+    logBusinessAction(req.user, null, 'whatsapp_template_deleted', `${req.params.name}${hsmId ? ` (idioma ${req.query.language ?? hsmId})` : ' (todos los idiomas)'}`);
     res.json({ ok: true });
-  } catch (err) { next(err); }
+  } catch (err) { sendError(res, next, err); }
 });
 
 // Uploaded once per campaign, not once per recipient — the resulting media id is valid
@@ -796,7 +844,9 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({
         error: headerFormat === 'DOCUMENT'
           ? 'Esta plantilla necesita un documento de encabezado — súbelo antes de enviar'
-          : 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar',
+          : headerFormat === 'VIDEO'
+            ? 'Esta plantilla necesita un video de encabezado — súbelo antes de enviar'
+            : 'Esta plantilla necesita una imagen de encabezado — súbela antes de enviar',
       });
     }
     // The token only ever resolves to a file this backend itself wrote — see the

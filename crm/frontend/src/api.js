@@ -345,10 +345,52 @@ export async function createWhatsappTemplate(data) {
   return res.json();
 }
 
-export async function deleteWhatsappTemplate(name, lineId) {
-  const params = lineId ? `?lineId=${encodeURIComponent(lineId)}` : '';
-  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}${params}`, { method: 'DELETE' });
+export async function updateWhatsappTemplate(id, data) {
+  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al guardar la plantilla');
+  return res.json();
+}
+
+// Sin hsmId Meta borra todos los idiomas con ese nombre; con él, solo ese idioma.
+export async function deleteWhatsappTemplate(name, lineId, { hsmId, language } = {}) {
+  const params = new URLSearchParams();
+  if (lineId) params.set('lineId', String(lineId));
+  if (hsmId) params.set('hsmId', String(hsmId));
+  if (language) params.set('language', language);
+  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}?${params}`, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error ?? 'Error al eliminar la plantilla');
+}
+
+// Archivo de ejemplo del encabezado (imagen / video / documento): Meta lo pide al revisar la plantilla.
+export async function uploadTemplateSample(file, lineId) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (lineId) formData.append('lineId', String(lineId));
+  const res = await apiFetch('/api/campaigns/templates/sample', { method: 'POST', body: formData });
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al subir el archivo de ejemplo');
+  return res.json();
+}
+
+export async function fetchTemplateStats() {
+  const res = await apiFetch('/api/campaigns/templates/stats');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el rendimiento');
+  return res.json();
+}
+
+export async function fetchTemplateStatsDetail(name) {
+  const res = await apiFetch(`/api/campaigns/templates/${encodeURIComponent(name)}/stats`);
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar el rendimiento');
+  return res.json();
+}
+
+export async function fetchTemplateEvents() {
+  const res = await apiFetch('/api/campaigns/templates/events');
+  if (!res.ok) throw new Error((await res.json()).error ?? 'Error al cargar los cambios');
+  return res.json();
 }
 
 export async function uploadCampaignHeaderMedia(file, lineId) {

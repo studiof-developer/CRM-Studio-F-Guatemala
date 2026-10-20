@@ -26,6 +26,7 @@ const ACTION_META = {
   whatsapp_number_updated: { label: 'Editó un número de WhatsApp', variant: 'warning', icon: SmartphoneNfc },
   whatsapp_number_deleted: { label: 'Eliminó un número de WhatsApp', variant: 'danger', icon: PhoneOff },
   whatsapp_template_created: { label: 'Creó una plantilla de WhatsApp', variant: 'purple', icon: FileText },
+  whatsapp_template_updated: { label: 'Editó una plantilla de WhatsApp', variant: 'warning', icon: FileText },
   whatsapp_template_deleted: { label: 'Eliminó una plantilla de WhatsApp', variant: 'danger', icon: FileX },
 };
 const VARIANT_ICON_CLASS = { info: 'text-accent', success: 'text-ok', purple: 'text-purple', warning: 'text-warn', danger: 'text-danger' };
@@ -41,7 +42,7 @@ const ACTION_FILTER_OPTIONS = [
   ...['login', 'user_created', 'user_updated', 'user_deleted'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Cuentas',
   })),
-  ...['whatsapp_number_created', 'whatsapp_number_updated', 'whatsapp_number_deleted', 'whatsapp_template_created', 'whatsapp_template_deleted'].map((k) => ({
+  ...['whatsapp_number_created', 'whatsapp_number_updated', 'whatsapp_number_deleted', 'whatsapp_template_created', 'whatsapp_template_updated', 'whatsapp_template_deleted'].map((k) => ({
     value: k, label: ACTION_META[k].label, icon: ACTION_META[k].icon, iconClassName: VARIANT_ICON_CLASS[ACTION_META[k].variant], group: 'Configuración',
   })),
 ];

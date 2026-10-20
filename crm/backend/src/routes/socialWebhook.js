@@ -16,6 +16,7 @@ import { compressImageBuffer } from '../imageCompression.js';
 import { compressPdfBuffer } from '../pdfCompression.js';
 import { processInboundImageOcr, updateMessageStatus } from './attachments.js';
 import { broadcast } from '../events.js';
+import { TEMPLATE_FIELDS, recordTemplateEvent } from '../templateEvents.js';
 
 const router = Router();
 
@@ -335,6 +336,11 @@ async function handleWhatsAppWebhook(body) {
 
   for (const entry of body.entry) {
     for (const change of entry.changes ?? []) {
+      // Avisos de Meta sobre las plantillas (aprobada, rechazada, pausada, calidad, categoría)
+      if (TEMPLATE_FIELDS.includes(change.field)) {
+        await recordTemplateEvent(entry.id, change).catch((err) => console.error('template event', err.message));
+        continue;
+      }
       if (change.field !== 'messages') continue;
       const value = change.value;
       if (!value) continue;
