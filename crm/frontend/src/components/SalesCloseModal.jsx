@@ -177,7 +177,7 @@ export default function SalesCloseModal({ open, onClose }) {
                             <tr key={i} className="border-b border-line-soft align-top">
                               <td className="whitespace-nowrap py-1.5 text-ink">{fmtTime(p.at)}</td>
                               <td className="py-1.5 text-ink">{p.customer}<div className="text-[10px] text-greige-ink">…{p.last4}</div></td>
-                              <td className="whitespace-nowrap py-1.5 text-right text-ink">{fmtQ(p.amount)}<div className="text-[10px] text-greige-ink">{p.medium ?? ''}</div></td>
+                              <td className="whitespace-nowrap py-1.5 text-right text-ink">{fmtQ(p.amount)}<div className="text-[10px] text-greige-ink">{p.medium ?? ''}</div>{p.quotedAmounts?.length > 1 && <div className="text-[10px] text-warning">Cotizó: {p.quotedAmounts.map((q) => fmtQ(q)).join(' · ')} (suma {fmtQ(p.quotedAmounts.reduce((a, b) => a + b, 0))})</div>}</td>
                               <td className="py-1.5 text-ink">{p.customerAccepted ? 'El cliente aceptó' : p.customerReplied ? 'El cliente respondió' : <span className="text-greige-ink">Solo se enviaron los medios</span>}</td>
                             </tr>
                           ))}</tbody>

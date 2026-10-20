@@ -321,7 +321,7 @@ function findPending(sorted, episodes, asOf) {
   const since = lastDone || null;
   const price = approvedQuote(sorted, since, payInfo.at);
   const cycle = sorted.filter((e) => +new Date(e.at) > lastDone && +new Date(e.at) <= +new Date(payInfo.at));
-  const quotedAmounts = [...new Set(cycle.filter((e) => e.role === 'advisor').map((e) => quotedAmountIn(e.text)).filter((v) => v != null))].slice(-6);
+  const quotedAmounts = cycle.filter((e) => e.role === 'advisor').map((e) => quotedAmountIn(e.text)).filter((v) => v != null).slice(-8);
   const quotedAt = price?.at ? +new Date(price.at) : null;
   return {
     at: payInfo.at, eventId: payInfo.id, advisor: payInfo.advisor, medium: paymentMedium(payInfo.text),
