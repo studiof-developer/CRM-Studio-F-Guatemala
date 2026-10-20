@@ -535,9 +535,10 @@ export default function SalesAdvisorDashboard() {
         </div>
       )}
 
-      {/* Reporte en dos columnas (pantalla ancha): total y asesoras a la izquierda; meta y detalle a la derecha */}
-      <div className={`mt-6 grid gap-6 ${viewMode === 'tarjetas' ? 'xl:grid-cols-12' : ''}`}>
-        <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-7' : ''}`}>
+      {/* Arriba, lado a lado: el general (izquierda) y las asesoras (derecha). Abajo: la meta y el apoyo (medios de pago, ventas por día) */}
+      <div className="mt-6 grid gap-6">
+        <div className={`grid gap-6 ${viewMode === 'tarjetas' ? 'xl:grid-cols-12' : ''}`}>
+          <div className={`min-w-0 ${viewMode === 'tarjetas' ? 'xl:col-span-5' : ''}`}>
       {/* Tarjeta principal: total del período y comparación */}
       <SalesHeadline
         title={periodTitle(period, periodRange(period, from, to, guatemalaToday()))}
@@ -550,6 +551,8 @@ export default function SalesAdvisorDashboard() {
       />
 
 
+          </div>
+          <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-7' : ''}`}>
       {/* Resultado por asesora: tarjetas (por defecto) o tabla completa */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-ink">Resultado por asesora</h3>
@@ -739,8 +742,10 @@ export default function SalesAdvisorDashboard() {
         </>
       )}
 
+          </div>
         </div>
-        <div className={`min-w-0 space-y-6 ${viewMode === 'tarjetas' ? 'xl:col-span-5' : ''}`}>
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <div className="min-w-0">
       {/* Cumplimiento del mes contra la meta (solo las líneas que tienen meta) */}
       {(() => {
         const visible = (goalsData?.goals ?? []).filter((g) => !lineId || String(g.lineId) === String(lineId));
@@ -756,7 +761,10 @@ export default function SalesAdvisorDashboard() {
       })()}
 
 
+          </div>
+          <div className="min-w-0 space-y-6">
           <SalesInsights daily={salesData?.daily ?? []} methods={salesData?.paymentMethods ?? []} total={summary.totalQuetzales} />
+          </div>
         </div>
       </div>
 
