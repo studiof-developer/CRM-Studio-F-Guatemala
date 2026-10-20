@@ -102,8 +102,8 @@ const SETTINGS_TABS = {
 // user's `tabs` (role-gated), so e.g. an asesor never sees an empty "Administración" group.
 const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
 const NAV_GROUPS = [
-  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns'] },
-  { key: 'admin', title: 'Administración', keys: ['audit', 'analysis', 'users', 'companies', 'brands', 'whatsappNumbers'] },
+  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns', 'analysis'] },
+  { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
 ];
 
 // Every tab reachable at its own bookmarkable URL — an explicit map rather than
