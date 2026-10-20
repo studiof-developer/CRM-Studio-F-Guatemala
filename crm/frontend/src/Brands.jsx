@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Building2, Plus, Edit2, Trash2, Store, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { fetchBrands, createBrand, updateBrand, deleteBrand, createBranch, updateBranch, deleteBranch, fetchCompanies } from './api.js';
 
 function Modal({ open, onClose, title, children }) {
@@ -25,6 +26,7 @@ export default function Brands() {
   const [loading, setLoading] = useState(true);
   const [savingBrand, setSavingBrand] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null); // { title, message, run } — ventana de confirmar eliminación
   
   const [brandModal, setBrandModal] = useState({ open: false, mode: 'create', data: null });
   const [branchModal, setBranchModal] = useState({ open: false, mode: 'create', brandId: null, data: null });
@@ -70,8 +72,8 @@ export default function Brands() {
     }
   };
 
-  const handleBrandDelete = async (id) => {
-    if (!confirm('¿Seguro que deseas eliminar esta marca?')) return;
+  const handleBrandDelete = (id) => setPendingDelete({ title: 'Eliminar marca', message: '¿Seguro que deseas eliminar esta marca?', run: () => doBrandDelete(id) });
+  const doBrandDelete = async (id) => {
     try {
       await deleteBrand(id);
       toast.success('Marca eliminada');
@@ -107,8 +109,8 @@ export default function Brands() {
     }
   };
 
-  const handleBranchDelete = async (brandId, id) => {
-    if (!confirm('¿Seguro que deseas eliminar esta sucursal?')) return;
+  const handleBranchDelete = (brandId, id) => setPendingDelete({ title: 'Eliminar sucursal', message: '¿Seguro que deseas eliminar esta sucursal?', run: () => doBranchDelete(brandId, id) });
+  const doBranchDelete = async (brandId, id) => {
     try {
       await deleteBranch(brandId, id);
       toast.success('Sucursal eliminada');
@@ -289,6 +291,15 @@ export default function Brands() {
           </div>
         </form>
       </Modal>
+      <ConfirmDialog
+        open={!!pendingDelete}
+        danger
+        title={pendingDelete?.title}
+        message={pendingDelete?.message}
+        confirmLabel="Eliminar"
+        onConfirm={() => { const run = pendingDelete.run; setPendingDelete(null); run(); }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

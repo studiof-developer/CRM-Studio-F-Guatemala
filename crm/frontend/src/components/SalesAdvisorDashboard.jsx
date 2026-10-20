@@ -9,6 +9,8 @@ import {
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { fetchSalesByAdvisor, fetchWhatsappNumbers, updateSale, fetchDailySalesBreakdown, rebuildSales, validateSaleAmount, fetchMe } from '../api.js';
 import ReassignAdvisor from './ReassignAdvisor.jsx';
+import ConfirmDialog from './ConfirmDialog.jsx';
+import { showError, showSuccess } from './Toast.jsx';
 import { guatemalaToday, addDays, monthBounds } from '../lib/pipelinePeriod.js';
 import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
@@ -149,7 +151,7 @@ export default function SalesAdvisorDashboard() {
       setAuditData(await rebuildSales({ ...auditRange(), lineId, apply: false }));
       setAuditTab('corregir');
     } catch (err) {
-      alert(err.message || 'Error al auditar las ventas');
+      showError(err.message || 'Error al auditar las ventas');
     } finally {
       setAuditLoading(false);
     }
@@ -163,7 +165,7 @@ export default function SalesAdvisorDashboard() {
       loadData();
       loadDailyData();
     } catch (err) {
-      alert(err.message || 'Error al aplicar las correcciones');
+      showError(err.message || 'Error al aplicar las correcciones');
     } finally {
       setAuditApplying(false);
     }
@@ -197,7 +199,7 @@ export default function SalesAdvisorDashboard() {
       setEditAmountVal('');
       loadData();
     } catch (err) {
-      alert(err.message);
+      showError(err.message);
     } finally {
       setEditBusy(false);
     }
@@ -205,16 +207,18 @@ export default function SalesAdvisorDashboard() {
 
   // El pago por link no deja el monto en el chat: se usó el último precio aprobado por el cliente y
   // un supervisor/administrador confirma que coincide con lo depositado (o lo corrige).
-  async function handleValidateAmount(t) {
-    const input = window.prompt(`Confirma el monto realmente depositado/validado en el banco (Q).\nMonto actual: Q${Number(t.amount).toFixed(2)}`, String(t.amount));
-    if (input === null) return;
-    const amount = Number(String(input).replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0) { alert('Escribe un monto válido.'); return; }
+  const [validating, setValidating] = useState(null); // { sale, value, error } — ventana "Validar monto"
+  function handleValidateAmount(t) { setValidating({ sale: t, value: String(t.amount), error: null }); }
+  async function confirmValidateAmount() {
+    const amount = Number(String(validating.value).replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) { setValidating((v) => ({ ...v, error: 'Escribe un monto válido, mayor que cero.' })); return; }
     try {
-      await validateSaleAmount(t.id, amount);
+      await validateSaleAmount(validating.sale.id, amount);
+      showSuccess('Monto validado');
+      setValidating(null);
       loadData();
     } catch (err) {
-      alert(err.message);
+      setValidating((v) => ({ ...v, error: err.message }));
     }
   }
 
@@ -223,7 +227,7 @@ export default function SalesAdvisorDashboard() {
       await updateSale(saleId, { status: newStatus });
       loadData();
     } catch (err) {
-      alert(err.message);
+      showError(err.message);
     }
   }
 
@@ -1509,6 +1513,27 @@ export default function SalesAdvisorDashboard() {
       )}
 
       {/* Modal de Auditoría Forense de Chats del 14 de Octubre */}
+      <ConfirmDialog
+        open={!!validating}
+        title="Validar el monto de la venta"
+        message={validating ? `Confirma el monto realmente depositado o validado en el banco. Monto actual: Q${Number(validating.sale.amount).toFixed(2)}` : ''}
+        confirmLabel="Validar monto"
+        onConfirm={confirmValidateAmount}
+        onCancel={() => setValidating(null)}
+      >
+        {validating && (
+          <div>
+            <label className="text-xs font-medium text-greige-ink">Monto (Q)</label>
+            <input
+              type="number" step="0.01" min="0" autoFocus value={validating.value}
+              onChange={(e) => setValidating((v) => ({ ...v, value: e.target.value, error: null }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmValidateAmount(); }}
+              className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+            />
+            {validating.error && <p className="mt-1 text-xs font-medium text-danger">{validating.error}</p>}
+          </div>
+        )}
+      </ConfirmDialog>
       <SalesAnalysisModal open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
       <SalesCloseModal open={closeOpen} onClose={() => setCloseOpen(false)} />
 
