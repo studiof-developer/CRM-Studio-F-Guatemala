@@ -7,377 +7,962 @@
 <title>Auditoría del CRM · Bagneres CRM</title>
 <link rel="icon" href="data:image/png;base64,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" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
   :root {
     color-scheme: light;
     --background: #f5f5f7; --paper: #ffffff; --ink: #18181b; --greige: #71717a; --greige-ink: #52525b;
-    --line: #e4e4e7; --muted: rgba(0,0,0,.04);
-    --accent: #4338ca; --accent-soft: rgba(67,56,202,.1); --accent-hover: #3730a3;
-    --ok: #15803d; --ok-bg: rgba(21,128,61,.1); --warn: #b45309; --warn-bg: rgba(180,83,9,.1);
-    --danger: #b91c1c; --danger-bg: rgba(185,28,28,.1); --cyan: #0e7490; --cyan-bg: rgba(14,116,144,.1);
-    --shadow: 0 1px 2px rgba(24,24,27,.04), 0 4px 18px -6px rgba(67,56,202,.10);
+    --line: #e4e4e7; --muted: rgba(24,24,27,.045); --muted-2: rgba(24,24,27,.08);
+    --accent: #4338ca; --accent-soft: rgba(67,56,202,.10); --accent-ink: #ffffff;
+    --ok: #15803d; --ok-bg: rgba(21,128,61,.10); --warn: #b45309; --warn-bg: rgba(180,83,9,.11);
+    --danger: #b91c1c; --danger-bg: rgba(185,28,28,.10); --cyan: #0e7490; --cyan-bg: rgba(14,116,144,.10);
+    --crit: #b91c1c; --crit-ink: #ffffff;
+    --shadow: 0 1px 2px rgba(24,24,27,.04), 0 6px 24px -10px rgba(67,56,202,.14);
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
     --background: #09090b; --paper: #18181b; --ink: #f4f4f5; --greige: #a1a1aa; --greige-ink: #d4d4d8;
-    --line: #27272a; --muted: rgba(255,255,255,.05);
-    --accent: #6366f1; --accent-soft: rgba(79,70,229,.2); --accent-hover: #818cf8;
-    --ok: #22c55e; --ok-bg: rgba(34,197,94,.15); --warn: #f59e0b; --warn-bg: rgba(245,158,11,.15);
-    --danger: #ef4444; --danger-bg: rgba(239,68,68,.15); --cyan: #22d3ee; --cyan-bg: rgba(34,211,238,.15);
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 20px -4px rgba(79,70,229,.15);
+    --line: #27272a; --muted: rgba(255,255,255,.05); --muted-2: rgba(255,255,255,.09);
+    --accent: #6366f1; --accent-soft: rgba(99,102,241,.18); --accent-ink: #ffffff;
+    --ok: #22c55e; --ok-bg: rgba(34,197,94,.14); --warn: #f59e0b; --warn-bg: rgba(245,158,11,.15);
+    --danger: #f87171; --danger-bg: rgba(239,68,68,.16); --cyan: #22d3ee; --cyan-bg: rgba(34,211,238,.14);
+    --crit: #ef4444; --crit-ink: #ffffff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -10px rgba(79,70,229,.25);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
       --background: #09090b; --paper: #18181b; --ink: #f4f4f5; --greige: #a1a1aa; --greige-ink: #d4d4d8;
-      --line: #27272a; --muted: rgba(255,255,255,.05);
-      --accent: #6366f1; --accent-soft: rgba(79,70,229,.2); --accent-hover: #818cf8;
-      --ok: #22c55e; --ok-bg: rgba(34,197,94,.15); --warn: #f59e0b; --warn-bg: rgba(245,158,11,.15);
-      --danger: #ef4444; --danger-bg: rgba(239,68,68,.15); --cyan: #22d3ee; --cyan-bg: rgba(34,211,238,.15);
-      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 20px -4px rgba(79,70,229,.15);
+      --line: #27272a; --muted: rgba(255,255,255,.05); --muted-2: rgba(255,255,255,.09);
+      --accent: #6366f1; --accent-soft: rgba(99,102,241,.18); --accent-ink: #ffffff;
+      --ok: #22c55e; --ok-bg: rgba(34,197,94,.14); --warn: #f59e0b; --warn-bg: rgba(245,158,11,.15);
+      --danger: #f87171; --danger-bg: rgba(239,68,68,.16); --cyan: #22d3ee; --cyan-bg: rgba(34,211,238,.14);
+      --crit: #ef4444; --crit-ink: #ffffff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -10px rgba(79,70,229,.25);
     }
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
-  body { margin: 0; background: var(--background); color: var(--ink); font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; line-height: 1.6; font-size: 15px; }
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+  body { margin: 0; background: var(--background); color: var(--ink); font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; line-height: 1.55; font-size: 15px; }
   a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
-  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .86em; background: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .84em; background: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+  h1, h2, h3, p { margin: 0; text-wrap: balance; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 
-  .layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
-  aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; background: var(--paper); border-right: 1px solid var(--line); padding: 22px 16px; overflow-y: auto; }
-  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
-  .brand img { width: 44px; height: 44px; object-fit: contain; }
-  .brand b { display: block; font-size: 17px; letter-spacing: .02em; line-height: 1.1; color: #172554; } :root[data-theme="dark"] .brand b { color: #fff; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand b { color: #fff; } }
-  nav { display: flex; flex-direction: column; gap: 4px; }
-  nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; color: var(--greige-ink); font-weight: 500; font-size: 14px; }
+  /* ---------- estructura ---------- */
+  .layout { display: grid; grid-template-columns: 256px minmax(0, 1fr); min-height: 100vh; }
+  aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; background: var(--paper); border-right: 1px solid var(--line); padding: 20px 14px; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .brand img { width: 42px; height: 42px; object-fit: contain; }
+  .brand b { font-size: 17px; letter-spacing: .02em; line-height: 1.1; font-weight: 800; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 12px; color: var(--greige-ink); font-weight: 500; font-size: 14px; }
   nav a:hover { background: var(--muted); color: var(--ink); text-decoration: none; }
-  nav a.on { background: var(--accent); color: #fff; box-shadow: 0 6px 16px -6px var(--accent); }
-  nav .dot { width: 8px; height: 8px; border-radius: 99px; background: currentColor; opacity: .55; }
-  .side-foot { font-size: 12px; color: var(--greige); padding: 10px 8px 0; border-top: 1px solid var(--line); }
-  .theme { margin-top: 12px; width: 100%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 12px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .theme:hover { background: var(--muted); }
+  nav a.on { background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 18px -8px var(--accent); }
+  nav .cnt { font-size: 11px; font-weight: 700; min-width: 22px; text-align: center; padding: 1px 7px; border-radius: 99px; background: var(--muted-2); color: var(--greige-ink); }
+  nav a.on .cnt { background: rgba(255,255,255,.22); color: var(--accent-ink); }
+  nav .cnt.zero { background: var(--ok-bg); color: var(--ok); } nav a.on .cnt.zero { background: rgba(255,255,255,.22); color: var(--accent-ink); }
+  .side-foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 10px; font-size: 12px; color: var(--greige); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 12px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--muted); text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); } .btn.primary:hover { filter: brightness(1.1); }
 
-  main { padding: 40px 44px 80px; max-width: 1040px; width: 100%; }
-  h1 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 4px; }
-  h2 { font-size: 21px; letter-spacing: -.01em; margin: 0 0 4px; }
-  h3 { font-size: 15px; margin: 0 0 6px; }
-  .sub { color: var(--greige-ink); margin: 0; }
-  section { margin-top: 44px; }
-  .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); }
-  .grid { display: grid; gap: 14px; } .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  main { padding: 36px clamp(20px, 3.4vw, 56px) 90px; width: 100%; max-width: 1480px; margin: 0 auto; }
+  section { margin-top: 48px; }
+  .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  h2 { font-size: 22px; letter-spacing: -.015em; font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 650; }
+  .sub { color: var(--greige-ink); font-size: 14px; margin-top: 2px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+  .pad { padding: 20px 22px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--greige); }
 
-  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-  .p-danger { background: var(--danger-bg); color: var(--danger); } .p-warn { background: var(--warn-bg); color: var(--warn); }
-  .p-ok { background: var(--ok-bg); color: var(--ok); } .p-info { background: var(--accent-soft); color: var(--accent); } .p-cyan { background: var(--cyan-bg); color: var(--cyan); }
+  /* ---------- píldoras ---------- */
+  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; line-height: 1.4; }
+  .p-crit { background: var(--crit); color: var(--crit-ink); } .p-danger { background: var(--danger-bg); color: var(--danger); } .p-warn { background: var(--warn-bg); color: var(--warn); }
+  .p-ok { background: var(--ok-bg); color: var(--ok); } .p-info { background: var(--accent-soft); color: var(--accent); } .p-cyan { background: var(--cyan-bg); color: var(--cyan); } .p-gray { background: var(--muted-2); color: var(--greige-ink); }
 
-  .verdict { display: flex; flex-direction: column; gap: 8px; }
-  .verdict .lbl { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--greige); }
-  .verdict p { margin: 0; font-size: 13.5px; color: var(--greige-ink); }
-  .stat { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-  .stripe { border-left: 4px solid var(--line); } .s-danger { border-left-color: var(--danger); } .s-warn { border-left-color: var(--warn); } .s-ok { border-left-color: var(--ok); } .s-info { border-left-color: var(--accent); }
+  /* ---------- portada ---------- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 28px 30px; background: linear-gradient(120deg, var(--accent-soft), transparent 55%), var(--paper); }
+  .hero h1 { font-size: clamp(26px, 3vw, 36px); letter-spacing: -.025em; font-weight: 800; margin: 12px 0 8px; }
+  .hero p { color: var(--greige-ink); max-width: 62ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .ring { position: relative; width: 148px; height: 148px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .track { stroke: var(--muted-2); } .ring .bar { stroke: var(--ok); transition: stroke-dasharray .5s ease; }
+  .ring .mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  .ring .mid b { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1; } .ring .mid span { font-size: 12px; color: var(--greige); margin-top: 4px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+  .tile { padding: 16px 18px; display: grid; gap: 4px; }
+  .tile b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; line-height: 1; } .tile b small { font-size: 14px; font-weight: 600; color: var(--greige); }
+  .tile .dot { width: 9px; height: 9px; border-radius: 99px; display: inline-block; margin-right: 6px; }
 
-  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); box-shadow: var(--shadow); }
+  /* ---------- veredictos ---------- */
+  .verdicts { display: grid; }
+  .vrow { display: grid; grid-template-columns: 200px 210px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--line); color: inherit; }
+  .vrow:last-child { border-bottom: 0; } .vrow:hover { background: var(--muted); text-decoration: none; }
+  .vrow .area { font-weight: 650; } .vrow .txt { color: var(--greige-ink); font-size: 14px; } .vrow .left { font-size: 12px; font-weight: 600; color: var(--greige); white-space: nowrap; }
+  .vrow .pill { justify-self: start; }
+
+  /* ---------- barra de filtros ---------- */
+  .filters { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 14px; margin-top: 48px; border-radius: 16px; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(10px); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--paper); color: var(--greige-ink); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chip:hover { background: var(--muted); } .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .filters .sep { width: 1px; height: 22px; background: var(--line); }
+  .search { flex: 1; min-width: 160px; border: 1px solid var(--line); background: var(--background); color: var(--ink); border-radius: 12px; padding: 7px 12px; font: inherit; font-size: 13px; }
+  .shown { font-size: 12px; color: var(--greige); white-space: nowrap; }
+  .notice { margin-top: 12px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border-radius: 14px; padding: 12px 16px; background: var(--warn-bg); color: var(--ink); font-size: 14px; }
+  .notice[hidden] { display: none; }
+
+  /* ---------- áreas e hallazgos ---------- */
+  .area-prog { display: flex; align-items: center; gap: 10px; min-width: 170px; font-size: 12px; font-weight: 600; color: var(--greige-ink); }
+  .meter { flex: 1; height: 6px; border-radius: 9px; background: var(--muted-2); overflow: hidden; } .meter i { display: block; height: 100%; background: var(--ok); width: 0; transition: width .4s ease; }
+  .extra { margin-bottom: 14px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .tbl-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  th { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--greige); padding: 11px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--greige-ink); }
-  tr:last-child td { border-bottom: 0; } td b, td strong { color: var(--ink); }
+  th { text-align: left; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--greige); padding: 12px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--greige-ink); } tr:last-child td { border-bottom: 0; } td b { color: var(--ink); }
+  ul.clean { margin: 0; padding-left: 18px; color: var(--greige-ink); font-size: 14px; } ul.clean li { margin: 5px 0; }
+  ul.okl { list-style: none; margin: 0; padding: 0; font-size: 14px; } ul.okl li { display: flex; gap: 10px; margin: 8px 0; color: var(--greige-ink); } ul.okl li::before { content: "✓"; color: var(--ok); font-weight: 800; }
 
-  details { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
-  summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 16px 18px; font-weight: 600; }
-  summary::-webkit-details-marker { display: none; }
-  summary .id { font-size: 12px; font-weight: 700; color: var(--greige); min-width: 28px; }
-  summary .t { flex: 1; }
-  summary::after { content: "+"; font-size: 20px; color: var(--greige); } details[open] summary::after { content: "–"; }
-  .body { padding: 0 18px 18px 58px; color: var(--greige-ink); font-size: 14px; }
-  .body p { margin: 0 0 10px; } .body .fix { background: var(--ok-bg); border-radius: 12px; padding: 10px 14px; color: var(--ink); }
-  .body .fix b { color: var(--ok); }
-  ul.clean { margin: 0; padding-left: 18px; color: var(--greige-ink); } ul.clean li { margin: 4px 0; }
-  .list-ok { list-style: none; padding: 0; margin: 0; } .list-ok li { display: flex; gap: 10px; margin: 7px 0; color: var(--greige-ink); } .list-ok li::before { content: "✓"; color: var(--ok); font-weight: 700; }
+  .items { overflow: hidden; }
+  .item { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; } .item[hidden] { display: none; }
+  .item.done { background: var(--ok-bg); } .item.done h3 { text-decoration: line-through; text-decoration-color: var(--greige); color: var(--greige-ink); }
+  .chk { position: relative; width: 24px; height: 24px; margin-top: 1px; cursor: pointer; }
+  .chk input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: inherit; }
+  .chk span { position: absolute; inset: 0; border: 2px solid var(--greige); border-radius: 8px; background: var(--paper); display: grid; place-content: center; transition: all .15s; }
+  .chk input:checked + span { background: var(--ok); border-color: var(--ok); } .chk input:checked + span::after { content: "✓"; color: #fff; font-weight: 800; font-size: 14px; }
+  .chk input:disabled + span { opacity: .45; } .chk input:disabled { cursor: not-allowed; } .chk input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ihead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; justify-content: space-between; }
+  .ihead h3 { flex: 1 1 320px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .idesc { margin-top: 6px; color: var(--greige-ink); font-size: 14px; max-width: 90ch; }
+  .more { margin-top: 10px; } .more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+  .more summary::-webkit-details-marker { display: none; } .more summary::before { content: "▸"; transition: transform .15s; } .more[open] summary::before { transform: rotate(90deg); }
+  .fix { margin-top: 10px; background: var(--muted); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; font-size: 14px; color: var(--ink); max-width: 90ch; } .fix b { color: var(--ok); }
+  .fix .where { display: block; margin-top: 8px; color: var(--greige-ink); font-size: 13px; }
+  .who { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--greige); } .who:empty { display: none; } .item.done .who { color: var(--ok); font-weight: 600; }
+  .empty { padding: 28px; text-align: center; color: var(--greige); font-size: 14px; }
+  .log { max-height: 360px; overflow-y: auto; } .log li { font-size: 13.5px; }
+  .foot { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--greige); font-size: 12.5px; }
 
-  .plan { list-style: none; margin: 0; padding: 0; }
-  .plan li { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
-  .plan li:last-child { border-bottom: 0; }
-  .plan input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); }
-  .plan .n { font-weight: 600; color: var(--ink); } .plan .d { color: var(--greige-ink); font-size: 13.5px; }
-  .plan li.done .n { text-decoration: line-through; color: var(--greige); }
-  .who { font-size: 12px; color: var(--greige); margin-top: 2px; }
-  .plan input:disabled { cursor: not-allowed; opacity: .6; }
-  .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: var(--muted); color: var(--greige-ink); margin-left: 6px; }
-
-  .alert { display: flex; gap: 12px; border-radius: 16px; padding: 14px 16px; border: 1px solid var(--line); background: var(--warn-bg); color: var(--ink); font-size: 14px; }
-  .alert.danger { background: var(--danger-bg); }
-  .foot { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--greige); font-size: 12.5px; }
-
-  @media (max-width: 980px) {
-    .layout { grid-template-columns: 1fr; }
-    aside { position: static; height: auto; flex-direction: row; align-items: center; gap: 12px; padding: 12px 14px; overflow-x: auto; }
-    .brand { border: 0; margin: 0; padding: 0; } nav { flex-direction: row; } nav a { white-space: nowrap; padding: 7px 10px; } .side-foot, .theme { display: none; }
-    main { padding: 24px 16px 60px; } .g2, .g3, .g5 { grid-template-columns: 1fr; } .body { padding-left: 18px; }
+  @media (max-width: 1100px) {
+    .vrow { grid-template-columns: 150px minmax(0, 1fr); } .vrow .txt { grid-column: 1 / -1; } .vrow .left { justify-self: end; grid-row: 1; grid-column: 2; }
+    .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  @media print { aside, .theme { display: none; } .layout { display: block; } details { break-inside: avoid; } details > .body { display: block; } main { padding: 0; } }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { border: 0; margin: 0; padding: 0; } nav { flex-direction: row; } nav a { white-space: nowrap; padding: 7px 10px; } .side-foot { display: none; }
+    main { padding: 22px 16px 70px; } .hero { grid-template-columns: 1fr; } .grid2, .grid3 { grid-template-columns: 1fr; } .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .item { grid-template-columns: 28px minmax(0, 1fr); padding: 16px; } .filters { position: static; } .vrow { padding: 14px 16px; grid-template-columns: 1fr; } .vrow .left { grid-column: auto; grid-row: auto; justify-self: start; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+  @media print { aside, .filters, .notice, .btn { display: none !important; } .layout { display: block; } main { padding: 0; max-width: none; } .more > * { display: block; } .item { break-inside: avoid; } }
 </style>
 </head>
 <body>
 <div class="layout">
   <aside>
     <div>
-      <div class="brand"><img alt="Bagneres CRM" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAADAFBMVEVMaXEmn6BHRkglXskaFD4suP0lZdUUD3IQOV4sbbcmWLwkZNMjYc4bJ2x2dWsXJGhgo/AtPYYmWLkWIGFeoPAyQopPc30qR4lRY7IzKjcWIWIeI0omXMIXImU3U340UJAlJDYUHFISGEoiYtEhI0YiIzVXa7sTGUksP4BDVKEjWsAoKkcVHVcXIFolM3omWK4kU7IlTaolVKkiWrojJ0ooQXwaHEYlm5tom9dmlssqOoE7S5giRJUlN20UG1AgKWEmVrUrOHQdLHMgKV8tV6YYI2BFfooRF0tenOVIWac2Q4crPXYZHUwlWqoqkZIlYMgllJMmPYUklpYWGkIaHUsbJWJohKxhl9YSGUxjo+4jVKgYH1k2SYgaJGI6V48wi4gkUq8iWrkYIVwXHU0hXq0mmZptnMslRJgiK2U0RZEjWbMpVqsfKWVEU5gpRosyQn8jSaFHUpAvkZItj44hTqckX8kiWLgkQ5MhO38eHzghLWEXHFAkUqopWa8zRYsjRZUpVo8cIEYmY80jUa0tj5AwlJQol5csjo0qO3ZVYKFpnNxfnec5RYtDUY8vW6QlTqElVKhfmtsjYplOf8ogMG8pe5omW7xindgwjKZcZ6pSYqpmkcJTZK4XGjVhmt5Bc6kjhYFhm91bltxXY6dfmt99sfNemN0CCi9IlrAvSZtTdMNCYLIdKW4YImUlX8sbKXAlWr8loqEmoaMjZdcYI2MXIWEWIGQbJmsaJWgfLHIdKnEaKG0fLnZeovIhMHc3R5QlNH0lXMUlW8MkTKYnN38XJWsmpKMkMnkiY9IlZ9gqOYIkYs8poqYNGlk5SpdEVqVAUqEWImc9Tp0lSqMlR58lU7FJWqoaJWRhpfUvP4kzRZIlT64THV0nnqJgo/Rip/krPIk9TZomVrQlU69VZrZMXawmVrckUKslRJoxQ49OX68pRYtrrfoohaJnrP0THmAjZtsmpqosnaooOYRLgMouQY0nVLMiS5oiPZAlc6QplKkgVqUiWpceV4cqRIdWhtFi+bW0AAAArHRSTlMA/gn+AwH+AQID/v/+/Af8/v7+/fz+D1X+DvtB/fwYLxPQv/wnGv2Rkf38IPnt/ZD8/WH+LSVT/F07/f63Y7jG/H38kj/gIuj1/rU9e2+f86+i3G1j0xeb1fODs0rpizXvscWj/vAp/Z/9orOu0mNx+XpxZtPi0fLsNX+tnHrQ23VJ++eEW85KvWCD4e2jUa/J2v7+9qH0auqI3Uv2ora+3rzFp8XOwKxi/f37wieDaQAAAAlwSFlzAAAOwwAADsMBx2+oZAAADSNJREFUaN61Wndck9caPll8X8gCwpAICoKVIThRwYGKgrsuHDjqqNtqHbfaWuto1ard63b37vsPSUhISBgBwhJN2FtWBQfaUhTr7LrvOV+CaHv9go2vaH6/8OV5zrvf80aE+iIU4nORAD014aPB//0mGgmfHn74spLflj81Bhq9HKgr+fCH09FPxUoUHy0eqleU/NhqWj7uKehA0WjRUKVcV/LjD571ns5noJHvkCa5XF8HBCa3etBB4GT3BkzSK/Q6HSZoqXerd/srElLOxB8dmKaQ6+rqGIJ6txbMIHCe+cckpCmUOmWdTYP6elNLy1Kpk8xEUeBeuUJZoax7QNDiaWpdSiNnWIlC3uu7dGkVBB+c/OEPbi0tLSZPT8/6rzc6QQcKcb9KWLZsWaA/eECnMwJBvZubW0trvduMGWAlJ+jAHezr64v6K8DD2EQfLj8NUTTj76fGRS/xFjivSEQodXVKsFLJb6e835+xdCPl3CTmBnbJlTiMjCXPbEQbo+FNIRbySv95N0jXN8n1OiWILG01ZAUSCHunGcV/Un0oIU1RoMCQJn+MrqzwlzX1R7QAH52O2rFgAkjIjmBixCdBtztgTIlcrlNWgAr+XUMoYjPptHdH3PbwuHz58u3GFyf4cBHdVyUEYAjpwB2r3541a1JEmlwPx69IkzctAoNB5r3z3nC/FA+PyZOHg9TUVB3aye2jEgAyYNcLoTNrr10wQI3D9q9QypuGID78RjrMI88VBBRou13TfqVxxIj8CQP6xECj+F0v1F6qrZ3pLpdDlSMeUDQN4WLzLNlm9gtzTWEIamra2xuv5OePOOTjOAM0L5+3yspCQ8tqC5r0OmweJbE/KAaZvU3l55eSggk8QAFMABpU5W/ycbgLUWjn+PLQ0NDyme5dej0Tnzr/rkm+2HLe23h+foQhZVQvDaperNq30kEdKBRyobKyvLy8rKFLB/iEQNG1HuwjQPxtFrOf2QwErqNcPcDJjVewAEN11b7ZDjHQaGLpBWCoLC9N0+sJgVGpSJvExQaiXlXxzDwz1sDDI2UUyPPPP/9TPuBXgQ6vcR0ofjQa/db48Zih/EwTmF+h8Jf5K/SDBuNQlwI+ljzsgra9SXPnfvxpd/f9znv3fqquvlPdMcUhFWaVlpaOB46cLigQaVCBjP76QQGAT6FhFh5PRQhcU4YflmKfxL+xwQpy/96djurqfQNZGWi00isnByhKL+SWNDUlLBuE5UAwVCAKJfFURMx5Ya6v+5CCRwvQiYXa5mat9f4HHZuqQxwgWFC6JYdIXUnCnHApZU88IZw/SCwmBH7m1wfagpIWovjjWg6Ho7F23mFXAcL8tZwt5zG+e9eyYNQDD3AjeWKxxQIMvLy84b2CXoie26ABBk5R552OnSzJQKPZMVfPY9lSkPAy4mPD21BGPmuxWIqLgcDMW/NQUgnRGxqORqvlgA6zWOJIiCa6e926CnI+fRGu/D3vjxSLgkQikUUs5plH+TC/omn7XLBQy9EWWZtv3Ns/4PEMQjSlAeTWrVtXV4U/eFSIpj3rInIBEYlVvFEjmfNTyPYEqFCk1WqKtJruX1iSjUYh7u4N7pgjFvUQYPucZfAtKlWYDR86dX+bJui5sWAhILF2Tuyl9x8T3Ixxx9KwvRf+NMBPBQEFjqqS7PjBCdhNuHkg7sIiDmhg1XavfjwBH005F3MOJObbWL49htC0v5x1cYGfVJFYHJbEJ46nUXhgYeGq/sQiAjSfEGi1Nz5+vIn4aGJkwTkiHwUzj+LzXwfrpAKDWCw+aD9/wLpMiSRjFbESjebdAC9rrNYb89h8MDu9gJHcV+zKrr3ukkqkOKh4K3N+CvmuUGdkZEzNWHUEHgMnLLyh1YAObATwwcTcyMjI3NzIMx8xLqTBQgwD4A9Ddvx1GVPTifgvhj4qQAPmazkajebGG4/3AcBtB+wzkfA3NzaAnKaHIej6WtqGz12RMTUrC+NPTZcAA3hBOr9IA6G6hyWVwQnZZ7LPgMBL7GjCIEQDgQHOv9bW2bECWUBAZGq2ZA7C05M3MGjGPsdejGKze2T6aKIwZkg9mrq258pBoYBEYLA/lv4KFHPQYV6RZqE320jPR2MM2fDRrKzsrKnp68LtDC+lvtRrMoEkSISHztiEMGAdbsxnbzkUioPDEf9lZKin2z0d9epDlRistD2bxAKWyOw4PGQi73l7WHxMPjp4etbUDEAHfIl6FWMlikIPVzFIhNhcu0BMxPHxM1KpQ13/yCp1Bo5ytVotMdh0oCjq0ccGb88t6JHIzXgqEDg0tUDfn66WZKqTkzPVmQbl0DF/rDYwbr55s+BmAU79mJiCzXwHL1SwFEL9I4CBiEGmjOj/OwamHFH8zQU3iQBBzLnNDhFI4yHOQIfEQllhYWam0WisUw5d9DADxDIZ14Fmys1vQUj9dT/3CnsIwdT7txOABquh6ZihEAiM/o9YCc+Pc0nCAkMcJsBNqsHdff9oVgYh2jN2wwl4wduDClmhwWiEH3/d0MUPmXDr2WffQYwO/CnutxoavEDgnzcRm5WgsHOaN5wgBTJgEmYAAQZZ2hz74WCA2eoS5HL0ILMO4aOdDdDEva4CxVV3H5Y0EED75ozlbDhGdAgPNBAGo7FQVtF0xFaHBGgYbp5nRXMJAyTwFK/zzCCy5TybCnxornjCGXuM6BC+AvsBu0HWBcMjxdxpD4oB/qzL9aMH+fZp2YsZ1bbkeLH0fCE6xiEydg+JJS5mMBorZBWBg5mjCVGSKkgEBCAurzKRL0QhpTBu4j+lLIMX+FhLRigOZzfggx9WVMiMShh+w+39c64qKAjaJ8Z3+STK1jCC3yIDc+n4yhA2DXY3476k4VhJ3YUwHFKhUKQFBtjxR/qJLS6EwOU6RBJtc92syvGVF0AqZ7FF6eFmDmbgaDbE40/Drm6SvmvZaDv+DlexjcAl9ehIuzn4KKSSkfLXHr+AgX7WqW3WaMBGttYESTvkgX18PFQ8iwjaJ54wevDxsIOvXFhYLjlQhH6xarFwinbb50Opbw/+JyqeipnwROK5D9zJR3HloYAO91IWAojM/Z3Qu61WTtFx28aMshVqIVq5xsxTiS0wAruIVHN7hwsVG4pvvWVltbPYCil685fuIrivwMB/zA5BMaecvcZsVqksxSJRUJAoqRc+Hx2pK2Ok9m2WagTWvPuBVdOs1XC0x3v3b+jKr+f5EQWKi4NEw5CAsm+ToDQOKphZNhNL7S7WC0jUfmDAUybHOu/BapTgh4GFVHALseHTjPEoFHxA73WJwZ+5kq0nwx2t4+7PzUU42cbuhqULySQ+itqbF5aHCcQWPD/ipYttpRc8J8Iou3AJbzZqr73gzVZOYU1xd9PdO51FRRpOc/M8eJ4SwjkH7k0Jy8vD+Kogy1bcfRE958CBFStiAyMMybKsS9cuEdnFvq+gQIVNmzb93NltBSsd3x0P70QlrYGLsdkMl2TV0eJt5H7MXa83GjKT8eSRXJFz8RoRdgVIYdkPF96Ojp/vdd7v7u7+9Jth766BxUdKnhkHEU+E5y+8ZquTyCRY1MmGjEv9QK5dAw9QDu0q7m7qqK6C7Ub+T7CJ8MCrIdeUlDxwAagA8yn27Ry50ZBsIHNHcmHOxX5EVju2bgEjVVcDQRWsmRobhw+fPBk4CIGZZyHzI5xfKQF0RgrPXQTp1+/i2w4us2EqnIAJYIdy5Up7++02D6xAil+en5/qpSjS6xbrZZmZdvxsjH/xmX6rHV40Q1dfwBA0trfXAAHRALZQqvfw+flokcIg6Tl/dr9nsHx+ElGU4ys77oJq2JKNAAVq2touE4IwP/PeKIK/eCiDr06WSPwjCf6Xny3p054cdPA5lD8CfIAJMIOra97kYcz5xzD4GeBedVbOxYtffv7Pk/Goj3t4iMMBIfvyGxuvtIOT2y67ptS8N42klw0f4j9ZUrd912cnTw70JmNknzfukF8hEw692Hi7ra19zd53faS4MtEwtSZjfBygdevtFf2JFuSgBKIGzPY5fHjHyoFcXPAEUOEE64wYHyZviWE9n+LDTop64lU/3ftGQ5b5QjTuV3k6uBfsk5kYgP70Zh/UwF8T8Ak6/t5A+u/zTemQAerMTDzUO/NrCmH00hlu48Z9/2tXuhoCNLNujBPOb8eWLok+9Y8ZrZ6m5TO+/y4tHVsoIw55e0sDuE6AF6Av3j/t2drq5gnfPpkIATCopycmJq76ytcJX0PB3LK03s3T080EBJ6MBuAD8IIhMNwpX9UByLjlJk+TyWTTACcZrHL843yRk7wM0bm8hTAAgZIQSAz6RU+Qvv+f4QvsY1MLIUiHNmmcPsaJ+Jgh+nQruIHRIFlWGBjuvCi1MWx8v9XEECRLjJMGs+8k+hytS/7VaiJOlhjjuE4+v43hP60Qpop0xRxEUQg9DYav61u/a4pY7FT3PpJy3/+a4OQi95AOFDr1ZrDT3fvo/86h0dMUqq/u/R9DQRwk4d8U3gAAAABJRU5ErkJggg==" /><b>BAGNERES<br />CRM</b></div>
-      <nav id="nav">
-        <a href="#resumen"><span class="dot"></span>Resumen</a>
-        <a href="#paquetes"><span class="dot"></span>Paquetes</a>
-        <a href="#seguridad"><span class="dot"></span>Seguridad</a>
-        <a href="#servidor"><span class="dot"></span>Servidor</a>
-        <a href="#optimizacion"><span class="dot"></span>Optimización</a>
-        <a href="#mejoras"><span class="dot"></span>Mejoras del sistema</a>
-        <a href="#marketing"><span class="dot"></span>Marketing</a>
-        <a href="#plan"><span class="dot"></span>Plan de acción</a>
-        <a href="#limites"><span class="dot"></span>Lo no verificado</a>
-      </nav>
+      <div class="brand"><img alt="" src="data:image/png;base64,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" /><b>BAGNERES<br />CRM</b></div>
+      <nav id="nav" aria-label="Secciones"></nav>
     </div>
-    <div>
-      <button class="theme" id="themeBtn" type="button">Cambiar tema</button>
-      <div class="side-foot">Documento confidencial · 20 de octubre de 2026</div>
+    <div class="side-foot">
+      <button class="btn" id="themeBtn" type="button">Cambiar tema</button>
+      <span>Documento interno · 20 de octubre de 2026</span>
     </div>
   </aside>
 
   <main>
-    <header>
-      <span class="pill p-info">Auditoría completa</span>
-      <h1 style="margin-top:10px">Auditoría del CRM Studio F</h1>
-      <p class="sub">Código, paquetes, servidor y página de Marketing · 20 de octubre de 2026 · solo lectura</p>
+    <header class="card hero" id="resumen">
+      <div>
+        <span class="pill p-info">Auditoría completa · solo lectura</span>
+        <h1>Auditoría del CRM Studio F</h1>
+        <p>Código, paquetes, servidor, optimización y la página de Marketing. Cada hallazgo es un punto del checklist: se marca con tu nombre y la hora, y queda en el historial.</p>
+        <div class="meta"><span class="pill p-gray">20 de octubre de 2026</span><span class="pill p-gray">54 puntos de control</span><span class="pill p-gray">Backend · Frontend · Servidor · Marketing</span></div>
+      </div>
+      <div class="ring" role="img" aria-label="Avance del checklist"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42" fill="none" stroke-width="9" /><circle class="bar" id="ringBar" cx="50" cy="50" r="42" fill="none" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 264" /></svg><div class="mid"><b id="ringPct">0%</b><span id="ringTxt">0 de 0</span></div></div>
     </header>
 
-    <div class="alert danger" style="margin-top:18px"><span>🔒</span><div><b>Documento interno.</b> El checklist solo se puede ver y marcar iniciando sesión en el CRM como administrador. Los datos de infraestructura no se publican aquí.</div></div>
+    <div class="tiles" id="tiles"></div>
 
-    <section id="resumen">
-      <div class="sec-head"><div><h2>Resumen</h2><p class="sub">Un veredicto por tema.</p></div></div>
-      <div class="grid g5">
-        <div class="card verdict stripe s-warn"><span class="lbl">Paquetes</span><span class="pill p-warn">Regular</span><p>11 vulnerabilidades conocidas (1 crítica) y Node 20 sin soporte. Casi todo se arregla con una actualización.</p></div>
-        <div class="card verdict stripe s-warn"><span class="lbl">Seguridad de código</span><span class="pill p-warn">Aceptable · 4 fallos serios</span><p>Buenas bases, pero una firma que se salta, sesiones sin revocar y permisos incompletos.</p></div>
-        <div class="card verdict stripe s-danger"><span class="lbl">Seguridad del servidor</span><span class="pill p-danger">Mala</span><p>Servicios internos del servidor visibles desde internet.</p></div>
-        <div class="card verdict stripe s-info"><span class="lbl">Optimización</span><span class="pill p-info">Buena base</span><p>Lo más pesado ya se arregló; quedan 7 puntos concretos.</p></div>
-        <div class="card verdict stripe s-danger"><span class="lbl">Marketing</span><span class="pill p-danger">No dejarla como está</span><p>Envía difusiones, pero no gestiona publicidad; y una pestaña muestra datos fijos.</p></div>
+    <section style="margin-top:36px">
+      <div class="sec-head"><div><h2>Veredicto por tema</h2><p class="sub">Una línea por área; entra para ver cada punto.</p></div></div>
+      <div class="card verdicts" id="verdicts"></div>
+    </section>
+
+    <div class="filters card" id="filters">
+      <div class="chips" id="fStatus" role="group" aria-label="Estado">
+        <button class="chip" type="button" data-v="all" aria-pressed="true">Todos</button>
+        <button class="chip" type="button" data-v="pend" aria-pressed="false">Pendientes</button>
+        <button class="chip" type="button" data-v="done" aria-pressed="false">Hechos</button>
       </div>
-    </section>
+      <span class="sep"></span>
+      <div class="chips" id="fSev" role="group" aria-label="Gravedad"></div>
+      <input class="search" id="fQ" type="search" placeholder="Buscar en los hallazgos…" aria-label="Buscar" />
+      <span class="shown" id="shown"></span>
+    </div>
+    <div class="notice" id="msg" hidden><span id="msgTxt"></span><a class="btn primary" href="https://crm.bagneres.online/" id="msgBtn" hidden>Ir al CRM</a></div>
 
-    <section id="paquetes">
-      <div class="sec-head"><div><h2>Paquetes de desarrollo</h2><p class="sub">Actualizados o desactualizados, y qué vulnerabilidades traen.</p></div><span class="pill p-warn">Regular</span></div>
-      <h3>Versiones</h3>
-      <div class="tbl-wrap"><table>
-        <tr><th>Paquete</th><th>Instalada</th><th>Disponible</th><th>Qué hacer</th></tr>
-        <tr><td><b>sharp</b></td><td>0.35.4</td><td>0.35.5</td><td><span class="pill p-danger">Subir ya</span> vulnerabilidad alta</td></tr>
-        <tr><td><b>express</b></td><td>4.22.2</td><td>4.22.3 · 5.3.0</td><td>Subir el parche; pasar a 5 es opcional</td></tr>
-        <tr><td><b>multer · pg · csv-parse</b></td><td>2.2.0 · 8.22.0 · 7.0.2</td><td>2.4.0 · 8.23.1 · 7.0.3</td><td>Subir</td></tr>
-        <tr><td><b>react · react-dom</b></td><td>18.3.1</td><td>19.3.1</td><td>Sigue soportado; migrar cuando haya tiempo</td></tr>
-        <tr><td><b>vite · plugin-react</b></td><td>5.4.21 · 4.7.0</td><td>8.3.4 · 6.1.2</td><td>Tres versiones mayores atrás; solo afecta al build, no es urgente</td></tr>
-        <tr><td><b>framer-motion · lucide-react · react-hot-toast</b></td><td>13.1 · 1.28 · 2.6.0</td><td>14.4 · 1.60 · 2.6.1</td><td>Opcional</td></tr>
-      </table></div>
-
-      <h3 style="margin-top:22px">Vulnerabilidades conocidas (npm audit)</h3>
-      <div class="grid g2">
-        <div class="card"><div class="sec-head" style="margin-bottom:8px"><b>Servidor</b><span class="pill p-danger">6 · 1 crítica</span></div>
-          <ul class="clean"><li><b>proxy-addr</b> <span class="pill p-danger">crítica</span> suplanta la IP; afecta al límite de intentos de inicio de sesión.</li>
-          <li><b>sharp</b> <span class="pill p-danger">alta</span> procesa las imágenes que mandan los clientes.</li>
-          <li><b>qs · body-parser · express</b> <span class="pill p-warn">moderadas</span> denegación de servicio.</li></ul>
-          <p class="sub" style="margin-top:10px;font-size:13px">Todas tienen arreglo: <code>npm audit fix</code>.</p></div>
-        <div class="card"><div class="sec-head" style="margin-bottom:8px"><b>Frontend</b><span class="pill p-warn">5 · 4 altas</span></div>
-          <ul class="clean"><li><b>xlsx</b> <span class="pill p-danger">alta</span> sin arreglo en npm. Riesgo real bajo: el CRM solo escribe Excel, nunca lee archivos de usuarios.</li>
-          <li><b>nanoid · source-map-js</b> <span class="pill p-warn">altas</span> son herramientas de compilación, no llegan al navegador.</li></ul>
-          <p class="sub" style="margin-top:10px;font-size:13px">Conviene reemplazar xlsx por otra librería de exportación.</p></div>
-      </div>
-
-      <h3 style="margin-top:22px">Infraestructura de paquetes</h3>
-      <div class="card"><ul class="clean">
-        <li><b>Node 20 dejó de recibir soporte en abril de 2026.</b> Las imágenes Docker siguen en <code>node:20-alpine</code>: subir a Node 22 o 24.</li>
-        <li>Los Dockerfiles usan <code>npm install</code> en vez de <code>npm ci</code>: dos despliegues pueden instalar versiones distintas.</li>
-        <li><code>n8nio/n8n:latest</code> y <code>atmoz/sftp</code> sin versión fija: un despliegue puede traer cambios inesperados.</li>
-        <li>Los contenedores corren como <b>root</b>. PostgreSQL 16: correcto, con soporte hasta 2028.</li>
-        <li>No hay ESLint, ni TypeScript, ni pruebas del frontend; hay 13 archivos de pruebas, casi todos del motor de ventas.</li>
-      </ul></div>
-    </section>
-
-    <section id="seguridad">
-      <div class="sec-head"><div><h2>Seguridad de código</h2><p class="sub">Qué está bien y qué hay que corregir, de más a menos grave.</p></div><span class="pill p-warn">Aceptable · 4 fallos serios</span></div>
-      <div class="card" style="margin-bottom:16px"><h3>Lo que está bien (verificado en el código)</h3>
-        <ul class="list-ok">
-          <li>Todo el SQL usa parámetros; los fragmentos dinámicos están en listas blancas.</li>
-          <li>Contraseñas con bcrypt (mínimo 8 caracteres); cookie de sesión <code>httpOnly</code> y CORS limitado a un origen.</li>
-          <li>Los tokens de Meta y WhatsApp se guardan cifrados (AES-256-GCM).</li>
-          <li>Los endpoints de n8n exigen un secreto y fallan cerrado si no está configurado.</li>
-          <li>Sin <code>eval</code>, sin <code>innerHTML</code>; los subprocesos usan <code>execFile</code> sin shell; subidas con lista blanca de tipos.</li>
-          <li>Rutas de administración protegidas por rol.</li>
-        </ul></div>
-
-      <details open><summary><span class="id">S2</span><span class="t">La firma de los webhooks de Meta se puede saltar</span><span class="pill p-danger">Alto</span></summary>
-        <div class="body"><p>En <code>socialWebhook.js</code> la firma solo se comprueba si el mensaje la trae. Sin cabecera, el mensaje se procesa igual; y un mensaje de WhatsApp con firma incorrecta también. Quien conozca el identificador del número puede inyectar mensajes, estados de entrega o comprobantes falsos.</p><p class="fix"><b>Arreglo:</b> exigir la firma siempre y descartar el mensaje si falta o no coincide.</p></div></details>
-      <details open><summary><span class="id">S3</span><span class="t">No hay forma de revocar sesiones</span><span class="pill p-danger">Alto</span></summary>
-        <div class="body"><p>El token se renueva solo en cada petición con el rol antiguo y nunca se vuelve a consultar la base. Como el CRM consulta al servidor cada pocos segundos, <b>una persona dada de baja, o con el rol cambiado, mantiene su acceso mientras tenga la pestaña abierta</b>. "Cerrar sesión" tampoco invalida el token.</p><p class="fix"><b>Arreglo:</b> verificar al usuario en la base (con caché de 1 minuto) y una versión de token que se invalida al cambiar rol o contraseña, o al desactivar al usuario.</p></div></details>
-      <details open><summary><span class="id">S4</span><span class="t">Faltan controles de permisos finos</span><span class="pill p-warn">Medio-alto</span></summary>
-        <div class="body"><ul class="clean"><li><code>PATCH /api/sales/:id</code>: cualquier asesora puede cambiar el monto, estado o notas de cualquier venta. Las ventas son la base de las métricas.</li><li><code>GET /api/attachments/:id/file</code>: entrega cualquier adjunto (comprobantes, documentos) de cualquier línea a cualquier usuario con sesión; los números son consecutivos.</li><li>Clientes, tickets y respuestas rápidas se editan sin aislar por línea.</li></ul><p class="fix" style="margin-top:10px"><b>Arreglo:</b> limitar la edición de ventas a supervisión y comprobar la línea de la asesora al servir adjuntos.</p></div></details>
-      <details><summary><span class="id">S5</span><span class="t">Sin cabeceras de seguridad</span><span class="pill p-warn">Medio</span></summary>
-        <div class="body"><p>El CRM y la API no envían CSP, HSTS, X-Frame-Options ni X-Content-Type-Options, y la API anuncia <code>X-Powered-By: Express</code>. La cookie no lleva <code>Secure</code>. Los adjuntos se sirven en línea y la lista blanca de <code>image/</code> incluye <code>image/svg+xml</code>, que puede ejecutar código si se abre directo.</p><p class="fix"><b>Arreglo:</b> <code>helmet</code> en el backend, cabeceras en nginx, excluir SVG, <code>nosniff</code> y <code>CSP: sandbox</code> en los adjuntos, y <code>Secure</code> en la cookie.</p></div></details>
-      <details><summary><span class="id">S6</span><span class="t">Claves y secretos</span><span class="pill p-warn">Medio</span></summary>
-        <div class="body"><ul class="clean"><li>Si falta <code>WHATSAPP_ENCRYPTION_KEY</code>, el cifrado usa una clave derivada del <code>JWT_SECRET</code> (o una frase fija del código): un mismo secreto para dos usos. Debe fallar al arrancar si falta.</li><li>La llave de OpenAI que se pegó en el chat <b>sigue sin revocarse</b>.</li><li>Los secretos de n8n se comparan con <code>!==</code> (no en tiempo constante): riesgo bajo.</li></ul></div></details>
-      <details><summary><span class="id">S7</span><span class="t">Límites y abuso</span><span class="pill p-warn">Bajo-medio</span></summary>
-        <div class="body"><p>Solo el login tiene límite (10 intentos cada 15 min por IP, en memoria, se borra al reiniciar). JSON de hasta 25 MB en todas las rutas; subidas de hasta 100 MB en memoria; la imagen de cabecera de difusiones no filtra el tipo. El flujo de eventos en vivo envía a todos los usuarios los eventos de todas las líneas.</p></div></details>
-      <details><summary><span class="id">S8</span><span class="t">Higiene</span><span class="pill p-info">Bajo</span></summary>
-        <div class="body"><p>41 <code>console.log</code> en el backend, algunos con teléfonos. Hay respaldos locales con datos de clientes en la carpeta del proyecto (ya ignorados por Git).</p></div></details>
-    </section>
-
-    <section id="servidor">
-      <div class="sec-head"><div><h2>Seguridad del servidor</h2><p class="sub">Comprobado desde fuera, sin intentar entrar a ningún servicio.</p></div><span class="pill p-danger">Mala</span></div>
-      <details open><summary><span class="id">S1</span><span class="t">Servicios internos visibles desde internet</span><span class="pill p-danger">Crítico</span></summary>
-        <div class="body"><p>Varios servicios que deberían ser internos (base de datos, API, panel de administración y acceso remoto) responden desde internet. El detalle exacto no se publica en esta página: está en el informe privado de la auditoría.</p><p class="fix"><b>Arreglo:</b> publicar solo la entrada web, cerrar el resto con el firewall, y proteger el panel de administración con HTTPS y verificación en dos pasos. Requiere acceso a Dokploy y Hostinger.</p></div></details>
-    </section>
-
-    <section id="optimizacion">
-      <div class="sec-head"><div><h2>Optimización</h2><p class="sub">Funcional y de código.</p></div><span class="pill p-info">Buena base</span></div>
-      <div class="card" style="margin-bottom:16px"><h3>Ya hecho esta semana</h3>
-        <ul class="list-ok"><li>Lista de chats: de ~800 ms a ~25 ms. Contador de no leídos: de 130 a ~25 ms.</li><li>Lector de comprobantes compartido; análisis y auditoría con tope de CPU; consulta del chat social cada 30 s en vez de 3 s.</li></ul></div>
-      <div class="tbl-wrap"><table>
-        <tr><th>#</th><th>Pendiente</th><th>Impacto</th><th>Esfuerzo</th></tr>
-        <tr><td>1</td><td><b>Nginx sin compresión ni caché.</b> ~1,2 MB de JavaScript en cada carga. Con gzip y caché de archivos con huella, la primera carga baja ~70 %.</td><td><span class="pill p-ok">Alto</span></td><td>Bajo</td></tr>
-        <tr><td>2</td><td><b>El logo pesa 284 KB</b> y debería pesar ~15 KB; se carga en la pantalla de entrada.</td><td><span class="pill p-ok">Medio</span></td><td>Bajo</td></tr>
-        <tr><td>3</td><td><b>Lista de chats con filtros</b> (línea, búsqueda, no leídos) sigue en la consulta antigua: ~1 s y crece con cada mensaje.</td><td><span class="pill p-ok">Alto</span></td><td>Medio</td></tr>
-        <tr><td>4</td><td><b>/api/tickets sin paginar:</b> devuelve ~10.800 tickets (1,5 MB).</td><td><span class="pill p-info">Medio</span></td><td>Bajo</td></tr>
-        <tr><td>5</td><td><b>Tablas que solo crecen:</b> <code>access_audit</code> (75 mil), <code>processed_messages</code> (50 mil), <code>n8n_chat_histories</code> (152 mil). Falta archivado.</td><td><span class="pill p-info">Medio</span></td><td>Medio</td></tr>
-        <tr><td>6</td><td><b>Archivos gigantes:</b> <code>Conversations.jsx</code> 3.463 líneas, <code>SalesAdvisorDashboard.jsx</code> 1.631, <code>conversations.js</code> 1.567, <code>tickets.js</code> 1.169. Cada cambio es lento y arriesgado.</td><td><span class="pill p-info">Mantenimiento</span></td><td>Alto</td></tr>
-        <tr><td>7</td><td><b>xlsx pesa 283 KB</b> y solo se usa al exportar: cargarla bajo demanda.</td><td><span class="pill p-info">Bajo</span></td><td>Bajo</td></tr>
-      </table></div>
-    </section>
-
-    <section id="mejoras">
-      <div class="sec-head"><div><h2>Mejoras del sistema completo</h2><p class="sub">Chats, catálogo, dashboards y administración.</p></div></div>
-      <div class="grid g2">
-        <div class="card"><h3>Chats</h3><ul class="clean"><li>Mensajes programados y notas internas.</li><li>Asignación automática por turno.</li><li>Etiquetas y resumen automático del chat.</li><li>Tiempo de respuesta por asesora.</li></ul></div>
-        <div class="card"><h3>Catálogo</h3><ul class="clean"><li>Hoy es un espejo del ERP, solo lectura.</li><li>Falta publicarlo en WhatsApp (Commerce).</li><li>Enviar productos por el chat con un clic.</li></ul></div>
-        <div class="card"><h3>Dashboards</h3><ul class="clean"><li>El motor de ventas va bien encaminado.</li><li>Alertar a las 4 y 9 pm si el cierre no coincide.</li><li>Comparar contra el ERP cuando ya traiga la factura.</li></ul></div>
-        <div class="card"><h3>Administración</h3><ul class="clean"><li>Ver "quién cambió qué" por pantalla, con filtros.</li><li>Respaldos verificados: probar una restauración.</li><li>Monitoreo con alertas: CPU, errores y cola de mensajes.</li></ul></div>
-      </div>
-    </section>
-
-    <section id="marketing">
-      <div class="sec-head"><div><h2>Página de Marketing</h2><p class="sub">Veredicto estricto.</p></div><span class="pill p-danger">No dejarla como está</span></div>
-      <div class="tbl-wrap"><table>
-        <tr><th>Pestaña</th><th>Estado</th><th>Qué hace de verdad</th></tr>
-        <tr><td><b>Pipeline</b></td><td><span class="pill p-ok">Funciona</span></td><td>Lista los clientes dormidos (sin actividad más de 24 h) por etapa y los exporta a Excel. Útil para reactivar.</td></tr>
-        <tr><td><b>Difusión</b></td><td><span class="pill p-warn">Incompleta</span></td><td>Envía plantillas con pausa de 42 h, exclusión de quienes no quieren, reintento y estado de entrega. <b>Falta:</b> programar, pausar un envío en curso, medir respuestas y <b>compras por campaña</b>, costo por campaña, prueba A/B, horarios permitidos.</td></tr>
-        <tr><td><b>Estrategia Meta &amp; Costos</b></td><td><span class="pill p-danger">Parcialmente falsa</span></td><td>Precios, límites por nivel y "nivel actual" <b>escritos a mano en el código</b>. Los conteos de audiencia <b>salen siempre en 0</b> por un error de nombres. Costos en pesos colombianos para un negocio en Guatemala.</td></tr>
-        <tr><td><b>Plantillas</b> (admin)</td><td><span class="pill p-warn">Básica</span></td><td>Crea, borra y muestra el estado (aprobada, en revisión, rechazada con motivo). Falta editar, botones, plantillas con imagen o video y rendimiento por plantilla.</td></tr>
-      </table></div>
-
-      <h3 style="margin-top:22px">Lo que NO existe y obliga a seguir entrando a Meta</h3>
-      <div class="grid g2">
-        <div class="card"><b>Anuncios</b><p class="sub" style="font-size:13.5px">El CRM solo lee el gasto: no crea, pausa ni cambia presupuestos, públicos o creativos.</p></div>
-        <div class="card"><b>API de Conversiones</b><p class="sub" style="font-size:13.5px">Meta no sabe cuándo un cliente compró, así que sus anuncios optimizan a ciegas. La mejora de mayor retorno que falta.</p></div>
-        <div class="card"><b>Costo real por venta</b><p class="sub" style="font-size:13.5px">Gasto de anuncios dividido entre ventas reales del CRM, por campaña. Hoy solo hay un promedio general.</p></div>
-        <div class="card"><b>Públicos personalizados</b><p class="sub" style="font-size:13.5px">Subir listas de compradores o de quienes cotizaron y no compraron.</p></div>
-        <div class="card"><b>Respuesta y ROI por difusión</b><p class="sub" style="font-size:13.5px">Cuántos respondieron, cuántos compraron, cuánto ingresó.</p></div>
-        <div class="card"><b>Catálogo, Flows, programación y secuencias</b><p class="sub" style="font-size:13.5px">Commerce, formularios dentro del chat, mensajes programados y recordatorios automáticos.</p></div>
-      </div>
-
-      <h3 style="margin-top:22px">Orden recomendado</h3>
-      <div class="tbl-wrap"><table>
-        <tr><th>#</th><th>Qué construir</th><th>Tiempo</th></tr>
-        <tr><td>1</td><td>Arreglar la pestaña Estrategia Meta: datos reales, moneda y el error del 0</td><td>1 día</td></tr>
-        <tr><td>2</td><td>Medir cada difusión: respondieron, compraron, ingreso</td><td>2 a 3 días</td></tr>
-        <tr><td>3</td><td>Programar y pausar envíos</td><td>2 días</td></tr>
-        <tr><td>4</td><td>Panel de anuncios (solo lectura) con costo real por venta</td><td>3 días</td></tr>
-        <tr><td>5</td><td>API de Conversiones: enviar las compras a Meta</td><td>3 a 4 días</td></tr>
-        <tr><td>6</td><td>Públicos personalizados y luego crear o pausar anuncios desde el CRM</td><td>1 a 2 semanas</td></tr>
-      </table></div>
-    </section>
-
-    <section id="plan">
-      <div class="sec-head"><div><h2>Plan de acción</h2><p class="sub">Cada marca queda guardada con quién la hizo y cuándo.</p></div><span class="pill p-info" id="prog">0 de 9</span></div>
-      <div class="card"><ul class="plan" id="plan">
-        <li data-k="s1"><input type="checkbox" /><div><div class="n">Cerrar los puertos del servidor y poner Dokploy con HTTPS <span class="tag">Hoy · requiere tu acceso</span></div><div class="d">Dejar publicada solo la entrada web, firewall para el resto y verificación en dos pasos en el panel.</div><div class="who"></div></div></li>
-        <li data-k="key"><input type="checkbox" /><div><div class="n">Revocar la llave de OpenAI pegada en el chat y crear una nueva con límite de gasto <span class="tag">Hoy</span></div><div class="who"></div></div></li>
-        <li data-k="s2"><input type="checkbox" /><div><div class="n">Exigir siempre la firma de los webhooks de Meta <span class="tag">Código</span></div><div class="who"></div></div></li>
-        <li data-k="s3"><input type="checkbox" /><div><div class="n">Poder revocar sesiones al dar de baja o cambiar el rol <span class="tag">Código</span></div><div class="who"></div></div></li>
-        <li data-k="s4"><input type="checkbox" /><div><div class="n">Limitar la edición de ventas y los adjuntos por línea <span class="tag">Código</span></div><div class="who"></div></div></li>
-        <li data-k="npm"><input type="checkbox" /><div><div class="n">Actualizar paquetes (<code>npm audit fix</code>) y subir a Node 22 o 24 <span class="tag">Código</span></div><div class="who"></div></div></li>
-        <li data-k="s5"><input type="checkbox" /><div><div class="n">Cabeceras de seguridad, compresión, caché y logo liviano <span class="tag">Código</span></div><div class="who"></div></div></li>
-        <li data-k="mk1"><input type="checkbox" /><div><div class="n">Arreglar la pestaña Estrategia Meta y medir cada difusión <span class="tag">Marketing</span></div><div class="who"></div></div></li>
-        <li data-k="mk2"><input type="checkbox" /><div><div class="n">Programar envíos, panel de anuncios y API de Conversiones <span class="tag">Marketing</span></div><div class="who"></div></div></li>
-      </ul>
-        <p class="alert" id="planMsg" hidden style="margin-top:12px"></p>
-        <h3 style="margin-top:18px">Historial</h3><ul class="clean" id="planLog"></ul></div>
-    </section>
+    <div id="areas"></div>
 
     <section id="limites">
-      <div class="sec-head"><div><h2>Lo que no se pudo verificar</h2></div></div>
-      <div class="card"><ul class="clean">
-        <li>La fuerza real de <code>JWT_SECRET</code> y de las claves en Dokploy (están en variables de entorno que no se ven desde fuera).</li>
+      <div class="sec-head"><div><h2>Lo que no se pudo verificar</h2><p class="sub">Límites de esta auditoría; conviene revisarlos aparte.</p></div></div>
+      <div class="card pad"><ul class="clean">
+        <li>La fuerza real de <code>JWT_SECRET</code> y de las claves en Dokploy: están en variables de entorno que no se ven desde fuera.</li>
         <li>Las reglas del firewall del servidor.</li>
-        <li>Que los respaldos de la base se puedan restaurar.</li>
+        <li>Que las copias de seguridad de la base se puedan restaurar.</li>
         <li>Los permisos reales de la app de Meta: qué puede leer o escribir el token.</li>
-        <li>El rendimiento con varias asesoras a la vez: se midió con datos de prueba.</li>
-        <li>No se probó ninguna vulnerabilidad contra producción (sin cargas falsas ni intentos de autenticación).</li>
+        <li>El rendimiento con varias asesoras a la vez: se midió con datos sintéticos.</li>
+        <li>No se probó ninguna vulnerabilidad contra producción: sin cargas falsas ni intentos de autenticación.</li>
       </ul></div>
     </section>
 
-    <div class="foot">Bagneres CRM · Studio F Guatemala · Auditoría del 20 de octubre de 2026 · Documento confidencial.</div>
+    <section id="historial">
+      <div class="sec-head"><div><h2>Historial del checklist</h2><p class="sub">Quién marcó o desmarcó cada punto y cuándo (últimos 40 movimientos).</p></div></div>
+      <div class="card pad"><ul class="clean log" id="planLog"><li>Inicia sesión como administrador para ver el historial.</li></ul></div>
+    </section>
+
+    <div class="foot">Bagneres CRM · Studio F Guatemala · Auditoría del 20 de octubre de 2026 · Documento interno.</div>
   </main>
 </div>
+
 <script>
-  (function () {
-    var root = document.documentElement, btn = document.getElementById('themeBtn');
-    function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-    function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: no recuerda */ } }
-    var saved = safeGet('auditTheme'); if (saved) root.setAttribute('data-theme', saved);
-    btn.addEventListener('click', function () {
-      var dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
-      var next = dark ? 'light' : 'dark'; root.setAttribute('data-theme', next); safeSet('auditTheme', next);
+(function () {
+  /* ====== contenido ====== */
+  var SEV = { crit: ['Crítico', 'p-crit'], alto: ['Alto', 'p-danger'], medio: ['Medio', 'p-warn'], bajo: ['Bajo', 'p-info'], mejora: ['Mejora', 'p-cyan'] };
+  var SEV_COLOR = { crit: 'var(--crit)', alto: 'var(--danger)', medio: 'var(--warn)', bajo: 'var(--accent)', mejora: 'var(--cyan)' };
+  var WHO = { code: ['Lo hago yo (código)', 'p-ok'], access: ['Requiere tu acceso', 'p-warn'], build: ['Desarrollo nuevo', 'p-cyan'], decision: ['Decisión tuya', 'p-gray'] };
+
+  var AREAS = [
+ {
+  "id": "paquetes",
+  "title": "Paquetes de desarrollo",
+  "sub": "Versiones al día y vulnerabilidades conocidas (npm audit).",
+  "verdict": [
+   "Regular",
+   "p-warn"
+  ],
+  "summary": "11 vulnerabilidades conocidas (1 crítica) y Node 20 sin soporte. Casi todo se arregla con una actualización.",
+  "extra": "<div class=\"card tbl-wrap extra\"><table><tr><th>Paquete</th><th>Instalada</th><th>Disponible</th><th>Qué hacer</th></tr><tr><td><b>sharp</b></td><td>0.35.4</td><td>0.35.5</td><td><span class=\"pill p-danger\">Subir ya</span> vulnerabilidad alta</td></tr><tr><td><b>express</b></td><td>4.22.2</td><td>4.22.3 · 5.3.0</td><td>Subir el parche; pasar a 5 es opcional</td></tr><tr><td><b>multer · pg · csv-parse</b></td><td>2.2.0 · 8.22.0 · 7.0.2</td><td>2.4.0 · 8.23.1 · 7.0.3</td><td>Subir</td></tr><tr><td><b>react · react-dom</b></td><td>18.3.1</td><td>19.3.1</td><td>Sigue soportado; migrar cuando haya tiempo</td></tr><tr><td><b>vite · plugin-react</b></td><td>5.4.21 · 4.7.0</td><td>8.3.4 · 6.1.2</td><td>Tres versiones mayores atrás; solo afecta al build</td></tr><tr><td><b>framer-motion · lucide-react · react-hot-toast</b></td><td>13.1 · 1.28 · 2.6.0</td><td>14.4 · 1.60 · 2.6.1</td><td>Opcional</td></tr></table></div>",
+  "items": [
+   {
+    "k": "p-audit-back",
+    "sev": "crit",
+    "t": "Corregir las 6 vulnerabilidades del servidor",
+    "d": "Incluye <b>proxy-addr</b> (crítica: suplanta la IP y debilita el límite de intentos de inicio de sesión), <b>sharp</b> (alta: procesa las imágenes que mandan los clientes) y <b>qs, body-parser, express</b> (moderadas: denegación de servicio).",
+    "fix": "Ejecutar <code>npm audit fix</code> en el backend, correr las pruebas y desplegar.",
+    "where": "crm/backend/package.json",
+    "effort": "Bajo · 1 h",
+    "who": "code"
+   },
+   {
+    "k": "p-minor",
+    "sev": "bajo",
+    "t": "Subir parches menores del backend",
+    "d": "multer 2.2→2.4, pg 8.22→8.23, csv-parse 7.0.2→7.0.3. Sin cambios de comportamiento esperados.",
+    "fix": "Actualizar en el mismo cambio que el punto anterior.",
+    "where": "crm/backend/package.json",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "p-node",
+    "sev": "alto",
+    "t": "Subir Node 20 (sin soporte desde abril de 2026) a Node 22 o 24",
+    "d": "Las imágenes Docker siguen en <code>node:20-alpine</code>, que ya no recibe parches de seguridad.",
+    "fix": "Cambiar la imagen base de los Dockerfiles, correr las pruebas y desplegar primero en un entorno de prueba.",
+    "where": "crm/backend/Dockerfile · crm/frontend/Dockerfile",
+    "effort": "Bajo-medio · 2 h",
+    "who": "code"
+   },
+   {
+    "k": "p-xlsx",
+    "sev": "medio",
+    "t": "Reemplazar la librería xlsx (alta, sin arreglo en npm)",
+    "d": "Tiene contaminación de prototipo y ReDoS. El riesgo real es bajo: el CRM solo <b>escribe</b> Excel y nunca lee archivos de usuarios (no hay <code>XLSX.read</code>). Aun así conviene cambiarla.",
+    "fix": "Usar una librería de exportación mantenida (por ejemplo exceljs) y cargarla solo al exportar.",
+    "where": "crm/frontend (exportaciones a Excel)",
+    "effort": "Medio · 0,5 día",
+    "who": "code"
+   },
+   {
+    "k": "p-vite",
+    "sev": "bajo",
+    "t": "Subir Vite 5→8 y plugin-react (corrige nanoid y source-map-js)",
+    "d": "Las dos vulnerabilidades altas del frontend están en herramientas de compilación, no llegan al navegador del usuario.",
+    "fix": "Actualizar, compilar y probar el CRM completo en local antes de desplegar.",
+    "where": "crm/frontend/package.json",
+    "effort": "Medio · 0,5 día",
+    "who": "code"
+   },
+   {
+    "k": "p-npmci",
+    "sev": "medio",
+    "t": "Usar <code>npm ci</code> en los Dockerfiles",
+    "d": "Con <code>npm install</code> dos despliegues pueden instalar versiones distintas de un mismo paquete.",
+    "fix": "Cambiar a <code>npm ci</code> (usa el lockfile exacto).",
+    "where": "crm/backend/Dockerfile · crm/frontend/Dockerfile",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "p-pin",
+    "sev": "medio",
+    "t": "Fijar la versión de n8n y del servidor SFTP",
+    "d": "Las imágenes <code>n8nio/n8n:latest</code> y <code>atmoz/sftp</code> no tienen versión fija: un despliegue puede traer cambios inesperados.",
+    "fix": "Poner una versión concreta en el compose y actualizarla a propósito.",
+    "where": "docker-compose.yml",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "p-root",
+    "sev": "medio",
+    "t": "Que los contenedores no corran como root",
+    "d": "El backend no declara <code>USER node</code>: si alguien explota un fallo, tiene permisos de administrador dentro del contenedor.",
+    "fix": "Agregar <code>USER node</code> y ajustar permisos de la carpeta de subidas.",
+    "where": "crm/backend/Dockerfile",
+    "effort": "Bajo-medio",
+    "who": "code"
+   },
+   {
+    "k": "p-lint",
+    "sev": "mejora",
+    "t": "Agregar ESLint y pruebas del frontend",
+    "d": "No hay linter ni TypeScript ni pruebas del frontend. Hay 13 archivos de pruebas, casi todos del motor de ventas.",
+    "fix": "ESLint con reglas básicas primero; luego pruebas de los flujos críticos (cotizar, cerrar el día).",
+    "where": "crm/frontend",
+    "effort": "Medio · 1 día",
+    "who": "build"
+   },
+   {
+    "k": "p-react",
+    "sev": "mejora",
+    "t": "Migrar a React 19 y actualizar librerías de interfaz",
+    "d": "React 18 sigue soportado; framer-motion, lucide-react y react-hot-toast tienen versiones nuevas. Opcional.",
+    "fix": "Hacerlo cuando haya tiempo, en un cambio aparte.",
+    "where": "crm/frontend/package.json",
+    "effort": "Medio",
+    "who": "code"
+   }
+  ]
+ },
+ {
+  "id": "codigo",
+  "title": "Seguridad de código",
+  "sub": "Qué está bien y qué hay que corregir, de más a menos grave.",
+  "verdict": [
+   "Aceptable · 4 fallos serios",
+   "p-warn"
+  ],
+  "summary": "Buenas bases, con 4 puntos serios por corregir. El detalle está en el informe privado.",
+  "extra": "<div class=\"card pad extra\"><h3 style=\"margin-bottom:6px\">Lo que está bien (verificado en el código)</h3><ul class=\"okl\"><li>Todo el SQL usa parámetros; los fragmentos dinámicos (orden, columnas) están en listas blancas.</li><li>Contraseñas con bcrypt (mínimo 8 caracteres); cookie de sesión <code>httpOnly</code> y CORS limitado a un origen.</li><li>Los tokens de Meta y WhatsApp se guardan cifrados (AES-256-GCM).</li><li>Los endpoints de n8n exigen un secreto y fallan cerrado si no está configurado.</li><li>Sin <code>eval</code> ni <code>innerHTML</code>; los subprocesos usan <code>execFile</code> sin shell; subidas con lista blanca de tipos.</li><li>Rutas de administración protegidas por rol.</li></ul></div>",
+  "items": [
+   {
+    "k": "s2-webhook",
+    "sev": "alto",
+    "t": "S2 · Verificación de firma de los webhooks",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 2 h",
+    "who": "code"
+   },
+   {
+    "k": "s3-sesiones",
+    "sev": "alto",
+    "t": "S3 · Control y revocación de sesiones",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Medio · 0,5 día",
+    "who": "code"
+   },
+   {
+    "k": "s4-ventas",
+    "sev": "alto",
+    "t": "S4a · Permisos de edición de ventas",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 2 h",
+    "who": "code"
+   },
+   {
+    "k": "s4-adjuntos",
+    "sev": "alto",
+    "t": "S4b · Permisos de acceso a adjuntos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo-medio · 3 h",
+    "who": "code"
+   },
+   {
+    "k": "s4-lineas",
+    "sev": "medio",
+    "t": "S4c · Aislamiento de datos por línea",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Medio · 0,5 día",
+    "who": "code"
+   },
+   {
+    "k": "s5-headers",
+    "sev": "medio",
+    "t": "S5a · Cabeceras de seguridad",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 2 h",
+    "who": "code"
+   },
+   {
+    "k": "s5-cookie",
+    "sev": "medio",
+    "t": "S5b · Configuración de la cookie de sesión",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "s5-svg",
+    "sev": "medio",
+    "t": "S5c · Entrega segura de adjuntos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "s6-clave",
+    "sev": "medio",
+    "t": "S6a · Gestión de la clave de cifrado",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "s6-openai",
+    "sev": "alto",
+    "t": "S6b · Rotar la llave de OpenAI",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 5 min",
+    "who": "access"
+   },
+   {
+    "k": "s6-compare",
+    "sev": "bajo",
+    "t": "S6c · Comparación de secretos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "s7-limites",
+    "sev": "bajo",
+    "t": "S7a · Límites de tamaño y de intentos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Medio",
+    "who": "code"
+   },
+   {
+    "k": "s7-cabecera",
+    "sev": "bajo",
+    "t": "S7b · Validación de la imagen de cabecera",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "s7-sse",
+    "sev": "medio",
+    "t": "S7c · Eventos en vivo por línea",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Medio",
+    "who": "code"
+   },
+   {
+    "k": "s8-higiene",
+    "sev": "bajo",
+    "t": "S8 · Higiene de registros y respaldos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo",
+    "who": "code"
+   }
+  ]
+ },
+ {
+  "id": "servidor",
+  "title": "Seguridad del servidor",
+  "sub": "Comprobado desde fuera, sin intentar entrar a ningún servicio.",
+  "verdict": [
+   "Mala",
+   "p-danger"
+  ],
+  "summary": "Hay servicios internos que deben protegerse mejor. El detalle está en el informe privado.",
+  "extra": "<div class=\"card pad extra\"><h3>Detalle de seguridad</h3><p class=\"sub\">Este repositorio es público, así que aquí solo se listan los puntos de seguridad y su estado. La explicación de cada fallo, los archivos y los puertos están en el informe privado de la auditoría.</p></div>",
+  "items": [
+   {
+    "k": "sv-ports",
+    "sev": "crit",
+    "t": "S1a · Exposición de servicios internos",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 30 min",
+    "who": "access"
+   },
+   {
+    "k": "sv-firewall",
+    "sev": "crit",
+    "t": "S1b · Firewall del servidor",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo · 30 min",
+    "who": "access"
+   },
+   {
+    "k": "sv-dokploy",
+    "sev": "alto",
+    "t": "S1c · Protección del panel de administración",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo-medio · 1 h",
+    "who": "access"
+   },
+   {
+    "k": "sv-remoto",
+    "sev": "medio",
+    "t": "S1d · Acceso remoto restringido",
+    "d": "Detalle en el informe privado de la auditoría.",
+    "fix": "",
+    "where": "",
+    "effort": "Bajo-medio",
+    "who": "access"
+   }
+  ]
+ },
+ {
+  "id": "optimizacion",
+  "title": "Optimización",
+  "sub": "Funcional y de código, por impacto.",
+  "verdict": [
+   "Buena base",
+   "p-info"
+  ],
+  "summary": "Lo más pesado ya se arregló esta semana; quedan 7 puntos concretos.",
+  "extra": "<div class=\"card pad extra\"><h3 style=\"margin-bottom:6px\">Ya hecho esta semana</h3><ul class=\"okl\"><li>Lista de chats: de ~800 ms a ~25 ms. Contador de no leídos: de 130 a ~25 ms.</li><li>Lector de comprobantes compartido; análisis y auditoría con tope de CPU; consulta del chat social cada 30 s en vez de 3 s.</li></ul></div>",
+  "items": [
+   {
+    "k": "o-gzip",
+    "sev": "alto",
+    "t": "Activar compresión y caché en nginx",
+    "d": "El navegador baja ~1,2 MB de JavaScript sin comprimir y sin caché. Con gzip y <code>Cache-Control: immutable</code> en los archivos con huella, la primera carga baja ~70 % y las siguientes casi no descargan nada.",
+    "fix": "Agregar gzip y caché de assets en la configuración de nginx del frontend.",
+    "where": "crm/frontend/nginx.conf",
+    "effort": "Bajo · 1 h",
+    "who": "code"
+   },
+   {
+    "k": "o-logo",
+    "sev": "medio",
+    "t": "Aligerar el logo (284 KB → ~15 KB)",
+    "d": "<code>logo-icon.png</code> se carga en la pantalla de entrada y pesa 19 veces lo necesario.",
+    "fix": "Redimensionar a 2 tamaños (96 y 192 px) y servir WebP/PNG optimizado.",
+    "where": "crm/frontend/public/logo-icon.png",
+    "effort": "Bajo",
+    "who": "code"
+   },
+   {
+    "k": "o-lista",
+    "sev": "alto",
+    "t": "Lista de chats con filtros todavía usa la consulta antigua",
+    "d": "Con filtros (línea, búsqueda, no leídos) tarda ~1 s con el volumen actual y crece con cada mensaje.",
+    "fix": "Llevar los filtros al camino rápido que ya usa la lista sin filtros.",
+    "where": "crm/backend/src/conversationList.js",
+    "effort": "Medio · 0,5 día",
+    "who": "code"
+   },
+   {
+    "k": "o-tickets",
+    "sev": "medio",
+    "t": "Paginar GET /api/tickets",
+    "d": "Devuelve ~10.800 tickets (1,5 MB) en cada llamada.",
+    "fix": "Paginar y filtrar en el servidor.",
+    "where": "crm/backend/src/routes/tickets.js",
+    "effort": "Medio",
+    "who": "code"
+   },
+   {
+    "k": "o-tablas",
+    "sev": "medio",
+    "t": "Archivar las tablas que solo crecen",
+    "d": "<code>access_audit</code> (75 mil filas), <code>processed_messages</code> (50 mil) y <code>n8n_chat_histories</code> (152 mil) no tienen política de archivado.",
+    "fix": "Borrar o archivar lo anterior a N meses con una tarea programada, y agregar índices por fecha.",
+    "where": "Base de datos",
+    "effort": "Medio",
+    "who": "code"
+   },
+   {
+    "k": "o-archivos",
+    "sev": "mejora",
+    "t": "Partir los archivos gigantes",
+    "d": "<code>Conversations.jsx</code> 3.463 líneas, <code>SalesAdvisorDashboard.jsx</code> 1.631, <code>conversations.js</code> 1.567, <code>tickets.js</code> 1.169. Funcionan, pero cada cambio es lento y arriesgado.",
+    "fix": "Dividir en componentes y módulos, empezando por Conversations.jsx.",
+    "where": "crm/frontend/src · crm/backend/src/routes",
+    "effort": "Alto · varios días",
+    "who": "code"
+   },
+   {
+    "k": "o-xlsx",
+    "sev": "bajo",
+    "t": "Cargar xlsx solo al exportar (283 KB)",
+    "d": "La librería viaja en la carga del dashboard aunque solo se use al exportar.",
+    "fix": "Importación dinámica en el momento de exportar.",
+    "where": "crm/frontend/src (exportaciones)",
+    "effort": "Bajo",
+    "who": "code"
+   }
+  ]
+ },
+ {
+  "id": "mejoras",
+  "title": "Mejoras del sistema completo",
+  "sub": "Chats, catálogo, dashboards y administración.",
+  "verdict": [
+   "Oportunidades",
+   "p-cyan"
+  ],
+  "summary": "Funciones que acercan el CRM a operar sin depender de herramientas externas.",
+  "extra": "",
+  "items": [
+   {
+    "k": "c-programar",
+    "sev": "mejora",
+    "t": "Chats · Mensajes programados y notas internas",
+    "d": "Programar una respuesta para después y dejar notas que el cliente no ve.",
+    "fix": "Tabla de mensajes programados con un proceso que los envíe; notas como un tipo de mensaje interno.",
+    "where": "Conversaciones",
+    "effort": "Medio · 2 días",
+    "who": "build"
+   },
+   {
+    "k": "c-turno",
+    "sev": "mejora",
+    "t": "Chats · Asignación automática por turno",
+    "d": "Que los chats nuevos lleguen a quien está en turno (mañana o tarde).",
+    "fix": "Reglas de turno por usuario y reparto equitativo.",
+    "where": "Conversaciones · usuarios",
+    "effort": "Medio",
+    "who": "build"
+   },
+   {
+    "k": "c-etiquetas",
+    "sev": "mejora",
+    "t": "Chats · Etiquetas y resumen automático del chat",
+    "d": "Clasificar conversaciones y mostrar un resumen al abrir un chat largo.",
+    "fix": "Etiquetas por conversación y un resumen generado bajo demanda.",
+    "where": "Conversaciones",
+    "effort": "Medio",
+    "who": "build"
+   },
+   {
+    "k": "c-tiempo",
+    "sev": "mejora",
+    "t": "Chats · Tiempo de respuesta por asesora",
+    "d": "Medir cuánto tarda cada asesora en responder.",
+    "fix": "Calcular desde los mensajes ya guardados y mostrarlo en el dashboard.",
+    "where": "Dashboard",
+    "effort": "Bajo-medio",
+    "who": "build"
+   },
+   {
+    "k": "k-commerce",
+    "sev": "mejora",
+    "t": "Catálogo · Publicarlo en WhatsApp (Commerce)",
+    "d": "Hoy el catálogo es un espejo del ERP, solo lectura.",
+    "fix": "Sincronizar el catálogo con Meta Commerce.",
+    "where": "Catálogo",
+    "effort": "Alto",
+    "who": "build"
+   },
+   {
+    "k": "k-enviar",
+    "sev": "mejora",
+    "t": "Catálogo · Enviar productos por el chat con un clic",
+    "d": "Evitar copiar fotos y precios a mano.",
+    "fix": "Botón \"enviar producto\" que compone foto, precio y referencia.",
+    "where": "Catálogo · Conversaciones",
+    "effort": "Medio",
+    "who": "build"
+   },
+   {
+    "k": "d-alerta",
+    "sev": "mejora",
+    "t": "Dashboards · Alertar a las 4 y 9 pm si el cierre no coincide",
+    "d": "Avisar cuando el cierre del motor y lo reportado por la asesora difieren.",
+    "fix": "Reutilizar el cierre del día y notificar a supervisión.",
+    "where": "Cierre del día",
+    "effort": "Bajo-medio",
+    "who": "build"
+   },
+   {
+    "k": "d-erp",
+    "sev": "mejora",
+    "t": "Dashboards · Comparar contra el ERP cuando ya traiga la factura",
+    "d": "Mostrar la diferencia entre lo que ve el chat y lo que factura el ERP.",
+    "fix": "Cruce por teléfono y monto cuando el ERP lo permita.",
+    "where": "Dashboard de ventas",
+    "effort": "Medio",
+    "who": "build"
+   },
+   {
+    "k": "a-quien",
+    "sev": "mejora",
+    "t": "Administración · Ver \"quién cambió qué\" por pantalla",
+    "d": "El registro de acciones existe, pero no se puede consultar con filtros.",
+    "fix": "Pantalla de auditoría con filtros por usuario, acción y fecha.",
+    "where": "Administración",
+    "effort": "Medio",
+    "who": "build"
+   },
+   {
+    "k": "a-respaldo",
+    "sev": "alto",
+    "t": "Administración · Probar una restauración de respaldo",
+    "d": "Un respaldo que nunca se restauró no es un respaldo comprobado.",
+    "fix": "Restaurar la última copia en un servidor de prueba y verificar los datos.",
+    "where": "Dokploy · base de datos",
+    "effort": "Medio · 0,5 día",
+    "who": "access"
+   },
+   {
+    "k": "a-monitoreo",
+    "sev": "mejora",
+    "t": "Administración · Monitoreo con alertas",
+    "d": "CPU, errores y cola de mensajes con aviso cuando algo falla.",
+    "fix": "Alertas sobre los registros lentos y sobre el estado de los servicios.",
+    "where": "Servidor",
+    "effort": "Medio",
+    "who": "build"
+   }
+  ]
+ },
+ {
+  "id": "marketing",
+  "title": "Página de Marketing",
+  "sub": "Veredicto estricto: qué hace cada pestaña de verdad.",
+  "verdict": [
+   "No dejarla como está",
+   "p-danger"
+  ],
+  "summary": "Envía difusiones, pero no gestiona publicidad; y una pestaña muestra datos fijos.",
+  "extra": "<div class=\"card tbl-wrap extra\"><table><tr><th>Pestaña</th><th>Estado</th><th>Qué hace de verdad</th></tr><tr><td><b>Pipeline</b></td><td><span class=\"pill p-ok\">Funciona</span></td><td>Lista los clientes dormidos (sin actividad más de 24 h) por etapa y los exporta a Excel. Útil para reactivar.</td></tr><tr><td><b>Difusión</b></td><td><span class=\"pill p-warn\">Incompleta</span></td><td>Envía plantillas con pausa de 42 h, exclusión de quienes no quieren, reintento y estado de entrega. <b>Falta:</b> programar, pausar un envío en curso, medir respuestas y <b>compras por campaña</b>, costo por campaña, prueba A/B, horarios permitidos.</td></tr><tr><td><b>Estrategia Meta &amp; Costos</b></td><td><span class=\"pill p-danger\">Parcialmente falsa</span></td><td>Precios, límites por nivel y \"nivel actual\" <b>escritos a mano en el código</b>. Los conteos de audiencia <b>salen siempre en 0</b> por un error de nombres. Costos en pesos colombianos para un negocio en Guatemala.</td></tr><tr><td><b>Plantillas</b> (admin)</td><td><span class=\"pill p-warn\">Básica</span></td><td>Crea, borra y muestra el estado (aprobada, en revisión, rechazada con motivo). Falta editar, botones, plantillas con imagen o video y rendimiento por plantilla.</td></tr></table></div><h3 style=\"margin:18px 0 10px\">Lo que no existe y obliga a seguir entrando a Meta</h3><div class=\"grid3 extra\"><div class=\"card pad\"><h3>Anuncios</h3><p class=\"sub\">El CRM solo lee el gasto: no crea, pausa ni cambia presupuestos, públicos o creativos.</p></div><div class=\"card pad\"><h3>API de Conversiones</h3><p class=\"sub\">Meta no sabe cuándo un cliente compró, así que sus anuncios optimizan a ciegas. La mejora de mayor retorno que falta.</p></div><div class=\"card pad\"><h3>Costo real por venta</h3><p class=\"sub\">Gasto de anuncios entre ventas reales del CRM, por campaña. Hoy solo hay un promedio general.</p></div><div class=\"card pad\"><h3>Públicos personalizados</h3><p class=\"sub\">Subir listas de compradores o de quienes cotizaron y no compraron.</p></div><div class=\"card pad\"><h3>Respuesta y ROI por difusión</h3><p class=\"sub\">Cuántos respondieron, cuántos compraron, cuánto ingresó.</p></div><div class=\"card pad\"><h3>Catálogo, Flows y secuencias</h3><p class=\"sub\">Commerce, formularios dentro del chat, mensajes programados y recordatorios automáticos.</p></div></div>",
+  "items": [
+   {
+    "k": "m1-estrategia",
+    "sev": "alto",
+    "t": "1 · Arreglar la pestaña Estrategia Meta",
+    "d": "Datos reales de Meta (nivel de mensajería, calidad), moneda en quetzales o dólares, y el error que deja las audiencias en 0.",
+    "fix": "Consultar el nivel real por la API, usar los nombres correctos de temperatura (tibio, caliente, frío) y quitar los valores escritos a mano.",
+    "where": "crm/frontend (Marketing) · routes/campaigns.js",
+    "effort": "Bajo · 1 día",
+    "who": "build"
+   },
+   {
+    "k": "m2-medir",
+    "sev": "alto",
+    "t": "2 · Medir cada difusión: respondieron, compraron, ingreso",
+    "d": "Hoy se sabe cuántos mensajes salieron, no qué pasó después.",
+    "fix": "Cruzar los destinatarios con respuestas y ventas del motor en una ventana de días.",
+    "where": "Difusión · motor de ventas",
+    "effort": "Medio · 2 a 3 días",
+    "who": "build"
+   },
+   {
+    "k": "m3-programar",
+    "sev": "medio",
+    "t": "3 · Programar y pausar envíos",
+    "d": "No se puede dejar una difusión para una hora ni detener una en curso.",
+    "fix": "Estado \"programada\" y botón pausar/cancelar en el proceso de envío.",
+    "where": "Difusión",
+    "effort": "Medio · 2 días",
+    "who": "build"
+   },
+   {
+    "k": "m4-anuncios",
+    "sev": "medio",
+    "t": "4 · Panel de anuncios (solo lectura) con costo real por venta",
+    "d": "Gasto por campaña dividido entre ventas reales del CRM.",
+    "fix": "Leer gasto por campaña con la API de anuncios y cruzarlo con las ventas.",
+    "where": "Marketing (nueva pestaña)",
+    "effort": "Medio · 3 días",
+    "who": "build"
+   },
+   {
+    "k": "m5-conversiones",
+    "sev": "alto",
+    "t": "5 · API de Conversiones: enviar las compras a Meta",
+    "d": "Meta no recibe cuándo un cliente compró; sus anuncios optimizan a ciegas. Es la mejora con mayor retorno.",
+    "fix": "Enviar cada venta confirmada como evento de compra con el identificador del anuncio.",
+    "where": "Motor de ventas → Meta",
+    "effort": "Medio · 3 a 4 días",
+    "who": "build"
+   },
+   {
+    "k": "m6-publicos",
+    "sev": "mejora",
+    "t": "6 · Públicos personalizados y luego crear o pausar anuncios",
+    "d": "Subir listas de compradores o de quienes cotizaron y no compraron, y gestionar anuncios sin entrar a Meta.",
+    "fix": "Sincronizar listas con Meta y, después, crear y pausar anuncios desde el CRM.",
+    "where": "Marketing",
+    "effort": "Alto · 1 a 2 semanas",
+    "who": "build"
+   },
+   {
+    "k": "m7-plantillas",
+    "sev": "mejora",
+    "t": "Plantillas · editar, botones, imagen o video y rendimiento",
+    "d": "Hoy solo se crean y se borran.",
+    "fix": "Editor de plantillas con botones y multimedia, y métricas de lectura y respuesta por plantilla.",
+    "where": "Plantillas",
+    "effort": "Medio",
+    "who": "build"
+   }
+  ]
+ }
+
+  ];
+
+  /* ====== utilidades ====== */
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return [].slice.call((r || document).querySelectorAll(s)); };
+  function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: no recuerda el tema */ } }
+  function when(iso) { try { return new Date(iso).toLocaleString('es-GT', { timeZone: 'America/Guatemala', dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return iso; } }
+  var API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:4000' : 'https://api.bagneres.online';
+  var state = {}, canEdit = false, filt = { status: 'all', sev: 'all', q: '' };
+  var ALL = []; AREAS.forEach(function (a) { a.items.forEach(function (i) { i.area = a.id; ALL.push(i); }); });
+  var TITLE = {}; ALL.forEach(function (i) { TITLE[i.k] = i.t.replace(/<[^>]+>/g, ''); });
+  var isDone = function (k) { return !!(state[k] && state[k].done); };
+
+  /* ====== dibujo ====== */
+  function itemHtml(i) {
+    var sv = SEV[i.sev], wh = WHO[i.who];
+    return '<article class="item" data-k="' + i.k + '" data-sev="' + i.sev + '" data-area="' + i.area + '">' +
+      '<label class="chk"><input type="checkbox" aria-label="Marcar como hecho" /><span></span></label>' +
+      '<div><div class="ihead"><h3>' + i.t + '</h3><div class="badges"><span class="pill ' + sv[1] + '">' + sv[0] + '</span><span class="pill ' + wh[1] + '">' + wh[0] + '</span><span class="pill p-gray">' + i.effort + '</span></div></div>' +
+      (i.d ? '<p class="idesc">' + i.d + '</p>' : '') +
+      (i.fix ? '<details class="more"><summary>Cómo se arregla</summary><div class="fix"><b>Arreglo:</b> ' + i.fix + '<span class="where">Dónde: <code>' + i.where + '</code></span></div></details>' : '') +
+      '<div class="who"></div></div></article>';
+  }
+  function build() {
+    $('#nav').innerHTML = '<a href="#resumen">Resumen<span></span></a>' + AREAS.map(function (a) { return '<a href="#' + a.id + '" data-a="' + a.id + '">' + a.title.replace('Página de ', '').replace(' del sistema completo', '').replace(' de desarrollo', '').replace('Seguridad de código', 'Código').replace('Seguridad del servidor', 'Servidor') + '<span class="cnt"></span></a>'; }).join('') + '<a href="#limites">No verificado<span></span></a><a href="#historial">Historial<span></span></a>';
+    $('#verdicts').innerHTML = AREAS.map(function (a) { return '<a class="vrow" href="#' + a.id + '"><span class="area">' + a.title + '</span><span class="pill ' + a.verdict[1] + '">' + a.verdict[0] + '</span><span class="txt">' + a.summary + '</span><span class="left" data-left="' + a.id + '"></span></a>'; }).join('');
+    $('#fSev').innerHTML = Object.keys(SEV).map(function (k) { return '<button class="chip" type="button" data-v="' + k + '" aria-pressed="false">' + SEV[k][0] + '</button>'; }).join('');
+    $('#areas').innerHTML = AREAS.map(function (a) {
+      return '<section id="' + a.id + '" class="area" data-area="' + a.id + '"><div class="sec-head"><div><h2>' + a.title + '</h2><p class="sub">' + a.sub + '</p></div>' +
+        '<div style="display:grid;gap:8px;justify-items:end"><span class="pill ' + a.verdict[1] + '">' + a.verdict[0] + '</span><div class="area-prog"><div class="meter"><i data-meter="' + a.id + '"></i></div><span data-prog="' + a.id + '"></span></div></div></div>' +
+        a.extra + '<div class="card items">' + a.items.map(itemHtml).join('') + '<div class="empty" hidden>Ningún punto coincide con el filtro.</div></div></section>';
+    }).join('');
+    var sevs = Object.keys(SEV);
+    $('#tiles').innerHTML = sevs.map(function (k) { return '<div class="card tile"><span class="eyebrow"><i class="dot" style="background:' + SEV_COLOR[k] + '"></i>' + SEV[k][0] + '</span><b data-t="' + k + '"></b></div>'; }).join('');
+  }
+
+  function paint() {
+    var done = 0, bySev = {}, byArea = {};
+    ALL.forEach(function (i) { var s = bySev[i.sev] = bySev[i.sev] || [0, 0], a = byArea[i.area] = byArea[i.area] || [0, 0]; s[1]++; a[1]++; if (isDone(i.k)) { s[0]++; a[0]++; done++; } });
+    $$('.item').forEach(function (el) {
+      var k = el.dataset.k, s = state[k], on = isDone(k), cb = $('input', el);
+      el.classList.toggle('done', on); cb.checked = on; cb.disabled = !canEdit;
+      $('.who', el).textContent = s && s.at ? (on ? 'Hecho por ' : 'Desmarcado por ') + s.by + ' · ' + when(s.at) : '';
     });
-    var links = [].slice.call(document.querySelectorAll('#nav a')), secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
-    function spy() { var y = window.scrollY + 120, cur = 0; secs.forEach(function (s, i) { if (s && s.offsetTop <= y) cur = i; }); links.forEach(function (a, i) { a.classList.toggle('on', i === cur); }); }
-    addEventListener('scroll', spy, { passive: true }); spy();
-    var items = [].slice.call(document.querySelectorAll('#plan li')), prog = document.getElementById('prog'), msg = document.getElementById('planMsg'), logEl = document.getElementById('planLog');
-    var API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:4000' : 'https://api.bagneres.online';
-    var state = {}, canEdit = false;
-    function when(iso) { try { return new Date(iso).toLocaleString('es-GT', { timeZone: 'America/Guatemala', dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return iso; } }
-    function paint() {
-      var n = 0;
-      items.forEach(function (li) {
-        var s = state[li.dataset.k], on = !!(s && s.done), who = li.querySelector('.who'), cb = li.querySelector('input');
-        li.classList.toggle('done', on); cb.checked = on; cb.disabled = !canEdit;
-        who.textContent = s && s.at ? (on ? 'Hecho por ' : 'Desmarcado por ') + s.by + ' · ' + when(s.at) : '';
-        if (on) n++;
-      });
-      prog.textContent = n + ' de ' + items.length;
-    }
-    function paintLog(log) {
-      logEl.textContent = '';
-      (log || []).forEach(function (e) {
-        var li = document.createElement('li'), name = document.querySelector('#plan li[data-k="' + e.key + '"] .n');
-        li.textContent = when(e.at) + ' · ' + e.by + (e.done ? ' marcó ' : ' desmarcó ') + '“' + (name ? name.firstChild.textContent.trim() : e.key) + '”';
-        logEl.appendChild(li);
-      });
-    }
-    function load() {
-      fetch(API + '/api/audit-checklist', { credentials: 'include' }).then(function (r) {
-        if (r.status === 401 || r.status === 403) { msg.textContent = 'Inicia sesión en el CRM como administrador para ver y marcar el checklist.'; msg.hidden = false; return null; }
-        if (!r.ok) throw new Error('error ' + r.status);
-        return r.json();
-      }).then(function (d) {
-        if (!d) { paint(); return; }
-        state = d.items; canEdit = true; msg.hidden = true; paint(); paintLog(d.log);
-      }).catch(function () { msg.textContent = 'No se pudo cargar el checklist. Intenta de nuevo en un momento.'; msg.hidden = false; paint(); });
-    }
-    items.forEach(function (li) {
-      li.querySelector('input').addEventListener('change', function (e) {
-        var done = e.target.checked;
-        fetch(API + '/api/audit-checklist/' + li.dataset.k, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: done }) })
-          .then(function (r) { if (!r.ok) throw new Error(); load(); })
-          .catch(function () { msg.textContent = 'No se pudo guardar el cambio. Revisa tu sesión e intenta de nuevo.'; msg.hidden = false; e.target.checked = !done; });
-      });
+    var pct = ALL.length ? Math.round(done * 100 / ALL.length) : 0;
+    $('#ringBar').setAttribute('stroke-dasharray', (264 * pct / 100) + ' 264'); $('#ringBar').style.opacity = pct ? 1 : 0; $('#ringPct').textContent = pct + '%'; $('#ringTxt').textContent = done + ' de ' + ALL.length;
+    Object.keys(SEV).forEach(function (k) { var v = bySev[k] || [0, 0]; $('[data-t="' + k + '"]').innerHTML = (v[1] - v[0]) + ' <small>pendientes de ' + v[1] + '</small>'; });
+    AREAS.forEach(function (a) {
+      var v = byArea[a.id]; $('[data-prog="' + a.id + '"]').textContent = v[0] + ' de ' + v[1]; $('[data-meter="' + a.id + '"]').style.width = (v[1] ? v[0] * 100 / v[1] : 0) + '%';
+      var pend = v[1] - v[0], c = $('#nav [data-a="' + a.id + '"] .cnt'); c.textContent = pend || '✓'; c.classList.toggle('zero', !pend);
+      $('[data-left="' + a.id + '"]').textContent = pend ? pend + ' pendientes' : 'Todo hecho ✓';
     });
-    paint(); load();
-  })();
+    applyFilter();
+  }
+  function applyFilter() {
+    var q = filt.q.trim().toLowerCase(), shown = 0;
+    $$('.item').forEach(function (el) {
+      var on = isDone(el.dataset.k), ok = (filt.status === 'all' || (filt.status === 'done') === on) && (filt.sev === 'all' || el.dataset.sev === filt.sev) && (!q || el.textContent.toLowerCase().indexOf(q) > -1);
+      el.hidden = !ok; if (ok) shown++;
+    });
+    $$('.area').forEach(function (s) { $('.empty', s).hidden = !!$$('.item:not([hidden])', s).length; });
+    $('#shown').textContent = shown + ' de ' + ALL.length + ' puntos';
+  }
+  function paintLog(log) {
+    var ul = $('#planLog'); ul.textContent = '';
+    if (!log || !log.length) { var e = document.createElement('li'); e.textContent = 'Todavía no hay movimientos.'; ul.appendChild(e); return; }
+    log.forEach(function (x) { var li = document.createElement('li'); li.textContent = when(x.at) + ' · ' + x.by + (x.done ? ' marcó ' : ' desmarcó ') + '“' + (TITLE[x.key] || x.key) + '”'; ul.appendChild(li); });
+  }
+  function notice(txt, withBtn) { $('#msgTxt').textContent = txt; $('#msgBtn').hidden = !withBtn; $('#msg').hidden = !txt; }
+
+  /* ====== datos del CRM (solo administradores) ====== */
+  function load() {
+    fetch(API + '/api/audit-checklist', { credentials: 'include' }).then(function (r) {
+      if (r.status === 401 || r.status === 403) { notice('Para marcar el checklist y ver el historial, inicia sesión en el CRM como administrador y vuelve a esta página.', true); return null; }
+      if (!r.ok) throw new Error('error ' + r.status);
+      return r.json();
+    }).then(function (d) {
+      if (!d) { paint(); return; }
+      state = d.items; canEdit = true; notice('', false); paint(); paintLog(d.log);
+    }).catch(function () { notice('No se pudo cargar el checklist. Intenta de nuevo en un momento.', false); paint(); });
+  }
+  function save(k, done, box) {
+    fetch(API + '/api/audit-checklist/' + k, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: done }) })
+      .then(function (r) { if (!r.ok) throw new Error(); load(); })
+      .catch(function () { notice('No se pudo guardar el cambio. Revisa tu sesión e intenta de nuevo.', false); box.checked = !done; });
+  }
+
+  /* ====== arranque ====== */
+  build();
+  $('#areas').addEventListener('change', function (e) { if (e.target.matches('.chk input')) save(e.target.closest('.item').dataset.k, e.target.checked, e.target); });
+  function chips(sel, key) { $(sel).addEventListener('click', function (e) { var b = e.target.closest('.chip'); if (!b) return; var already = b.getAttribute('aria-pressed') === 'true'; filt[key] = (key === 'sev' && already) ? 'all' : b.dataset.v; $$('.chip', $(sel)).forEach(function (c) { c.setAttribute('aria-pressed', String(c.dataset.v === filt[key])); }); applyFilter(); }); }
+  chips('#fStatus', 'status'); chips('#fSev', 'sev');
+  $('#fQ').addEventListener('input', function (e) { filt.q = e.target.value; applyFilter(); });
+
+  var root = document.documentElement, saved = safeGet('auditTheme'); if (saved) root.setAttribute('data-theme', saved);
+  $('#themeBtn').addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' || (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark'; root.setAttribute('data-theme', next); safeSet('auditTheme', next);
+  });
+  var links = $$('#nav a'), secs = links.map(function (a) { return $(a.getAttribute('href')); });
+  function spy() { var y = window.scrollY + 130, cur = 0; secs.forEach(function (s, i) { if (s && s.offsetTop <= y) cur = i; }); links.forEach(function (a, i) { a.classList.toggle('on', i === cur); }); }
+  addEventListener('scroll', spy, { passive: true }); spy();
+  paint(); load();
+})();
 </script>
 </body>
 </html>
