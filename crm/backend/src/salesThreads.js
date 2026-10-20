@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { buildEpisodes, receiptAmountInText, givesPaymentInfo, isPaymentInfoImageText, PAYMENT_IMAGE_MARKER, PAYINFO_FRESH_MS } from './salesRules.js';
+import { buildEpisodes, receiptAmountInText, givesPaymentInfo, isPaymentInfoImageText, PAYMENT_IMAGE_MARKER, PAYINFO_ATTRIBUTION_MS } from './salesRules.js';
 
 // Carga el hilo de UN cliente en UNA línea y lo convierte en ventas (episodios). Lo usan el
 // motor en vivo, la auditoría y el análisis histórico: una sola definición de "qué es una venta".
@@ -137,7 +137,7 @@ async function applyAttachments(events, ocr) {
 async function applyAdvisorImages(events, ocr) {
   const anchors = events.filter((e) => e.role === 'customer' && (e.ocrAmount || e.voucher)).map((e) => +new Date(e.at));
   if (events.length) anchors.push(+new Date(events[events.length - 1].at));
-  const near = (t) => anchors.some((a) => t <= a && a - t <= PAYINFO_FRESH_MS);
+  const near = (t) => anchors.some((a) => t <= a && a - t <= PAYINFO_ATTRIBUTION_MS);
   const candidates = events.filter((e) => e.role === 'advisor' && e.id > 0 && !givesPaymentInfo(e.text) && near(+new Date(e.at)));
   if (!candidates.length) return;
   const { rows } = await pool.query(

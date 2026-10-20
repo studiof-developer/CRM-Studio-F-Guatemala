@@ -184,6 +184,13 @@ async function saleFromEpisode(customer, ep, lineId, { clickUser = null } = {}) 
   });
 }
 
+// En vivo también se leen las imágenes que mandó la asesora (la tarjeta de medios de pago, sin texto): sin eso la venta se
+// acreditaba a quien escribió último (el cambio de turno) y no a quien dio los medios. Pocas lecturas, las de las últimas horas.
+async function buildLiveThread(customer, line, window) {
+  const ocr = createLazyOcrRunner({ maxReads: 10, throttle: false });
+  try { return await buildThread(customer, line, { ...window, ocr }); } finally { await ocr.close(); }
+}
+
 // --- 1. Comprobante recibido (OCR de imagen/PDF) -----------------------------------------
 
 // `amount` solo se pasa cuando la suma de varios comprobantes parciales ya coincide con lo
@@ -198,7 +205,7 @@ export async function recordSaleFromReceipt({ messageId, amount = null }) {
   const customer = await getCustomer(cRows[0].id);
   const line = lineFromSession(m.session_id) ?? (await defaultLineId());
 
-  const thread = await buildThread(customer, line, { from: new Date(+new Date(m.created_at) - LOOKBACK_MS), to: new Date() });
+  const thread = await buildLiveThread(customer, line, { from: new Date(+new Date(m.created_at) - LOOKBACK_MS), to: new Date() });
   const ep = thread.episodes.find((e) => e.eventId === Number(messageId));
   // Sin medios de pago antes y sin confirmación: no es concluyente. Si luego la asesora
   // confirma, confirmSaleByAdvisorMessage la toma. Si fue reenvío de otro pago, tampoco es venta.
@@ -241,7 +248,7 @@ export async function confirmSaleByAdvisorMessage({ customerId, user, channel = 
     if (pending.length) { broadcast('sales_changes', JSON.stringify({ saleId: pending[0].id })); return pending[0]; }
 
     // Si no, esta confirmación puede cerrar una venta nueva (prueba ya recibida o pago por link).
-    const thread = await buildThread(customer, line, { from: new Date(+now - LOOKBACK_MS), to: now });
+    const thread = await buildLiveThread(customer, line, { from: new Date(+now - LOOKBACK_MS), to: now });
     const ep = thread.episodes[thread.episodes.length - 1];
     // Seguimiento posterior ("proceso de alistamiento" tras una venta ya registrada): no hay venta nueva.
     if (!ep || !ep.verified || +now - +new Date(ep.confirmedAt) > 10 * 60000) return null;

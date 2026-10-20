@@ -109,9 +109,12 @@ function sortedByTime(events) {
 // pagó fuera de horario, quien le respondió primero en las siguientes 2 h.
 // Medios de pago "recientes": una cuenta o link enviado hace días (de una compra que no se cerró)
 // no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
-export const PAYINFO_FRESH_MS = 24 * 3600000;
+export const PAYINFO_FRESH_MS = 24 * 3600000; // venta PENDIENTE: medios de pago enviados hace menos de un día
+// Para ACREDITAR la venta, quien dio los medios de pago sigue siendo la dueña aunque el cliente pague al día siguiente
+// (cambio de turno): la asesora del turno siguiente solo recibe el comprobante. Más de 3 días ya es otra compra.
+export const PAYINFO_ATTRIBUTION_MS = 72 * 3600000;
 
-export function attributeAdvisor(events, atTime, { lookbackMs = 7 * 86400000, graceMs = 2 * 3600000, freshMs = PAYINFO_FRESH_MS } = {}) {
+export function attributeAdvisor(events, atTime, { lookbackMs = 7 * 86400000, graceMs = 2 * 3600000, freshMs = PAYINFO_ATTRIBUTION_MS } = {}) {
   const t = +new Date(atTime);
   const advisorEvents = sortedByTime(events).filter(
     (e) => e.role === 'advisor' && e.advisor && !GENERIC_ADVISOR_NAMES.has(String(e.advisor).trim().toLowerCase())
@@ -227,7 +230,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
     const t = +new Date(anchor.at);
     const windowStart = prevAt ?? t - lookbackMs;
     const cycle = sorted.filter((e) => +new Date(e.at) > windowStart && +new Date(e.at) <= t);
-    const payInfo = [...cycle].reverse().find((e) => e.role === 'advisor' && +new Date(e.at) >= t - PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
+    const payInfo = [...cycle].reverse().find((e) => e.role === 'advisor' && +new Date(e.at) >= t - PAYINFO_ATTRIBUTION_MS && givesPaymentInfo(e.text));
     // Quién la atendía se decide con lo ocurrido desde la venta anterior; solo si ahí no hay
     // nadie se recurre a todo el historial reciente.
     const attribution = attributeAdvisor(cycle, anchor.at) ?? attributeAdvisor(sorted, anchor.at);
@@ -248,8 +251,9 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
     if (type === 'confirmacion' && approvedPrice && !approvedPrice.approved) issues.push('precio_sin_aprobacion_del_cliente');
     if (amount != null && quote != null && Math.abs(amount - quote) >= 0.5) issues.push('monto_distinto_a_cotizacion');
     if (touched.length > 1) issues.push('varias_asesoras');
-    // Otra asesora habló después de los medios de pago y antes de la prueba: no está claro de quién es la venta.
-    const handoff = !!payInfo && cycle.some((e) => e.role === 'advisor' && e.advisor && +new Date(e.at) > +new Date(payInfo.at) && e.advisor !== payInfo.advisor);
+    // Dos asesoras distintas dieron medios de pago en esta compra (ej. el link de la mañana y la tarjeta de la tarde): se
+    // acredita a la última, pero queda por validar. Si solo una los dio, la venta es suya aunque otra reciba el comprobante.
+    const handoff = !!payInfo && cycle.some((e) => e.role === 'advisor' && e.advisor && e.advisor !== payInfo.advisor && +new Date(e.at) >= t - PAYINFO_ATTRIBUTION_MS && givesPaymentInfo(e.text));
     if (handoff) issues.push('asesora_por_validar');
     if (!attribution) issues.push('sin_asesora');
     if (type === 'confirmacion' && !voucher && !proof.some((e) => e.image || e.ocrAmount)) issues.push('sin_prueba_del_cliente');

@@ -11,7 +11,8 @@ import { getSetting } from './routes/settings.js';
 // Tras cada lectura se espera hasta el mismo tiempo que tomó (máx. 4 s): el trabajo usa ~la mitad de la CPU.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function createLazyOcrRunner({ maxReads = Infinity } = {}) {
+// throttle=false: el flujo en vivo (registrar una venta) no puede esperar esas pausas.
+export function createLazyOcrRunner({ maxReads = Infinity, throttle = true } = {}) {
   let session = null;
   let extraKeywords = null;
   let reads = 0;
@@ -39,7 +40,7 @@ export function createLazyOcrRunner({ maxReads = Infinity } = {}) {
         'INSERT INTO attachment_ocr (attachment_id, amount, voucher, snippet) VALUES ($1, $2, $3, $4) ON CONFLICT (attachment_id) DO NOTHING',
         [att.id, amount, voucher, snippet]
       );
-      await sleep(Math.min(Date.now() - t0, 4000));
+      if (throttle) await sleep(Math.min(Date.now() - t0, 4000));
       return { amount, voucher, snippet };
     },
     async close() {

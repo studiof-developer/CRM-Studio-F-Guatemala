@@ -380,17 +380,16 @@ test('medios de pago del mismo día siguen mandando (cambio de turno)', () => {
   assert.equal(buildEpisodes(eventos).episodes[0]?.advisor, 'Aura');
 });
 
-test('otra asesora toma el chat después de los medios de pago: la venta queda por validar', () => {
+test('otra asesora solo conversa después de los medios de pago: la venta sigue siendo de quien los dio', () => {
   const eventos = [
     adv(gt('17', '10:21'), 'Luisa', 'https://pay.neolink.com.gt/VEL130042900'),
-    adv(gt('17', '16:30'), 'Aura', ''), // imagen de "medios de pago" sin texto
+    adv(gt('17', '16:30'), 'Aura', 'Quedo atenta al comprobante'),
     img(gt('17', '16:38'), 349.5),
     adv(gt('17', '16:55'), 'Aura', CANONICA),
   ];
   const [ep] = buildEpisodes(eventos).episodes;
   assert.equal(ep.advisor, 'Luisa');
-  assert.equal(ep.attributionUncertain, true);
-  assert.ok(ep.issues.includes('asesora_por_validar'));
+  assert.equal(ep.attributionUncertain, false);
 });
 
 test('una sola asesora de principio a fin no queda por validar', () => {
