@@ -111,15 +111,32 @@ function sortedByTime(events) {
 // no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
 export const PAYINFO_FRESH_MS = 24 * 3600000;
 
+// Quien atiende el chat pero no es una asesora de ventas: sus mensajes valen como evidencia (medios de pago, confirmación) pero
+// nunca se le acredita la venta. shortcut: lista fija por nombre; pasarla a configuración si se agregan más.
+const NOT_SELLERS = new Set(['luisa cristancho']);
+export const isSeller = (name) => { const n = String(name ?? '').trim().toLowerCase(); return !!n && !GENERIC_ADVISOR_NAMES.has(n) && !NOT_SELLERS.has(n); };
+
+// Si una asesora escribió al menos el doble de mensajes que cualquier otra en la compra (y 3 o más), la atendió ella aunque otra haya
+// mandado los medios de pago o confirmado: la venta es suya.
+const MAJORITY_MIN_MESSAGES = 3;
+function majorityAdvisor(before) {
+  const counts = new Map();
+  for (const e of before) counts.set(e.advisor, (counts.get(e.advisor) ?? 0) + 1);
+  const [top, second] = [...counts].sort((a, b) => b[1] - a[1]);
+  if (!top || top[1] < MAJORITY_MIN_MESSAGES || top[1] < 2 * (second?.[1] ?? 0)) return null;
+  return [...before].reverse().find((e) => e.advisor === top[0]);
+}
+
 export function attributeAdvisor(events, atTime, { lookbackMs = 7 * 86400000, graceMs = 2 * 3600000, freshMs = PAYINFO_FRESH_MS } = {}) {
   const t = +new Date(atTime);
-  const advisorEvents = sortedByTime(events).filter(
-    (e) => e.role === 'advisor' && e.advisor && !GENERIC_ADVISOR_NAMES.has(String(e.advisor).trim().toLowerCase())
-  );
+  const advisorEvents = sortedByTime(events).filter((e) => e.role === 'advisor' && isSeller(e.advisor));
   const before = advisorEvents.filter((e) => +new Date(e.at) <= t && +new Date(e.at) >= t - lookbackMs);
   const gave = [...before].reverse().find((e) => +new Date(e.at) >= t - freshMs && givesPaymentInfo(e.text));
-  if (gave) return { advisor: gave.advisor, rule: 'dio_medios_de_pago', eventId: gave.id };
   const last = before[before.length - 1];
+  const by = gave ?? last;
+  const most = majorityAdvisor(before);
+  if (most && most.advisor !== by?.advisor) return { advisor: most.advisor, rule: 'mayor_atencion', eventId: most.id };
+  if (gave) return { advisor: gave.advisor, rule: 'dio_medios_de_pago', eventId: gave.id };
   if (last) return { advisor: last.advisor, rule: 'ultimo_asesor_antes_del_pago', eventId: last.id };
   const after = advisorEvents.find((e) => +new Date(e.at) > t && +new Date(e.at) <= t + graceMs);
   if (after) return { advisor: after.advisor, rule: 'primer_asesor_despues_del_pago', eventId: after.id };
@@ -231,7 +248,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
     // Quién la atendía se decide con lo ocurrido desde la venta anterior; solo si ahí no hay
     // nadie se recurre a todo el historial reciente.
     const attribution = attributeAdvisor(cycle, anchor.at) ?? attributeAdvisor(sorted, anchor.at);
-    const touched = [...new Set(cycle.filter((e) => e.role === 'advisor' && e.advisor).map((e) => e.advisor))];
+    const touched = [...new Set(cycle.filter((e) => e.role === 'advisor' && isSeller(e.advisor)).map((e) => e.advisor))];
     const quote = latestQuote(sorted, prevAt, anchor.at);
     const approvedPrice = approvedQuote(sorted, prevAt, anchor.at);
     const proof = cycle.filter((e) => e.role === 'customer');
@@ -250,7 +267,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
     if (touched.length > 1) issues.push('varias_asesoras');
     // Dos asesoras distintas dieron medios de pago en esta compra (ej. el link de la mañana y la tarjeta de la tarde): se
     // acredita a la última, pero queda por validar. Si solo una los dio, la venta es suya aunque otra reciba el comprobante.
-    const handoff = !!payInfo && cycle.some((e) => e.role === 'advisor' && e.advisor && e.advisor !== payInfo.advisor && +new Date(e.at) >= t - PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
+    const handoff = !!payInfo && cycle.some((e) => e.role === 'advisor' && isSeller(e.advisor) && e.advisor !== payInfo.advisor && +new Date(e.at) >= t - PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
     if (handoff) issues.push('asesora_por_validar');
     if (!attribution) issues.push('sin_asesora');
     if (type === 'confirmacion' && !voucher && !proof.some((e) => e.image || e.ocrAmount)) issues.push('sin_prueba_del_cliente');

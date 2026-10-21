@@ -78,6 +78,31 @@ test('atribución: pago fuera de horario se acredita a quien responde primero de
   assert.equal(r.rule, 'primer_asesor_despues_del_pago');
 });
 
+test('atribución: quien atendió mucho más el chat (el doble de mensajes, mínimo 3) se queda la venta aunque otra mande los medios de pago', () => {
+  const events = [
+    adv(gt('14', '09:00'), 'Leydi', 'Hola, ¿qué talla buscas?'),
+    adv(gt('14', '09:05'), 'Leydi', 'Te cotizo Q539'),
+    adv(gt('14', '09:30'), 'Leydi', 'Tenemos en negro y beige'),
+    adv(gt('14', '10:00'), 'Aura', 'Te paso la cuenta: Banrural 4012345678'),
+    adv(gt('14', '10:10'), 'Leydi', 'Avísame cuando hagas el pago'),
+  ];
+  const r = attributeAdvisor(events, gt('14', '11:00'));
+  assert.equal(r.advisor, 'Leydi');
+  assert.equal(r.rule, 'mayor_atencion');
+  // con una diferencia menor al doble sigue mandando quien dio los medios de pago
+  const parejo = [...events.slice(0, 2), events[3], adv(gt('14', '10:20'), 'Aura', 'Aquí te espero'), events[4]];
+  assert.equal(attributeAdvisor(parejo, gt('14', '11:00')).advisor, 'Aura');
+});
+
+test('atribución: Luisa Cristancho aporta evidencia pero nunca se le acredita la venta', () => {
+  const events = [
+    adv(gt('15', '09:00'), 'Luisa Cristancho', 'Te paso la cuenta: Banrural 4012345678'),
+    adv(gt('15', '09:30'), 'Leydi', 'Quedo atenta al comprobante'),
+  ];
+  assert.equal(attributeAdvisor(events, gt('15', '10:00')).advisor, 'Leydi');
+  assert.equal(attributeAdvisor([events[0]], gt('15', '10:00')), null);
+});
+
 test('atribución: sin asesora en 7 días o con nombres genéricos no se inventa a nadie', () => {
   assert.equal(attributeAdvisor([], gt('14', '10:00')), null);
   assert.equal(attributeAdvisor([adv(gt('14', '09:00'), 'bot', 'hola')], gt('14', '10:00')), null);
