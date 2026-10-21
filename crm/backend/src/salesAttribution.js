@@ -369,7 +369,11 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
       `UPDATE sales s SET evidence_type = CASE WHEN h.message->>'type' = 'human' THEN 'receipt_ocr' ELSE 'advisor_confirmation' END
        FROM n8n_chat_histories h
        WHERE h.id = s.evidence_message_id AND (s.evidence_type IS NULL OR s.evidence_type IN ('legacy', 'manual'))
-         AND s.created_at >= $1 AND s.created_at <= $2`,
+         AND s.created_at >= $1 AND s.created_at <= $2
+         -- uq_sales_evidence: si ya hay otra venta con ese tipo y mensaje (un duplicado de una corrida anterior), esta queda como está
+         -- y aparece en la lista de ventas por borrar
+         AND NOT EXISTS (SELECT 1 FROM sales o WHERE o.id <> s.id AND o.evidence_message_id = s.evidence_message_id
+           AND o.evidence_type = CASE WHEN h.message->>'type' = 'human' THEN 'receipt_ocr' ELSE 'advisor_confirmation' END)`,
       [new Date(+start - DAY), new Date(+end + DAY)]
     );
   }
