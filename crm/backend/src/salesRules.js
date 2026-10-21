@@ -111,10 +111,7 @@ function sortedByTime(events) {
 // no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
 export const PAYINFO_FRESH_MS = 24 * 3600000;
 
-// Quien atiende el chat pero no es una asesora de ventas: sus mensajes valen como evidencia (medios de pago, confirmación) pero
-// nunca se le acredita la venta. shortcut: lista fija por nombre; pasarla a configuración si se agregan más.
-const NOT_SELLERS = new Set(['luisa cristancho']);
-export const isSeller = (name) => { const n = String(name ?? '').trim().toLowerCase(); return !!n && !GENERIC_ADVISOR_NAMES.has(n) && !NOT_SELLERS.has(n); };
+const isSeller = (name) => { const n = String(name ?? '').trim().toLowerCase(); return !!n && !GENERIC_ADVISOR_NAMES.has(n); };
 
 // Si una asesora escribió al menos el doble de mensajes que cualquier otra en la compra (y 3 o más), la atendió ella aunque otra haya
 // mandado los medios de pago o confirmado: la venta es suya.

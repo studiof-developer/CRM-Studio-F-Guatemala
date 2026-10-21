@@ -94,15 +94,6 @@ test('atribución: quien atendió mucho más el chat (el doble de mensajes, mín
   assert.equal(attributeAdvisor(parejo, gt('14', '11:00')).advisor, 'Aura');
 });
 
-test('atribución: Luisa Cristancho aporta evidencia pero nunca se le acredita la venta', () => {
-  const events = [
-    adv(gt('15', '09:00'), 'Luisa Cristancho', 'Te paso la cuenta: Banrural 4012345678'),
-    adv(gt('15', '09:30'), 'Leydi', 'Quedo atenta al comprobante'),
-  ];
-  assert.equal(attributeAdvisor(events, gt('15', '10:00')).advisor, 'Leydi');
-  assert.equal(attributeAdvisor([events[0]], gt('15', '10:00')), null);
-});
-
 test('atribución: sin asesora en 7 días o con nombres genéricos no se inventa a nadie', () => {
   assert.equal(attributeAdvisor([], gt('14', '10:00')), null);
   assert.equal(attributeAdvisor([adv(gt('14', '09:00'), 'bot', 'hola')], gt('14', '10:00')), null);
