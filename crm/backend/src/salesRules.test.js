@@ -226,6 +226,17 @@ test('episodios: sin medios de pago en el chat, la confirmación de la asesora s
   assert.ok(episodes[0].issues.includes('sin_medios_de_pago_en_chat'));
 });
 
+test('episodios: "proceso de alistamiento" a quien pregunta por un pedido de la tienda en línea no es una venta del chat', () => {
+  const eventos = [
+    cust(gt('13', '21:05'), 'Quisiera saber qué día me enviarán mi pedido en línea'),
+    adv(gt('14', '07:06'), 'Aura', 'Si seño está en proceso de alistamiento, tiene un tiempo de entrega de 3 a 4 días'),
+  ];
+  assert.equal(buildEpisodes(eventos).episodes.length, 0);
+  // con cotización o medios de pago antes, la misma frase sí confirma una venta
+  const conVenta = [adv(gt('14', '06:00'), 'Aura', 'Total Q539'), ...eventos.slice(1)];
+  assert.equal(buildEpisodes(conVenta).episodes.length, 1);
+});
+
 test('episodios: comprobante con medios de pago pero sin confirmación queda pendiente, no verificado', () => {
   const { episodes } = buildEpisodes([adv(gt('14', '09:00'), 'Aura', 'Cuenta Banrural 4012345678 total Q539'), img(gt('14', '10:00'), 539)]);
   assert.equal(episodes[0].status, 'pendiente_de_confirmar');

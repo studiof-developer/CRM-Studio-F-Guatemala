@@ -197,6 +197,16 @@ export function startsNewCycle(events, lastSaleAt, atTime) {
   );
 }
 
+// "Tu pedido ya está en proceso de alistamiento" también es lo que se le responde a quien pregunta por un pedido de la tienda en línea:
+// una confirmación sola solo es una venta si antes, en este mismo chat, hubo una cotización, medios de pago o una imagen/PDF del cliente.
+export function hasSaleEvidence(events, afterAt, atTime, lookbackMs = 7 * 86400000) {
+  const b = +new Date(atTime);
+  const a = Math.max(afterAt ? +new Date(afterAt) : -Infinity, b - lookbackMs);
+  return events.some((e) => +new Date(e.at) > a && +new Date(e.at) <= b && (
+    (e.role === 'advisor' && !isConfirmationMessage(e.text) && (givesPaymentInfo(e.text) || quotedAmountIn(e.text) != null))
+    || (e.role === 'customer' && (e.image || e.voucher || e.ocrAmount))));
+}
+
 // Un comprobante con el mismo monto que una venta de los últimos 3 días, sin una
 // cotización nueva desde la ÚLTIMA venta, es ese mismo pago reenviado por la clienta. La
 // referencia es la última venta (no la que coincide en monto): una cotización que ya se
@@ -305,7 +315,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
         last.confirmedBy = e.advisor;
         continue;
       }
-      if (startsNewCycle(sorted, last?.at ?? null, e.at)) {
+      if (startsNewCycle(sorted, last?.at ?? null, e.at) && hasSaleEvidence(sorted, last?.at ?? null, e.at, lookbackMs)) {
         const ep = describe(e, 'confirmacion', approvedQuote(sorted, last?.at ?? null, e.at)?.amount ?? null);
         ep.confirmedAt = e.at;
         ep.confirmedBy = e.advisor;
