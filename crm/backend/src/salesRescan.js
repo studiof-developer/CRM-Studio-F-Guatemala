@@ -8,11 +8,13 @@ import { looksRejected } from './ocrPayment.js';
 // si estaba registrada, aparece en "ventas por borrar" de la revisión de su día.
 export async function rescanRejectedReceipts({ days = 30, log = console.log }) {
   const { rows } = await pool.query(
-    `SELECT h.id AS message_id, h.created_at, split_part(h.session_id, '__', 1) AS phone, h.message->'additional_kwargs'->>'ocrAmount' AS amount,
+    `SELECT h.id AS message_id, h.created_at, split_part(h.session_id, '__', 1) AS phone, COALESCE(h.message->'additional_kwargs'->>'ocrAmount', o.amount::text) AS amount,
             a.id AS att_id, a.file_path, a.mime_type
      FROM n8n_chat_histories h JOIN message_attachments a ON a.n8n_message_id = h.id
+     LEFT JOIN attachment_ocr o ON o.attachment_id = a.id
      WHERE h.message->>'type' = 'human'
-       AND (h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL OR h.message->'additional_kwargs'->>'ocrVoucher' = 'true')
+       AND (h.message->'additional_kwargs'->>'ocrAmount' IS NOT NULL OR h.message->'additional_kwargs'->>'ocrVoucher' = 'true'
+            OR o.amount IS NOT NULL OR o.voucher = true)
        AND (a.kind = 'image' OR a.mime_type = 'application/pdf') AND h.created_at >= now() - ($1::int * interval '1 day')
      ORDER BY h.id`,
     [days]
