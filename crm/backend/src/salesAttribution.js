@@ -6,6 +6,7 @@ import {
   isResentReceipt, inRetailRange, guatemalaParts, shiftOf,
 } from './salesRules.js';
 import { createLazyOcrRunner } from './ocrRunner.js';
+import { applyLinkAmounts } from './paymentLinks.js';
 import {
   defaultLineId, lineFromSession, loadEvents, resolveAdvisor, buildThread, analyzeCustomer, nameResolver,
 } from './salesThreads.js';
@@ -346,6 +347,16 @@ const sameAdvisor = (a, b) => String(a ?? '').trim().toLowerCase() === String(b 
 const CONFIRM_SQL = 'gracias\\s+por\\s+elegir|alistamiento|gracias\\s+por\\s+(su|tu)\\s+compra|pago\\s+(recibido|confirmado|verificado|acreditado|con)|comprobante\\s+(recibido|verificado|confirmado)|hemos\\s+recibido\\s+(su|tu)\\s+pago|confirmamos\\s+(su|tu)\\s+pago|pedido\\s+(confirmado|registrado)|agregado\\s+a\\s+la\\s+compra';
 const BANK_SQL = 'compra\\s+con\\s+(tu\\s+)?tarjeta|se\\s+realiz|transferencia\\s+(realizada|exitosa|enviada)|dep[oó]sito\\s+(realizado|exitoso)|pago\\s+(exitoso|aprobado|realizado)|comprobante\\s+de';
 
+// Una venta pagada por link y confirmada sin comprobante toma el monto de la página del link (lo que se cobró: incluye lo que el cliente
+// agregó después de aprobar el precio), no el último precio aprobado en el chat. Si la página no se puede leer, queda el precio aprobado.
+async function useLinkAmounts(episodes) {
+  const cand = episodes.filter((ep) => ep.type === 'confirmacion' && ep.medium === 'link' && ep.amountBasis === 'precio_aprobado' && ep.paymentInfoId > 0);
+  if (!cand.length) return;
+  const rows = cand.map((ep) => ({ eventId: ep.paymentInfoId, amount: ep.amount }));
+  await applyLinkAmounts(rows);
+  cand.forEach((ep, i) => { if (rows[i].amountSource === 'link') { ep.amount = rows[i].amount; ep.amountBasis = 'link'; ep.via = 'link'; } });
+}
+
 // ignoreLock: reconstruye también lo anterior a LOCK_BEFORE y las ventas calibradas a mano (attribution_locked). Lo que un supervisor
 // ya validó (monto o asesora) nunca se mueve, con o sin esta opción. ocrMaxReads: tope de imágenes nuevas que se leen en la corrida.
 export async function auditSales({ from, to, lineId = null, ignoreLock = false, ocrMaxReads = 80 }) {
@@ -371,6 +382,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
   const items = [];
   for (const customer of candidates) {
     const { rows: episodes, orphans } = await analyzeCustomer(customer, { canonical, ocr });
+    if (ignoreLock) await useLinkAmounts(episodes);
     for (const o of orphans) {
       if (new Date(o.at) >= start && new Date(o.at) <= end && (!lineId || Number(lineId) === o.line)) {
         items.push({ status: 'sin_contexto', receiptId: o.eventId, at: o.at, customerId: customer.id, customer: o.customer, phone: customer.whatsapp_number, amount: o.amount, line: o.line, shift: shiftOf(o.at) });
@@ -398,7 +410,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
 
       const item = {
         receiptId: ep.eventId, at: ep.at, customerId: customer.id, customer: ep.customer, phone: ep.phone, line: ep.line,
-        amount: ep.amount, type: ep.type, verified: ep.verified, medium: ep.medium, shift: ep.shift, issues: ep.issues,
+        amount: ep.amount, amountBasis: ep.amountBasis, type: ep.type, verified: ep.verified, medium: ep.medium, shift: ep.shift, issues: ep.issues,
         expectedAdvisor: ep.advisor, rule: ep.rule, attributionUncertain: ep.attributionUncertain, confirmedBy: ep.confirmedBy, confirmedAt: ep.confirmedAt, via: ep.via, voucher: ep.voucher, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
       };
       if (new Date(ep.at) < lockBefore) { items.push({ ...item, status: 'historico_bloqueado' }); continue; }
@@ -408,7 +420,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
       item.recordedAmount = Number(sale.amount);
       // Un supervisor ya validó esta venta (y pudo elegir la asesora): el motor no la vuelve a mover.
       const wrongAdvisor = ep.advisor && !sale.amount_validated_at && !sale.advisor_override_at && !sameAdvisor(ep.advisor, sale.advisor_name);
-      const wrongAmount = ep.type === 'comprobante' && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
+      const wrongAmount = (ep.type === 'comprobante' || (ignoreLock && !sale.amount_validated_at)) && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
       const wrongDate = guatemalaParts(sale.created_at).ymd !== guatemalaParts(ep.at).ymd;
       const promotable = sale.status === 'revisar' && countsAsSale(ep) && (ep.amount > 0 || Number(sale.amount) > 0);
       item.status = (sale.attribution_locked && !ignoreLock) ? 'bloqueada'
@@ -501,23 +513,26 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
       const u = i.expectedAdvisor ? await resolveAdvisor(i.expectedAdvisor) : null;
       const evType = i.type === 'comprobante' ? 'receipt_ocr' : 'advisor_confirmation';
       const useReceiptAmount = i.type === 'comprobante' && i.amount > 0;
+      // En la reconstrucción histórica, una confirmación sin comprobante también corrige el monto (el del link o el precio aprobado),
+      // salvo que un supervisor ya lo haya validado.
+      const useChatAmount = ignoreLock && i.type !== 'comprobante' && i.amount > 0;
       await pool.query(
         `UPDATE sales SET created_at = $2, confirmed_at = CASE WHEN $8::boolean THEN $2 ELSE confirmed_at END,
                 advisor_name = CASE WHEN amount_validated_at IS NULL AND advisor_override_at IS NULL THEN COALESCE($3, advisor_name) ELSE advisor_name END,
                 advisor_id = CASE WHEN amount_validated_at IS NULL AND advisor_override_at IS NULL THEN COALESCE($4, advisor_id) ELSE advisor_id END,
                 attributed_by = COALESCE($5, attributed_by),
-                amount = CASE WHEN $9::boolean THEN $10::numeric ELSE amount END,
+                amount = CASE WHEN $9::boolean OR ($13::boolean AND amount_validated_at IS NULL) THEN $10::numeric ELSE amount END,
                 receipt_amount = CASE WHEN $9::boolean THEN $10::numeric ELSE receipt_amount END,
-                amount_source = CASE WHEN $9::boolean THEN 'ocr' ELSE amount_source END,
-                amount_basis = CASE WHEN $9::boolean THEN 'comprobante' ELSE amount_basis END,
+                amount_source = CASE WHEN $9::boolean THEN 'ocr' WHEN $13::boolean AND amount_validated_at IS NULL THEN 'chat_cotizado' ELSE amount_source END,
+                amount_basis = CASE WHEN $9::boolean THEN 'comprobante' WHEN $13::boolean AND amount_validated_at IS NULL THEN COALESCE($14::text, 'precio_aprobado') ELSE amount_basis END,
                 attribution_uncertain = CASE WHEN amount_validated_at IS NULL THEN $11::boolean ELSE attribution_uncertain END,
                 attribution_locked = CASE WHEN $12::boolean THEN false ELSE attribution_locked END,
-                status = CASE WHEN $8::boolean AND (CASE WHEN $9::boolean THEN $10::numeric ELSE amount END) > 0 THEN 'confirmada' ELSE status END,
+                status = CASE WHEN $8::boolean AND (CASE WHEN $9::boolean OR ($13::boolean AND amount_validated_at IS NULL) THEN $10::numeric ELSE amount END) > 0 THEN 'confirmada' ELSE status END,
                 evidence_type = COALESCE(evidence_type, $6), evidence_message_id = COALESCE(evidence_message_id, $7),
                 updated_at = now()
          WHERE id = $1 AND ($12::boolean OR NOT attribution_locked)
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
-        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null, !!i.attributionUncertain, ignoreLock]
+        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, countsAsSale(i), useReceiptAmount, i.amount ?? null, !!i.attributionUncertain, ignoreLock, useChatAmount, i.amountBasis ?? null]
       );
     } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && deleteUnbacked) {
       // reconstrucción histórica: lo registrado sin comprobante, confirmación ni medios de pago en el chat no es una venta

@@ -3,16 +3,21 @@ import { rebuildHistory, completedDays, listBackups } from './salesHistory.js';
 // Corre la reconstrucción del historial en segundo plano para el botón del CRM (la misma lógica que el script de terminal).
 // Una sola corrida a la vez (además del candado en la base). El estado vive en memoria: si el servidor se reinicia a mitad de camino,
 // lo ya terminado queda registrado por día y al volver a iniciar retoma donde quedó.
+// hooks.before / hooks.after (opcionales): pasos extra antes y después de reconstruir (las correcciones humanas de la revisión de un día).
 const MAX_LINES = 5000;
 let job = null;
 
-export async function startHistoryJob({ mode, from, to, force = false, userName = null }) {
+export async function startHistoryJob({ mode, from, to, force = false, userName = null, hooks = {} }) {
   if (job?.running) throw Object.assign(new Error('Ya hay una reconstrucción corriendo. Espera a que termine.'), { status: 409 });
   const cur = { id: Date.now(), mode, from, to, force, userName, running: true, error: null, startedAt: new Date().toISOString(), finishedAt: null, lines: [], backup: null };
   job = cur;
   const log = (l) => { if (cur.lines.length < MAX_LINES) cur.lines.push(String(l)); };
-  rebuildHistory({ from, to, apply: mode === 'apply', force, log })
-    .then((r) => { cur.backup = r?.backup ?? null; })
+  (async () => {
+    await hooks.before?.(log);
+    const r = await rebuildHistory({ from, to, apply: mode === 'apply', force, log });
+    cur.backup = r?.backup ?? null;
+    if (mode === 'apply') await hooks.after?.(log);
+  })()
     .catch((err) => { cur.error = err.message; log(`ERROR: ${err.message}`); })
     .finally(() => { cur.running = false; cur.finishedAt = new Date().toISOString(); });
   return { id: cur.id };

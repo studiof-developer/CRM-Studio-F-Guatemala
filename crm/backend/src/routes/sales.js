@@ -14,7 +14,7 @@ import { getPendingPayments } from '../pendingPayments.js';
 import { startHistoryJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
 import { restoreBackup } from '../salesHistory.js';
 import { explainChat } from '../salesExplain.js';
-import { reviewDay, markItem } from '../salesDayReview.js';
+import { reviewDay, markItem, applyHumanCorrections } from '../salesDayReview.js';
 
 const router = Router();
 
@@ -726,9 +726,26 @@ router.get('/history/day', adminOnly, async (req, res, next) => {
 
 router.put('/history/day/mark', adminOnly, async (req, res, next) => {
   try {
-    const { day, itemKey, verdict = null, note } = req.body ?? {};
-    await markItem({ day, itemKey, verdict, note, userId: req.user?.id });
+    const { day, itemKey, verdict = null, note, amountOverride, advisorOverride, keep } = req.body ?? {};
+    await markItem({ day, itemKey, verdict, note, amountOverride, advisorOverride, keep, userId: req.user?.id });
     res.json({ ok: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// POST /api/sales/history/day/apply { day }: reconstruye ese día y fija las correcciones que la persona marcó en la revisión.
+router.post('/history/day/apply', adminOnly, async (req, res, next) => {
+  try {
+    const day = req.body?.day;
+    if (!isDay(day)) return res.status(400).json({ error: 'Indica el día (AAAA-MM-DD)' });
+    const { rows } = await pool.query('SELECT 1 FROM sales_rebuild_days WHERE day = $1', [day]);
+    const userId = req.user?.id;
+    res.status(202).json(await startHistoryJob({
+      mode: 'apply', from: day, to: day, force: rows.length > 0, userName: req.user?.fullName || req.user?.username,
+      hooks: { before: (log) => applyHumanCorrections(day, userId, 'before', log), after: (log) => applyHumanCorrections(day, userId, 'after', log) },
+    }));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, RefreshCw, MessageSquare, Eye, Check, Ban, Copy, Play, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchSalesDayReview, markSalesDayItem, explainSalesChat, startSalesHistory, fetchSalesHistory } from '../api.js';
+import { fetchSalesDayReview, markSalesDayItem, explainSalesChat, applySalesDay, fetchSalesHistory } from '../api.js';
 import { showError, showSuccess } from './Toast.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 
@@ -39,13 +39,18 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   const all = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
   const reviewed = all.filter((r) => marks[r.key]).length;
   const bad = all.filter((r) => marks[r.key]?.verdict === 'mal');
-  const ready = data && all.length > 0 && reviewed === all.length && bad.length === 0;
+  const fixed = (k) => { const m = marks[k]; return m?.verdict === 'mal' && (m.amountOverride != null || !!m.advisorOverride || !!m.keep); };
+  const unresolved = bad.filter((r) => !fixed(r.key));
+  const ready = data && all.length > 0 && reviewed === all.length && unresolved.length === 0;
 
-  async function mark(item, verdict, note = marks[item.key]?.note ?? '') {
+  // patch: { note, amountOverride, advisorOverride, keep }. Una marca "ok" no lleva corrección.
+  async function mark(item, verdict, patch = {}) {
     const prev = marks[item.key];
-    const next = verdict === null ? undefined : { verdict, note };
+    const body = verdict === 'mal' ? { note: '', amountOverride: null, advisorOverride: '', keep: false, ...(prev?.verdict === 'mal' ? prev : {}), ...patch } : {};
+    delete body.verdict;
+    const next = verdict === null ? undefined : { verdict, ...body };
     setMarks((m) => { const c = { ...m }; if (next) c[item.key] = next; else delete c[item.key]; return c; });
-    try { await markSalesDayItem({ day, itemKey: item.key, verdict, note }); }
+    try { await markSalesDayItem({ day, itemKey: item.key, verdict, ...body }); }
     catch (err) { showError(err.message); setMarks((m) => { const c = { ...m }; if (prev) c[item.key] = prev; else delete c[item.key]; return c; }); }
   }
 
@@ -56,14 +61,14 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   }
 
   function copyBad() {
-    const text = [`Revisión del ${day}: ventas marcadas como incorrectas`, ...bad.map((r) => `· ${fmtTime(r.at)} ${r.customer} (…${last4(r.phone)}) ${fmtQ(r.amount)}${r.advisor ? ` · ${r.advisor}` : ''}: ${marks[r.key]?.note || '(sin nota)'}`)].join('\n');
+    const text = [`Revisión del ${day}: ventas marcadas como incorrectas`, ...unresolved.map((r) => `· ${fmtTime(r.at)} ${r.customer} (…${last4(r.phone)}) ${fmtQ(r.amount)}${r.advisor ? ` · ${r.advisor}` : ''}: ${marks[r.key]?.note || '(sin nota)'}`)].join('\n');
     navigator.clipboard.writeText(text).then(() => showSuccess('Observaciones copiadas'), () => showError('No se pudo copiar'));
   }
 
   async function applyDay() {
     setApplying(true); setConfirmApply(false);
     try {
-      await startSalesHistory({ mode: 'apply', from: day, to: day, force: !!data?.completed });
+      await applySalesDay(day);
       const poll = async () => {
         const s = await fetchSalesHistory(0);
         if (s.job?.running) { timer.current = setTimeout(poll, 2500); return; }
@@ -79,32 +84,47 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   const btn = 'flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-[11px] font-semibold text-ink hover:bg-muted disabled:opacity-50';
 
   // Funciones (no componentes) para que escribir una nota no remonte el campo en cada render.
-  const actions = (item) => {
+  const actions = (item, kind = 'paid') => {
     const m = marks[item.key];
+    const [okLabel, badLabel] = kind === 'paid' ? ['Correcto', 'Incorrecto'] : ['No fue venta', 'Sí fue venta'];
     return (
       <div className="flex flex-wrap items-center gap-1">
         {item.phone && <button type="button" className={btn} onClick={() => onOpenConversation?.(item.phone, item.line)} disabled={!onOpenConversation}><MessageSquare size={11} />Chat</button>}
         {item.phone && <button type="button" className={btn} onClick={() => showEngine(item)}><Eye size={11} />Motor</button>}
-        <button type="button" onClick={() => mark(item, m?.verdict === 'ok' ? null : 'ok')} title="Correcto" className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'ok' ? 'border-success bg-success text-white' : 'border-line text-ink hover:bg-muted'}`}><Check size={11} />Correcto</button>
-        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal')} title="Incorrecto" className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />Incorrecto</button>
+        <button type="button" onClick={() => mark(item, m?.verdict === 'ok' ? null : 'ok')} title={okLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'ok' ? 'border-success bg-success text-white' : 'border-line text-ink hover:bg-muted'}`}><Check size={11} />{okLabel}</button>
+        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal')} title={badLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />{badLabel}</button>
       </div>
     );
   };
 
-  const extra = (item) => (
+  const field = 'rounded-lg border border-danger/40 bg-paper px-2 py-1 text-[11px] text-ink outline-none focus:border-danger';
+  const extra = (item, kind = 'paid') => {
+    const m = marks[item.key];
+    return (
     <>
-      {marks[item.key]?.verdict === 'mal' && (
-        <input
-          defaultValue={marks[item.key]?.note ?? ''} onBlur={(e) => mark(item, 'mal', e.target.value)} placeholder="¿Qué está mal? (ej. la vendió Leydi, el monto es Q349)"
-          className="mt-1.5 w-full rounded-lg border border-danger/40 bg-paper px-2 py-1 text-[11px] text-ink outline-none focus:border-danger"
-        />
+      {m?.verdict === 'mal' && (
+        <div className="mt-1.5 space-y-1.5">
+          <input defaultValue={m.note ?? ''} onBlur={(e) => mark(item, 'mal', { note: e.target.value })} placeholder="¿Qué pasó? (sirve de registro)" className={`${field} w-full`} />
+          {kind !== 'orphan' && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
+              {kind === 'delete' && (
+                <label className="flex items-center gap-1 font-semibold"><input type="checkbox" checked={!!m.keep} onChange={(e) => mark(item, 'mal', { keep: e.target.checked })} />Conservar esta venta</label>
+              )}
+              <label className="flex items-center gap-1">Monto correcto Q<input type="number" min="1" step="0.01" defaultValue={m.amountOverride ?? ''} onBlur={(e) => mark(item, 'mal', { amountOverride: e.target.value === '' ? null : Number(e.target.value) })} className={`${field} w-24`} /></label>
+              <label className="flex items-center gap-1">Asesora correcta<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(igual)" className={`${field} w-48`} /></label>
+              <span className={fixed(item.key) ? 'text-success' : 'text-danger'}>{fixed(item.key) ? 'Se fija al aplicar el día' : 'Sin corrección: pásamela para ajustar el motor'}</span>
+            </div>
+          )}
+          {kind === 'orphan' && <p className="text-[11px] text-danger">Esto no se corrige aquí: copia las observaciones y pásamelas para ajustar el motor.</p>}
+        </div>
       )}
       {explain[item.key]?.loading && <p className="mt-1.5 text-[11px] text-greige-ink">Leyendo el chat…</p>}
       {explain[item.key]?.lines && (
         <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-secondary p-2 font-mono text-[10.5px] leading-relaxed text-ink">{explain[item.key].lines.join('\n')}</pre>
       )}
     </>
-  );
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -150,9 +170,9 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
                           <p className="text-ink">{r.advisor ?? 'Sin asesora'}{r.attributionUncertain ? ' (por validar)' : ''}</p>
                           <p className="text-[11px] text-greige-ink">{CRM[r.status] ?? r.status}{r.recordedAdvisor && r.status !== 'ok' ? ` (${r.recordedAdvisor}${r.recordedAmount != null ? `, ${fmtQ(r.recordedAmount)}` : ''})` : ''}</p>
                         </div>
-                        {actions(r)}
+                        {actions(r, 'paid')}
                       </div>
-                      {extra(r)}
+                      {extra(r, 'paid')}
                     </div>
                   ))}
                 </div>
@@ -168,9 +188,9 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
                         <div className="grid gap-2 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.4fr)_auto] md:items-center">
                           <p className="font-semibold text-ink">{fmtTime(r.at)} · {r.customer} <span className="font-normal text-greige-ink">(…{last4(r.phone)})</span></p>
                           <p className="text-ink">{fmtQ(r.amount)} · no cuenta</p>
-                          {actions(r)}
+                          {actions(r, 'orphan')}
                         </div>
-                        {extra(r)}
+                        {extra(r, 'orphan')}
                       </div>
                     ))}
                   </div>
@@ -187,9 +207,9 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
                         <div className="grid gap-2 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.4fr)_auto] md:items-center">
                           <p className="font-semibold text-ink">{fmtTime(r.at)} · {r.customer} <span className="font-normal text-greige-ink">(…{last4(r.phone)})</span></p>
                           <p className="text-ink">{fmtQ(r.amount)} · {r.advisor}{r.duplicateOf ? ` · duplicada de la venta ${fmtQ(r.duplicateOf.amount)} de ${r.duplicateOf.advisor}` : ''}</p>
-                          {actions(r)}
+                          {actions(r, 'delete')}
                         </div>
-                        {extra(r)}
+                        {extra(r, 'delete')}
                       </div>
                     ))}
                   </div>
@@ -201,9 +221,9 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
 
         {data && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-3 text-xs">
-            <span className="text-greige-ink">{bad.length > 0 ? `${bad.length} marcada(s) como incorrecta(s): copia las observaciones y pásamelas para ajustar el motor.` : ready ? 'Todo revisado y correcto.' : 'Marca todas las filas como correctas para poder aplicar el día.'}</span>
+            <span className="text-greige-ink">{unresolved.length > 0 ? `${unresolved.length} fila(s) sin corrección: ponle el monto, la asesora o "conservar", o copia las observaciones y pásamelas para ajustar el motor.` : ready ? 'Todo revisado. Se aplica el día con tus correcciones.' : 'Revisa todas las filas para poder aplicar el día.'}</span>
             <div className="flex items-center gap-2">
-              {bad.length > 0 && <button type="button" onClick={copyBad} className={btn}><Copy size={12} />Copiar observaciones</button>}
+              {unresolved.length > 0 && <button type="button" onClick={copyBad} className={btn}><Copy size={12} />Copiar observaciones</button>}
               <button type="button" onClick={() => setConfirmApply(true)} disabled={!ready || applying} className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-1.5 font-semibold text-white hover:opacity-90 disabled:opacity-50">
                 {applying ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}<span>{applying ? 'Aplicando…' : 'Aplicar este día'}</span>
               </button>
@@ -212,6 +232,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
         )}
       </div>
 
+      <datalist id="day-review-advisors">{(data?.advisors ?? []).map((a) => <option key={a} value={a} />)}</datalist>
       <ConfirmDialog
         open={confirmApply}
         title={`¿Aplicar el ${day}?`}

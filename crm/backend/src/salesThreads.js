@@ -229,7 +229,7 @@ export async function analyzeCustomer(customer, { canonical = nameResolver(), oc
         at: ep.at, eventId: ep.eventId, customerId: customer.id, customer: customer.full_name || customer.whatsapp_number,
         phone: customer.whatsapp_number, last4: customer.whatsapp_number.slice(-4), line,
         currentStatus: customer.manual_status ?? null, type: ep.type, via: ep.via, amount: ep.amount, quote: ep.quote,
-        advisor: await canonical(ep.advisor), rule: ep.rule, paymentInfoBy: await canonical(ep.paymentInfoBy),
+        advisor: await canonical(ep.advisor), rule: ep.rule, paymentInfoBy: await canonical(ep.paymentInfoBy), paymentInfoId: ep.paymentInfoId,
         medium: ep.medium, voucher: ep.voucher, shift: ep.shift, touchedBy: await Promise.all(ep.touchedBy.map(canonical)),
         confirmedBy: await canonical(ep.confirmedBy), confirmedAt: ep.confirmedAt ?? null,
         attributionUncertain: ep.attributionUncertain, quotedAmounts: ep.quotedAmounts, amountBasis: ep.amountBasis, priceApprovedByCustomer: ep.priceApprovedByCustomer,

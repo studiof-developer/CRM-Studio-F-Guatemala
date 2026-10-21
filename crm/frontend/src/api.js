@@ -980,7 +980,8 @@ export const fetchSalesHistory = (since = 0) => historyCall(`?since=${since}`, u
 export const startSalesHistory = (body) => historyCall('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 'No se pudo iniciar');
 export const fetchSalesDayReview = (day) => historyCall(`/day?${new URLSearchParams({ day })}`, undefined, 'No se pudo cargar el día');
 export const markSalesDayItem = (body) => historyCall('/day/mark', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 'No se pudo guardar la marca');
-export const explainSalesChat =(phone, day) => historyCall(`/explain?${new URLSearchParams({ phone, day })}`, undefined, 'No se pudo leer el chat');
+export const applySalesDay = (day) => historyCall('/day/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ day }) }, 'No se pudo aplicar el día');
+export const explainSalesChat = (phone, day) => historyCall(`/explain?${new URLSearchParams({ phone, day })}`, undefined, 'No se pudo leer el chat');
 export const restoreSalesHistory =(backup) => historyCall('/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup }) }, 'No se pudo deshacer');
 
 export async function fetchMetaBilling(fresh = false) {

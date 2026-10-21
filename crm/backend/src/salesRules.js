@@ -287,7 +287,7 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
       amountBasis: amount == null ? null : (type === 'comprobante' ? 'comprobante' : 'precio_aprobado'),
       priceApprovedByCustomer: type === 'confirmacion' ? (approvedPrice?.approved ?? null) : null,
       advisor: attribution?.advisor ?? null, rule: attribution?.rule ?? null, attributionUncertain: handoff, quotedAmounts,
-      paymentInfoBy: payInfo?.advisor ?? null, paymentInfoAt: payInfo?.at ?? null,
+      paymentInfoBy: payInfo?.advisor ?? null, paymentInfoAt: payInfo?.at ?? null, paymentInfoId: payInfo?.id ?? null,
       medium: payInfo ? paymentMedium(payInfo.text) : null, voucher,
       touchedBy: touched, shift: shiftOf(anchor.at), imagesWithoutAmount, issues,
     };
