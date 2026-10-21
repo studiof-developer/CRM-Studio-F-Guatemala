@@ -362,6 +362,17 @@ async function useLinkAmounts(episodes) {
 export async function auditSales({ from, to, lineId = null, ignoreLock = false, ocrMaxReads = 80 }) {
   const lockBefore = ignoreLock ? new Date(0) : LOCK_BEFORE;
   const { start, end } = rangeBounds(from, to);
+  // Ventas que quedaron enlazadas a su mensaje pero con otro tipo de evidencia (una venta manual o vieja que se enlazó al corregirla): la
+  // búsqueda por tipo + mensaje no las encontraría y la siguiente corrida las duplicaría. Se les pone el tipo que corresponde al mensaje.
+  if (ignoreLock) {
+    await pool.query(
+      `UPDATE sales s SET evidence_type = CASE WHEN h.message->>'type' = 'human' THEN 'receipt_ocr' ELSE 'advisor_confirmation' END
+       FROM n8n_chat_histories h
+       WHERE h.id = s.evidence_message_id AND (s.evidence_type IS NULL OR s.evidence_type IN ('legacy', 'manual'))
+         AND s.created_at >= $1 AND s.created_at <= $2`,
+      [new Date(+start - DAY), new Date(+end + DAY)]
+    );
+  }
   const { rows: candidates } = await pool.query(
     `SELECT DISTINCT c.id, c.whatsapp_number, c.full_name, c.manual_status, c.paid_method
      FROM n8n_chat_histories h JOIN customers c ON c.whatsapp_number = split_part(h.session_id, '__', 1)
@@ -437,7 +448,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
     `SELECT s.id, s.customer_id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
      FROM sales s JOIN customers c ON c.id = s.customer_id
      WHERE s.created_at >= $1 AND s.created_at <= $2 AND ($3::boolean OR NOT s.attribution_locked)
-       AND s.evidence_message_id IS NULL AND ($3::boolean OR (COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'))
+       AND ($3::boolean OR s.evidence_message_id IS NULL) AND ($3::boolean OR (COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'))
        AND NOT ($3::boolean AND (s.amount_validated_at IS NOT NULL OR s.advisor_override_at IS NOT NULL))
      ORDER BY s.created_at`,
     [start, end, ignoreLock]
@@ -528,7 +539,7 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
                 attribution_uncertain = CASE WHEN amount_validated_at IS NULL THEN $11::boolean ELSE attribution_uncertain END,
                 attribution_locked = CASE WHEN $12::boolean THEN false ELSE attribution_locked END,
                 status = CASE WHEN $8::boolean AND (CASE WHEN $9::boolean OR ($13::boolean AND amount_validated_at IS NULL) THEN $10::numeric ELSE amount END) > 0 THEN 'confirmada' ELSE status END,
-                evidence_type = COALESCE(evidence_type, $6), evidence_message_id = COALESCE(evidence_message_id, $7),
+                evidence_type = CASE WHEN evidence_message_id IS NULL THEN $6 ELSE evidence_type END, evidence_message_id = COALESCE(evidence_message_id, $7),
                 updated_at = now()
          WHERE id = $1 AND ($12::boolean OR NOT attribution_locked)
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
@@ -537,7 +548,7 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
     } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && deleteUnbacked) {
       // reconstrucción histórica: lo registrado sin comprobante, confirmación ni medios de pago en el chat no es una venta
       await pool.query(
-        `DELETE FROM sales WHERE id = $1 AND evidence_message_id IS NULL AND amount_validated_at IS NULL AND advisor_override_at IS NULL AND ($2::boolean OR NOT attribution_locked)`,
+        `DELETE FROM sales WHERE id = $1 AND ($2::boolean OR evidence_message_id IS NULL) AND amount_validated_at IS NULL AND advisor_override_at IS NULL AND ($2::boolean OR NOT attribution_locked)`,
         [i.saleId, ignoreLock]
       );
     } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && markUnbacked) {
