@@ -8,18 +8,19 @@ test('los días del rango, ambos extremos incluidos', () => {
   assert.deepEqual(listDays('2026-10-05', '2026-10-05'), ['2026-10-05']);
 });
 
-test('lo que dicen los chats: solo episodios verificados y con monto, por asesora', () => {
+test('lo que dicen los chats: comprobante con monto o confirmación de la asesora, por asesora', () => {
   const t = chatTotals([
     { type: 'comprobante', verified: true, amount: 829, expectedAdvisor: 'Leydi' },
     { type: 'comprobante', verified: true, amount: 500.5, expectedAdvisor: 'Leydi' },
     { type: 'confirmacion', verified: true, amount: 640, expectedAdvisor: 'Aura' },
-    { type: 'comprobante', verified: false, amount: 900, expectedAdvisor: 'Aura' }, // sin confirmación de la asesora
+    { type: 'comprobante', verified: false, amount: 900, expectedAdvisor: 'Aura' }, // el comprobante basta aunque la asesora no confirme
+    { type: 'confirmacion', verified: false, amount: 450, expectedAdvisor: 'Aura' }, // sin comprobante ni confirmación: no cuenta
     { type: 'comprobante', verified: true, amount: 0, expectedAdvisor: 'Aura' },
     { type: 'comprobante', verified: true, amount: 300, expectedAdvisor: null },
     { status: 'sin_evidencia', amount: 700 }, // venta registrada sin respaldo: no es un episodio del chat
   ]);
   assert.deepEqual(t.get('Leydi'), { total: 1329.5, count: 2 });
-  assert.deepEqual(t.get('Aura'), { total: 640, count: 1 });
+  assert.deepEqual(t.get('Aura'), { total: 1540, count: 2 });
   assert.deepEqual(t.get('Sin Asignar'), { total: 300, count: 1 });
 });
 

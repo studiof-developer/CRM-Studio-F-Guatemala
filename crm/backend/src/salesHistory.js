@@ -1,6 +1,6 @@
 import { pool } from './db.js';
 import { auditSales, rebuildSales } from './salesAttribution.js';
-import { guatemalaParts } from './salesRules.js';
+import { guatemalaParts, countsAsSale } from './salesRules.js';
 
 // Reconstrucción de las ventas de días pasados leyendo los chats, día por día, con el mismo motor que ya cuadra el día a día
 // (auditSales / rebuildSales) pero sin los candados de "calibrado a mano". Lo registrado se reemplaza por lo que dicen los chats:
@@ -20,7 +20,7 @@ export const listDays = (from, to) => {
 export function chatTotals(items) {
   const byAdvisor = new Map();
   for (const i of items) {
-    if (!i.type || !i.verified || !(Number(i.amount) > 0)) continue;
+    if (!i.type || !countsAsSale(i) || !(Number(i.amount) > 0)) continue;
     const name = i.expectedAdvisor || 'Sin Asignar';
     const cur = byAdvisor.get(name) ?? { total: 0, count: 0 };
     cur.total += Number(i.amount); cur.count += 1;

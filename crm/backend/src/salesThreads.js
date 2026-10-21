@@ -121,6 +121,10 @@ async function applyAttachments(events, ocr) {
   const byMessage = new Map();
   for (const r of rows) byMessage.set(Number(r.n8n_message_id), [...(byMessage.get(Number(r.n8n_message_id)) ?? []), r]);
   const firstPayInfo = events.find((e) => e.role === 'advisor' && givesPaymentInfo(e.text));
+  // Los medios de pago casi siempre llegan como la tarjeta "MEDIOS DE PAGO" (imagen sin texto): todavía no se sabe que lo son (eso se lee
+  // después), así que cuenta como posible tarjeta lo que la asesora mandó tras elegir el cliente cómo pagar, en las 24 h previas.
+  const cardBefore = (e) => events.some((x) => x.role === 'advisor' && x.id > 0 && +new Date(x.at) < +new Date(e.at)
+    && +new Date(e.at) - +new Date(x.at) <= PAYINFO_FRESH_MS && followsPaymentChoice(events, x));
 
   for (const e of candidates) {
     const atts = byMessage.get(e.id);
@@ -129,7 +133,7 @@ async function applyAttachments(events, ocr) {
     for (const att of atts.slice(0, 2)) {
       let amount = att.cached ? Number(att.amount) : null;
       let voucher = att.cached ? att.cached_voucher : false;
-      if (!att.cached && ocr && firstPayInfo && +new Date(e.at) > +new Date(firstPayInfo.at)) {
+      if (!att.cached && ocr && ((firstPayInfo && +new Date(e.at) > +new Date(firstPayInfo.at)) || cardBefore(e))) {
         const read = await ocr.run(att);
         if (!read.skipped) ({ amount, voucher } = read);
       }

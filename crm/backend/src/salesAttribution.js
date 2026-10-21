@@ -2,7 +2,7 @@ import { pool } from './db.js';
 import { logBusinessAction } from './auditLog.js';
 import { broadcast } from './events.js';
 import {
-  CONFIRMATION_PHRASES_REGEX, isConfirmationMessage, attributeAdvisor, latestQuote,
+  CONFIRMATION_PHRASES_REGEX, isConfirmationMessage, attributeAdvisor, latestQuote, countsAsSale,
   isResentReceipt, inRetailRange, guatemalaParts, shiftOf,
 } from './salesRules.js';
 import { createLazyOcrRunner } from './ocrRunner.js';
@@ -121,7 +121,7 @@ async function adoptExistingSale(customerId, ep, amount, advisor) {
   const legacy = sale.evidence_type === null || sale.evidence_type === 'legacy';
   const exact = ep.type === 'comprobante' && amount > 0;
   const finalAmount = exact ? amount : Number(sale.amount) || amount || 0;
-  const confirmed = ep.verified && finalAmount > 0 && (advisor.name || sale.advisor_name !== 'Sin atribuir');
+  const confirmed = countsAsSale(ep) && finalAmount > 0 && (advisor.name || sale.advisor_name !== 'Sin atribuir');
   const evType = ep.type === 'comprobante' ? 'receipt_ocr' : 'advisor_confirmation';
   const { rows: upd } = await pool.query(
     `UPDATE sales SET
@@ -176,7 +176,7 @@ async function saleFromEpisode(customer, ep, lineId, { clickUser = null } = {}) 
     notes: ep.verified
       ? 'Venta verificada por la asesora'
       : 'Comprobante recibido: esperando que la asesora confirme el pago',
-    lineId, at: ep.at, status: ep.verified && amount > 0 && advisor.name ? 'confirmada' : 'revisar',
+    lineId, at: ep.at, status: countsAsSale(ep) && amount > 0 && advisor.name ? 'confirmada' : 'revisar',
     amountSource: amount ? source : null, quotedAmount: ep.quote ?? null, receiptAmount: receipt,
     amountMatch: ep.quote != null && receipt != null ? Math.abs(ep.quote - receipt) < 0.5 : null, rule: rule ?? 'sin_atribuir',
     channel: social ? 'social' : 'whatsapp', evidenceType: ep.type === 'comprobante' ? 'receipt_ocr' : (social ? 'social_confirmation' : 'advisor_confirmation'),
@@ -357,7 +357,9 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
      WHERE h.created_at >= $1 AND h.created_at <= $2 AND (
        (h.message->'additional_kwargs'->>'ocrAmount') IS NOT NULL
        OR (h.message->>'type' = 'ai' AND h.message->>'content' ~* $3)
-       OR (h.message->>'type' = 'human' AND h.message->>'content' ~* $4))`,
+       OR (h.message->>'type' = 'human' AND h.message->>'content' ~* $4)
+       -- una foto/PDF del cliente que aún no se ha leído (típico: la boleta del banco) puede ser el comprobante: se revisa en el hilo
+       OR (h.message->>'type' = 'human' AND EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id AND (a.kind = 'image' OR a.mime_type = 'application/pdf'))))`,
     [ignoreLock ? new Date(+start - DAY) : start, ignoreLock ? new Date(+end + DAY) : end, CONFIRM_SQL, BANK_SQL]
   );
 
@@ -408,7 +410,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
       const wrongAdvisor = ep.advisor && !sale.amount_validated_at && !sale.advisor_override_at && !sameAdvisor(ep.advisor, sale.advisor_name);
       const wrongAmount = ep.type === 'comprobante' && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
       const wrongDate = guatemalaParts(sale.created_at).ymd !== guatemalaParts(ep.at).ymd;
-      const promotable = sale.status === 'revisar' && ep.verified && (ep.amount > 0 || Number(sale.amount) > 0);
+      const promotable = sale.status === 'revisar' && countsAsSale(ep) && (ep.amount > 0 || Number(sale.amount) > 0);
       item.status = (sale.attribution_locked && !ignoreLock) ? 'bloqueada'
         : wrongAdvisor ? 'asesor_distinto' : wrongAmount ? 'monto_distinto' : wrongDate ? 'fecha_distinta'
         : promotable ? 'confirmacion_pendiente' : 'ok';
