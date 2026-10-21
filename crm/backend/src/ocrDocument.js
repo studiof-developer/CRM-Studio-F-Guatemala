@@ -6,7 +6,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { createWorker } from 'tesseract.js';
 import { UPLOAD_DIR } from './attachmentStorage.js';
-import { tesseractErrorHandler } from './ocrPayment.js';
+import { tesseractErrorHandler, looksRejected } from './ocrPayment.js';
 
 const execFileAsync = promisify(execFile);
 const GS_TIMEOUT_MS = 60_000;
@@ -18,7 +18,7 @@ const MIN_EMBEDDED_TEXT = 40;
 // El voucher de aprobación de NeoLink/pasarela (pantalla "Aprobada ... Descargar voucher") no
 // trae monto, pero SÍ prueba que el pago con link se aprobó. Se guarda aparte del monto.
 export function isPaymentVoucher(ocrText) {
-  return /(aprobad[ao]|descargar\s+voucher|neolink|transacci[oó]n\s+(exitosa|aprobada)|pago\s+(exitoso|aprobado))/i.test(ocrText ?? '');
+  return !looksRejected(ocrText) && /(aprobad[ao]|descargar\s+voucher|neolink|transacci[oó]n\s+(exitosa|aprobada)|pago\s+(exitoso|aprobado))/i.test(ocrText ?? '');
 }
 
 async function withTempFile(buffer, ext, fn) {

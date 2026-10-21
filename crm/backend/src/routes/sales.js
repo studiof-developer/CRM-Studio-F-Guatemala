@@ -11,7 +11,7 @@ import { getGoals, saveGoal, buildGoalRows, monthClock } from '../salesGoals.js'
 import { aggregateItems } from '../salesItems.js';
 import { syncRecentPaymentLinks } from '../paymentLinks.js';
 import { getPendingPayments } from '../pendingPayments.js';
-import { startHistoryJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
+import { startHistoryJob, startRescanJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
 import { restoreBackup } from '../salesHistory.js';
 import { explainChat } from '../salesExplain.js';
 import { reviewDay, markItem, applyHumanCorrections } from '../salesDayReview.js';
@@ -729,6 +729,17 @@ router.put('/history/day/mark', adminOnly, async (req, res, next) => {
     const { day, itemKey, verdict = null, note, amountOverride, advisorOverride, keep, discard } = req.body ?? {};
     await markItem({ day, itemKey, verdict, note, amountOverride, advisorOverride, keep, discard, userId: req.user?.id });
     res.json({ ok: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// POST /api/sales/history/rescan { days? }: relee los comprobantes guardados y quita los que eran pantallas de verificación o de rechazo
+router.post('/history/rescan', adminOnly, async (req, res, next) => {
+  try {
+    const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 90);
+    res.status(202).json(await startRescanJob({ days, userName: req.user?.fullName || req.user?.username }));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);

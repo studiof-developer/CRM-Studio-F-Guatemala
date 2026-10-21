@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, RefreshCw, Play, Eye, Undo2 } from 'lucide-react';
-import { fetchSalesHistory, startSalesHistory, restoreSalesHistory, explainSalesChat } from '../api.js';
+import { fetchSalesHistory, startSalesHistory, startSalesRescan, restoreSalesHistory, explainSalesChat } from '../api.js';
 import { showError, showSuccess } from './Toast.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 
@@ -52,6 +52,12 @@ export default function SalesHistoryModal({ open, onClose, onChanged }) {
     catch (err) { showError(err.message); } finally { setBusy(false); setConfirmApply(false); }
   }
 
+  async function rescan() {
+    setBusy(true);
+    try { await startSalesRescan(30); seen.current = 0; await refresh(); }
+    catch (err) { showError(err.message); } finally { setBusy(false); }
+  }
+
   async function explain() {
     setBusy(true);
     try { setChatLines((await explainSalesChat(chatPhone, chatDay)).lines); }
@@ -95,7 +101,10 @@ export default function SalesHistoryModal({ open, onClose, onChanged }) {
           <button type="button" onClick={() => setConfirmApply(true)} disabled={busy || running || !from || !to} className="flex items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 font-semibold text-white hover:opacity-90 disabled:opacity-50">
             {running && job?.mode === 'apply' ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}<span>2. Aplicar</span>
           </button>
-          {running && <span className="flex items-center gap-1.5 font-semibold text-warning"><RefreshCw size={12} className="animate-spin" />{job.mode === 'apply' ? 'Aplicando' : 'Revisando'} {job.from} → {job.to}… puedes cerrar esta ventana, sigue en el servidor.</span>}
+          <button type="button" onClick={rescan} disabled={busy || running} title="Relee los comprobantes de los últimos 30 días y quita los que eran la pantalla de verificación o de rechazo de la pasarela (el cliente no pagó)" className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-1.5 font-semibold text-ink hover:bg-muted disabled:opacity-50">
+            {running && job?.mode === 'rescan' ? <RefreshCw size={13} className="animate-spin" /> : <Eye size={13} />}<span>Buscar pagos rechazados (30 días)</span>
+          </button>
+          {running && <span className="flex items-center gap-1.5 font-semibold text-warning"><RefreshCw size={12} className="animate-spin" />{job.mode === 'apply' ? 'Aplicando' : job.mode === 'rescan' ? 'Releyendo comprobantes' : 'Revisando'}{job.from ? ` ${job.from} → ${job.to}` : ''}… puedes cerrar esta ventana, sigue en el servidor.</span>}
         </div>
 
         <div className="border-b border-line px-5 py-2 text-xs text-greige-ink">
@@ -112,7 +121,7 @@ export default function SalesHistoryModal({ open, onClose, onChanged }) {
         </div>
 
         {job?.error && !running &&<p className="border-b border-line bg-danger/10 px-5 py-2 text-xs text-danger">Se cortó: {job.error}. Los días ya terminados quedan guardados; vuelve a pulsar Aplicar para retomar.</p>}
-        {job && !running && !job.error && <p className="border-b border-line bg-success/10 px-5 py-2 text-xs text-success">{job.mode === 'apply' ? `Terminado${job.backup ? ` · copia: ${job.backup}` : ''}.` : 'Revisión lista: no se cambió nada. Compara unos días con las libretas y, si cuadra, pulsa Aplicar.'}</p>}
+        {job && !running && !job.error && <p className="border-b border-line bg-success/10 px-5 py-2 text-xs text-success">{job.mode === 'apply' ? `Terminado${job.backup ? ` · copia: ${job.backup}` : ''}.` : job.mode === 'rescan' ? 'Listo: revisa el resultado en el recuadro.' : 'Revisión lista: no se cambió nada. Compara unos días con las libretas y, si cuadra, pulsa Aplicar.'}</p>}
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
           <pre ref={logRef} className="h-[50vh] overflow-auto whitespace-pre rounded-xl border border-line bg-secondary p-3 font-mono text-[11px] leading-relaxed text-ink">

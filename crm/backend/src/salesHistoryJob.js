@@ -1,4 +1,5 @@
 import { rebuildHistory, completedDays, listBackups } from './salesHistory.js';
+import { rescanRejectedReceipts } from './salesRescan.js';
 
 // Corre la reconstrucción del historial en segundo plano para el botón del CRM (la misma lógica que el script de terminal).
 // Una sola corrida a la vez (además del candado en la base). El estado vive en memoria: si el servidor se reinicia a mitad de camino,
@@ -18,6 +19,18 @@ export async function startHistoryJob({ mode, from, to, force = false, userName 
     cur.backup = r?.backup ?? null;
     if (mode === 'apply') await hooks.after?.(log);
   })()
+    .catch((err) => { cur.error = err.message; log(`ERROR: ${err.message}`); })
+    .finally(() => { cur.running = false; cur.finishedAt = new Date().toISOString(); });
+  return { id: cur.id };
+}
+
+// Misma ventana de progreso que la reconstrucción: relee los comprobantes guardados y quita los que eran pantallas de rechazo/verificación.
+export async function startRescanJob({ days = 30, userName = null }) {
+  if (job?.running) throw Object.assign(new Error('Ya hay un proceso corriendo. Espera a que termine.'), { status: 409 });
+  const cur = { id: Date.now(), mode: 'rescan', from: null, to: null, force: false, userName, running: true, error: null, startedAt: new Date().toISOString(), finishedAt: null, lines: [], backup: null };
+  job = cur;
+  const log = (l) => { if (cur.lines.length < MAX_LINES) cur.lines.push(String(l)); };
+  rescanRejectedReceipts({ days, log })
     .catch((err) => { cur.error = err.message; log(`ERROR: ${err.message}`); })
     .finally(() => { cur.running = false; cur.finishedAt = new Date().toISOString(); });
   return { id: cur.id };

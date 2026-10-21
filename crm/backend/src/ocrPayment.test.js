@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount } from './ocrPayment.js';
+import { receiptContainsAmount, guessPaidMethod, extractReceiptAmount, parseAmount, looksRejected } from './ocrPayment.js';
+import { isPaymentVoucher } from './ocrDocument.js';
 
 test('matches a bare integer against a receipt printing cents', () => {
   assert.equal(receiptContainsAmount('MONTO (Q) 1,390.00', 1390), true);
@@ -152,4 +153,18 @@ test('un comprobante guarda los centavos exactos (Q349.50 no es Q350)', () => {
   assert.equal(extractReceiptAmount('Neolink Medio de pago: Contado Monto: (Q) 349.50 pagado electronicamente'), 349.5);
   assert.equal(extractReceiptAmount('Comprobante Referencia 12345 Monto Q 734.30'), 734.3);
   assert.equal(extractReceiptAmount('Comprobante de pago. Referencia: 987654321. Q2.486,00 pagado.'), 2486);
+});
+
+test('la pantalla de verificación (OTP) o de rechazo de NeoLink no es un comprobante: ni monto ni voucher', () => {
+  const otp = 'pay.neolink.com.gt Banco Promerica VISA Ingresa el código de verificación que te hemos enviado por Biometric a Autorice la transacción biométrica desde su App del Banco. Estás autorizando la compra en BAGNERES ESTUDIO F por Q 2,025.00 GTQ el 21/10/2026 con tu tarjeta 6121. Has alcanzado el máximo de solicitudes de un código.';
+  assert.equal(looksRejected(otp), true);
+  assert.equal(extractReceiptAmount(otp), null);
+  assert.equal(isPaymentVoucher(otp), false);
+  assert.equal(receiptContainsAmount(otp, 2025), false);
+  assert.equal(extractReceiptAmount('pay.neolink.com.gt Transacción rechazada. Monto: Q 349.00'), null);
+  // el voucher de un pago aprobado sigue valiendo
+  const aprobado = 'Neolink BAGNERES ESTUDIO F Medio de pago: Contado Monto: (Q) 873.00 (01): pagado electrónicamente COPIA CLIENTE ¡Gracias por tu compra!';
+  assert.equal(looksRejected(aprobado), false);
+  assert.equal(extractReceiptAmount(aprobado), 873);
+  assert.equal(isPaymentVoucher(aprobado), true);
 });

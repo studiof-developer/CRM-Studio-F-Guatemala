@@ -37,7 +37,13 @@ const RECEIPT_KEYWORDS = /(monto|cuenta|referencia|autorizaci[oó]n|recib[oí]|c
 // confirmation screen uses). Plain substring match, not regex — an admin typing a phrase
 // here can't accidentally write a broken or overly-broad pattern the way editing the
 // fixed regex above could.
+// Pantallas de la pasarela que muestran la compra y el monto pero NO son un pago hecho: el código de verificación (OTP) que pide el banco, o
+// el aviso de transacción rechazada. Traen "neolink" en la dirección y el monto de la compra, así que pasaban por comprobante.
+const NOT_A_PAYMENT = /(est[aá]s|estas)\s+autorizando\s+la\s+compra|ingresa\s+el\s+c[oó]digo\s+de\s+verificaci[oó]n|m[aá]ximo\s+de\s+solicitudes|autorice\s+la\s+transacci[oó]n|(transacci[oó]n|pago|compra|tarjeta)\s+(fue\s+|ha\s+sido\s+)?(rechazad|declinad|denegad|fallid)|\bAUTENTICAR\b/i;
+export const looksRejected = (ocrText) => NOT_A_PAYMENT.test(ocrText ?? '');
+
 function matchesReceiptKeywords(ocrText, extraKeywords = []) {
+  if (looksRejected(ocrText)) return false;
   if (RECEIPT_KEYWORDS.test(ocrText)) return true;
   const lower = ocrText.toLowerCase();
   return extraKeywords.some((kw) => kw && lower.includes(kw.toLowerCase()));
