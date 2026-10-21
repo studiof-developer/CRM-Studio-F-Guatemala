@@ -48,9 +48,9 @@ export default function SalesHeadline({ title, summary, previous, porValidarTota
               <div>
                 <dt className="text-[11px] font-semibold uppercase tracking-wider text-warn">Pendiente de pago</dt>
                 <dd className="mt-0.5">
-                  <button type="button" onClick={onShowPending} title="Ver los links de pago enviados que todavía no se pagan" className="text-left text-xl font-bold tracking-tight text-warn hover:underline">
+                  <button type="button" onClick={onShowPending} title="Ver los pagos pendientes: medios de pago enviados que todavía no se pagan" className="text-left text-xl font-bold tracking-tight text-warn hover:underline">
                     {q(pending.total)}
-                    <span className="ml-1.5 text-xs font-semibold text-greige-ink">{pending.count} link{pending.count === 1 ? '' : 's'}{pending.unknownCount ? ` · ${pending.unknownCount} sin monto` : ''}</span>
+                    <span className="ml-1.5 text-xs font-semibold text-greige-ink">{pending.count} pendiente{pending.count === 1 ? '' : 's'}{pending.unknownCount ? ` · ${pending.unknownCount} sin monto` : ''}</span>
                   </button>
                 </dd>
               </div>

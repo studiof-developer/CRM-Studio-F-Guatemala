@@ -323,9 +323,13 @@ function findPending(sorted, episodes, asOf) {
   const cycle = sorted.filter((e) => +new Date(e.at) > lastDone && +new Date(e.at) <= +new Date(payInfo.at));
   const quotedAmounts = cycle.filter((e) => e.role === 'advisor').map((e) => quotedAmountIn(e.text)).filter((v) => v != null).slice(-8);
   const quotedAt = price?.at ? +new Date(price.at) : null;
+  // el último total que la asesora dijo DESPUÉS de entregar los medios de pago ("Total Q1.576, por favor mándeme el comprobante"):
+  // si lo hay, es el monto que se espera cobrar
+  const quotedAfter = sorted.filter((e) => e.role === 'advisor' && +new Date(e.at) > +new Date(payInfo.at) && +new Date(e.at) <= cutoff && !isConfirmationMessage(e.text))
+    .map((e) => quotedAmountIn(e.text)).filter((v) => v != null).pop() ?? null;
   return {
     at: payInfo.at, eventId: payInfo.id, advisor: payInfo.advisor, medium: paymentMedium(payInfo.text),
-    amount: price?.amount ?? null, quotedAmounts,
+    amount: price?.amount ?? null, quotedAfter, quotedAmounts,
     // "intención": el cliente aceptó explícitamente una cotización antes de recibir los medios de pago
     customerAccepted: quotedAt != null && cycle.some((e) => e.role === 'customer' && +new Date(e.at) > quotedAt && acceptsOffer(e.text)),
     customerReplied: sorted.some((e) => e.role === 'customer' && +new Date(e.at) > +new Date(payInfo.at) && +new Date(e.at) <= cutoff),

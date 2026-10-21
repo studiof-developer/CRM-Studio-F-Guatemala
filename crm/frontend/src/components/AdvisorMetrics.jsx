@@ -91,7 +91,7 @@ export default function AdvisorMetrics({ advisors, goals, pending, onOpen, onSho
                       {a.turnos && TURNOS.filter(([, k]) => a.turnos[k] > 0).map(([label, k]) => (
                         <span key={k} className="rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-greige-ink dark:bg-white/[0.08]">{label} {q0(a.turnos[k])}</span>
                       ))}
-                      {pend && <button type="button" onClick={onShowPending} className="rounded-full bg-warn/15 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/25">Pendiente de pago {q0(pend.total)} · {pend.count} link{pend.count === 1 ? '' : 's'}</button>}
+                      {pend && <button type="button" onClick={onShowPending} className="rounded-full bg-warn/15 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/25">Pendiente de pago {q0(pend.total)} · {pend.count}</button>}
                       {a.porValidar > 0 && <span className="rounded-full bg-warn/10 px-2.5 py-1 text-[11px] font-semibold text-warn">{q0(a.porValidarTotal)} por validar</span>}
                       {a.porRevisar > 0 && (
                         <button type="button" onClick={() => onOpen(a, 'revisar')} className="rounded-full bg-warn/15 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/25">{a.porRevisar} por revisar</button>

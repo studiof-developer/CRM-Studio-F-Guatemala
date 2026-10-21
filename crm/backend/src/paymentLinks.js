@@ -86,30 +86,23 @@ export async function applyLinkAmounts(pending) {
   return pending;
 }
 
-// Lo pendiente de cobro ahora: links mandados en las últimas 24 h al cliente que todavía no tiene una venta registrada después.
-// Si a un cliente le mandaron varios links, cuenta solo el último.
-export async function pendingPayments({ lineId = null } = {}) {
+// Links mandados en las últimas 24 h al cliente que todavía no tiene una venta registrada después. Si a un cliente le mandaron
+// varios links, cuenta solo el último. El resumen y la unión con los pendientes del chat están en pendingPayments.js.
+export async function pendingFromLinks() {
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (COALESCE(c.id::text, pl.phone)) pl.id, pl.url, pl.amount, pl.phone, pl.sent_at, pl.advisor_name, c.full_name AS customer_name
+    `SELECT DISTINCT ON (COALESCE(c.id::text, pl.phone)) pl.id, pl.url, pl.amount, pl.phone, pl.line_id, pl.sent_at, pl.advisor_name, c.id AS customer_id, c.full_name AS customer_name
      FROM payment_links pl LEFT JOIN customers c ON c.whatsapp_number = pl.phone
-     WHERE pl.sent_at >= now() - interval '24 hours' AND ($1::int IS NULL OR pl.line_id = $1::int)
+     WHERE pl.sent_at >= now() - interval '24 hours'
        AND NOT EXISTS (SELECT 1 FROM sales s WHERE s.customer_id = c.id AND s.status IN ('confirmada', 'revisar') AND s.created_at >= pl.sent_at)
-     ORDER BY COALESCE(c.id::text, pl.phone), pl.sent_at DESC`,
-    [lineId ? Number(lineId) : null]
+     ORDER BY COALESCE(c.id::text, pl.phone), pl.sent_at DESC`
   );
   const canonical = nameResolver();
   const items = [];
   for (const r of rows) {
     items.push({
-      id: r.id, url: r.url, amount: r.amount != null ? Number(r.amount) : null, phone: r.phone, customerName: r.customer_name ?? null,
-      sentAt: r.sent_at, advisorName: (await canonical(r.advisor_name)) ?? r.advisor_name ?? 'Sin asignar',
+      source: 'link', id: r.id, url: r.url, medium: 'link', amount: r.amount != null ? Number(r.amount) : null, phone: r.phone, line: r.line_id,
+      customerId: r.customer_id, customerName: r.customer_name ?? null, sentAt: r.sent_at, advisorName: (await canonical(r.advisor_name)) ?? r.advisor_name ?? 'Sin asignar',
     });
   }
-  items.sort((a, b) => +new Date(b.sentAt) - +new Date(a.sentAt));
-  const byAdvisor = {};
-  for (const it of items) {
-    const a = (byAdvisor[it.advisorName] ??= { total: 0, count: 0 });
-    a.total += it.amount ?? 0; a.count += 1;
-  }
-  return { total: items.reduce((n, i) => n + (i.amount ?? 0), 0), count: items.length, unknownCount: items.filter((i) => i.amount == null).length, byAdvisor, items };
+  return items;
 }

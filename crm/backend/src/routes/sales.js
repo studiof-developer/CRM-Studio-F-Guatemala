@@ -9,7 +9,8 @@ import { exportChats } from '../salesChatExport.js';
 import { lineSessionSql, defaultLineId } from '../salesThreads.js';
 import { getGoals, saveGoal, buildGoalRows, monthClock } from '../salesGoals.js';
 import { aggregateItems } from '../salesItems.js';
-import { syncRecentPaymentLinks, pendingPayments } from '../paymentLinks.js';
+import { syncRecentPaymentLinks } from '../paymentLinks.js';
+import { getPendingPayments } from '../pendingPayments.js';
 
 const router = Router();
 
@@ -425,7 +426,7 @@ router.get('/by-advisor', async (req, res, next) => {
     let pending = null;
     try {
       await Promise.race([syncRecentPaymentLinks(), new Promise((resolve) => setTimeout(resolve, 6000))]);
-      pending = await pendingPayments({ lineId });
+      pending = await getPendingPayments({ lineId });
     } catch (err) { console.error('pending payments', err.message); }
 
     res.json({
