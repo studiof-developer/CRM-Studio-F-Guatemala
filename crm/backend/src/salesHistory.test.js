@@ -30,3 +30,12 @@ test('comparación del día: registrado contra chats, también cuando una asesor
   );
   assert.deepEqual(rows.map((r) => [r.name, r.registered, r.chat, r.diff]), [['Aura', 100, 0, -100], ['Leydi', 1575, 2405, 830], ['Marisa', 0, 50, 50]]);
 });
+
+test('retomar: los días ya completos se omiten y se sigue desde el primero que falta', async () => {
+  const { splitDays } = await import('./salesHistory.js');
+  const days = listDays('2026-10-01', '2026-10-05');
+  assert.deepEqual(splitDays(days, ['2026-10-01', '2026-10-02', '2026-10-03']), { pending: ['2026-10-04', '2026-10-05'], skipped: ['2026-10-01', '2026-10-02', '2026-10-03'] });
+  assert.deepEqual(splitDays(days, days).pending, []);
+  assert.deepEqual(splitDays(days, ['2026-10-01'], true).pending, days); // --force: rehace todo
+  assert.deepEqual(splitDays(days, []).pending, days);
+});

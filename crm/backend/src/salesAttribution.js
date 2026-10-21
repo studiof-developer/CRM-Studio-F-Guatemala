@@ -358,7 +358,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
        (h.message->'additional_kwargs'->>'ocrAmount') IS NOT NULL
        OR (h.message->>'type' = 'ai' AND h.message->>'content' ~* $3)
        OR (h.message->>'type' = 'human' AND h.message->>'content' ~* $4))`,
-    [start, end, CONFIRM_SQL, BANK_SQL]
+    [ignoreLock ? new Date(+start - DAY) : start, ignoreLock ? new Date(+end + DAY) : end, CONFIRM_SQL, BANK_SQL]
   );
 
   const canonical = nameResolver();
@@ -375,7 +375,8 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
       }
     }
     for (const ep of episodes) {
-      if (new Date(ep.at) < start || new Date(ep.at) > end) continue;
+      const inRange = new Date(ep.at) >= start && new Date(ep.at) <= end;
+      if (!inRange && !(ignoreLock && new Date(ep.at) >= new Date(+start - DAY) && new Date(ep.at) <= new Date(+end + DAY))) continue;
       if (lineId && Number(lineId) !== ep.line) continue;
       const evType = ep.type === 'comprobante' ? 'receipt_ocr' : 'advisor_confirmation';
       let sale = (await pool.query('SELECT * FROM sales WHERE evidence_type = $1 AND evidence_message_id = $2', [evType, ep.eventId])).rows[0];
@@ -391,6 +392,7 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
         )).rows.find((s) => !claimed.has(s.id));
       }
       if (sale) claimed.add(sale.id);
+      if (!inRange) continue;
 
       const item = {
         receiptId: ep.eventId, at: ep.at, customerId: customer.id, customer: ep.customer, phone: ep.phone, line: ep.line,
@@ -421,7 +423,8 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
     `SELECT s.id, s.customer_id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
      FROM sales s JOIN customers c ON c.id = s.customer_id
      WHERE s.created_at >= $1 AND s.created_at <= $2 AND ($3::boolean OR NOT s.attribution_locked)
-       AND s.evidence_message_id IS NULL AND COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'
+       AND s.evidence_message_id IS NULL AND ($3::boolean OR (COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'))
+       AND NOT ($3::boolean AND (s.amount_validated_at IS NOT NULL OR s.advisor_override_at IS NOT NULL))
      ORDER BY s.created_at`,
     [start, end, ignoreLock]
   );
@@ -474,14 +477,15 @@ function buildAuditText({ from, to, counts, items }) {
 // no tiene respaldo en el chat pasa a "por revisar" (queda fuera de los totales).
 // ignoreLock: ver auditSales (las ventas que toca quedan sin candado: ya salen de la evidencia). markUnbacked=false no pasa a "por revisar"
 // las ventas sin comprobante ni confirmación en el chat; solo se reportan.
-export async function rebuildSales({ from, to, lineId = null, apply = false, user = null, ignoreLock = false, markUnbacked = true, ocrMaxReads = 80 }) {
+export async function rebuildSales({ from, to, lineId = null, apply = false, user = null, ignoreLock = false, markUnbacked = true, deleteUnbacked = false, ocrMaxReads = 80 }) {
   const audit = await auditSales({ from, to, lineId, ignoreLock, ocrMaxReads });
-  const plan = { insertar: 0, reasignar: 0, promover: 0, vincular: 0, marcarRevisar: 0 };
+  const plan = { insertar: 0, reasignar: 0, promover: 0, vincular: 0, marcarRevisar: 0, eliminar: 0 };
   for (const i of audit.items) {
     if (i.status === 'sin_venta') plan.insertar++;
     else if (['asesor_distinto', 'fecha_distinta', 'monto_distinto'].includes(i.status)) plan.reasignar++;
     else if (i.status === 'confirmacion_pendiente') plan.promover++;
     else if (i.status === 'ok' && !i.linked && i.saleId) plan.vincular++;
+    else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && deleteUnbacked) plan.eliminar++;
     else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && markUnbacked) plan.marcarRevisar++;
   }
   if (!apply) return { applied: false, plan, ...audit };
@@ -512,6 +516,12 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
          WHERE id = $1 AND ($12::boolean OR NOT attribution_locked)
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
         [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null, !!i.attributionUncertain, ignoreLock]
+      );
+    } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && deleteUnbacked) {
+      // reconstrucción histórica: lo registrado sin comprobante, confirmación ni medios de pago en el chat no es una venta
+      await pool.query(
+        `DELETE FROM sales WHERE id = $1 AND evidence_message_id IS NULL AND amount_validated_at IS NULL AND advisor_override_at IS NULL AND ($2::boolean OR NOT attribution_locked)`,
+        [i.saleId, ignoreLock]
       );
     } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && markUnbacked) {
       const note = i.duplicateOf
