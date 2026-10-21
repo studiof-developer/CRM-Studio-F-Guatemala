@@ -27,8 +27,11 @@ export async function reviewDay(day) {
     key: `s:${i.saleId}`, at: i.at, customer: i.customer, phone: i.phone, amount: i.amount, advisor: i.recordedAdvisor,
     duplicateOf: i.duplicateOf ?? null,
   })).sort(byAt);
+  const protectedSales = audit.items.filter((i) => i.status === 'protegida').map((i) => ({
+    key: `s:${i.saleId}`, at: i.at, customer: i.customer, phone: i.phone, amount: i.amount, advisor: i.recordedAdvisor,
+  })).sort(byAt);
   return {
-    day, paid, orphans, deletes, advisors: advisors.map((a) => a.full_name), completed: done.length > 0,
+    day, paid, orphans, deletes, protectedSales, advisors: advisors.map((a) => a.full_name), completed: done.length > 0,
     marks: Object.fromEntries(marks.map((m) => [m.item_key, {
       verdict: m.verdict, note: m.note, amountOverride: m.amount_override != null ? Number(m.amount_override) : null, advisorOverride: m.advisor_override, keep: m.keep, discard: m.discard,
     }])),
@@ -77,7 +80,10 @@ export async function applyHumanCorrections(day, userId, phase, log = () => {}) 
   let n = 0;
   for (const m of marks) {
     const id = Number(m.item_key.slice(2));
-    if (phase === 'before' && m.item_key.startsWith('s:') && m.keep) n += await fixSale(id, m, userId);
+    if (phase === 'before' && m.item_key.startsWith('s:') && m.discard) {
+      // una venta validada a mano que la persona confirma que NO fue compra: se quita (la persona decide por encima de la validación)
+      n += (await pool.query('DELETE FROM sales WHERE id = $1', [id])).rowCount;
+    } else if (phase === 'before' && m.item_key.startsWith('s:') && m.keep) n += await fixSale(id, m, userId);
     if (phase === 'after' && m.item_key.startsWith('r:') && m.discard) {
       // no fue una compra: no queda registro (si no existe aún, no hay nada que borrar)
       n += (await pool.query(`DELETE FROM sales WHERE evidence_message_id = $1 AND evidence_type IN ('receipt_ocr', 'advisor_confirmation')`, [id])).rowCount;

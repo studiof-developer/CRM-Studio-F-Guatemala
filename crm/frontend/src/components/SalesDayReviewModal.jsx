@@ -35,7 +35,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const groups = useMemo(() => (data ? [['paid', data.paid], ['orphans', data.orphans], ['deletes', data.deletes]] : []), [data]);
+  const groups = useMemo(() => (data ? [['paid', data.paid], ['orphans', data.orphans], ['deletes', data.deletes], ['protected', data.protectedSales ?? []]] : []), [data]);
   const all = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
   const reviewed = all.filter((r) => marks[r.key]).length;
   const bad = all.filter((r) => marks[r.key]?.verdict === 'mal');
@@ -86,13 +86,13 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   // Funciones (no componentes) para que escribir una nota no remonte el campo en cada render.
   const actions = (item, kind = 'paid') => {
     const m = marks[item.key];
-    const [okLabel, badLabel] = kind === 'paid' ? ['Correcto', 'Incorrecto'] : ['No fue venta', 'Sí fue venta'];
+    const [okLabel, badLabel] = kind === 'paid' ? ['Correcto', 'Incorrecto'] : kind === 'protected' ? ['Es una venta real', 'No fue venta: quitarla'] : ['No fue venta', 'Sí fue venta'];
     return (
       <div className="flex flex-wrap items-center gap-1">
         {item.phone && <button type="button" className={btn} onClick={() => onOpenConversation?.(item.phone, item.line)} disabled={!onOpenConversation}><MessageSquare size={11} />Chat</button>}
         {item.phone && <button type="button" className={btn} onClick={() => showEngine(item)}><Eye size={11} />Motor</button>}
         <button type="button" onClick={() => mark(item, m?.verdict === 'ok' ? null : 'ok')} title={okLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'ok' ? 'border-success bg-success text-white' : 'border-line text-ink hover:bg-muted'}`}><Check size={11} />{okLabel}</button>
-        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal')} title={badLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />{badLabel}</button>
+        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal', kind === 'protected' ? { discard: true } : {})} title={badLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />{badLabel}</button>
       </div>
     );
   };
@@ -105,7 +105,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
       {m?.verdict === 'mal' && (
         <div className="mt-1.5 space-y-1.5">
           <input defaultValue={m.note ?? ''} onBlur={(e) => mark(item, 'mal', { note: e.target.value })} placeholder="¿Qué pasó? (sirve de registro)" className={`${field} w-full`} />
-          {kind !== 'orphan' && (
+          {(kind === 'paid' || kind === 'delete') && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
               {kind === 'delete' && (
                 <label className="flex items-center gap-1 font-semibold"><input type="checkbox" checked={!!m.keep} onChange={(e) => mark(item, 'mal', { keep: e.target.checked })} />Conservar esta venta</label>
@@ -218,6 +218,24 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
                   </div>
                 )}
               </section>
+              {data.protectedSales?.length > 0 && (
+                <section>
+                  <h4 className="mb-1 text-sm font-bold text-ink">Ventas del CRM validadas a mano sin respaldo en el chat ({data.protectedSales.length})</h4>
+                  <p className="mb-2 text-greige-ink">Alguien validó o corrigió estas ventas a mano, por eso el motor no las borra, pero el chat de ese día no tiene comprobante, confirmación ni medios de pago que las explique. Revisa el chat: si no fue una compra, quítala aquí.</p>
+                  <div className="divide-y divide-line-soft rounded-xl border border-line">
+                    {data.protectedSales.map((r) => (
+                      <div key={r.key} className="p-3">
+                        <div className="grid gap-2 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.4fr)_auto] md:items-center">
+                          <p className="font-semibold text-ink">{fmtTime(r.at)} · {r.customer} <span className="font-normal text-greige-ink">(…{last4(r.phone)})</span></p>
+                          <p className="text-ink">{fmtQ(r.amount)} · {r.advisor}</p>
+                          {actions(r, 'protected')}
+                        </div>
+                        {extra(r, 'protected')}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>

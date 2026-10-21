@@ -476,6 +476,25 @@ export async function auditSales({ from, to, lineId = null, ignoreLock = false, 
     });
   }
 
+  // Ventas que un supervisor validó o corrigió a mano y que ningún comprobante ni confirmación del chat explica: el motor no las borra, pero la
+  // revisión las muestra para que la persona decida (si no, quedarían escondidas en el CRM).
+  if (ignoreLock) {
+    const { rows: protectedSales } = await pool.query(
+      `SELECT s.id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
+       FROM sales s JOIN customers c ON c.id = s.customer_id
+       WHERE s.created_at >= $1 AND s.created_at <= $2 AND (s.amount_validated_at IS NOT NULL OR s.advisor_override_at IS NOT NULL)
+       ORDER BY s.created_at`,
+      [start, end]
+    );
+    for (const s of protectedSales) {
+      if (claimed.has(s.id)) continue;
+      items.push({
+        status: 'protegida', saleId: s.id, at: s.created_at, customer: s.full_name || s.whatsapp_number, phone: s.whatsapp_number,
+        amount: Number(s.amount), recordedAdvisor: s.advisor_name, shift: shiftOf(s.created_at),
+      });
+    }
+  }
+
   const counts = items.reduce((acc, i) => ({ ...acc, [i.status]: (acc[i.status] ?? 0) + 1 }), {});
   return { from, to, counts, items, txtContent: buildAuditText({ from, to, counts, items }) };
 }
