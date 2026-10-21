@@ -39,14 +39,14 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   const all = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
   const reviewed = all.filter((r) => marks[r.key]).length;
   const bad = all.filter((r) => marks[r.key]?.verdict === 'mal');
-  const fixed = (k) => { const m = marks[k]; return m?.verdict === 'mal' && (m.amountOverride != null || !!m.advisorOverride || !!m.keep); };
+  const fixed = (k) => { const m = marks[k]; return m?.verdict === 'mal' && (m.amountOverride != null || !!m.advisorOverride || !!m.keep || !!m.discard); };
   const unresolved = bad.filter((r) => !fixed(r.key));
   const ready = data && all.length > 0 && reviewed === all.length && unresolved.length === 0;
 
   // patch: { note, amountOverride, advisorOverride, keep }. Una marca "ok" no lleva corrección.
   async function mark(item, verdict, patch = {}) {
     const prev = marks[item.key];
-    const body = verdict === 'mal' ? { note: '', amountOverride: null, advisorOverride: '', keep: false, ...(prev?.verdict === 'mal' ? prev : {}), ...patch } : {};
+    const body = verdict === 'mal' ? { note: '', amountOverride: null, advisorOverride: '', keep: false, discard: false, ...(prev?.verdict === 'mal' ? prev : {}), ...patch } : {};
     delete body.verdict;
     const next = verdict === null ? undefined : { verdict, ...body };
     setMarks((m) => { const c = { ...m }; if (next) c[item.key] = next; else delete c[item.key]; return c; });
@@ -109,6 +109,9 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
               {kind === 'delete' && (
                 <label className="flex items-center gap-1 font-semibold"><input type="checkbox" checked={!!m.keep} onChange={(e) => mark(item, 'mal', { keep: e.target.checked })} />Conservar esta venta</label>
+              )}
+              {kind === 'paid' && (
+                <label className="flex items-center gap-1 font-semibold"><input type="checkbox" checked={!!m.discard} onChange={(e) => mark(item, 'mal', { discard: e.target.checked })} />No fue una compra: que no quede registro</label>
               )}
               <label className="flex items-center gap-1">Monto correcto Q<input type="number" min="1" step="0.01" defaultValue={m.amountOverride ?? ''} onBlur={(e) => mark(item, 'mal', { amountOverride: e.target.value === '' ? null : Number(e.target.value) })} className={`${field} w-24`} /></label>
               <label className="flex items-center gap-1">Asesora correcta<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(igual)" className={`${field} w-48`} /></label>

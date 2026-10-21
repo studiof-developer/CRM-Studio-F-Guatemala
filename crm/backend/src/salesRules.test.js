@@ -232,6 +232,9 @@ test('episodios: "proceso de alistamiento" a quien pregunta por un pedido de la 
     adv(gt('14', '07:06'), 'Aura', 'Si seño está en proceso de alistamiento, tiene un tiempo de entrega de 3 a 4 días'),
   ];
   assert.equal(buildEpisodes(eventos).episodes.length, 0);
+  // una foto del cliente sin monto leído (una prenda, p. ej.) tampoco demuestra una compra
+  const conFoto = [{ id: ++n, at: gt('13', '21:00'), role: 'customer', advisor: null, text: '', ocrAmount: null, image: true }, ...eventos];
+  assert.equal(buildEpisodes(conFoto).episodes.length, 0);
   // con cotización o medios de pago antes, la misma frase sí confirma una venta
   const conVenta = [adv(gt('14', '06:00'), 'Aura', 'Total Q539'), ...eventos.slice(1)];
   assert.equal(buildEpisodes(conVenta).episodes.length, 1);

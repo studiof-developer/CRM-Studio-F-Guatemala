@@ -726,8 +726,8 @@ router.get('/history/day', adminOnly, async (req, res, next) => {
 
 router.put('/history/day/mark', adminOnly, async (req, res, next) => {
   try {
-    const { day, itemKey, verdict = null, note, amountOverride, advisorOverride, keep } = req.body ?? {};
-    await markItem({ day, itemKey, verdict, note, amountOverride, advisorOverride, keep, userId: req.user?.id });
+    const { day, itemKey, verdict = null, note, amountOverride, advisorOverride, keep, discard } = req.body ?? {};
+    await markItem({ day, itemKey, verdict, note, amountOverride, advisorOverride, keep, discard, userId: req.user?.id });
     res.json({ ok: true });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
