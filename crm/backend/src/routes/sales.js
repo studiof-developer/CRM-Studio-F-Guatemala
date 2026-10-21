@@ -14,6 +14,7 @@ import { getPendingPayments } from '../pendingPayments.js';
 import { startHistoryJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
 import { restoreBackup } from '../salesHistory.js';
 import { explainChat } from '../salesExplain.js';
+import { reviewDay, markItem } from '../salesDayReview.js';
 
 const router = Router();
 
@@ -710,6 +711,25 @@ router.get('/history', adminOnly, async (req, res, next) => {
 // GET /api/sales/history/explain?phone=7107&day=2026-10-15: cómo lee el motor el chat de un cliente (solo lectura)
 router.get('/history/explain', adminOnly, async (req, res, next) => {
   try { res.json({ lines: await explainChat({ phone: req.query.phone, day: req.query.day }) }); } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Revisión día por día: GET lista las ventas del día para revisarlas a mano; PUT guarda la marca (ok / mal / null) de una de ellas.
+router.get('/history/day', adminOnly, async (req, res, next) => {
+  try {
+    if (!isDay(req.query.day)) return res.status(400).json({ error: 'Indica el día (AAAA-MM-DD)' });
+    res.json(await reviewDay(req.query.day));
+  } catch (err) { next(err); }
+});
+
+router.put('/history/day/mark', adminOnly, async (req, res, next) => {
+  try {
+    const { day, itemKey, verdict = null, note } = req.body ?? {};
+    await markItem({ day, itemKey, verdict, note, userId: req.user?.id });
+    res.json({ ok: true });
+  } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }

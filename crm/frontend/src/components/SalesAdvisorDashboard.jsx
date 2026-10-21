@@ -17,6 +17,7 @@ import Badge from './Badge.jsx';
 import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 import SalesCloseModal from './SalesCloseModal.jsx';
 import SalesHistoryModal from './SalesHistoryModal.jsx';
+import SalesDayReviewModal from './SalesDayReviewModal.jsx';
 import SalesToolsMenu from './SalesToolsMenu.jsx';
 import SalesHeadline from './SalesHeadline.jsx';
 import AdvisorMetrics from './AdvisorMetrics.jsx';
@@ -90,7 +91,7 @@ function renderStatusBadge(status) {
   );
 }
 
-export default function SalesAdvisorDashboard() {
+export default function SalesAdvisorDashboard({ onOpenConversation }) {
   const { period, setPeriod, from, setFrom, to, setTo, lineId, setLineId, salesData, loading, error, updatedAt, previous, goalsData, loadData, loadGoals } = useSalesReport();
   const [whatsappNumbers, setWhatsappNumbers] = useState([]);
   const [showTransactions, setShowTransactions] = useState(false);
@@ -116,6 +117,7 @@ export default function SalesAdvisorDashboard() {
   const [canManage, setCanManage] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [dayReviewOpen, setDayReviewOpen] = useState(false);
   useEffect(() => { fetchMe().then((u) => { setCanManage(['admin', 'supervisor'].includes(u?.role)); setIsAdmin(u?.role === 'admin'); }).catch(() => {}); }, []);
   const [auditData, setAuditData] = useState(null);
   const [auditTab, setAuditTab] = useState('corregir');
@@ -492,6 +494,7 @@ export default function SalesAdvisorDashboard() {
               { label: 'Descargar Excel', hint: 'Esta tabla de rendimiento', icon: Download, onClick: exportToExcel, disabled: advisors.length === 0 },
               { label: 'Analizar chats vendidos', hint: 'Reconstruye las ventas leyendo los chats; exporta los chats a texto', icon: FileText, onClick: () => setAnalysisOpen(true) },
               { label: auditLoading ? 'Auditando…' : 'Auditar ventas', hint: 'Compara comprobantes del chat con lo registrado y corrige', icon: Sparkles, onClick: handleOpenAudit, disabled: auditLoading, busy: auditLoading },
+              ...(isAdmin ? [{ label: 'Revisar un día, venta por venta', hint: 'Abre cada chat que pagó, márcalo y aplica el día', icon: CheckCircle2, onClick: () => setDayReviewOpen(true) }] : []),
               ...(isAdmin ? [{ label: 'Reconstruir ventas de días pasados', hint: 'Deja los días como dicen los chats (con copia para deshacer)', icon: History, onClick: () => setHistoryOpen(true) }] : []),
             ]}
           />
@@ -1141,6 +1144,7 @@ export default function SalesAdvisorDashboard() {
       </ConfirmDialog>
       <SalesAnalysisModal open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
       <SalesHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} onChanged={loadData} />
+      <SalesDayReviewModal open={dayReviewOpen} onClose={() => setDayReviewOpen(false)} onChanged={loadData} onOpenConversation={onOpenConversation} />
       <SalesCloseModal open={closeOpen} onClose={() => setCloseOpen(false)} />
 
       {auditData && (() => {

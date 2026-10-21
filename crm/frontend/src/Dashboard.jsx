@@ -62,7 +62,7 @@ function useChart(canvasRef, buildConfig, deps) {
   }, deps);
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onOpenConversation }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const pipelineRef = useRef(null);
@@ -273,7 +273,7 @@ export default function Dashboard() {
       </div>
 
       <div className="px-4 pb-8 md:px-8">
-        <SalesAdvisorDashboard />
+        <SalesAdvisorDashboard onOpenConversation={onOpenConversation} />
 
         <div className="mb-4">
           <h2 className="text-base font-semibold text-ink">Métricas Operativas del CRM</h2>
