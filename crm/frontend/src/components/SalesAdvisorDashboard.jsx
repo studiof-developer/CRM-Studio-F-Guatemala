@@ -4,7 +4,7 @@ import {
   Trophy, CircleDollarSign, Users, ShoppingBag, TrendingUp,
   Download, RefreshCw, Calendar, ArrowRight, MessageCircle,
   FileSpreadsheet, Filter, ChevronDown, ChevronUp, Pencil, X, Check,
-  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText, LayoutGrid, Table2
+  Copy, CheckCircle2, AlertCircle, Eye, ExternalLink, Sparkles, FileText, LayoutGrid, Table2, History
 } from 'lucide-react';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { fetchWhatsappNumbers, updateSale, rebuildSales, validateSaleAmount, fetchMe, saveSalesGoal } from '../api.js';
@@ -16,6 +16,7 @@ import { PAID_METHOD_LABELS } from '../lib/paymentMethods.js';
 import Badge from './Badge.jsx';
 import SalesAnalysisModal from './SalesAnalysisModal.jsx';
 import SalesCloseModal from './SalesCloseModal.jsx';
+import SalesHistoryModal from './SalesHistoryModal.jsx';
 import SalesToolsMenu from './SalesToolsMenu.jsx';
 import SalesHeadline from './SalesHeadline.jsx';
 import AdvisorMetrics from './AdvisorMetrics.jsx';
@@ -113,7 +114,9 @@ export default function SalesAdvisorDashboard() {
   const [closeOpen, setCloseOpen] = useState(false);
   // Solo administradores y supervisores pueden corregir a mano la asesora de una venta.
   const [canManage, setCanManage] = useState(false);
-  useEffect(() => { fetchMe().then((u) => setCanManage(['admin', 'supervisor'].includes(u?.role))).catch(() => {}); }, []);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => { fetchMe().then((u) => { setCanManage(['admin', 'supervisor'].includes(u?.role)); setIsAdmin(u?.role === 'admin'); }).catch(() => {}); }, []);
   const [auditData, setAuditData] = useState(null);
   const [auditTab, setAuditTab] = useState('corregir');
   const [copiedAudit, setCopiedAudit] = useState(false);
@@ -489,6 +492,7 @@ export default function SalesAdvisorDashboard() {
               { label: 'Descargar Excel', hint: 'Esta tabla de rendimiento', icon: Download, onClick: exportToExcel, disabled: advisors.length === 0 },
               { label: 'Analizar chats vendidos', hint: 'Reconstruye las ventas leyendo los chats; exporta los chats a texto', icon: FileText, onClick: () => setAnalysisOpen(true) },
               { label: auditLoading ? 'Auditando…' : 'Auditar ventas', hint: 'Compara comprobantes del chat con lo registrado y corrige', icon: Sparkles, onClick: handleOpenAudit, disabled: auditLoading, busy: auditLoading },
+              ...(isAdmin ? [{ label: 'Reconstruir ventas de días pasados', hint: 'Deja los días como dicen los chats (con copia para deshacer)', icon: History, onClick: () => setHistoryOpen(true) }] : []),
             ]}
           />
         </div>
@@ -1136,6 +1140,7 @@ export default function SalesAdvisorDashboard() {
         )}
       </ConfirmDialog>
       <SalesAnalysisModal open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
+      <SalesHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} onChanged={loadData} />
       <SalesCloseModal open={closeOpen} onClose={() => setCloseOpen(false)} />
 
       {auditData && (() => {

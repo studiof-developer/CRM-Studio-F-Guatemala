@@ -11,6 +11,8 @@ import { getGoals, saveGoal, buildGoalRows, monthClock } from '../salesGoals.js'
 import { aggregateItems } from '../salesItems.js';
 import { syncRecentPaymentLinks } from '../paymentLinks.js';
 import { getPendingPayments } from '../pendingPayments.js';
+import { startHistoryJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
+import { restoreBackup } from '../salesHistory.js';
 
 const router = Router();
 
@@ -692,6 +694,36 @@ router.post('/rebuild', requireRole('admin', 'supervisor'), async (req, res, nex
     res.json(await rebuildSales({ from, to, lineId: lineId ? Number(lineId) : null, apply: apply === true, user: req.user }));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Reconstrucción del historial día por día desde los chats (mismo motor que scripts/rebuildHistory.js). Solo admin: reemplaza ventas.
+const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d ?? '');
+const adminOnly = requireRole('admin');
+
+router.get('/history', adminOnly, async (req, res, next) => {
+  try { res.json(await getHistoryState(Number(req.query.since) || 0)); } catch (err) { next(err); }
+});
+
+// POST /api/sales/history { mode: 'preview' | 'apply', from, to, force? }
+router.post('/history', adminOnly, async (req, res, next) => {
+  try {
+    const { mode, from, to, force } = req.body ?? {};
+    if (!['preview', 'apply'].includes(mode) || !isDay(from) || !isDay(to) || from > to) return res.status(400).json({ error: 'Indica modo y un rango de fechas válido' });
+    res.status(202).json(await startHistoryJob({ mode, from, to, force: force === true, userName: req.user?.fullName || req.user?.username }));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.post('/history/restore', adminOnly, async (req, res, next) => {
+  try {
+    if (isHistoryJobRunning()) return res.status(409).json({ error: 'Hay una reconstrucción corriendo. Espera a que termine.' });
+    res.json(await restoreBackup(req.body?.backup));
+  } catch (err) {
+    if (/Nombre de copia|No existe la copia/.test(err.message)) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

@@ -970,6 +970,16 @@ export async function downloadSalesChatExport(from, to) {
 }
 
 // Facturación de la API de WhatsApp (Meta): estado y alertas de saldo; owed = el "Saldo actual" que muestra Meta.
+// Reconstrucción del historial de ventas día por día desde los chats (solo admin).
+async function historyCall(path, options, fallback) {
+  const res = await apiFetch(`/api/sales/history${path}`, options);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? fallback);
+  return res.json();
+}
+export const fetchSalesHistory = (since = 0) => historyCall(`?since=${since}`, undefined, 'No se pudo consultar el avance');
+export const startSalesHistory = (body) => historyCall('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 'No se pudo iniciar');
+export const restoreSalesHistory = (backup) => historyCall('/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup }) }, 'No se pudo deshacer');
+
 export async function fetchMetaBilling(fresh = false) {
   const res = await apiFetch(`/api/billing/meta${fresh ? '?fresh=1' : ''}`);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo consultar la facturación de Meta');

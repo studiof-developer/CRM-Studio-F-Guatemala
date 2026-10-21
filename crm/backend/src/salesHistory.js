@@ -49,6 +49,15 @@ export async function completedDays() {
   return rows;
 }
 
+// Copias de seguridad que dejaron las corridas, de la más nueva a la más vieja (con el rango que cubre cada una).
+export async function listBackups() {
+  const { rows } = await pool.query(
+    `SELECT c.relname AS name, obj_description(c.oid) AS comment FROM pg_class c
+     WHERE c.relkind = 'r' AND c.relname ~ '^sales_backup_[0-9]{12,14}$' ORDER BY c.relname DESC`
+  );
+  return rows.map((r) => { let m = {}; try { m = JSON.parse(r.comment ?? '{}'); } catch { /* sin comentario */ } return { name: r.name, from: m.from ?? null, to: m.to ?? null }; });
+}
+
 export async function registeredByDay(from, to) {
   const { rows } = await pool.query(
     `SELECT to_char(created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD') AS day, COALESCE(NULLIF(TRIM(advisor_name), ''), 'Sin Asignar') AS advisor, SUM(amount) AS total, COUNT(*)::int AS count
