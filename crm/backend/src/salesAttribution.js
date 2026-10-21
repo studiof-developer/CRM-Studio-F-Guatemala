@@ -346,7 +346,10 @@ const sameAdvisor = (a, b) => String(a ?? '').trim().toLowerCase() === String(b 
 const CONFIRM_SQL = 'gracias\\s+por\\s+elegir|alistamiento|gracias\\s+por\\s+(su|tu)\\s+compra|pago\\s+(recibido|confirmado|verificado|acreditado|con)|comprobante\\s+(recibido|verificado|confirmado)|hemos\\s+recibido\\s+(su|tu)\\s+pago|confirmamos\\s+(su|tu)\\s+pago|pedido\\s+(confirmado|registrado)|agregado\\s+a\\s+la\\s+compra';
 const BANK_SQL = 'compra\\s+con\\s+(tu\\s+)?tarjeta|se\\s+realiz|transferencia\\s+(realizada|exitosa|enviada)|dep[oó]sito\\s+(realizado|exitoso)|pago\\s+(exitoso|aprobado|realizado)|comprobante\\s+de';
 
-export async function auditSales({ from, to, lineId = null }) {
+// ignoreLock: reconstruye también lo anterior a LOCK_BEFORE y las ventas calibradas a mano (attribution_locked). Lo que un supervisor
+// ya validó (monto o asesora) nunca se mueve, con o sin esta opción. ocrMaxReads: tope de imágenes nuevas que se leen en la corrida.
+export async function auditSales({ from, to, lineId = null, ignoreLock = false, ocrMaxReads = 80 }) {
+  const lockBefore = ignoreLock ? new Date(0) : LOCK_BEFORE;
   const { start, end } = rangeBounds(from, to);
   const { rows: candidates } = await pool.query(
     `SELECT DISTINCT c.id, c.whatsapp_number, c.full_name, c.manual_status, c.paid_method
@@ -361,7 +364,7 @@ export async function auditSales({ from, to, lineId = null }) {
   const canonical = nameResolver();
   // Lee las imágenes y PDF del rango que aún no se habían leído (y saca los centavos exactos). Cada
   // lectura queda en caché; el tope evita que una sola auditoría se alargue sin límite.
-  const ocr = createLazyOcrRunner({ maxReads: 80 });
+  const ocr = createLazyOcrRunner({ maxReads: ocrMaxReads });
   const claimed = new Set();
   const items = [];
   for (const customer of candidates) {
@@ -378,11 +381,13 @@ export async function auditSales({ from, to, lineId = null }) {
       let sale = (await pool.query('SELECT * FROM sales WHERE evidence_type = $1 AND evidence_message_id = $2', [evType, ep.eventId])).rows[0];
       const linked = !!sale;
       if (!sale) {
+        // En la reconstrucción histórica (ignoreLock) la venta calibrada se empareja por cliente y cercanía de hora aunque el monto
+        // difiera (se corrige después con el comprobante); si no, quedaría duplicada con la que se inserta.
         sale = (await pool.query(
           `SELECT * FROM sales WHERE customer_id = $1 AND evidence_message_id IS NULL AND created_at BETWEEN $2 AND $3
-             AND (amount = 0 OR $4::numeric IS NULL OR abs(amount - $4::numeric) <= 1)
+             AND (amount = 0 OR $4::numeric IS NULL OR $6::boolean OR abs(amount - $4::numeric) <= 1)
            ORDER BY abs(extract(epoch FROM created_at - $5::timestamptz)) LIMIT 3`,
-          [customer.id, new Date(+new Date(ep.at) - DAY), new Date(+new Date(ep.at) + DAY), ep.amount, ep.at]
+          [customer.id, new Date(+new Date(ep.at) - DAY), new Date(+new Date(ep.at) + DAY), ep.amount, ep.at, ignoreLock]
         )).rows.find((s) => !claimed.has(s.id));
       }
       if (sale) claimed.add(sale.id);
@@ -392,7 +397,7 @@ export async function auditSales({ from, to, lineId = null }) {
         amount: ep.amount, type: ep.type, verified: ep.verified, medium: ep.medium, shift: ep.shift, issues: ep.issues,
         expectedAdvisor: ep.advisor, rule: ep.rule, attributionUncertain: ep.attributionUncertain, confirmedBy: ep.confirmedBy, confirmedAt: ep.confirmedAt, via: ep.via, voucher: ep.voucher, saleId: sale?.id ?? null, locked: !!sale?.attribution_locked, linked,
       };
-      if (new Date(ep.at) < LOCK_BEFORE) { items.push({ ...item, status: 'historico_bloqueado' }); continue; }
+      if (new Date(ep.at) < lockBefore) { items.push({ ...item, status: 'historico_bloqueado' }); continue; }
       if (!sale) { items.push({ ...item, status: 'sin_venta' }); continue; }
       item.recordedAdvisor = sale.advisor_name;
       item.recordedAt = sale.created_at;
@@ -402,7 +407,7 @@ export async function auditSales({ from, to, lineId = null }) {
       const wrongAmount = ep.type === 'comprobante' && ep.amount && Math.abs(Number(sale.amount) - ep.amount) >= 0.5;
       const wrongDate = guatemalaParts(sale.created_at).ymd !== guatemalaParts(ep.at).ymd;
       const promotable = sale.status === 'revisar' && ep.verified && (ep.amount > 0 || Number(sale.amount) > 0);
-      item.status = sale.attribution_locked ? 'bloqueada'
+      item.status = (sale.attribution_locked && !ignoreLock) ? 'bloqueada'
         : wrongAdvisor ? 'asesor_distinto' : wrongAmount ? 'monto_distinto' : wrongDate ? 'fecha_distinta'
         : promotable ? 'confirmacion_pendiente' : 'ok';
       items.push(item);
@@ -415,10 +420,10 @@ export async function auditSales({ from, to, lineId = null }) {
   const { rows: unbacked } = await pool.query(
     `SELECT s.id, s.customer_id, s.amount, s.advisor_name, s.created_at, c.full_name, c.whatsapp_number
      FROM sales s JOIN customers c ON c.id = s.customer_id
-     WHERE s.created_at >= $1 AND s.created_at <= $2 AND NOT s.attribution_locked
+     WHERE s.created_at >= $1 AND s.created_at <= $2 AND ($3::boolean OR NOT s.attribution_locked)
        AND s.evidence_message_id IS NULL AND COALESCE(s.evidence_type, '') <> 'manual' AND s.status <> 'revisar'
      ORDER BY s.created_at`,
-    [start, end]
+    [start, end, ignoreLock]
   );
   for (const s of unbacked) {
     if (claimed.has(s.id)) continue;
@@ -467,15 +472,17 @@ function buildAuditText({ from, to, counts, items }) {
 
 // apply=false solo describe lo que haría. Nunca toca ventas bloqueadas ni borra nada: lo que
 // no tiene respaldo en el chat pasa a "por revisar" (queda fuera de los totales).
-export async function rebuildSales({ from, to, lineId = null, apply = false, user = null }) {
-  const audit = await auditSales({ from, to, lineId });
+// ignoreLock: ver auditSales (las ventas que toca quedan sin candado: ya salen de la evidencia). markUnbacked=false no pasa a "por revisar"
+// las ventas sin comprobante ni confirmación en el chat; solo se reportan.
+export async function rebuildSales({ from, to, lineId = null, apply = false, user = null, ignoreLock = false, markUnbacked = true, ocrMaxReads = 80 }) {
+  const audit = await auditSales({ from, to, lineId, ignoreLock, ocrMaxReads });
   const plan = { insertar: 0, reasignar: 0, promover: 0, vincular: 0, marcarRevisar: 0 };
   for (const i of audit.items) {
     if (i.status === 'sin_venta') plan.insertar++;
     else if (['asesor_distinto', 'fecha_distinta', 'monto_distinto'].includes(i.status)) plan.reasignar++;
     else if (i.status === 'confirmacion_pendiente') plan.promover++;
     else if (i.status === 'ok' && !i.linked && i.saleId) plan.vincular++;
-    else if (i.status === 'sin_evidencia' || i.status === 'duplicada') plan.marcarRevisar++;
+    else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && markUnbacked) plan.marcarRevisar++;
   }
   if (!apply) return { applied: false, plan, ...audit };
 
@@ -483,7 +490,7 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
     if (i.status === 'sin_venta') {
       const customer = await getCustomer(i.customerId);
       await saleFromEpisode(customer, { ...i, eventId: i.receiptId, advisor: i.expectedAdvisor, quote: null, via: null }, i.line);
-    } else if (i.saleId && !i.locked && ['asesor_distinto', 'fecha_distinta', 'monto_distinto', 'confirmacion_pendiente', 'ok'].includes(i.status)) {
+    } else if (i.saleId && (ignoreLock || !i.locked) && ['asesor_distinto', 'fecha_distinta', 'monto_distinto', 'confirmacion_pendiente', 'ok'].includes(i.status)) {
       if (i.status === 'ok' && i.linked) continue;
       const u = i.expectedAdvisor ? await resolveAdvisor(i.expectedAdvisor) : null;
       const evType = i.type === 'comprobante' ? 'receipt_ocr' : 'advisor_confirmation';
@@ -498,26 +505,27 @@ export async function rebuildSales({ from, to, lineId = null, apply = false, use
                 amount_source = CASE WHEN $9::boolean THEN 'ocr' ELSE amount_source END,
                 amount_basis = CASE WHEN $9::boolean THEN 'comprobante' ELSE amount_basis END,
                 attribution_uncertain = CASE WHEN amount_validated_at IS NULL THEN $11::boolean ELSE attribution_uncertain END,
+                attribution_locked = CASE WHEN $12::boolean THEN false ELSE attribution_locked END,
                 status = CASE WHEN $8::boolean AND (CASE WHEN $9::boolean THEN $10::numeric ELSE amount END) > 0 THEN 'confirmada' ELSE status END,
                 evidence_type = COALESCE(evidence_type, $6), evidence_message_id = COALESCE(evidence_message_id, $7),
                 updated_at = now()
-         WHERE id = $1 AND NOT attribution_locked
+         WHERE id = $1 AND ($12::boolean OR NOT attribution_locked)
            AND (evidence_message_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM sales WHERE evidence_type = $6 AND evidence_message_id = $7))`,
-        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null, !!i.attributionUncertain]
+        [i.saleId, i.at, u?.name ?? null, u?.id ?? null, i.rule ?? null, evType, i.receiptId, !!i.verified, useReceiptAmount, i.amount ?? null, !!i.attributionUncertain, ignoreLock]
       );
-    } else if (i.status === 'sin_evidencia' || i.status === 'duplicada') {
+    } else if ((i.status === 'sin_evidencia' || i.status === 'duplicada') && markUnbacked) {
       const note = i.duplicateOf
         ? ` [Duplicada de la venta #${i.duplicateOf.saleId} (${i.duplicateOf.advisor}): revisar]`
         : ' [Sin comprobante ni confirmación en el chat: revisar]';
       await pool.query(
         `UPDATE sales SET status = 'revisar', updated_at = now(), notes = COALESCE(notes, '') || $2
-         WHERE id = $1 AND NOT attribution_locked AND status <> 'revisar' AND evidence_message_id IS NULL`,
-        [i.saleId, note]
+         WHERE id = $1 AND ($3::boolean OR NOT attribution_locked) AND status <> 'revisar' AND evidence_message_id IS NULL`,
+        [i.saleId, note, ignoreLock]
       );
     }
   }
   logBusinessAction(user ?? { fullName: 'Sistema', id: null }, null, 'sale_updated', `Reconstrucción de ventas ${from} → ${to}: ${JSON.stringify(plan)}`);
   broadcast('sales_changes', JSON.stringify({ action: 'rebuilt' }));
   // Se vuelve a auditar para mostrar cómo quedó, no cómo estaba antes de aplicar.
-  return { applied: true, plan, ...(await auditSales({ from, to, lineId })) };
+  return { applied: true, plan, ...(await auditSales({ from, to, lineId, ignoreLock, ocrMaxReads })) };
 }
