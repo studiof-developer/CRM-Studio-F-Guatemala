@@ -13,6 +13,7 @@ import { syncRecentPaymentLinks } from '../paymentLinks.js';
 import { getPendingPayments } from '../pendingPayments.js';
 import { startHistoryJob, getHistoryState, isHistoryJobRunning } from '../salesHistoryJob.js';
 import { restoreBackup } from '../salesHistory.js';
+import { explainChat } from '../salesExplain.js';
 
 const router = Router();
 
@@ -704,6 +705,14 @@ const adminOnly = requireRole('admin');
 
 router.get('/history', adminOnly, async (req, res, next) => {
   try { res.json(await getHistoryState(Number(req.query.since) || 0)); } catch (err) { next(err); }
+});
+
+// GET /api/sales/history/explain?phone=7107&day=2026-10-15: cómo lee el motor el chat de un cliente (solo lectura)
+router.get('/history/explain', adminOnly, async (req, res, next) => {
+  try { res.json({ lines: await explainChat({ phone: req.query.phone, day: req.query.day }) }); } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 });
 
 // POST /api/sales/history { mode: 'preview' | 'apply', from, to, force? }
