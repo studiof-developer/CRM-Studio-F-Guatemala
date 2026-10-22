@@ -8,7 +8,9 @@ import { decryptToken } from './tokenCrypto.js';
 import { saveAttachment } from './attachmentStorage.js';
 import { broadcast } from './events.js';
 
-const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
+// v20.0 venció el 24-sep-2026 (Meta reenvía esas llamadas a una versión vieja) y Instagram solo acepta PDF por la API desde dic-2025:
+// con la versión vieja el cliente recibe el PDF como un enlace que no abre. v25.0 es estable y no trae los cambios de v26.
+const GRAPH_BASE = 'https://graph.facebook.com/v25.0';
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 800;
