@@ -54,7 +54,8 @@ function periodClauses(col, period, from, to, params) {
     clauses.push(`${col} < ${gtStart(`date_trunc('month', ${gtNow})`)}`);
   } else if (period === 'personalizado' && from) {
     params.push(from);
-    clauses.push(`${col} >= ($${params.length}::date AT TIME ZONE 'America/Guatemala')`);
+    // ::timestamp: un date con AT TIME ZONE se toma como UTC y da la hora local del día anterior (arrancaba a las 12:00 del día previo)
+    clauses.push(`${col} >= ($${params.length}::date::timestamp AT TIME ZONE 'America/Guatemala')`);
     if (to) {
       params.push(to);
       clauses.push(`${col} < (($${params.length}::date + interval '1 day') AT TIME ZONE 'America/Guatemala')`);
