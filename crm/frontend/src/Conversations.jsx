@@ -72,6 +72,7 @@ const CHANNEL_FILTER_OPTIONS = [
   { value: '', label: 'Todas las redes' },
   { value: 'whatsapp', label: 'WhatsApp', icon: channelFilterIcon('whatsapp') },
   { value: 'instagram', label: 'Instagram', icon: channelFilterIcon('instagram') },
+  { value: 'messenger', label: 'Messenger', icon: channelFilterIcon('messenger') },
 ];
 
 function isSameThread(a, b) {
@@ -514,7 +515,12 @@ function SocialThreadPanel({
               </div>
             )}
             {messages?.length === 0 && <p className="py-8 text-center text-sm text-greige-ink">Sin mensajes todavía.</p>}
-            {messages?.map((m) => {
+            {groupByDay(messages ?? []).map((group) => (
+              <div key={group.label} className="space-y-2">
+                <div className="sticky top-0 z-10 my-3 flex justify-center">
+                  <span className="rounded-full bg-paper px-3 py-1 text-[11px] font-medium text-greige-ink shadow-sm">{group.label}</span>
+                </div>
+                {group.items.map((m) => {
               const outgoing = m.direction === 'out';
               const rawAttachments = m.attachments?.length ? m.attachments : (m.attachment ? [m.attachment] : []);
 
@@ -677,6 +683,8 @@ function SocialThreadPanel({
                 </div>
               );
             })}
+              </div>
+            ))}
             <div ref={bottomRef} />
           </div>
 
