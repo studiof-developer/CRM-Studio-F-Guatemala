@@ -4,15 +4,17 @@ import InfoModal from './InfoModal.jsx';
 const q = (n) => `Q ${Number(n || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const ago = (iso) => {
   const min = Math.max(0, Math.round((Date.now() - +new Date(iso)) / 60000));
-  return min < 60 ? `hace ${min} min` : `hace ${Math.floor(min / 60)} h ${min % 60} min`;
+  if (min < 60) return `hace ${min} min`;
+  if (min < 1440) return `hace ${Math.floor(min / 60)} h ${min % 60} min`;
+  return `hace ${Math.floor(min / 1440)} d ${Math.floor((min % 1440) / 60)} h`;
 };
 
-// Pagos pendientes: medios de pago (link de NeoLink o cuenta) que las asesoras entregaron en las últimas 24 h y que todavía no tienen
+// Pagos pendientes: medios de pago (link de NeoLink o cuenta) que las asesoras entregaron en las últimas 72 h y que todavía no tienen
 // comprobante ni venta registrada. El monto es el de la página del link o el total que cotizó la asesora en el chat.
 export default function PendingPaymentsModal({ open, onClose, pending }) {
   const items = pending?.items ?? [];
   return (
-    <InfoModal open={open} onClose={onClose} title="Pagos pendientes" subtitle="Medios de pago enviados por las asesoras que todavía no tienen comprobante ni venta (últimas 24 horas)">
+    <InfoModal open={open} onClose={onClose} title="Pagos pendientes" subtitle="Medios de pago enviados por las asesoras que todavía no tienen comprobante ni venta (últimas 72 horas)">
       <div className="grid gap-4">
         <div className="grid grid-cols-2 gap-3 text-center">
           <div className="rounded-xl border border-warn/30 bg-warn/10 p-3"><p className="text-xl font-bold text-warn">{q(pending?.total)}</p><p className="text-[11px] font-semibold uppercase tracking-wide text-greige-ink">Por cobrar</p></div>
@@ -40,7 +42,7 @@ export default function PendingPaymentsModal({ open, onClose, pending }) {
             </div>
           )}
         {pending?.unknownCount > 0 && <p className="rounded-xl bg-warn/10 p-3 text-xs text-warn">{pending.unknownCount} pendiente{pending.unknownCount === 1 ? '' : 's'} sin monto (no se leyó el link o la asesora no cotizó un total): no suman al total hasta que se conozca.</p>}
-        <p className="text-[11px] text-greige">Cuando el cliente manda su comprobante y la venta entra al CRM, el pendiente deja de aparecer aquí. A las 24 horas sin pago también sale de la lista. Un cliente cuenta una sola vez.</p>
+        <p className="text-[11px] text-greige">Cuando el cliente manda su comprobante y la venta entra al CRM, el pendiente deja de aparecer aquí. A las 72 horas sin pago también sale de la lista. Un cliente cuenta una sola vez.</p>
       </div>
     </InfoModal>
   );

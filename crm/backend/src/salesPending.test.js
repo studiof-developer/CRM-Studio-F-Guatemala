@@ -55,3 +55,14 @@ test('pendiente con varias prendas cotizadas por separado: lista cada cifra, tam
   assert.deepEqual(pending.quotedAmounts, [449, 449, 412]);
   assert.equal(pending.quotedAmounts.reduce((a, b) => a + b, 0), 1310);
 });
+
+test('lista en vivo: los medios de pago de hace 2 días siguen pendientes con la ventana de 72 h, y no con la de 24 h', () => {
+  const { PENDING_FRESH_MS } = { PENDING_FRESH_MS: 72 * 3600000 };
+  const eventos = [adv(gt('18', '10:00'), 'Leydi', 'Total Q449. Cuenta Banrural 4012345678')];
+  const ahora = gt('20', '09:00'); // 47 h después
+  assert.equal(buildEpisodes(eventos, { asOf: ahora }).pending, null); // la regla de 24 h (cierres, atribución) no cambia
+  const vivo = buildEpisodes(eventos, { asOf: ahora, pendingMs: PENDING_FRESH_MS });
+  assert.equal(vivo.pending?.advisor, 'Leydi');
+  assert.equal(vivo.pending?.amount, 449);
+  assert.equal(buildEpisodes(eventos, { asOf: gt('21', '11:00'), pendingMs: PENDING_FRESH_MS }).pending, null); // 73 h: ya sale
+});

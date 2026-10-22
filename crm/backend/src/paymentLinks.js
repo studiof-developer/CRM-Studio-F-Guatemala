@@ -1,5 +1,6 @@
 import { pool } from './db.js';
 import { lineFromSession, defaultLineId, nameResolver } from './salesThreads.js';
+import { PENDING_HOURS } from './salesRules.js';
 
 // Links de pago de NeoLink: cuando una asesora manda uno por el chat, la página del link muestra el monto a cobrar ("Monto:
 // Q1,461.00"). El CRM lo lee (solo lectura: un GET, sin enviar nada) y lo guarda para mostrar lo pendiente de pago. Solo se abre
@@ -57,14 +58,14 @@ const MSG_COLUMNS = `h.id, h.session_id, h.created_at, h.message->>'content' AS 
 const NOT_READ_YET = `NOT EXISTS (SELECT 1 FROM payment_links p WHERE p.message_id = h.id AND (p.amount IS NOT NULL OR p.fetched_at > now() - interval '10 minutes'))`;
 
 let lastSync = 0;
-// Lee los links que las asesoras mandaron en las últimas 24 h y todavía no se han leído. Pensado para llamarse al abrir el
+// Lee los links que las asesoras mandaron en las últimas 72 h y todavía no se han leído. Pensado para llamarse al abrir el
 // Dashboard: como mucho una vez cada 30 s, y los que fallan se reintentan cada 10 minutos.
 export async function syncRecentPaymentLinks({ throttleMs = 30000 } = {}) {
   if (Date.now() - lastSync < throttleMs) return;
   lastSync = Date.now();
   const { rows } = await pool.query(
     `SELECT ${MSG_COLUMNS} FROM n8n_chat_histories h
-     WHERE h.created_at >= now() - interval '24 hours' AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
+     WHERE h.created_at >= now() - interval '${PENDING_HOURS} hours' AND h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'
        AND h.message->>'content' ILIKE '%pay.neolink.com.gt/%' AND ${NOT_READ_YET}
      ORDER BY h.id DESC LIMIT 30`
   );
@@ -86,13 +87,13 @@ export async function applyLinkAmounts(pending) {
   return pending;
 }
 
-// Links mandados en las últimas 24 h al cliente que todavía no tiene una venta registrada después. Si a un cliente le mandaron
+// Links mandados en las últimas 72 h al cliente que todavía no tiene una venta registrada después. Si a un cliente le mandaron
 // varios links, cuenta solo el último. El resumen y la unión con los pendientes del chat están en pendingPayments.js.
 export async function pendingFromLinks() {
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (COALESCE(c.id::text, pl.phone)) pl.id, pl.url, pl.amount, pl.phone, pl.line_id, pl.sent_at, pl.advisor_name, c.id AS customer_id, c.full_name AS customer_name
      FROM payment_links pl LEFT JOIN customers c ON c.whatsapp_number = pl.phone
-     WHERE pl.sent_at >= now() - interval '24 hours'
+     WHERE pl.sent_at >= now() - interval '${PENDING_HOURS} hours'
        AND NOT EXISTS (SELECT 1 FROM sales s WHERE s.customer_id = c.id AND s.status IN ('confirmada', 'revisar') AND s.created_at >= pl.sent_at)
      ORDER BY COALESCE(c.id::text, pl.phone), pl.sent_at DESC`
   );

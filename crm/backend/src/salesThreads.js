@@ -160,10 +160,10 @@ function followsPaymentChoice(events, e) {
     && ((x.role === 'customer' && PAYMENT_CHOICE_RE.test(x.text ?? '')) || (x.role === 'advisor' && ASKED_PAYMENT_RE.test(x.text ?? ''))));
 }
 
-async function applyAdvisorImages(events, ocr) {
+async function applyAdvisorImages(events, ocr, windowMs = PAYINFO_FRESH_MS) {
   const anchors = events.filter((e) => e.role === 'customer' && (e.ocrAmount || e.voucher)).map((e) => +new Date(e.at));
   if (events.length) anchors.push(+new Date(events[events.length - 1].at));
-  const near = (t) => anchors.some((a) => t <= a && a - t <= PAYINFO_FRESH_MS);
+  const near = (t) => anchors.some((a) => t <= a && a - t <= windowMs);
   const candidates = events.filter((e) => e.role === 'advisor' && e.id > 0 && !givesPaymentInfo(e.text) && near(+new Date(e.at)) && followsPaymentChoice(events, e));
   if (!candidates.length) return;
   const { rows } = await pool.query(
@@ -188,10 +188,10 @@ async function applyAdvisorImages(events, ocr) {
 
 // Hilo completo (o la ventana from..to) de un cliente en una línea, ya convertido en ventas.
 // asOf = "como estaba el chat a esa hora": solo cuenta lo que ya había ocurrido (comprobantes, confirmaciones, medios de pago).
-export async function buildThread(customer, lineId, { from = new Date(0), to = new Date(Date.now() + DAY), ocr = null, asOf = null } = {}) {
+export async function buildThread(customer, lineId, { from = new Date(0), to = new Date(Date.now() + DAY), ocr = null, asOf = null, pendingMs = PAYINFO_FRESH_MS } = {}) {
   if (asOf) to = new Date(asOf);
   const events = await loadEvents({ phone: customer.whatsapp_number, customerId: customer.id, lineId, from, to });
-  if (lineId !== null) { await applyAttachments(events, ocr); await applyAdvisorImages(events, ocr); }
+  if (lineId !== null) { await applyAttachments(events, ocr); await applyAdvisorImages(events, ocr, pendingMs); }
   // Las cotizaciones formales del Cotizador (la tarjeta PNG con precios) son precios ofrecidos
   // igual que los que la asesora escribe en el chat.
   const { rows: quotes } = await pool.query(
@@ -204,18 +204,18 @@ export async function buildThread(customer, lineId, { from = new Date(0), to = n
   for (const q of quotes) {
     events.push({ id: -q.id, at: q.created_at, role: 'advisor', advisor: q.full_name ?? null, text: `Cotización formal. Total Q${q.grand_total}`, ocrAmount: null, via: null, voucher: false });
   }
-  return { events, ...buildEpisodes(events, { asOf }) };
+  return { events, ...buildEpisodes(events, { asOf, pendingMs }) };
 }
 
 // Todas las ventas reconstruidas de un cliente (todas sus líneas), con los nombres de asesora
 // normalizados al usuario del CRM.
-export async function analyzeCustomer(customer, { canonical = nameResolver(), ocr = null, asOf = null } = {}) {
+export async function analyzeCustomer(customer, { canonical = nameResolver(), ocr = null, asOf = null, pendingMs = PAYINFO_FRESH_MS } = {}) {
   const rows = [];
   const pending = [];
   const orphans = [];
   let resentReceipts = 0;
   for (const line of await threadLines(customer.whatsapp_number)) {
-    const t = await buildThread(customer, line, { ocr, asOf });
+    const t = await buildThread(customer, line, { ocr, asOf, pendingMs });
     resentReceipts += t.resentReceipts;
     if (t.pending) {
       pending.push({

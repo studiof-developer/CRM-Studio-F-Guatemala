@@ -110,6 +110,10 @@ function sortedByTime(events) {
 // Medios de pago "recientes": una cuenta o link enviado hace días (de una compra que no se cerró)
 // no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
 export const PAYINFO_FRESH_MS = 24 * 3600000;
+// Cuánto tiempo sigue "pendiente de pago" un cliente al que se le dieron los medios de pago (lista en vivo del Dashboard). Es más largo que
+// PAYINFO_FRESH_MS a propósito: ese 24 h decide si un comprobante vale como venta y a quién se atribuye; no se toca.
+export const PENDING_HOURS = 72;
+export const PENDING_FRESH_MS = PENDING_HOURS * 3600000;
 
 // Un comprobante del cliente con monto ya es una venta: la confirmación de la asesora la verifica, pero no es requisito.
 export const countsAsSale = (ep) => !!ep.verified || (ep.type === 'comprobante' && Number(ep.amount) > 0);
@@ -243,7 +247,7 @@ const DAY_MS = 86400000;
 // y una prueba sin medios de pago ni confirmación se descarta como "orphan" (sin contexto).
 // events: ordenados o no; los del cliente traen ocrAmount (foto/PDF/texto con monto) y/o
 // voucher:true (comprobante reconocido sin monto) e image:true (adjunto sin monto leído).
-export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } = {}) {
+export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null, pendingMs = PAYINFO_FRESH_MS } = {}) {
   const sorted = sortedByTime(events);
   const episodes = [];
   const orphans = [];
@@ -332,18 +336,18 @@ export function buildEpisodes(events, { lookbackMs = 7 * DAY_MS, asOf = null } =
     ep.status = ep.verified ? 'verificada' : 'pendiente_de_confirmar';
     kept.push(ep);
   }
-  return { episodes: kept, resentReceipts: resent, orphanReceipts: orphans, pending: findPending(sorted, kept, asOf) };
+  return { episodes: kept, resentReceipts: resent, orphanReceipts: orphans, pending: findPending(sorted, kept, asOf, pendingMs) };
 }
 
-// Venta PENDIENTE: la asesora entregó los medios de pago hace menos de 24 h y desde entonces no hay comprobante ni
+// Venta PENDIENTE: la asesora entregó los medios de pago hace menos de pendingMs (24 h; la lista en vivo usa PENDING_FRESH_MS) y desde entonces no hay comprobante ni
 // confirmación. Es lo que las asesoras anotan como venta (link enviado) y todavía no está pagado. `asOf` es el corte:
 // el llamador ya recortó los eventos a esa hora; sin él se usa el último mensaje del hilo.
-function findPending(sorted, episodes, asOf) {
+function findPending(sorted, episodes, asOf, pendingMs = PAYINFO_FRESH_MS) {
   if (!sorted.length) return null;
   const cutoff = asOf ? +new Date(asOf) : +new Date(sorted[sorted.length - 1].at);
   const lastDone = episodes.reduce((m, ep) => Math.max(m, +new Date(ep.at), ep.confirmedAt ? +new Date(ep.confirmedAt) : 0), 0);
   const payInfo = [...sorted].reverse().find((e) => e.role === 'advisor' && +new Date(e.at) <= cutoff
-    && cutoff - +new Date(e.at) <= PAYINFO_FRESH_MS && givesPaymentInfo(e.text));
+    && cutoff - +new Date(e.at) <= pendingMs && givesPaymentInfo(e.text));
   if (!payInfo || +new Date(payInfo.at) <= lastDone) return null;
   const since = lastDone || null;
   const price = approvedQuote(sorted, since, payInfo.at);
