@@ -2281,7 +2281,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                         </span>
                       );
                     })()}
-                    {c.channel === 'whatsapp' && c.ticketStatus === 'en_atencion' && (
+                    {c.ticketStatus === 'en_atencion' && (
                       c.assignedAdvisor ? (
                         // Whoever actually took the ticket, by name and in their own
                         // color — permanent (from the ticket record), unlike the row

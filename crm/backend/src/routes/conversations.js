@@ -632,8 +632,14 @@ router.get('/', async (req, res, next) => {
     if (canSeeSocial && channel !== 'whatsapp' && !temperature && !ticketStatus) {
       const { rows: socialRows } = await pool.query(`
         SELECT sc.id, sc.provider, sc.display_name, sc.last_message_at, sc.unread_count,
-               sm.body AS last_message_body, sm.direction AS last_message_direction
+               sm.body AS last_message_body, sm.direction AS last_message_direction,
+               t.status AS ticket_status, t.assigned_advisor, c.paid_locked,
+               CASE WHEN c.id IS NULL THEN NULL ELSE (${EFFECTIVE_STATUS_SQL}) END AS temperature
         FROM social_contacts sc
+        LEFT JOIN customers c ON c.id = sc.customer_id
+        LEFT JOIN LATERAL (
+          SELECT status, assigned_advisor FROM tickets WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1
+        ) t ON true
         LEFT JOIN LATERAL (
           SELECT body, direction FROM social_messages WHERE contact_id = sc.id ORDER BY created_at DESC LIMIT 1
         ) sm ON true
@@ -654,14 +660,14 @@ router.get('/', async (req, res, next) => {
           lastAttachment: null,
           customerName: r.display_name,
           phone: null,
-          ticketStatus: null,
-          assignedAdvisor: null,
+          ticketStatus: r.ticket_status ?? null,
+          assignedAdvisor: r.assigned_advisor ?? null,
           brandName: null,
           branchName: null,
           lineLabel: null,
-          enAtencion: false,
-          temperature: null,
-          paidLocked: false,
+          enAtencion: r.ticket_status === 'en_atencion',
+          temperature: r.temperature ?? null,
+          paidLocked: r.paid_locked ?? false,
           paymentSuggested: false,
           unreadCount: Number(r.unread_count),
         }));
