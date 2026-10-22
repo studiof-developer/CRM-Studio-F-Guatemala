@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2, Search } from 'lucide-react';
-import { fetchMe, logout, fetchTickets, fetchUnreadCount } from './api.js';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2, Search, Truck, ClipboardList } from 'lucide-react';
+import { fetchMe, logout, fetchTickets, fetchUnreadCount, fetchLogisticsMe } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import { playChime, requestNotificationPermission, showDesktopNotification } from './lib/notifications.js';
 import Login from './Login.jsx';
@@ -21,6 +21,8 @@ const Configuracion = lazy(() => import('./Configuracion.jsx'));
 const AgentTest = lazy(() => import('./AgentTest.jsx'));
 const Companies = lazy(() => import('./Companies.jsx'));
 const Brands = lazy(() => import('./Brands.jsx'));
+const Fichas = lazy(() => import('./Fichas.jsx'));
+const Logistica = lazy(() => import('./Logistica.jsx'));
 // Pulls in Conversations.jsx (which ChatPopup renders directly, not lazily) the first
 // time anything actually opens the popup — kept lazy for the same reason every other
 // tab here is: nothing pays for the chat UI's bundle weight until it's actually used.
@@ -88,6 +90,12 @@ const ADMIN_TABS = {
   whatsappNumbers: { label: 'Líneas', icon: Smartphone, Component: WhatsappNumbers },
 };
 
+// Logística: por ahora solo el administrador y quien tenga un rol de logística asignado (se amplía a las asesoras cuando el proceso esté validado).
+const LOGISTICS_TABS = {
+  fichas: { label: 'Fichas de pedido', icon: ClipboardList, Component: Fichas },
+  logistica: { label: 'Logística', icon: Truck, Component: Logistica },
+};
+
 const TEST_TABS = {
   pruebas: { label: 'Pruebas', icon: TestTube, Component: AgentTest },
 };
@@ -103,6 +111,7 @@ const SETTINGS_TABS = {
 const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
 const NAV_GROUPS = [
   { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns', 'analysis'] },
+  { key: 'logistics', title: 'Logística', keys: ['fichas', 'logistica'] },
   { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
 ];
 
@@ -127,6 +136,8 @@ const TAB_PATHS = {
   brands: '/marcas',
   whatsappNumbers: '/lineas',
   configuracion: '/configuracion',
+  fichas: '/fichas',
+  logistica: '/logistica',
   pruebas: '/pruebas',
 };
 const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([key, path]) => [path, key]));
@@ -221,7 +232,9 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', false);
   const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
-  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
+  const [logisticsExpanded, setLogisticsExpanded] = usePersistedBool('sidebar:logisticsExpanded', true);
+  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded], logistics: [logisticsExpanded, setLogisticsExpanded] };
+  const [hasLogisticsRole, setHasLogisticsRole] = useState(false);
   // "Ir al chat" (Pipeline, Auditoría's Sin responder) opens this overlay in place —
   // whatever tab you're on stays open underneath, instead of navigating away to
   // Conversaciones and losing your spot in the list/board you were just looking at.
@@ -236,6 +249,10 @@ export default function App() {
   }, []);
 
   useEffect(() => { fetchMe().then(setUser); }, []);
+  useEffect(() => {
+    if (!user || user.role === 'admin') return;
+    fetchLogisticsMe().then((m) => setHasLogisticsRole(m.roles.length > 0)).catch(() => {});
+  }, [user]);
 
   // Any API call anywhere getting a 401 means the session's gone (see api.js) — drop
   // straight to Login instead of leaving whatever page was open failing silently with
@@ -314,6 +331,7 @@ export default function App() {
     ...BASE_TABS,
     ...(user.role === 'admin' || user.role === 'supervisor' ? AUDIT_TABS : {}),
     ...(user.role === 'admin' || user.role === 'supervisor' ? CAMPAIGN_TABS : {}),
+    ...(user.role === 'admin' || hasLogisticsRole ? LOGISTICS_TABS : {}),
     ...(user.role === 'admin' ? ADMIN_TABS : {}),
     ...(user.role === 'admin' ? TEST_TABS : {}),
     ...(user.role === 'admin' ? SETTINGS_TABS : {}),

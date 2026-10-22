@@ -15,6 +15,7 @@ import authRouter from './routes/auth.js';
 import attachmentsRouter, { inboundRouter } from './routes/attachments.js';
 import quickRepliesRouter from './routes/quickReplies.js';
 import quotesRouter from './routes/quotes.js';
+import logisticsRouter from './routes/logistics.js';
 import whatsappNumbersRouter from './routes/whatsappNumbers.js';
 import brandsRouter from './routes/brands.js';
 import companiesRouter from './routes/companies.js';
@@ -78,6 +79,7 @@ app.use('/api/audit', requireAuth, requireRole('admin', 'supervisor'), auditRout
 app.use('/api/attachments', requireAuth, attachmentsRouter);
 app.use('/api/quick-replies', requireAuth, quickRepliesRouter);
 app.use('/api/quotes', requireAuth, quotesRouter);
+app.use('/api/logistics', requireAuth, logisticsRouter);
 app.use('/api/sales', requireAuth, salesRouter);
 app.use('/api/billing', requireAuth, billingRouter);
 app.use('/api/audit-checklist', requireAuth, requireRole('admin'), auditChecklistRouter);

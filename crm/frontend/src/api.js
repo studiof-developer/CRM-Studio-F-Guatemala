@@ -420,6 +420,51 @@ export async function fetchMetaAdsReport({ since, until, level }) {
   return res.json();
 }
 
+// — Logística: fichas de pedido, auditoría de pagos y avance por el flujo —
+async function logCall(path, options, fallback) {
+  const res = await apiFetch(`/api/logistics${path}`, options);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(body.error ?? fallback), { missing: body.missing });
+  }
+  return res.json();
+}
+const jsonBody = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+export const fetchLogisticsMe = () => logCall('/me', undefined, 'No se pudo consultar logística');
+export const fetchLogisticsConfig = () => logCall('/config', undefined, 'No se pudo cargar la configuración');
+export const saveLogisticsConfig = (cfg) => logCall('/config', jsonBody('PUT', cfg), 'No se pudo guardar la configuración');
+export const fetchLogisticsRoles = () => logCall('/roles', undefined, 'No se pudieron cargar los roles');
+export const saveLogisticsRoles = (userId, roles) => logCall(`/roles/${userId}`, jsonBody('PUT', { roles }), 'No se pudieron guardar los roles');
+export const fetchLogisticsBoard = () => logCall('/board', undefined, 'No se pudo cargar el tablero');
+export const fetchSheets = (params = {}) => logCall(`/sheets?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''))}`, undefined, 'No se pudieron cargar las fichas');
+export const createSheet = (body) => logCall('/sheets', jsonBody('POST', body), 'No se pudo crear la ficha');
+export const fetchSheet = (id) => logCall(`/sheets/${id}`, undefined, 'No se pudo cargar la ficha');
+export const updateSheet = (id, body) => logCall(`/sheets/${id}`, jsonBody('PATCH', body), 'No se pudo guardar la ficha');
+export const submitSheet = (id) => logCall(`/sheets/${id}/submit`, { method: 'POST' }, 'No se pudo enviar la ficha');
+export const addSheetPayment = (id, payment, file) => {
+  const form = new FormData();
+  form.append('payment', JSON.stringify(payment));
+  if (file) form.append('proof', file);
+  return logCall(`/sheets/${id}/payments`, { method: 'POST', body: form }, 'No se pudo agregar el pago');
+};
+export const removeSheetPayment = (id, paymentId) => logCall(`/sheets/${id}/payments/${paymentId}`, { method: 'DELETE' }, 'No se pudo retirar el pago');
+export const auditSheetPayment = (id, paymentId, audit, file) => {
+  const form = new FormData();
+  form.append('audit', JSON.stringify(audit));
+  if (file) form.append('evidence', file);
+  return logCall(`/sheets/${id}/payments/${paymentId}/audit`, { method: 'POST', body: form }, 'No se pudo registrar la auditoría');
+};
+export const runSheetStep = (id, key, data, note, files = []) => {
+  const form = new FormData();
+  form.append('data', JSON.stringify(data ?? {}));
+  if (note) form.append('note', note);
+  for (const f of files) form.append('evidence', f);
+  return logCall(`/sheets/${id}/steps/${key}`, { method: 'POST', body: form }, 'No se pudo completar el paso');
+};
+export const addSheetNote = (id, note) => logCall(`/sheets/${id}/notes`, jsonBody('POST', { note }), 'No se pudo guardar la nota');
+export const fetchChatProofs = (customerId) => logCall(`/customers/${customerId}/chat-proofs`, undefined, 'No se pudieron cargar los comprobantes del chat');
+export const logisticsFileUrl = (attachmentId, download = false) => `${API_BASE}/api/attachments/${attachmentId}/file${download ? '?download=1' : ''}`;
+
 export async function fetchMetaStrategy(lineId) {
   const params = lineId ? `?lineId=${lineId}` : '';
   const res = await apiFetch(`/api/campaigns/meta-strategy${params}`);
