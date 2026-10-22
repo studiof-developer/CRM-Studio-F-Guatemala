@@ -39,7 +39,8 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
   const all = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
   const reviewed = all.filter((r) => marks[r.key]).length;
   const bad = all.filter((r) => marks[r.key]?.verdict === 'mal');
-  const fixed = (k) => { const m = marks[k]; return m?.verdict === 'mal' && (m.amountOverride != null || !!m.advisorOverride || !!m.keep || !!m.discard); };
+  const orphanKeys = new Set((data?.orphans ?? []).map((o) => o.key));
+  const fixed = (k) => { const m = marks[k]; if (m?.verdict !== 'mal') return false; if (orphanKeys.has(k)) return !!m.keep && m.amountOverride > 0 && !!m.advisorOverride; return m.amountOverride != null || !!m.advisorOverride || !!m.keep || !!m.discard; };
   const unresolved = bad.filter((r) => !fixed(r.key));
   const ready = data && all.length > 0 && reviewed === all.length && unresolved.length === 0;
 
@@ -92,7 +93,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
         {item.phone && <button type="button" className={btn} onClick={() => onOpenConversation?.(item.phone, item.line)} disabled={!onOpenConversation}><MessageSquare size={11} />Chat</button>}
         {item.phone && <button type="button" className={btn} onClick={() => showEngine(item)}><Eye size={11} />Motor</button>}
         <button type="button" onClick={() => mark(item, m?.verdict === 'ok' ? null : 'ok')} title={okLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'ok' ? 'border-success bg-success text-white' : 'border-line text-ink hover:bg-muted'}`}><Check size={11} />{okLabel}</button>
-        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal', kind === 'protected' ? { discard: true } : {})} title={badLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />{badLabel}</button>
+        <button type="button" onClick={() => mark(item, m?.verdict === 'mal' ? null : 'mal', kind === 'protected' ? { discard: true } : kind === 'orphan' ? { keep: true, amountOverride: item.amount ?? null } : {})} title={badLabel} className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${m?.verdict === 'mal' ? 'border-danger bg-danger text-white' : 'border-line text-ink hover:bg-muted'}`}><Ban size={11} />{badLabel}</button>
       </div>
     );
   };
@@ -105,6 +106,13 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
       {m?.verdict === 'mal' && (
         <div className="mt-1.5 space-y-1.5">
           <input defaultValue={m.note ?? ''} onBlur={(e) => mark(item, 'mal', { note: e.target.value })} placeholder="¿Qué pasó? (sirve de registro)" className={`${field} w-full`} />
+          {kind === 'orphan' && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
+              <label className="flex items-center gap-1">Monto Q<input type="number" min="1" step="0.01" defaultValue={m.amountOverride ?? ''} onBlur={(e) => mark(item, 'mal', { amountOverride: e.target.value === '' ? null : Number(e.target.value) })} className={`${field} w-24`} /></label>
+              <label className="flex items-center gap-1">Asesora que la vendió<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(elige)" className={`${field} w-48`} /></label>
+              <span className={fixed(item.key) ? 'text-success' : 'text-danger'}>{fixed(item.key) ? 'Se registra como venta al aplicar el día' : 'Falta la asesora'}</span>
+            </div>
+          )}
           {(kind === 'paid' || kind === 'delete') && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
               {kind === 'delete' && (
@@ -118,7 +126,6 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
               <span className={fixed(item.key) ? 'text-success' : 'text-danger'}>{fixed(item.key) ? 'Se fija al aplicar el día' : 'Sin corrección: pásamela para ajustar el motor'}</span>
             </div>
           )}
-          {kind === 'orphan' && <p className="text-[11px] text-danger">Esto no se corrige aquí: copia las observaciones y pásamelas para ajustar el motor.</p>}
         </div>
       )}
       {explain[item.key]?.loading && <p className="mt-1.5 text-[11px] text-greige-ink">Leyendo el chat…</p>}

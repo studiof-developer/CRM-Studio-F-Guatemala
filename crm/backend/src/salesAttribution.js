@@ -88,6 +88,24 @@ async function insertSale(s) {
   return rows[0] ?? null;
 }
 
+// Una prueba que el motor no cuenta (los medios de pago se dieron hace más de 24 h) que la persona confirma como compra real en la revisión
+// de su día: se registra la venta con la asesora y el monto que ella indica, enlazada a ese comprobante.
+export async function createSaleFromProof({ messageId, amount, advisorName }) {
+  const { rows: [m] } = await pool.query('SELECT id, session_id, created_at FROM n8n_chat_histories WHERE id = $1', [messageId]);
+  if (!m) return null;
+  const { rows: [c] } = await pool.query('SELECT id FROM customers WHERE whatsapp_number = $1', [String(m.session_id).split('__')[0]]);
+  if (!c) return null;
+  const lineId = lineFromSession(m.session_id) ?? await defaultLineId();
+  const ticket = await ticketFor(c.id, { lineId });
+  const advisor = await resolveAdvisor(advisorName);
+  return insertSale({
+    customerId: c.id, ticketId: ticket?.id, advisorId: advisor.id, advisorName: advisor.name, amount, paymentMethod: 'transferencia',
+    notes: 'Venta confirmada a mano en la revisión del día: comprobante sin medios de pago en las 24 h previas', lineId, at: m.created_at,
+    status: 'confirmada', amountSource: 'ocr', receiptAmount: amount, rule: 'revision_manual', channel: 'whatsapp',
+    evidenceType: 'receipt_ocr', evidenceId: messageId, amountBasis: 'comprobante',
+  });
+}
+
 function announce(sale, user, detail) {
   if (!sale) return;
   broadcast('sales_changes', JSON.stringify({ saleId: sale.id }));

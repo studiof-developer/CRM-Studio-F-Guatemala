@@ -1,5 +1,5 @@
 import { pool } from './db.js';
-import { auditSales } from './salesAttribution.js';
+import { auditSales, createSaleFromProof } from './salesAttribution.js';
 import { resolveAdvisor } from './salesThreads.js';
 
 // Un día de ventas listo para revisar a mano: lo que el motor lee de los chats (ventas con comprobante o confirmación), las pruebas que
@@ -46,6 +46,7 @@ export async function markItem({ day, itemKey, verdict, note, amountOverride = n
   const amount = amountOverride === null || amountOverride === '' ? null : Number(amountOverride);
   if (amount !== null && (!Number.isFinite(amount) || amount <= 0 || amount > 10000)) throw Object.assign(new Error('El monto debe estar entre Q1 y Q10,000'), { status: 400 });
   const advisor = String(advisorOverride ?? '').trim() || null;
+  if (verdict === 'mal' && keep && itemKey.startsWith('r:') && (!amount || !advisor)) throw Object.assign(new Error('Para registrar la venta indica el monto y la asesora'), { status: 400 });
   if (advisor && !(await resolveAdvisor(advisor)).id) throw Object.assign(new Error(`La asesora "${advisor}" no existe en el CRM`), { status: 400 });
   await pool.query(
     `INSERT INTO sales_day_reviews (day, item_key, verdict, note, amount_override, advisor_override, keep, discard, reviewed_by, reviewed_at)
@@ -84,7 +85,13 @@ export async function applyHumanCorrections(day, userId, phase, log = () => {}) 
       // una venta validada a mano que la persona confirma que NO fue compra: se quita (la persona decide por encima de la validación)
       n += (await pool.query('DELETE FROM sales WHERE id = $1', [id])).rowCount;
     } else if (phase === 'before' && m.item_key.startsWith('s:') && m.keep) n += await fixSale(id, m, userId);
-    if (phase === 'after' && m.item_key.startsWith('r:') && m.discard) {
+    if (phase === 'after' && m.item_key.startsWith('r:') && m.keep && !m.discard) {
+      // prueba que el motor no contaba y que la persona confirmó como venta: se registra (si ya existe, solo se fijan sus datos)
+      let { rows: [sale] } = await pool.query(`SELECT id FROM sales WHERE evidence_message_id = $1 AND evidence_type = 'receipt_ocr'`, [id]);
+      if (!sale) { const created = await createSaleFromProof({ messageId: id, amount: Number(m.amount_override), advisorName: m.advisor_override }); sale = created ? { id: created.id } : null; }
+      if (sale) n += await fixSale(sale.id, m, userId);
+      else log(`Aviso: no se pudo registrar la venta marcada ${m.item_key}`);
+    } else if (phase === 'after' && m.item_key.startsWith('r:') && m.discard) {
       // no fue una compra: no queda registro (si no existe aún, no hay nada que borrar)
       n += (await pool.query(`DELETE FROM sales WHERE evidence_message_id = $1 AND evidence_type IN ('receipt_ocr', 'advisor_confirmation')`, [id])).rowCount;
     } else if (phase === 'after' && m.item_key.startsWith('r:')) {
