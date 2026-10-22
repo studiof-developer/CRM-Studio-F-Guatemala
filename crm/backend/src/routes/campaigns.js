@@ -8,7 +8,7 @@ import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
-import { fetchReport } from '../metaAdsReport.js';
+import { fetchReport, validRange } from '../metaAdsReport.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
@@ -95,8 +95,7 @@ function getHeaderFormat(template) {
 router.get('/meta-ads-report', requireRole('admin'), async (req, res, next) => {
   try {
     const { since, until, level = 'campaign' } = req.query;
-    const day = (d) => /^d{4}-d{2}-d{2}$/.test(d ?? '');
-    if (!day(since) || !day(until) || since > until) return res.status(400).json({ error: 'Indica un rango de fechas válido' });
+    if (!validRange(since, until)) return res.status(400).json({ error: 'Indica un rango de fechas válido' });
     res.json(await fetchReport({ since, until, level }));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });

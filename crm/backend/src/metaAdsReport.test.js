@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rowMetrics, totalsOf, previousRange, observations } from './metaAdsReport.js';
+import { rowMetrics, totalsOf, previousRange, observations, validRange } from './metaAdsReport.js';
 
 const row = (name, spend, conv, clicks, ctr, id = name) => ({ campaign_id: id, campaign_name: name, spend: String(spend), impressions: '10000', reach: '8000', frequency: '1.2', inline_link_clicks: String(clicks), inline_link_click_ctr: String(ctr), cpm: '500', actions: conv == null ? [] : [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: String(conv) }] });
 const money = (n) => `$${Math.round(n)}`;
@@ -43,4 +43,12 @@ test('observaciones: CTR, costo que sube, gasto sin conversaciones y la más bar
   assert.match(text, /Alcance gastó \$30000 y no trajo conversaciones/);
   assert.match(text, /La más barata: E33 a \$1148/);
   assert.equal(observations({ rows: [], previous: [], totals: totalsOf([]), since: '2026-10-20', until: '2026-10-20', fmt: money })[0], 'No hubo gasto en este período.');
+});
+
+test('el rango de fechas que manda la pantalla (un día o varios) es válido; basura o al revés, no', () => {
+  assert.equal(validRange('2026-10-21', '2026-10-21'), true);
+  assert.equal(validRange('2026-10-16', '2026-10-22'), true);
+  assert.equal(validRange('2026-10-22', '2026-10-16'), false);
+  assert.equal(validRange('ayer', '2026-10-16'), false);
+  assert.equal(validRange(undefined, undefined), false);
 });

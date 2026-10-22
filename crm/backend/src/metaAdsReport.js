@@ -42,7 +42,9 @@ export function totalsOf(rows) {
   };
 }
 
-const daysBetween = (since, until) => Math.round((+new Date(`${until}T12:00:00Z`) - +new Date(`${since}T12:00:00Z`)) / 86400000) + 1;
+export const validRange = (since, until) => /^\d{4}-\d{2}-\d{2}$/.test(since ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(until ?? '') && since <= until;
+
+const daysBetween =(since, until) => Math.round((+new Date(`${until}T12:00:00Z`) - +new Date(`${since}T12:00:00Z`)) / 86400000) + 1;
 export const previousRange = (since, until) => {
   const n = daysBetween(since, until);
   const shift = (d, k) => new Date(+new Date(`${d}T12:00:00Z`) + k * 86400000).toISOString().slice(0, 10);
