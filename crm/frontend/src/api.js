@@ -414,6 +414,12 @@ export async function searchCampaignAudience(temperature, q, lineId, { periodFro
   return res.json();
 }
 
+export async function fetchMetaAdsReport({ since, until, level }) {
+  const res = await apiFetch(`/api/campaigns/meta-ads-report?${new URLSearchParams({ since, until, level })}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo consultar a Meta');
+  return res.json();
+}
+
 export async function fetchMetaStrategy(lineId) {
   const params = lineId ? `?lineId=${lineId}` : '';
   const res = await apiFetch(`/api/campaigns/meta-strategy${params}`);

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Workflow, ShieldCheck } from 'lucide-react';
+import { BarChart3, Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Workflow, ShieldCheck } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
 import MetaStrategyTab from './MetaStrategyTab.jsx';
+import MetaAdsReport from './MetaAdsReport.jsx';
 import Templates from './Templates.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
@@ -45,6 +46,7 @@ function formatDateTime(iso) {
 export default function Campaigns({ user, onOpenConversation }) {
   const [tab, setTab] = useState('pipeline');
   const canManageTemplates = user?.role === 'admin' || user?.role === 'supervisor';
+  const isAdmin = user?.role === 'admin'; // el informe de anuncios sale primero solo para admin
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -61,6 +63,7 @@ export default function Campaigns({ user, onOpenConversation }) {
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
             { key: 'metaStrategy', label: 'Estrategia Meta & Costos', icon: ShieldCheck },
+            ...(isAdmin ? [{ key: 'metaReport', label: 'Informe de anuncios', icon: BarChart3 }] : []),
             ...(canManageTemplates ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -80,6 +83,7 @@ export default function Campaigns({ user, onOpenConversation }) {
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'metaStrategy' && <MetaStrategyTab />}
+        {tab === 'metaReport' && isAdmin && <MetaAdsReport />}
         {tab === 'templates' && canManageTemplates && <Templates />}
       </div>
     </div>

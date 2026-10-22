@@ -8,6 +8,7 @@ import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
+import { fetchReport } from '../metaAdsReport.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
@@ -89,6 +90,21 @@ const SUPPORTED_HEADER_FORMATS = ['IMAGE', 'DOCUMENT', 'VIDEO'];
 function getHeaderFormat(template) {
   return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
 }
+
+// GET /api/campaigns/meta-ads-report?since=YYYY-MM-DD&until=YYYY-MM-DD&level=campaign|adset|ad — informe de anuncios de Meta (solo admin)
+router.get('/meta-ads-report', requireRole('admin'), async (req, res, next) => {
+  try {
+    const { since, until, level = 'campaign' } = req.query;
+    const day = (d) => /^d{4}-d{2}-d{2}$/.test(d ?? '');
+    if (!day(since) || !day(until) || since > until) return res.status(400).json({ error: 'Indica un rango de fechas válido' });
+    res.json(await fetchReport({ since, until, level }));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    // el error de Meta (token vencido, sin permiso ads_read…) sirve tal cual a quien administra
+    if (/Meta|token|permission|OAuth/i.test(err.message)) return res.status(502).json({ error: err.message });
+    next(err);
+  }
+});
 
 router.get('/meta-strategy', async (req, res, next) => {
   try {

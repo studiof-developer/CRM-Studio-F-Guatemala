@@ -16,8 +16,11 @@ export async function getMetaAdsCredentials() {
   return { accountId: accountId.replace(/^act_/, ''), token: decryptToken(encToken) };
 }
 
-async function graphGet(path, token) {
-  const res = await fetch(`${GRAPH_BASE}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
+let doFetch = (...args) => fetch(...args);
+export const _setFetchForTests = (fn) => { doFetch = fn; };
+
+export async function graphGet(path, token) {
+  const res = await doFetch(`${GRAPH_BASE}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
   const body = await res.json();
   // Meta's own error shape ({error: {message, code, ...}}) is far more useful here than
   // a bare status code — this is what actually shows up in the "Probar conexión" button
