@@ -109,7 +109,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
           {kind === 'orphan' && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink">
               <label className="flex items-center gap-1">Monto Q<input type="number" min="1" step="0.01" defaultValue={m.amountOverride ?? ''} onBlur={(e) => mark(item, 'mal', { amountOverride: e.target.value === '' ? null : Number(e.target.value) })} className={`${field} w-24`} /></label>
-              <label className="flex items-center gap-1">Asesora que la vendió<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(elige)" className={`${field} w-48`} /></label>
+              <label className="flex items-center gap-1">Asesora que la vendió<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onChange={(e) => { if ((data?.advisors ?? []).includes(e.target.value)) mark(item, 'mal', { advisorOverride: e.target.value }); }} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(elige)" className={`${field} w-48`} /></label>
               <span className={fixed(item.key) ? 'text-success' : 'text-danger'}>{fixed(item.key) ? 'Se registra como venta al aplicar el día' : 'Falta la asesora'}</span>
             </div>
           )}
@@ -122,7 +122,7 @@ export default function SalesDayReviewModal({ open, onClose, onOpenConversation,
                 <label className="flex items-center gap-1 font-semibold"><input type="checkbox" checked={!!m.discard} onChange={(e) => mark(item, 'mal', { discard: e.target.checked })} />No fue una compra: que no quede registro</label>
               )}
               <label className="flex items-center gap-1">Monto correcto Q<input type="number" min="1" step="0.01" defaultValue={m.amountOverride ?? ''} onBlur={(e) => mark(item, 'mal', { amountOverride: e.target.value === '' ? null : Number(e.target.value) })} className={`${field} w-24`} /></label>
-              <label className="flex items-center gap-1">Asesora correcta<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(igual)" className={`${field} w-48`} /></label>
+              <label className="flex items-center gap-1">Asesora correcta<input list="day-review-advisors" defaultValue={m.advisorOverride ?? ''} onChange={(e) => { if ((data?.advisors ?? []).includes(e.target.value)) mark(item, 'mal', { advisorOverride: e.target.value }); }} onBlur={(e) => mark(item, 'mal', { advisorOverride: e.target.value })} placeholder="(igual)" className={`${field} w-48`} /></label>
               <span className={fixed(item.key) ? 'text-success' : 'text-danger'}>{fixed(item.key) ? 'Se fija al aplicar el día' : 'Sin corrección: pásamela para ajustar el motor'}</span>
             </div>
           )}
