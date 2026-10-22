@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rowMetrics, totalsOf, previousRange, observations, validRange } from './metaAdsReport.js';
+import { rowMetrics, totalsOf, previousRange, observations, validRange, fillDaily } from './metaAdsReport.js';
 
 const row = (name, spend, conv, clicks, ctr, id = name) => ({ campaign_id: id, campaign_name: name, spend: String(spend), impressions: '10000', reach: '8000', frequency: '1.2', inline_link_clicks: String(clicks), inline_link_click_ctr: String(ctr), cpm: '500', actions: conv == null ? [] : [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: String(conv) }] });
 const money = (n) => `$${Math.round(n)}`;
@@ -51,4 +51,10 @@ test('el rango de fechas que manda la pantalla (un día o varios) es válido; ba
   assert.equal(validRange('2026-10-22', '2026-10-16'), false);
   assert.equal(validRange('ayer', '2026-10-16'), false);
   assert.equal(validRange(undefined, undefined), false);
+});
+
+test('la serie por día trae todos los días del período, con ceros donde no hubo gasto', () => {
+  const d = fillDaily([{ date: '2026-10-20', spend: 100, conversations: 2, costPerConversation: 50, linkClicks: 9, impressions: 500 }], '2026-10-19', '2026-10-21');
+  assert.deepEqual(d.map((x) => [x.date, x.spend, x.conversations]), [['2026-10-19', 0, 0], ['2026-10-20', 100, 2], ['2026-10-21', 0, 0]]);
+  assert.equal(d[0].costPerConversation, null);
 });

@@ -44,6 +44,25 @@ export function totalsOf(rows) {
 
 export const validRange = (since, until) => /^\d{4}-\d{2}-\d{2}$/.test(since ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(until ?? '') && since <= until;
 
+// Datos de toda la cuenta en el período: el alcance y la frecuencia únicos, y (con daily) un renglón por día para la gráfica.
+async function accountInsights(creds, since, until, daily) {
+  const range = encodeURIComponent(JSON.stringify({ since, until }));
+  const fields = ['date_start', ...METRICS].join(',');
+  const body = await graphGet(`act_${creds.accountId}/insights?level=account&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}&limit=100`, creds.token);
+  return (body.data ?? []).map((r) => ({ ...rowMetrics({ ...r, campaign_id: 'account', campaign_name: 'Cuenta' }, 'campaign'), date: r.date_start }));
+}
+
+// Un renglón por cada día del período (con ceros donde Meta no devuelve nada), para que la gráfica no se salte días sin gasto.
+export function fillDaily(rows, since, until) {
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+  const out = [];
+  for (let d = since; d <= until; d = new Date(+new Date(`${d}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)) {
+    const r = byDate.get(d);
+    out.push({ date: d, spend: r?.spend ?? 0, conversations: r?.conversations ?? 0, costPerConversation: r?.costPerConversation ?? null, linkClicks: r?.linkClicks ?? 0, impressions: r?.impressions ?? 0 });
+  }
+  return out;
+}
+
 const daysBetween =(since, until) => Math.round((+new Date(`${until}T12:00:00Z`) - +new Date(`${since}T12:00:00Z`)) / 86400000) + 1;
 export const previousRange = (since, until) => {
   const n = daysBetween(since, until);
@@ -110,18 +129,22 @@ export async function fetchReport({ since, until, level = 'campaign', fmt }) {
   const creds = await getMetaAdsCredentials();
   if (!creds) throw Object.assign(new Error('Meta Ads no está configurado — guarda el ID de cuenta y el token en Configuración'), { status: 409 });
   const prevRange = previousRange(since, until);
-  const [current, previous, status, account] = await Promise.all([
+  const multiDay = daysBetween(since, until) > 1;
+  const [current, previous, status, account, accNow, accPrev, accDaily] = await Promise.all([
     insights(creds, level, since, until), insights(creds, level, prevRange.since, prevRange.until), statuses(creds, level).catch(() => new Map()),
     graphGet(`act_${creds.accountId}?fields=name,currency`, creds.token),
+    accountInsights(creds, since, until, false).catch(() => []), accountInsights(creds, prevRange.since, prevRange.until, false).catch(() => []),
+    multiDay ? accountInsights(creds, since, until, true).catch(() => []) : Promise.resolve([]),
   ]);
   const rows = current.map((r) => ({ ...r, status: status.get(r.id) ?? null })).sort((a, b) => b.spend - a.spend);
-  const totals = totalsOf(rows);
-  const prevTotals = totalsOf(previous);
+  const withAccount = (t, acc) => ({ ...t, reach: acc?.reach ?? null, frequency: acc?.frequency ?? null });
+  const totals = withAccount(totalsOf(rows), accNow[0]);
+  const prevTotals = withAccount(totalsOf(previous), accPrev[0]);
   // Como lo muestra el Administrador de anuncios: $47.071 (punto de miles) en pesos; otra moneda lleva su código.
   const dots = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const money = fmt ?? ((n) => (account.currency === 'COP' ? `$${dots(n)}` : `${account.currency} ${dots(n)}`));
   return {
     since, until, level, currency: account.currency, accountName: account.name, days: daysBetween(since, until), previousRange: prevRange,
-    rows, totals, previousTotals: prevTotals, observations: observations({ rows, previous, totals, since, until, fmt: money }),
+    rows, totals, previousTotals: prevTotals, daily: multiDay ? fillDaily(accDaily, since, until) : [], observations: observations({ rows, previous, totals, since, until, fmt: money }),
   };
 }

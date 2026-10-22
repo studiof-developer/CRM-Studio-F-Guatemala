@@ -46,7 +46,6 @@ function formatDateTime(iso) {
 export default function Campaigns({ user, onOpenConversation }) {
   const [tab, setTab] = useState('pipeline');
   const canManageTemplates = user?.role === 'admin' || user?.role === 'supervisor';
-  const isAdmin = user?.role === 'admin'; // el informe de anuncios sale primero solo para admin
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -63,7 +62,7 @@ export default function Campaigns({ user, onOpenConversation }) {
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
             { key: 'metaStrategy', label: 'Estrategia Meta & Costos', icon: ShieldCheck },
-            ...(isAdmin ? [{ key: 'metaReport', label: 'Informe de anuncios', icon: BarChart3 }] : []),
+            ...(canManageTemplates ? [{ key: 'metaReport', label: 'Informe de anuncios', icon: BarChart3 }] : []),
             ...(canManageTemplates ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -83,7 +82,7 @@ export default function Campaigns({ user, onOpenConversation }) {
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'metaStrategy' && <MetaStrategyTab />}
-        {tab === 'metaReport' && isAdmin && <MetaAdsReport />}
+        {tab === 'metaReport' && canManageTemplates && <MetaAdsReport />}
         {tab === 'templates' && canManageTemplates && <Templates />}
       </div>
     </div>

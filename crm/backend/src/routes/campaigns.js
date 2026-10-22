@@ -91,8 +91,8 @@ function getHeaderFormat(template) {
   return template.components?.find((c) => c.type === 'HEADER')?.format ?? null;
 }
 
-// GET /api/campaigns/meta-ads-report?since=YYYY-MM-DD&until=YYYY-MM-DD&level=campaign|adset|ad — informe de anuncios de Meta (solo admin)
-router.get('/meta-ads-report', requireRole('admin'), async (req, res, next) => {
+// GET /api/campaigns/meta-ads-report?since=YYYY-MM-DD&until=YYYY-MM-DD&level=campaign|adset|ad — informe de anuncios de Meta (admin y supervisor)
+router.get('/meta-ads-report', requireRole('admin', 'supervisor'), async (req, res, next) => {
   try {
     const { since, until, level = 'campaign' } = req.query;
     if (!validRange(since, until)) return res.status(400).json({ error: 'Indica un rango de fechas válido' });
