@@ -8,7 +8,7 @@ import { ThemeToggle } from './components/ThemeToggle.jsx';
 const HIGHLIGHTS = [
   { icon: MessagesSquare, title: 'Todas las conversaciones', text: 'WhatsApp, Instagram y Messenger en una sola bandeja, con el historial de cada cliente.' },
   { icon: Inbox, title: 'Pipeline de ventas', text: 'De la primera pregunta al pago, con cada cliente en su etapa y su asesora.' },
-  { icon: Truck, title: 'Pedidos y logística', text: 'Fichas, auditoría de pagos y seguimiento hasta que el cliente recibe.' },
+  { icon: Truck, title: 'Pedidos y logística', soon: true, text: 'Fichas, auditoría de pagos y seguimiento hasta que el cliente recibe.' },
   { icon: BarChart3, title: 'Ventas y pauta', text: 'Resultados por asesora, por día y por campaña, sin armar reportes a mano.' },
 ];
 
@@ -115,10 +115,10 @@ export default function Login({ onLoggedIn }) {
         </div>
 
         <ul className="relative mt-12 grid max-w-xl gap-5 xl:grid-cols-2">
-          {HIGHLIGHTS.map(({ icon: Icon, title, text }, i) => (
+          {HIGHLIGHTS.map(({ icon: Icon, title, text, soon }, i) => (
             <motion.li key={title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.07, duration: 0.4, ease: 'easeOut' }} className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-sm">
               <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-sky-300"><Icon size={18} /></span>
-              <h3 className="text-sm font-semibold text-white">{title}</h3>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-white">{title}{soon && <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">En desarrollo</span>}</h3>
               <p className="mt-1 text-[13px] leading-relaxed text-slate-300">{text}</p>
             </motion.li>
           ))}
