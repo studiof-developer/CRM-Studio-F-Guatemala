@@ -116,9 +116,10 @@ export default function Login({ onLoggedIn }) {
 
         <ul className="relative mt-12 grid max-w-xl gap-5 xl:grid-cols-2">
           {HIGHLIGHTS.map(({ icon: Icon, title, text, soon }, i) => (
-            <motion.li key={title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.07, duration: 0.4, ease: 'easeOut' }} className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-sm">
+            <motion.li key={title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.07, duration: 0.4, ease: 'easeOut' }} className="relative rounded-2xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-sm">
               <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-sky-300"><Icon size={18} /></span>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-white">{title}{soon && <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">En desarrollo</span>}</h3>
+              {soon && <span className="absolute right-4 top-5 rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">En desarrollo</span>}
+              <h3 className="text-sm font-semibold text-white">{title}</h3>
               <p className="mt-1 text-[13px] leading-relaxed text-slate-300">{text}</p>
             </motion.li>
           ))}
