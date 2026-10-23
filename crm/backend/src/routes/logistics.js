@@ -23,7 +23,7 @@ const id = (req, name = 'id') => { const n = Number(req.params[name]); if (!Numb
 
 router.get('/me', guard(async (req, res) => {
   const scope = await viewerScope(req.user);
-  res.json({ roles: scope.roles, seesAll: scope.seesAll, isAdmin: req.user.role === 'admin', roleLabels: ROLES, statusLabels: STATUS, steps: Object.fromEntries(Object.entries(TRANSITIONS).map(([k, s]) => [k, { code: s.code, label: s.label }])) });
+  res.json({ roles: scope.roles, seesAll: scope.seesAll, isAdmin: req.user.role === 'admin', roleLabels: ROLES, statusLabels: STATUS, steps: Object.fromEntries(Object.entries(TRANSITIONS).map(([k, s]) => [k, { code: s.code, label: s.label, from: s.from, to: s.to, roles: s.roles, mode: s.mode ?? null, evidence: s.evidence?.label ?? null, fields: s.fields.map((f) => ({ key: f.key, label: f.label })) }])) });
 }));
 
 router.get('/config', guard(async (req, res) => {

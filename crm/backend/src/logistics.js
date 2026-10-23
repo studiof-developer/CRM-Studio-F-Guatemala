@@ -479,6 +479,13 @@ function slaInfo(sheet, cfg, now = new Date()) {
   };
 }
 
+const QUEUE_SKIP = new Set(['hold', 'resume', 'cancel']);
+function isActionable(sheet, user, roles, cfg) {
+  return stepsFor(sheet).some((st) => !QUEUE_SKIP.has(st.key) && (st.roles.includes('asesora')
+    ? sheet.created_by === user.id
+    : allowedFor({ step: st, sheet, userId: user.id, userRole: user.role, roles, done: [], cfg }).ok));
+}
+
 export async function listSheets({ user, scope = 'mine', status = null, q = '', mode = null, overdue = false, limit = 100 }) {
   const view = await viewerScope(user);
   const cfg = await getConfig();
@@ -491,12 +498,15 @@ export async function listSheets({ user, scope = 'mine', status = null, q = '', 
   params.push(Math.min(Math.max(Number(limit) || 100, 1), 300));
   const { rows } = await pool.query(
     `SELECT s.*, (SELECT count(*)::int FROM order_sheet_items i WHERE i.sheet_id = s.id) AS items_count,
-            (SELECT count(*)::int FROM order_sheet_payments p WHERE p.sheet_id = s.id) AS payments_count
+            (SELECT count(*)::int FROM order_sheet_payments p WHERE p.sheet_id = s.id) AS payments_count,
+            (SELECT COALESCE(sum(COALESCE(p.audit_amount, p.amount)), 0) FROM order_sheet_payments p WHERE p.sheet_id = s.id AND p.audit_status = 'aprobado') AS approved_total,
+            (SELECT string_agg(i.reference, ', ' ORDER BY i.id) FROM order_sheet_items i WHERE i.sheet_id = s.id) AS items_summary,
+            (SELECT u.full_name FROM users u WHERE u.id = s.assigned_to) AS assigned_name
      FROM order_sheets s ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.status_changed_at DESC LIMIT $${params.length}`,
     params
   );
   const now = new Date();
-  const out = rows.map((s) => ({ ...s, sla: slaInfo(s, cfg, now), statusLabel: STATUS[s.status] }));
+  const out = rows.map((s) => ({ ...s, sla: slaInfo(s, cfg, now), statusLabel: STATUS[s.status], actionable: isActionable(s, user, view.roles, cfg) }));
   return overdue ? out.filter((s) => s.sla.overdue || s.sla.statusOverdue) : out;
 }
 
@@ -509,7 +519,22 @@ export async function boardCounts(user) {
   const { rows: [t] } = await pool.query(
     "SELECT count(*) FILTER (WHERE deadline_at < now() AND status NOT IN ('CERRADO','CANCELADA'))::int AS overdue, count(*) FILTER (WHERE deadline_at >= now() AND deadline_at < now() + interval '24 hours' AND status NOT IN ('CERRADO','CANCELADA'))::int AS due_soon FROM order_sheets"
   );
+  const [{ rows: [k] }, { rows: open }] = await Promise.all([
+    pool.query(`
+      SELECT (SELECT count(*)::int FROM order_sheets WHERE status NOT IN ('BORRADOR','CERRADO','CANCELADA')) AS active,
+             (SELECT COALESCE(sum(total), 0) FROM order_sheets WHERE status NOT IN ('BORRADOR','CERRADO','CANCELADA')) AS active_value,
+             (SELECT count(*)::int FROM order_sheets WHERE status = 'EN_AUDITORIA_PAGO') AS in_audit,
+             (SELECT count(*)::int FROM order_sheets WHERE status = 'OBSERVADA') AS observed,
+             (SELECT count(DISTINCT e.sheet_id)::int FROM order_sheet_events e WHERE e.action = 'mark_delivered' AND e.at > now() - interval '7 days') AS delivered_7d,
+             (SELECT round(avg(extract(epoch FROM (e.at - s.payment_approved_at)) / 86400)::numeric, 1) FROM order_sheet_events e JOIN order_sheets s ON s.id = e.sheet_id
+                WHERE e.action = 'mark_delivered' AND e.at > now() - interval '30 days' AND s.payment_approved_at IS NOT NULL) AS avg_cycle_days,
+             (SELECT round(100.0 * count(*) FILTER (WHERE e.at <= s.deadline_at) / NULLIF(count(*), 0))::int FROM order_sheet_events e JOIN order_sheets s ON s.id = e.sheet_id
+                WHERE e.action = 'mark_delivered' AND e.at > now() - interval '30 days' AND s.deadline_at IS NOT NULL) AS on_time_pct`),
+    pool.query("SELECT id, status, payment_mode, created_by FROM order_sheets WHERE status NOT IN ('CERRADO','CANCELADA')"),
+  ]);
+  const queue = open.filter((sh) => isActionable(sh, user, view.roles, cfg)).length;
   return {
+    kpis: { active: k.active, activeValue: Number(k.active_value), inAudit: k.in_audit, observed: k.observed, delivered7d: k.delivered_7d, avgCycleDays: k.avg_cycle_days == null ? null : Number(k.avg_cycle_days), onTimePct: k.on_time_pct, queue },
     columns: BOARD.map((c) => ({ ...c, label: c.label, statuses: c.statuses.map((s) => ({ status: s, label: STATUS[s], count: by[s]?.n ?? 0, overdue: by[s]?.overdue ?? 0 })) })),
     overdue: t.overdue, dueSoon: t.due_soon, config: { totalBusinessDays: cfg.totalBusinessDays },
   };

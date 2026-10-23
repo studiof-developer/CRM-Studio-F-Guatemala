@@ -1,80 +1,68 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { PageHeader } from './components/ui.jsx';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { Plus, Search, ClipboardList } from 'lucide-react';
 import { showError } from './components/Toast.jsx';
-import SheetTable from './components/logistics/SheetTable.jsx';
-import SheetDetail from './components/logistics/SheetDetail.jsx';
-import { fetchSheets, fetchLogisticsMe, fetchCustomers, fetchCustomerQuotes, createSheet } from './api.js';
-import { Modal, PrimaryBtn, GhostBtn, inputCls, q, fmtDT } from './lib/logisticsUi.jsx';
+import { SheetRow } from './components/logistics/SheetCards.jsx';
+import SheetDrawer from './components/logistics/SheetDrawer.jsx';
+import SheetWizard from './components/logistics/SheetWizard.jsx';
+import { fetchSheets, fetchLogisticsMe } from './api.js';
+import { PrimaryBtn, EmptyState, Skeleton, SOFT, inputCls } from './lib/logisticsUi.jsx';
 
-function NewSheetModal({ onClose, onCreated }) {
-  const [term, setTerm] = useState('');
-  const [results, setResults] = useState([]);
-  const [customer, setCustomer] = useState(null);
-  const [quotes, setQuotes] = useState([]);
-  const [quoteId, setQuoteId] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (customer || term.trim().length < 2) { setResults([]); return undefined; }
-    const t = setTimeout(() => fetchCustomers(term.trim(), undefined, 15).then((r) => setResults(Array.isArray(r) ? r : (r.customers ?? []))).catch(() => {}), 300);
-    return () => clearTimeout(t);
-  }, [term, customer]);
-
-  function pick(c) {
-    setCustomer(c); setQuoteId(null);
-    fetchCustomerQuotes(c.id).then(setQuotes).catch(() => setQuotes([]));
-  }
-
-  async function create() {
-    setBusy(true);
-    try { onCreated(await createSheet({ customerId: customer.id, quoteId })); } catch (err) { showError(err.message); setBusy(false); }
-  }
-
-  return (
-    <Modal title="Nueva ficha de pedido" subtitle="Elige al cliente y, si ya cotizaste, la cotización: las prendas se copian de ahí." onClose={onClose}
-      footer={<><GhostBtn onClick={onClose} disabled={busy}>Cancelar</GhostBtn><PrimaryBtn onClick={create} disabled={!customer || busy}>{busy ? 'Creando…' : 'Crear ficha'}</PrimaryBtn></>}>
-      {!customer ? (
-        <div>
-          <input autoFocus className={inputCls} placeholder="Buscar cliente por nombre o teléfono…" value={term} onChange={(e) => setTerm(e.target.value)} />
-          <ul className="mt-2 max-h-64 overflow-y-auto">
-            {results.map((c) => <li key={c.id}><button type="button" onClick={() => pick(c)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"><b className="text-ink">{c.full_name ?? 'Sin nombre'}</b> <span className="text-xs text-greige-ink">{String(c.whatsapp_number).startsWith('social:') ? 'Red social' : c.whatsapp_number}</span></button></li>)}
-            {term.trim().length >= 2 && !results.length && <li className="px-3 py-2 text-sm text-greige-ink">Sin resultados.</li>}
-          </ul>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2 text-sm"><span><b>{customer.full_name}</b> · {customer.whatsapp_number}</span><button type="button" className="text-xs font-semibold text-accent" onClick={() => { setCustomer(null); setQuotes([]); }}>Cambiar</button></div>
-          <div>
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-greige-ink">Cotización</span>
-            <label className="flex items-center gap-2 py-1 text-sm"><input type="radio" checked={quoteId === null} onChange={() => setQuoteId(null)} />Sin cotización (agrego las prendas a mano)</label>
-            {quotes.map((qt) => <label key={qt.id} className="flex items-center gap-2 py-1 text-sm"><input type="radio" checked={quoteId === qt.id} onChange={() => setQuoteId(qt.id)} />{qt.quoteNumber} · {q(qt.grandTotal)} · {qt.items.length} prenda(s) · {fmtDT(qt.createdAt)}</label>)}
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
+const GROUPS = [
+  ['todas', 'Todas', () => true],
+  ['borrador', 'Borradores', (s) => s.status === 'BORRADOR'],
+  ['observada', 'Por corregir', (s) => s.status === 'OBSERVADA'],
+  ['auditoria', 'En auditoría de pago', (s) => s.status === 'EN_AUDITORIA_PAGO'],
+  ['proceso', 'En proceso', (s) => !['BORRADOR', 'OBSERVADA', 'EN_AUDITORIA_PAGO', 'CERRADO', 'CANCELADA'].includes(s.status)],
+  ['cerradas', 'Cerradas', (s) => ['CERRADO', 'CANCELADA'].includes(s.status)],
+];
 
 // Fichas de pedido de la asesora: las crea, adjunta los comprobantes y las envía a auditoría de pago.
 export default function Fichas() {
-  const [sheets, setSheets] = useState([]);
+  const [sheets, setSheets] = useState(null);
   const [me, setMe] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [group, setGroup] = useState('todas');
+  const [term, setTerm] = useState('');
   const [openId, setOpenId] = useState(null);
-  const [creating, setCreating] = useState(false);
+  const [wizard, setWizard] = useState(false);
 
-  const load = useCallback(() => fetchSheets({ scope: 'mine' }).then(setSheets).catch((e) => showError(e.message)).finally(() => setLoading(false)), []);
+  const load = useCallback(() => fetchSheets({ scope: 'mine', limit: 300 }).then((r) => setSheets(r.sheets)).catch((e) => showError(e.message)), []);
   useEffect(() => { load(); fetchLogisticsMe().then(setMe).catch(() => {}); }, [load]);
-  const rows = Array.isArray(sheets) ? sheets : sheets.sheets ?? [];
+
+  const counts = useMemo(() => Object.fromEntries(GROUPS.map(([k, , fn]) => [k, (sheets ?? []).filter(fn).length])), [sheets]);
+  const rows = useMemo(() => {
+    const fn = GROUPS.find(([k]) => k === group)[2];
+    const t = term.trim().toLowerCase();
+    return (sheets ?? []).filter(fn).filter((s) => !t || [s.sheet_number, s.full_name, s.phone].some((v) => String(v ?? '').toLowerCase().includes(t)));
+  }, [sheets, group, term]);
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8">
-      <PageHeader title="Fichas de pedido" subtitle="Crea la ficha cuando el cliente paga, adjunta cada comprobante y envíala a auditoría de pago."
-        action={<PrimaryBtn onClick={() => setCreating(true)} className="inline-flex items-center gap-2"><Plus size={16} />Nueva ficha</PrimaryBtn>} />
-      {loading ? <p className="py-10 text-center text-sm text-greige-ink">Cargando…</p> : <SheetTable sheets={rows} onOpen={setOpenId} />}
-      {creating && <NewSheetModal onClose={() => setCreating(false)} onCreated={(s) => { setCreating(false); load(); setOpenId(s.id); }} />}
-      {openId && <SheetDetail sheetId={openId} me={me} onClose={() => setOpenId(null)} onChanged={load} />}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Fichas de pedido</h1>
+          <p className="mt-1 text-sm text-greige-ink">Crea la ficha cuando el cliente paga, adjunta cada comprobante y envíala a auditoría de pago.</p>
+        </div>
+        <PrimaryBtn onClick={() => setWizard(true)}><Plus size={16} />Nueva ficha</PrimaryBtn>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-paper p-1">
+          {GROUPS.map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={group === k} onClick={() => setGroup(k)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${group === k ? 'bg-accent text-white shadow-sm' : 'text-greige-ink hover:text-ink'}`}>
+              {label}<span className={`rounded-full px-1.5 text-[10px] font-bold ${group === k ? 'bg-white/25' : SOFT}`}>{counts[k]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full sm:w-64"><Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-greige" /><input className={`${inputCls} pl-9`} placeholder="Ficha, cliente o teléfono" value={term} onChange={(e) => setTerm(e.target.value)} /></div>
+      </div>
+
+      {sheets === null ? <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[68px]" />)}</div>
+        : rows.length === 0 ? <EmptyState icon={ClipboardList} title={sheets.length ? 'Nada con estos filtros' : 'Aún no tienes fichas'} text={sheets.length ? 'Cambia el filtro o la búsqueda.' : 'Cuando un cliente pague, crea su ficha aquí para que logística la prepare.'} action={!sheets.length && <PrimaryBtn onClick={() => setWizard(true)}><Plus size={16} />Crear la primera ficha</PrimaryBtn>} />
+          : <div className="space-y-2.5">{rows.map((s) => <SheetRow key={s.id} sheet={s} onOpen={setOpenId} showAdvisor={false} />)}</div>}
+
+      <AnimatePresence>{wizard && <SheetWizard key="wizard" onClose={(id) => { setWizard(false); load(); if (id) setOpenId(id); }} />}</AnimatePresence>
+      <AnimatePresence>{openId && <SheetDrawer key={openId} sheetId={openId} me={me} onClose={() => setOpenId(null)} onChanged={load} />}</AnimatePresence>
     </div>
   );
 }
