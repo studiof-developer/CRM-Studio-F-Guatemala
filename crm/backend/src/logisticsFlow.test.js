@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TRANSITIONS, STATUS, BOARD, stepsFor, allowedFor, validateFields, addBusinessDays, requiredPayment, sheetMissing, computeTotals, settleAudit, LOGISTICS_DEFAULTS, fromStatuses, TERMINAL,
+  TRANSITIONS, STATUS, BOARD, stepsFor, allowedFor, validateFields, addBusinessDays, requiredPayment, sheetMissing, computeTotals, settleAudit, LOGISTICS_DEFAULTS, fromStatuses, TERMINAL, transfersNeeded,
 } from './logisticsFlow.js';
 
 test('toda transición apunta a un estado que existe y sale de estados que existen', () => {
@@ -23,16 +23,18 @@ test('desde cualquier estado activo se puede avanzar o pausar: el proceso no tie
   for (const status of Object.keys(STATUS)) {
     if (TERMINAL.includes(status)) continue;
     for (const mode of ['contado', 'contraentrega']) {
-      assert.ok(stepsFor({ status, payment_mode: mode }).length > 0, `${status} (${mode}) sin pasos`);
+      for (const delivery of ['domicilio', 'agencia', 'tienda']) {
+        assert.ok(stepsFor({ status, payment_mode: mode, delivery_type: delivery }).length > 0, `${status} (${mode}, ${delivery}) sin pasos`);
+      }
     }
   }
 });
 
 test('el camino de contado llega de nuevo pedido a cerrado y el de contraentrega también', () => {
-  const walk = (mode, keys) => {
+  const walk = (mode, keys, delivery_type = 'domicilio') => {
     let status = 'NUEVO_PEDIDO';
     for (const k of keys) {
-      const step = stepsFor({ status, payment_mode: mode }).find((s) => s.key === k);
+      const step = stepsFor({ status, payment_mode: mode, delivery_type }).find((s) => s.key === k);
       assert.ok(step, `${mode}: ${k} no está disponible desde ${status}`);
       status = step.to;
     }
@@ -42,6 +44,15 @@ test('el camino de contado llega de nuevo pedido a cerrado y el de contraentrega
   const tail = ['pack', 'audit_pack', 'generate_guide', 'hand_over', 'send_guide', 'mark_delivered'];
   assert.equal(walk('contado', [...common, 'validate_cash', 'issue_invoice_cash', ...tail, 'confirm_received']), 'CERRADO');
   assert.equal(walk('contraentrega', [...common, 'validate_advance', ...tail, 'report_credit', 'verify_credit', 'invoice_cod']), 'CERRADO');
+  // recoger en tienda: sin guía ni ruta, cierra al entregar en la tienda
+  assert.equal(walk('contado', [...common, 'validate_cash', 'issue_invoice_cash', 'pack', 'audit_pack', 'ready_pickup', 'deliver_pickup'], 'tienda'), 'CERRADO');
+});
+
+test('recoger en tienda no pasa por Guatex y el envío a domicilio no pasa por la tienda', () => {
+  const keys = (delivery_type) => stepsFor({ status: 'SELLADO', payment_mode: 'contado', delivery_type }).map((s) => s.key);
+  assert.ok(keys('tienda').includes('ready_pickup') && !keys('tienda').includes('generate_guide'));
+  assert.ok(keys('domicilio').includes('generate_guide') && !keys('domicilio').includes('ready_pickup'));
+  assert.ok(keys('agencia').includes('generate_guide'));
 });
 
 test('el paquete incompleto vuelve a recibirse y revalidarse (bucle de faltantes)', () => {
@@ -108,6 +119,10 @@ test('4 días hábiles: paga el lunes, llega a más tardar el viernes (DEC-06)',
 test('pago requerido: el total en contado, el 25% en contraentrega; tolerancia y auditoría', () => {
   assert.equal(requiredPayment({ total: 1000, payment_mode: 'contado' }), 1000);
   assert.equal(requiredPayment({ total: 1000, payment_mode: 'contraentrega' }), 250);
+  // el flete ya pagado viaja dentro de los pagos; al recibir o sin envío no se exige por adelantado
+  assert.equal(requiredPayment({ total: 1000, shipping: 56, shipping_payment: 'pagado', payment_mode: 'contado' }), 1056);
+  assert.equal(requiredPayment({ total: 1000, shipping: 56, shipping_payment: 'al_recibir', payment_mode: 'contado' }), 1000);
+  assert.equal(requiredPayment({ total: 1000, shipping: 56, shipping_payment: 'pagado', payment_mode: 'contado' }, { ...LOGISTICS_DEFAULTS, includeFreightInRequired: false }), 1000);
   const sheet = { total: 1000, payment_mode: 'contado' };
   const p = (status, amount, extra = {}) => ({ id: 1, audit_status: status, amount, reference_number: 'R1', ...extra });
   assert.equal(settleAudit(sheet, [p('pendiente', 600), p('aprobado', 400)]).status, 'EN_AUDITORIA_PAGO');
@@ -122,18 +137,38 @@ test('pago requerido: el total en contado, el 25% en contraentrega; tolerancia y
   assert.equal(settleAudit(sheet, [p('aprobado', 1000, { audit_amount: 800 })]).status, 'OBSERVADA');
 });
 
-test('totales de la ficha: el servidor suma prendas con descuento y flete', () => {
+test('totales de la ficha: el servidor suma prendas con descuento y el flete va aparte', () => {
   const items = [{ unit_price: 449, quantity: 2, final_price: 349 }, { unit_price: 299, quantity: 1, final_price: 299 }];
-  assert.deepEqual(computeTotals(items, 35), { subtotal: 1197, discount_total: 200, shipping: 35, total: 1032 });
+  assert.deepEqual(computeTotals(items, 35), { subtotal: 1197, discount_total: 200, shipping: 35, total: 997 });
 });
 
-test('la ficha no sale a auditoría con campos del PDF vacíos, sin comprobante o sin referencia', () => {
-  const sheet = { campaign: 'NEWA', full_name: 'Ana', phone: '5000', email: 'a@b.c', address: 'Zona 1', city: 'Guatemala', department: 'Guatemala', total: 100 };
-  const item = { reference: 'S1' };
-  assert.deepEqual(sheetMissing(sheet, [item], [{ attachment_id: 1, reference_number: 'R1' }]), []);
-  assert.ok(sheetMissing({ ...sheet, email: '' }, [item], [{ attachment_id: 1, reference_number: 'R1' }]).includes('Correo'));
-  assert.ok(sheetMissing(sheet, [], [{ attachment_id: 1, reference_number: 'R1' }]).includes('Al menos una prenda'));
+test('la ficha no sale a auditoría con lo mínimo vacío, sin comprobante, sin referencia o sin tienda de origen', () => {
+  // por defecto solo es obligatorio lo que casi siempre llena la asesora en la ficha de papel; el correo, la ciudad o el DPI no
+  const sheet = { delivery_type: 'domicilio', shipping_payment: 'pagado', full_name: 'Ana', phone: '5000', address: 'Zona 1', department: 'Guatemala', total: 100 };
+  const item = { reference: 'S1', origin_warehouse: 'Oakland' };
+  const pay = [{ attachment_id: 1, reference_number: 'R1' }];
+  assert.deepEqual(sheetMissing(sheet, [item], pay), []);
+  assert.deepEqual(sheetMissing({ ...sheet, email: '', city: '', dpi: '' }, [item], pay), []);
+  assert.ok(sheetMissing({ ...sheet, phone: '' }, [item], pay).includes('Celular'));
+  assert.ok(sheetMissing({ ...sheet, department: '' }, [item], pay).includes('Departamento'));
+  assert.ok(!sheetMissing({ ...sheet, delivery_type: 'tienda', pickup_store: 'Oakland', address: '', department: '' }, [item], pay).includes('Dirección'));
+  assert.ok(sheetMissing({ ...sheet, delivery_type: 'tienda' }, [item], pay).includes('Tienda donde recoge'));
+  assert.ok(sheetMissing(sheet, [{ reference: 'S1' }], pay).includes('Tienda de origen de cada prenda'));
+  assert.ok(sheetMissing(sheet, [], pay).includes('Al menos una prenda'));
   assert.ok(sheetMissing(sheet, [item], []).includes('Al menos un pago con su comprobante'));
   assert.ok(sheetMissing(sheet, [item], [{ attachment_id: null, reference_number: 'R1' }]).includes('Cada pago debe llevar su comprobante'));
   assert.ok(sheetMissing(sheet, [item], [{ attachment_id: 1, reference_number: '' }]).includes('Cada pago necesita su número de referencia'));
+  assert.ok(sheetMissing({ ...sheet, shipping_payment: 'al_recibir', shipping: 0 }, [item], pay).some((m) => /flete/i.test(m)));
+  assert.ok(sheetMissing(sheet, [item], [{ attachment_id: 1, reference_number: 'R1', method: 'tarjeta_link', platform_verified: false }]).some((m) => /NeoLink/.test(m)));
+  assert.deepEqual(sheetMissing(sheet, [item], [{ attachment_id: 1, reference_number: 'R1', method: 'tarjeta_link', platform_verified: true }]), []);
+  // lo obligatorio se puede endurecer desde la configuración
+  assert.ok(sheetMissing(sheet, [item], pay, { ...LOGISTICS_DEFAULTS, requiredFields: ['full_name', 'phone', 'email'] }).includes('Correo'));
+});
+
+test('traslados: uno por tienda de origen distinta, aunque sea la misma bodega de despacho', () => {
+  const it = (origin_warehouse, quantity = 1) => ({ reference: 'R', quantity, origin_warehouse });
+  assert.equal(transfersNeeded([it('Oakland'), it('Oakland', 2)]).length, 1);
+  const multi = transfersNeeded([it('Oakland'), it('Videre', 2), it('videre'), it('Majadas')]);
+  assert.deepEqual(multi.map((t) => [t.store, t.units]), [['Oakland', 1], ['Videre', 3], ['Majadas', 1]]);
+  assert.equal(transfersNeeded([{ reference: 'R', quantity: 1 }]).length, 0);
 });

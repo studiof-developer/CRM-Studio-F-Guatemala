@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { requireRole } from '../auth.js';
 import {
-  getConfig, saveConfig, userRoles, listRoleAssignments, setUserRoles, viewerScope, createSheet, updateSheet, addPayment, removePayment, submitSheet, auditPayment, advance, addNote,
+  getConfig, configForUi, saveConfig, userRoles, listRoleAssignments, setUserRoles, viewerScope, createSheet, updateSheet, addPayment, removePayment, submitSheet, auditPayment, advance, addNote,
   listSheets, boardCounts, getSheet, chatProofs,
 } from '../logistics.js';
 import { ROLES, STATUS, TRANSITIONS } from '../logisticsFlow.js';
@@ -28,9 +28,9 @@ router.get('/me', guard(async (req, res) => {
 
 router.get('/config', guard(async (req, res) => {
   if (!(await viewerScope(req.user)).seesAll) return res.status(403).json({ error: 'forbidden' });
-  res.json(await getConfig());
+  res.json(await configForUi());
 }));
-router.put('/config', requireRole('admin'), guard(async (req, res) => { res.json(await saveConfig(req.body, req.user)); }));
+router.put('/config', requireRole('admin'), guard(async (req, res) => { await saveConfig(req.body, req.user); res.json(await configForUi()); }));
 
 router.get('/roles', requireRole('admin'), guard(async (req, res) => { res.json({ users: await listRoleAssignments(), roleLabels: ROLES }); }));
 router.put('/roles/:userId', requireRole('admin'), guard(async (req, res) => { res.json({ roles: await setUserRoles(id(req, 'userId'), req.body?.roles, req.user.id) }); }));

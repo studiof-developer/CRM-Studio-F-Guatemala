@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { X, Search, Plus, Trash2, Check, ChevronLeft, ChevronRight, Send, Loader2, ImageIcon, Wallet, Truck, CreditCard, CheckCircle2, Circle, ShieldCheck } from 'lucide-react';
+import { X, Search, Plus, Trash2, Check, ChevronLeft, ChevronRight, Send, Loader2, ImageIcon, Wallet, Truck, CreditCard, CheckCircle2, Circle, ShieldCheck, Store, Home, Building2, StickyNote } from 'lucide-react';
 import { fetchCustomers, fetchCustomerQuotes, fetchProducts, productImageUrl, createSheet, fetchSheet, updateSheet, runSheetStep } from '../../api.js';
 import { showSuccess, showError } from '../Toast.jsx';
 import Avatar from '../Avatar.jsx';
 import { PaymentDialog } from './StepDialogs.jsx';
 import { Drawer, Panel, PrimaryBtn, GhostBtn, FieldRow, ProofThumb, AuditPill, inputCls, SOFT, METHOD_LABELS, q, fmtDT } from '../../lib/logisticsUi.jsx';
 
-const STEPS = [['cliente', 'Cliente'], ['prendas', 'Prendas'], ['entrega', 'Entrega'], ['pagos', 'Pagos'], ['revision', 'Revisión']];
-const CONTACT = [['full_name', 'Nombre completo *'], ['phone', 'Celular *'], ['phone_alt', 'Celular alterno'], ['email', 'Correo *'], ['receiver_name', 'Quién recibe (si es otra persona)'], ['campaign', 'Nombre de la campaña *']];
-const ADDRESS = [['address', 'Dirección *'], ['address_ref', 'Referencia de la dirección'], ['city', 'Ciudad *'], ['department', 'Departamento *']];
-const InvoiceFields = [['invoice_name', 'Nombre para la factura'], ['invoice_nit', 'NIT']];
+const STEPS = [['cliente', 'Cliente'], ['prendas', 'Prendas'], ['entrega', 'Entrega y datos'], ['pagos', 'Pagos'], ['revision', 'Revisión']];
+const NOTE_CHIPS = ['Paga envío al recibir', 'Ya pagó envío', 'Recoge en tienda', 'No enviar factura (solicitud del cliente)', 'Pendiente datos'];
+const FORM_KEYS = ['full_name', 'phone', 'phone_alt', 'email', 'dpi', 'birthday_month', 'birthday_day', 'receiver_name', 'delivery_type', 'pickup_store', 'department', 'city', 'zone', 'address', 'address_ref',
+  'shipping_payment', 'payment_mode', 'dispatch_warehouse', 'notes', 'advisor_code', 'campaign', 'invoice_name', 'invoice_nit'];
+
+// El asterisco sale de lo que el administrador marcó como obligatorio en Configuración.
+const isRequired = (config, key, deliveryType) => (config?.requiredFields ?? []).includes(key) || (deliveryType !== 'tienda' && (config?.requiredForDelivery ?? []).includes(key));
 
 function Progress({ step, maxStep, onGo, lockFirst }) {
   return (
@@ -20,7 +23,7 @@ function Progress({ step, maxStep, onGo, lockFirst }) {
         return (
           <li key={key} className="flex items-center gap-1">
             <button type="button" disabled={!reachable || (i === 0 && lockFirst)} onClick={() => onGo(i)} aria-current={now ? 'step' : undefined}
-              className={`flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-semibold transition ${now ? 'bg-accent text-white' : done ? 'text-ink hover:bg-black/[0.04] dark:hover:bg-white/[0.06]' : 'text-greige'} disabled:cursor-not-allowed`}>
+              className={`flex items-center gap-2 whitespace-nowrap rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-semibold transition ${now ? 'bg-accent text-white' : done ? 'text-ink hover:bg-black/[0.04] dark:hover:bg-white/[0.06]' : 'text-greige'} disabled:cursor-not-allowed`}>
               <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${now ? 'bg-white/25' : done ? 'bg-success text-white' : SOFT}`}>{done ? <Check size={13} strokeWidth={3} /> : i + 1}</span>{label}
             </button>
             {i < STEPS.length - 1 && <span className="h-px w-3 bg-line" />}
@@ -31,9 +34,9 @@ function Progress({ step, maxStep, onGo, lockFirst }) {
   );
 }
 
-function Segmented({ value, onChange, options }) {
+function Segmented({ value, onChange, options, cols = 2 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className={`grid gap-2 ${cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
       {options.map(([v, title, text, Icon]) => (
         <button type="button" key={v} onClick={() => onChange(v)} aria-pressed={value === v} className={`flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition ${value === v ? 'border-accent bg-accent-soft' : 'border-line hover:border-greige'}`}>
           <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${value === v ? 'bg-accent text-white' : `${SOFT} text-greige-ink`}`}><Icon size={17} /></span>
@@ -43,6 +46,13 @@ function Segmented({ value, onChange, options }) {
     </div>
   );
 }
+
+const Option = ({ checked, onClick, title, text }) => (
+  <button type="button" onClick={onClick} aria-pressed={checked} className={`flex w-full items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition ${checked ? 'border-accent bg-accent-soft' : 'border-line hover:border-greige'}`}>
+    {checked ? <CheckCircle2 size={18} className="shrink-0 text-accent" /> : <Circle size={18} className="shrink-0 text-greige" />}
+    <span className="min-w-0"><span className="block text-sm font-semibold text-ink">{title}</span><span className="block truncate text-xs text-greige-ink">{text}</span></span>
+  </button>
+);
 
 // — paso 1: cliente y cotización —
 function CustomerStep({ onCreate, busy }) {
@@ -92,27 +102,23 @@ function CustomerStep({ onCreate, busy }) {
   );
 }
 
-const Option = ({ checked, onClick, title, text }) => (
-  <button type="button" onClick={onClick} aria-pressed={checked} className={`flex w-full items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition ${checked ? 'border-accent bg-accent-soft' : 'border-line hover:border-greige'}`}>
-    {checked ? <CheckCircle2 size={18} className="shrink-0 text-accent" /> : <Circle size={18} className="shrink-0 text-greige" />}
-    <span className="min-w-0"><span className="block text-sm font-semibold text-ink">{title}</span><span className="block truncate text-xs text-greige-ink">{text}</span></span>
-  </button>
-);
-
-// — paso 2: prendas —
-function ItemsStep({ items, setItems, shipping, setShipping, locked }) {
+// — paso 2: prendas, cada una con su tienda de origen —
+function ItemsStep({ items, setItems, warehouses, locked }) {
   const [term, setTerm] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [allStore, setAllStore] = useState('');
   useEffect(() => {
     if (term.trim().length < 2) { setResults([]); return undefined; }
     setLoading(true);
     const t = setTimeout(() => fetchProducts(term).then(setResults).catch(() => setResults([])).finally(() => setLoading(false)), 350);
     return () => clearTimeout(t);
   }, [term]);
-  const add = (p) => { setItems((l) => [...l, { product_id: p.id, reference: String(p.reference || p.sku || ''), description: p.name ?? '', size: p.size ?? '', color: p.color ?? '', quantity: 1, unit_price: Number(p.price) || 0, discount_pct: Number(p.discount_pct) || 0 }]); setTerm(''); setResults([]); };
+  const add = (p) => { setItems((l) => [...l, { product_id: p.id, reference: String(p.reference || p.sku || ''), description: p.name ?? '', size: p.size ?? '', color: p.color ?? '', quantity: 1, unit_price: Number(p.price) || 0, discount_pct: Number(p.discount_pct) || 0, origin_warehouse: '' }]); setTerm(''); setResults([]); };
   const set = (n, k, v) => setItems((l) => l.map((it, i) => (i === n ? { ...it, [k]: v } : it)));
   const goods = items.reduce((s, i) => s + Number(i.unit_price || 0) * (1 - Number(i.discount_pct || 0) / 100) * Number(i.quantity || 0), 0);
+  const stores = new Set(items.map((i) => String(i.origin_warehouse ?? '').trim().toLowerCase()).filter(Boolean));
+  const COLS = 'sm:grid-cols-[1.3fr_.55fr_.7fr_.45fr_.75fr_.55fr_1fr_auto]';
 
   return (
     <div className="space-y-4">
@@ -132,57 +138,104 @@ function ItemsStep({ items, setItems, shipping, setShipping, locked }) {
               ))}
             </ul>
           )}
-          <button type="button" onClick={() => setItems((l) => [...l, { reference: '', description: '', size: '', color: '', quantity: 1, unit_price: '', discount_pct: 0 }])} className="mt-3 text-xs font-semibold text-accent hover:underline">+ Agregar una fila a mano</button>
+          <button type="button" onClick={() => setItems((l) => [...l, { reference: '', description: '', size: '', color: '', quantity: 1, unit_price: '', discount_pct: 0, origin_warehouse: '' }])} className="mt-3 text-xs font-semibold text-accent hover:underline">+ Agregar una fila a mano</button>
         </Panel>
       )}
-      <Panel title={`Prendas del pedido (${items.length})`} pad={false}>
+      <Panel title={`Prendas del pedido (${items.length})`} pad={false}
+        right={!locked && items.length > 1 && (
+          <span className="flex items-center gap-1.5"><input list="wiz-stores" className={`${inputCls} !w-36 !py-1.5 !text-xs`} placeholder="Tienda para todas" value={allStore} onChange={(e) => setAllStore(e.target.value)} />
+            <button type="button" disabled={!allStore.trim()} onClick={() => { setItems((l) => l.map((i) => ({ ...i, origin_warehouse: allStore.trim() }))); setAllStore(''); }} className="text-xs font-semibold text-accent disabled:opacity-40">Aplicar</button></span>
+        )}>
         {items.length === 0 && <p className="px-5 py-8 text-center text-sm text-greige-ink">Aún no hay prendas. Búscalas arriba.</p>}
-        {items.length > 0 && <div className="hidden grid-cols-[1.4fr_.7fr_.7fr_.5fr_.8fr_.6fr_auto] gap-x-3 px-5 pt-3 text-[11px] font-medium text-greige sm:grid"><span>Referencia</span><span>Talla</span><span>Color</span><span>Cant.</span><span>Precio (Q)</span><span>Desc. %</span><span className="w-9" /></div>}
+        {items.length > 0 && <div className={`hidden grid-cols-[1.3fr_.55fr_.7fr_.45fr_.75fr_.55fr_1fr_auto] gap-x-3 px-5 pt-3 text-[11px] font-medium text-greige sm:grid`}><span>Referencia</span><span>Talla</span><span>Color</span><span>Cant.</span><span>Precio (Q)</span><span>Desc. %</span><span>Tienda de origen</span><span className="w-9" /></div>}
         <ul className="divide-y divide-line-soft">
           {items.map((it, n) => (
-            <li key={n} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 px-5 py-3.5 sm:grid-cols-[1.4fr_.7fr_.7fr_.5fr_.8fr_.6fr_auto]">
-              <input aria-label="Referencia" placeholder="Referencia" className={inputCls} disabled={locked} value={it.reference} onChange={(e) => set(n, 'reference', e.target.value)} />
+            <li key={n} className={`grid grid-cols-2 items-center gap-x-3 gap-y-2 px-5 py-3.5 ${COLS}`}>
+              <input aria-label="Referencia" placeholder="Referencia" className={`${inputCls} col-span-2 sm:col-span-1`} disabled={locked} value={it.reference} onChange={(e) => set(n, 'reference', e.target.value)} />
               <input aria-label="Talla" placeholder="Talla" className={inputCls} disabled={locked} value={it.size} onChange={(e) => set(n, 'size', e.target.value)} />
               <input aria-label="Color" placeholder="Color" className={inputCls} disabled={locked} value={it.color} onChange={(e) => set(n, 'color', e.target.value)} />
               <input aria-label="Cantidad" type="number" min="1" className={inputCls} disabled={locked} value={it.quantity} onChange={(e) => set(n, 'quantity', e.target.value)} />
               <input aria-label="Precio" type="number" step="0.01" min="0" className={inputCls} disabled={locked} value={it.unit_price} onChange={(e) => set(n, 'unit_price', e.target.value)} />
               <input aria-label="Descuento %" type="number" min="0" max="100" className={inputCls} disabled={locked} value={it.discount_pct} onChange={(e) => set(n, 'discount_pct', e.target.value)} />
+              <input aria-label="Tienda de origen" list="wiz-stores" placeholder="Tienda de origen" className={inputCls} disabled={locked} value={it.origin_warehouse ?? ''} onChange={(e) => set(n, 'origin_warehouse', e.target.value)} />
               {!locked && <button type="button" aria-label="Quitar prenda" onClick={() => setItems((l) => l.filter((_, i) => i !== n))} className="rounded-lg p-2 text-greige hover:text-danger"><Trash2 size={16} /></button>}
             </li>
           ))}
         </ul>
-        <div className="grid gap-3 border-t border-line-soft px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-end">
-          <FieldRow label="Envío (Q)" className="max-w-[180px]"><input className={inputCls} type="number" step="0.01" min="0" disabled={locked} value={shipping} onChange={(e) => setShipping(e.target.value)} /></FieldRow>
-          <div className="text-right"><div className="text-xs text-greige-ink">Total del pedido</div><div className="text-2xl font-bold tabular-nums text-ink">{q(goods + Number(shipping || 0))}</div></div>
+        <datalist id="wiz-stores">{(warehouses ?? []).map((w) => <option key={w} value={w} />)}</datalist>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-t border-line-soft px-5 py-4">
+          <p className="max-w-sm text-xs text-greige-ink">{stores.size > 1 ? `Sale de ${stores.size} tiendas: se pedirán ${stores.size} traslados (TR).` : stores.size === 1 ? 'Sale de una sola tienda: se pide 1 traslado (TR).' : 'Indica de qué tienda sale cada prenda según el stock: de ahí salen los traslados.'}</p>
+          <div className="text-right"><div className="text-xs text-greige-ink">Total del pedido (el flete va aparte)</div><div className="text-2xl font-bold tabular-nums text-ink">{q(goods)}</div></div>
         </div>
       </Panel>
     </div>
   );
 }
 
-// — paso 3: entrega —
-function DeliveryStep({ data, set, warehouses }) {
-  const field = ([k, label]) => <FieldRow key={k} label={label}><input className={inputCls} value={data[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></FieldRow>;
+// — paso 3: entrega y datos, en el orden de la ficha de papel —
+function DeliveryStep({ data, set, config, transfers }) {
+  const req = (k) => (isRequired(config, k, data.delivery_type) ? ' *' : '');
+  const text = (k, label, props = {}) => <FieldRow key={k} label={`${label}${req(k)}`} className={props.className}><input className={inputCls} value={data[k] ?? ''} onChange={(e) => set(k, e.target.value)} {...props.input} /></FieldRow>;
+  const pickup = data.delivery_type === 'tienda';
   return (
     <div className="space-y-4">
-      <Panel title="Tipo de pago" icon={Wallet}>
-        <Segmented value={data.payment_mode} onChange={(v) => set('payment_mode', v)} options={[
-          ['contado', 'Contado', 'El cliente paga el total antes del despacho.', Wallet], ['contraentrega', 'Contraentrega', 'Paga un anticipo y el saldo al recibir (guía por cobrar).', Truck]]} />
-      </Panel>
-      <Panel title="Cliente" icon={Check}><div className="grid gap-3 sm:grid-cols-2">{CONTACT.map(field)}</div></Panel>
-      <Panel title="Entrega" icon={Truck}>
-        <Segmented value={data.delivery_type} onChange={(v) => set('delivery_type', v)} options={[['domicilio', 'A domicilio', 'El paquete llega a la dirección del cliente.', Truck], ['agencia', 'En agencia', 'El cliente recoge en una agencia.', Check]]} />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">{ADDRESS.map(field)}</div>
-      </Panel>
-      <Panel title="Origen y facturación">
+      <Panel title="Datos del cliente" icon={Check}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <FieldRow label="Origen de las prendas"><select className={inputCls} value={data.origin_mode} onChange={(e) => set('origin_mode', e.target.value)}><option value="unica">Una sola tienda / bodega</option><option value="multiple">Varias tiendas / bodegas</option></select></FieldRow>
-          <FieldRow label="Tienda(s) / bodega(s)" hint="Separa con comas si son varias"><input className={inputCls} list="wiz-warehouses" value={data.origin_warehouses} onChange={(e) => set('origin_warehouses', e.target.value)} /></FieldRow>
-          <FieldRow label="Bodega de despacho"><input className={inputCls} value={data.dispatch_warehouse} onChange={(e) => set('dispatch_warehouse', e.target.value)} /></FieldRow>
-          {InvoiceFields.map(field)}
-          <FieldRow label="Notas" className="sm:col-span-2"><input className={inputCls} value={data.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></FieldRow>
+          {text('full_name', 'Nombre y apellidos')}{text('phone', 'Teléfono')}
+          {text('dpi', 'DPI')}{text('email', 'Correo')}
+          {text('phone_alt', 'Teléfono alterno')}{text('receiver_name', 'Quién recibe (si es otra persona)')}
+          <FieldRow label="Cumpleaños (mes y día)"><span className="flex gap-2"><input className={inputCls} placeholder="Mes" value={data.birthday_month ?? ''} onChange={(e) => set('birthday_month', e.target.value)} /><input className={inputCls} placeholder="Día" value={data.birthday_day ?? ''} onChange={(e) => set('birthday_day', e.target.value)} /></span></FieldRow>
         </div>
-        <datalist id="wiz-warehouses">{(warehouses ?? []).map((w) => <option key={w} value={w} />)}</datalist>
+      </Panel>
+
+      <Panel title="¿Cómo recibe el pedido?" icon={Truck}>
+        <Segmented cols={3} value={data.delivery_type} onChange={(v) => set('delivery_type', v)} options={[
+          ['domicilio', 'A domicilio', 'Llega a su dirección.', Home], ['agencia', 'En agencia', 'Lo recoge en una agencia de la paquetería.', Building2], ['tienda', 'Recoge en tienda', 'Según el stock, en una de nuestras tiendas.', Store]]} />
+        {pickup ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <FieldRow label="Tienda donde recoge *" hint="Se coordina con el cliente según dónde esté el stock. Ahí se reúne el pedido."><input list="wiz-pickup" className={inputCls} value={data.pickup_store ?? ''} onChange={(e) => set('pickup_store', e.target.value)} /></FieldRow>
+            <datalist id="wiz-pickup">{(config?.warehouses ?? []).map((w) => <option key={w} value={w} />)}</datalist>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {text('department', 'Departamento')}{text('city', 'Ciudad')}
+            {text('zone', 'Zona')}{text('address_ref', 'Vereda o referencia')}
+            {text('address', 'Dirección', { className: 'sm:col-span-2' })}
+          </div>
+        )}
+      </Panel>
+
+      {!pickup && (
+        <Panel title="Flete" icon={Truck}>
+          <p className="mb-3 text-xs text-greige-ink">El flete no entra en el total del pedido. Indica quién lo paga.</p>
+          <Segmented value={data.shipping_payment} onChange={(v) => set('shipping_payment', v)} options={[
+            ['al_recibir', 'Paga al recibir', 'El cliente se lo paga a la paquetería en la entrega.', Wallet], ['pagado', 'Ya pagó el flete', 'Viene dentro de los pagos que cargues.', CheckCircle2]]} />
+          <FieldRow label="Monto del flete (Q)" className="mt-3 max-w-[200px]"><input className={inputCls} type="number" step="0.01" min="0" value={data.shipping} onChange={(e) => set('shipping', e.target.value)} /></FieldRow>
+        </Panel>
+      )}
+
+      {config?.allowCodGoods && (
+        <Panel title="Tipo de pago del pedido" icon={Wallet}>
+          <Segmented value={data.payment_mode} onChange={(v) => set('payment_mode', v)} options={[
+            ['contado', 'Contado', 'El cliente paga el pedido antes del despacho.', Wallet], ['contraentrega', 'Contraentrega', 'Paga un anticipo y el saldo al recibir.', Truck]]} />
+        </Panel>
+      )}
+
+      <Panel title="Observaciones del cliente" icon={StickyNote}>
+        <p className="mb-2 text-xs text-greige-ink">Lo que pide el cliente y logística debe saber (lo que hoy va resaltado en amarillo en la ficha).</p>
+        <textarea rows={3} className={inputCls} value={data.notes ?? ''} onChange={(e) => set('notes', e.target.value)} placeholder="Ej. Recoge en Oakland · No enviar factura · Entregar en recepción" />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {NOTE_CHIPS.map((c) => <button type="button" key={c} onClick={() => set('notes', [data.notes, c].filter(Boolean).join('. '))} className={`rounded-full border border-line px-2.5 py-1 text-[11px] font-medium text-greige-ink transition hover:border-accent hover:text-accent`}>+ {c}</button>)}
+        </div>
+      </Panel>
+
+      <Panel title="Despacho y otros datos">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldRow label="Bodega de despacho" hint={pickup ? 'Es la tienda donde recoge.' : 'Desde donde sale el paquete.'}><input className={inputCls} disabled={pickup} value={pickup ? data.pickup_store ?? '' : data.dispatch_warehouse ?? ''} onChange={(e) => set('dispatch_warehouse', e.target.value)} /></FieldRow>
+          <FieldRow label="Traslados (TR)"><span className={`flex min-h-[42px] items-center rounded-xl px-3.5 text-sm text-ink ${SOFT}`}>{transfers.length ? `${transfers.length} · ${transfers.map((t) => t.store).join(', ')}` : 'Se calculan con la tienda de cada prenda'}</span></FieldRow>
+          {text('advisor_code', 'Código de vendedora')}{text('invoice_name', 'Nombre para la factura')}
+          {text('invoice_nit', 'NIT')}{text('campaign', 'Campaña')}
+        </div>
       </Panel>
     </div>
   );
@@ -190,23 +243,25 @@ function DeliveryStep({ data, set, warehouses }) {
 
 // — paso 4: pagos —
 function PaymentsStep({ detail, onAdd }) {
-  const { payments, paid } = detail;
-  const covered = paid.approved + 0.001 >= paid.required;
+  const { payments, paid, sheet } = detail;
   const declared = payments.filter((p) => p.audit_status !== 'rechazado').reduce((s, p) => s + Number(p.amount), 0);
+  const withFreight = paid.required > Number(sheet.total) + 0.001;
   return (
     <div className="space-y-4">
       <Panel>
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <div><div className="text-xs text-greige-ink">Lo que se debe cubrir para pasar a Logística{detail.sheet.payment_mode === 'contraentrega' ? ` (anticipo ${detail.config.codAdvancePct}%)` : ''}</div><div className="text-2xl font-bold tabular-nums text-ink">{q(paid.required)}</div></div>
+          <div><div className="text-xs text-greige-ink">Lo que se debe cubrir para pasar a Logística{sheet.payment_mode === 'contraentrega' ? ` (anticipo ${detail.config.codAdvancePct}%)` : ''}</div><div className="text-2xl font-bold tabular-nums text-ink">{q(paid.required)}</div>
+            {withFreight && <div className="text-xs text-greige">Pedido {q(sheet.total)} + flete ya pagado {q(sheet.shipping)}</div>}
+            {sheet.shipping_payment === 'al_recibir' && <div className="text-xs text-greige">El flete ({q(sheet.shipping)}) se paga al recibir: no va en estos pagos.</div>}</div>
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${declared + 0.001 >= paid.required ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning'}`}>Declarado {q(declared)}</span>
         </div>
-        {!covered && declared + 0.001 < paid.required && <p className="mt-2 text-xs text-warning">Faltan {q(paid.required - declared)} por cargar.</p>}
+        {declared + 0.001 < paid.required && <p className="mt-2 text-xs text-warning">Faltan {q(paid.required - declared)} por cargar.</p>}
       </Panel>
       <div className="grid gap-3 sm:grid-cols-2">
         {payments.map((p) => (
           <div key={p.id} className="flex gap-3 rounded-2xl border border-line bg-paper p-3.5 shadow-sm">
             {p.attachment_id && <ProofThumb id={p.attachment_id} mime={p.mime_type} filename={p.filename} size="h-24 w-20" />}
-            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b className="tabular-nums text-ink">{q(p.amount)}</b><AuditPill status={p.audit_status} /></div><p className="mt-1 text-xs text-greige-ink">{METHOD_LABELS[p.method]}{p.bank ? ` · ${p.bank}` : ''}</p><p className="break-all font-mono text-[11px] text-greige-ink">ref. {p.reference_number}</p></div>
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b className="tabular-nums text-ink">{q(p.amount)}</b><AuditPill status={p.audit_status} /></div><p className="mt-1 text-xs text-greige-ink">{METHOD_LABELS[p.method]}{p.bank ? ` · ${p.bank}` : ''}</p><p className="break-all font-mono text-[11px] text-greige-ink">ref. {p.reference_number}</p>{p.platform_verified && <p className="mt-1 flex items-center gap-1 text-[11px] text-success"><ShieldCheck size={11} />Verificado en NeoLink</p>}</div>
           </div>
         ))}
         <button type="button" onClick={onAdd} className="flex min-h-[112px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-line text-sm font-medium text-greige-ink transition hover:border-accent hover:text-accent"><Plus size={20} />Agregar pago</button>
@@ -217,7 +272,8 @@ function PaymentsStep({ detail, onAdd }) {
 
 // — paso 5: revisión —
 function ReviewStep({ detail }) {
-  const { sheet, items, payments, missing } = detail;
+  const { sheet, items, payments, missing, transfers } = detail;
+  const way = { domicilio: 'A domicilio', agencia: 'En agencia', tienda: `Recoge en ${sheet.pickup_store ?? 'tienda'}` }[sheet.delivery_type];
   return (
     <div className="space-y-4">
       <Panel title={missing.length ? 'Falta por completar' : 'Todo listo para auditoría'} icon={missing.length ? Circle : ShieldCheck}>
@@ -227,10 +283,13 @@ function ReviewStep({ detail }) {
       <Panel title="Resumen">
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div><dt className="text-[11px] text-greige">Cliente</dt><dd className="text-ink">{sheet.full_name ?? '—'} · {sheet.phone ?? '—'}</dd></div>
-          <div><dt className="text-[11px] text-greige">Entrega</dt><dd className="text-ink">{[sheet.address, sheet.city, sheet.department].filter(Boolean).join(', ') || '—'}</dd></div>
+          <div><dt className="text-[11px] text-greige">Entrega</dt><dd className="text-ink">{way}{sheet.delivery_type !== 'tienda' && [sheet.address, sheet.department].filter(Boolean).length ? ` · ${[sheet.address, sheet.department].filter(Boolean).join(', ')}` : ''}</dd></div>
           <div><dt className="text-[11px] text-greige">Prendas</dt><dd className="text-ink">{items.length} · {items.reduce((s, i) => s + i.quantity, 0)} unidades</dd></div>
-          <div><dt className="text-[11px] text-greige">Pagos</dt><dd className="text-ink">{payments.length} · {sheet.payment_mode === 'contraentrega' ? 'Contraentrega' : 'Contado'}</dd></div>
-          <div><dt className="text-[11px] text-greige">Total</dt><dd className="text-lg font-bold tabular-nums text-ink">{q(sheet.total)}</dd></div>
+          <div><dt className="text-[11px] text-greige">Traslados</dt><dd className="text-ink">{transfers.length} · {transfers.map((t) => t.store).join(', ') || '—'}</dd></div>
+          <div><dt className="text-[11px] text-greige">Pagos</dt><dd className="text-ink">{payments.length}</dd></div>
+          <div><dt className="text-[11px] text-greige">Flete</dt><dd className="text-ink">{sheet.delivery_type === 'tienda' ? 'Sin envío' : `${q(sheet.shipping)} · ${sheet.shipping_payment === 'al_recibir' ? 'se paga al recibir' : 'ya pagado'}`}</dd></div>
+          <div><dt className="text-[11px] text-greige">Total del pedido</dt><dd className="text-lg font-bold tabular-nums text-ink">{q(sheet.total)}</dd></div>
+          {sheet.notes && <div className="sm:col-span-2"><dt className="text-[11px] text-greige">Observaciones</dt><dd className="rounded-lg bg-yellow-300/25 px-3 py-2 text-ink">{sheet.notes}</dd></div>}
         </dl>
       </Panel>
     </div>
@@ -238,32 +297,30 @@ function ReviewStep({ detail }) {
 }
 
 const toForm = (sheet) => ({
-  payment_mode: sheet.payment_mode, delivery_type: sheet.delivery_type, origin_mode: sheet.origin_mode, dispatch_warehouse: sheet.dispatch_warehouse ?? '', origin_warehouses: (sheet.origin_warehouses ?? []).join(', '),
-  notes: sheet.notes ?? '', ...Object.fromEntries([...CONTACT, ...ADDRESS, ...InvoiceFields].map(([k]) => [k, sheet[k] ?? ''])),
+  ...Object.fromEntries(FORM_KEYS.map((k) => [k, sheet[k] ?? ''])),
+  shipping: sheet.shipping ?? 0,
 });
+const toItems = (d) => d.items.map((i) => ({ product_id: i.product_id, reference: i.reference, description: i.description ?? '', size: i.size, color: i.color, quantity: i.quantity, unit_price: i.unit_price, discount_pct: i.discount_pct, origin_warehouse: i.origin_warehouse ?? '' }));
 
 // Asistente para crear o completar una ficha: cada paso se guarda al avanzar, así que nada se pierde si se cierra.
-export default function SheetWizard({ sheetId: initialId = null, onClose, onSubmitted }) {
+export default function SheetWizard({ sheetId: initialId = null, onClose }) {
   const [sheetId, setSheetId] = useState(initialId);
   const [detail, setDetail] = useState(null);
   const [step, setStep] = useState(initialId ? 1 : 0);
   const [maxStep, setMaxStep] = useState(initialId ? 4 : 0);
   const [form, setForm] = useState(null);
   const [items, setItems] = useState([]);
-  const [shipping, setShipping] = useState(0);
   const [busy, setBusy] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState(null);
 
-  const hydrate = useCallback((d) => {
-    setDetail(d); setForm(toForm(d.sheet)); setShipping(d.sheet.shipping ?? 0);
-    setItems(d.items.map((i) => ({ product_id: i.product_id, reference: i.reference, description: i.description ?? '', size: i.size, color: i.color, quantity: i.quantity, unit_price: i.unit_price, discount_pct: i.discount_pct })));
-  }, []);
+  const hydrate = useCallback((d) => { setDetail(d); setForm(toForm(d.sheet)); setItems(toItems(d)); }, []);
   const load = useCallback((id) => fetchSheet(id).then(hydrate).catch((e) => setError(e.message)), [hydrate]);
   useEffect(() => { if (initialId) load(initialId); }, [initialId, load]);
 
   const hasApproved = detail?.payments.some((p) => p.audit_status === 'aprobado') ?? false;
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const liveTransfers = (() => { const m = new Map(); for (const i of items) { const n = String(i.origin_warehouse ?? '').trim(); if (n) m.set(n.toLowerCase(), { store: n }); } return [...m.values()]; })();
 
   async function create(customerId, quoteId) {
     setBusy(true);
@@ -273,8 +330,8 @@ export default function SheetWizard({ sheetId: initialId = null, onClose, onSubm
   // Guarda lo del paso actual en el servidor (si aplica) y devuelve true si se puede avanzar.
   async function saveStep() {
     try {
-      if (step === 1) await updateSheet(sheetId, { data: { shipping }, ...(hasApproved ? {} : { items }) });
-      if (step === 2) await updateSheet(sheetId, { data: { ...form, origin_warehouses: form.origin_warehouses.split(',').map((x) => x.trim()).filter(Boolean) } });
+      if (step === 1 && !hasApproved) await updateSheet(sheetId, { data: {}, items });
+      if (step === 2) await updateSheet(sheetId, { data: { ...form, shipping: form.delivery_type === 'tienda' ? 0 : Number(form.shipping || 0) } });
       if (step === 1 || step === 2) await load(sheetId);
       return true;
     } catch (e) { showError(e.message); return false; }
@@ -288,16 +345,16 @@ export default function SheetWizard({ sheetId: initialId = null, onClose, onSubm
 
   async function submit() {
     setBusy(true); setError(null);
-    try { await runSheetStep(sheetId, 'submit', {}); showSuccess('Ficha enviada a auditoría de pago'); onSubmitted?.(sheetId); onClose(sheetId); } catch (e) { setError(e); } finally { setBusy(false); }
+    try { await runSheetStep(sheetId, 'submit', {}); showSuccess('Ficha enviada a auditoría de pago'); onClose(sheetId); } catch (e) { setError(e); } finally { setBusy(false); }
   }
 
   const ready = !!detail && !!form;
   return (
     <>
-      <Drawer onClose={() => onClose(sheetId)} width="max-w-[880px]" locked={busy || paying}>
+      <Drawer onClose={() => onClose(sheetId)} width="max-w-[900px]" locked={busy || paying}>
         <header className="shrink-0 border-b border-line bg-paper px-6 pb-3 pt-5">
           <div className="flex items-start justify-between gap-4">
-            <div><h2 className="text-lg font-bold tracking-tight text-ink">{initialId || sheetId ? `Ficha ${detail?.sheet.sheet_number ?? ''}` : 'Nueva ficha de pedido'}</h2><p className="text-sm text-greige-ink">Se guarda como borrador mientras avanzas.</p></div>
+            <div><h2 className="text-lg font-bold tracking-tight text-ink">{sheetId ? `Ficha ${detail?.sheet.sheet_number ?? ''}` : 'Nueva ficha de pedido'}</h2><p className="text-sm text-greige-ink">Se guarda como borrador mientras avanzas.</p></div>
             <button type="button" onClick={() => onClose(sheetId)} aria-label="Cerrar" className="rounded-lg p-2 text-greige hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]"><X size={20} /></button>
           </div>
           <div className="mt-3"><Progress step={step} maxStep={maxStep} onGo={go} lockFirst={!!sheetId} /></div>
@@ -307,8 +364,8 @@ export default function SheetWizard({ sheetId: initialId = null, onClose, onSubm
           {step === 0 && <CustomerStep onCreate={create} busy={busy} />}
           {step > 0 && !ready && !error && <div className="flex justify-center py-20 text-greige"><Loader2 className="animate-spin" /></div>}
           {step > 0 && typeof error === 'string' && <p className="text-sm text-danger">{error}</p>}
-          {ready && step === 1 && <ItemsStep items={items} setItems={setItems} shipping={shipping} setShipping={setShipping} locked={hasApproved} />}
-          {ready && step === 2 && <DeliveryStep data={form} set={setField} warehouses={detail.config.warehouses} />}
+          {ready && step === 1 && <ItemsStep items={items} setItems={setItems} warehouses={detail.config.warehouses} locked={hasApproved} />}
+          {ready && step === 2 && <DeliveryStep data={form} set={setField} config={detail.config} transfers={liveTransfers} />}
           {ready && step === 3 && <PaymentsStep detail={detail} onAdd={() => setPaying(true)} />}
           {ready && step === 4 && <ReviewStep detail={detail} />}
           {error && typeof error !== 'string' && (

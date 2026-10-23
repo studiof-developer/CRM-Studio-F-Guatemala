@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Zap, Package } from 'lucide-react';
+import { Zap, Package, Store, Truck, StickyNote } from 'lucide-react';
 import Avatar from '../Avatar.jsx';
 import { StatusBadge, ModeBadge, SlaChip, SOFT, q, fmtDT } from '../../lib/logisticsUi.jsx';
 
@@ -32,7 +32,10 @@ export function SheetCard({ sheet, onOpen, showStatus = true }) {
         <span className="flex items-center gap-1.5"><span title={`Asesora: ${sheet.advisor_name}`}><Avatar name={sheet.advisor_name} size={22} /></span></span>
       </div>
       <PaidBar sheet={sheet} />
+      {sheet.notes && <p className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-yellow-300/25 px-2 py-1 text-[11px] text-ink"><StickyNote size={11} className="mt-0.5 shrink-0" /><span className="line-clamp-2">{sheet.notes}</span></p>}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {sheet.delivery_type === 'tienda' && <span className="inline-flex items-center gap-1 rounded-full bg-purple/10 px-2 py-0.5 text-[10px] font-semibold text-purple"><Store size={10} />Recoge: {sheet.pickup_store}</span>}
+        {sheet.delivery_type !== 'tienda' && sheet.shipping_payment === 'al_recibir' && <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning"><Truck size={10} />Flete al recibir</span>}
         {showStatus && <StatusBadge status={sheet.status} label={sheet.statusLabel} />}
         <SlaChip sla={sheet.sla} status={sheet.status} compact />
       </div>

@@ -12,7 +12,7 @@ export const ROLES = {
   facturador: 'Facturador/a',
   empacador: 'Empacador/a',
   auditor_empaque: 'Auditor/a de empaque',
-  despachador: 'Despachador/a y seguimiento (Guatex)',
+  despachador: 'Despachador/a y seguimiento (Guatex y tiendas)',
   jefe_logistica: 'Jefe/a de logística',
 };
 
@@ -28,6 +28,12 @@ export const LOGISTICS_DEFAULTS = {
   dispatchWarehouse: 'Oakland',
   warehouses: [], // A5: tiendas / bodegas de origen (vacío = texto libre)
   sla: {}, // horas por paso: { submit: 4, verify_ok: 8, ... } (vacío = sin alerta)
+  // Ajustes según la ficha de papel (Control Ventas Online):
+  allowCodGoods: false, // contraentrega del pedido completo (anticipo + saldo). En las fichas reales solo se cobra el flete al recibir; se deja apagado hasta confirmar
+  requiredFields: ['full_name', 'phone'], // siempre obligatorios para enviar a auditoría (lo que casi siempre llena la asesora)
+  requiredForDelivery: ['address', 'department'], // además, si va a domicilio o agencia (la paquetería los pide)
+  includeFreightInRequired: true, // si el flete ya está pagado, los pagos deben cubrir también el flete
+  numbering: { mode: 'auto', prefix: '' }, // auto = FIC-AAAA-00001 · custom = prefijo + número que define el administrador (p. ej. 2287)
 };
 
 export const STATUS = {
@@ -48,6 +54,7 @@ export const STATUS = {
   EMPACADO: 'Empacado (pendiente de auditoría)',
   SELLADO: 'Auditado y sellado',
   GUIA_GENERADA: 'Guía generada',
+  LISTO_RECOGER: 'Listo para recoger en tienda',
   DESPACHADO: 'Entregado a Guatex',
   EN_RUTA: 'En ruta',
   ENTREGADO: 'Entregado al cliente',
@@ -67,7 +74,7 @@ export const BOARD = [
   { key: 'entrada', label: 'Pago y verificación', statuses: ['EN_AUDITORIA_PAGO', 'OBSERVADA', 'NUEVO_PEDIDO', 'EN_VERIFICACION', 'VERIFICADA'] },
   { key: 'traslado', label: 'Traslado y bodega', statuses: ['TRASLADO_SOLICITADO', 'TRASLADO_AUTORIZADO', 'RECIBIDO_BODEGA', 'FALTANTE', 'CONSOLIDADO'] },
   { key: 'preparacion', label: 'Facturación y empaque', statuses: ['PAGO_VALIDADO', 'FACTURADO', 'ANTICIPO_VALIDADO', 'EMPACADO', 'SELLADO'] },
-  { key: 'despacho', label: 'Despacho y ruta', statuses: ['GUIA_GENERADA', 'DESPACHADO', 'EN_RUTA', 'DEVUELTO', 'CLIENTE_CONTACTADO'] },
+  { key: 'despacho', label: 'Despacho y ruta', statuses: ['GUIA_GENERADA', 'LISTO_RECOGER', 'DESPACHADO', 'EN_RUTA', 'DEVUELTO', 'CLIENTE_CONTACTADO'] },
   { key: 'cierre', label: 'Entrega y cierre', statuses: ['ENTREGADO', 'ACREDITACION_REPORTADA', 'ACREDITACION_VERIFICADA', 'CERRADO'] },
   { key: 'excepciones', label: 'Excepciones', statuses: ['PAUSADA', 'CANCELADA'] },
 ];
@@ -139,9 +146,13 @@ export const TRANSITIONS = {
   },
   audit_pack_fail: { code: 'LOG-07.03', label: 'Auditoría de empaque: no conforme', from: ['EMPACADO'], to: 'EMPACADO', roles: ['auditor_empaque'], sod: ['pack'], fields: [text('nonconformity', 'Qué no coincide con la ficha')], evidence: { required: true, label: 'Foto del hallazgo' }, slaHours: null, special: 'nonconformity' },
   generate_guide: {
-    code: 'LOG-08.01', label: 'Generar guía en Guatex', from: ['SELLADO'], to: 'GUIA_GENERADA', roles: ['despachador'], sod: [],
+    code: 'LOG-08.01', label: 'Generar guía en Guatex', from: ['SELLADO'], to: 'GUIA_GENERADA', roles: ['despachador'], delivery: ['domicilio', 'agencia'], sod: [],
     fields: [text('guide_number', 'Número de guía'), { key: 'guide_type', label: 'Tipo de guía', type: 'select', options: ['contado', 'xcobrar'], required: true }, num('amount_to_collect', 'Monto a cobrar al recibir (Q, solo XCOBRAR)', false)],
     evidence: { required: true, label: 'Guía (PDF o foto)' }, slaHours: null, special: 'guide',
+  },
+  ready_pickup: {
+    code: 'LOG-08.04', label: 'Pedido listo para recoger en tienda', from: ['SELLADO'], to: 'LISTO_RECOGER', roles: ['despachador'], delivery: ['tienda'], sod: [],
+    fields: [bool('asesora_avisada', 'Se avisó a la asesora para que contacte al cliente')], evidence: { required: true, label: 'Foto del paquete sellado en la tienda' }, slaHours: null,
   },
   hand_over: {
     code: 'LOG-08.02', label: 'Entregar paquete a Guatex', from: ['GUIA_GENERADA'], to: 'DESPACHADO', roles: ['despachador'], sod: [],
@@ -152,6 +163,10 @@ export const TRANSITIONS = {
   // — seguimiento y cierre —
   mark_delivered: { code: 'LOG-09.01', label: 'Entrega confirmada', from: ['EN_RUTA'], to: 'ENTREGADO', roles: ['despachador'], fields: [date('delivered_at', 'Fecha de entrega'), text('received_by', 'Quién recibió')], evidence: null, sod: [], slaHours: null },
   confirm_received: { code: 'LOG-09.02', label: 'Cliente confirmó recibido: cerrar', from: ['ENTREGADO'], to: 'CERRADO', roles: ['despachador'], mode: 'contado', fields: [bool('cliente_confirmo', 'El cliente confirmó que recibió su pedido')], evidence: null, sod: [], slaHours: null },
+  deliver_pickup: {
+    code: 'LOG-09.03', label: 'Entregado al cliente en tienda', from: ['LISTO_RECOGER'], to: 'CERRADO', roles: ['despachador'], mode: 'contado', delivery: ['tienda'], sod: [],
+    fields: [date('delivered_at', 'Fecha de entrega'), text('received_by', 'Quién recibió (nombre y DPI)')], evidence: { required: true, label: 'Foto o firma de recibido' }, slaHours: null,
+  },
   // contraentrega: el cliente no paga al recibir
   return_to_hub: { code: 'LOG-10.01', label: 'El cliente no pagó: paquete regresa a bodega Guatex', from: ['EN_RUTA'], to: 'DEVUELTO', roles: ['despachador'], mode: 'contraentrega', fields: [text('reason', 'Motivo')], evidence: null, sod: [], slaHours: null, special: 'attempt' },
   contact_client: { code: 'LOG-10.02', label: 'Cliente contactado: confirma recibir y pagar', from: ['DEVUELTO'], to: 'CLIENTE_CONTACTADO', roles: ['asesora'], mode: 'contraentrega', fields: [bool('cliente_confirmo_pago', 'El cliente confirmó que recibirá y pagará'), text('note', 'Observación', false)], evidence: null, sod: [], slaHours: null },
@@ -187,7 +202,7 @@ export function fromStatuses(step) {
 // Pasos que se pueden dar sobre una ficha: según su estado y su tipo de pago. No mira quién es la persona (eso lo hace allowedFor).
 export function stepsFor(sheet) {
   return Object.entries(TRANSITIONS)
-    .filter(([, s]) => fromStatuses(s).includes(sheet.status) && (!s.mode || s.mode === sheet.payment_mode))
+    .filter(([, s]) => fromStatuses(s).includes(sheet.status) && (!s.mode || s.mode === sheet.payment_mode) && (!s.delivery || s.delivery.includes(sheet.delivery_type)))
     .map(([key, s]) => ({ key, ...s }));
 }
 
@@ -252,27 +267,51 @@ export function addBusinessDays(from, n, holidays = []) {
 // Cuánto debe estar pagado para pasar a Logística: el total (contado) o el anticipo (contraentrega).
 export function requiredPayment(sheet, cfg = LOGISTICS_DEFAULTS) {
   const total = Number(sheet.total);
-  return sheet.payment_mode === 'contraentrega' ? Math.round(total * cfg.codAdvancePct) / 100 : total;
+  if (sheet.payment_mode === 'contraentrega') return Math.round(total * cfg.codAdvancePct) / 100;
+  const freight = cfg.includeFreightInRequired && sheet.shipping_payment === 'pagado' ? Number(sheet.shipping) || 0 : 0;
+  return Math.round((total + freight) * 100) / 100;
 }
 
-// Qué hace falta para enviar la ficha a auditoría (campos obligatorios del PDF). Devuelve la lista de faltantes.
-const REQUIRED_SHEET_FIELDS = [['campaign', 'Nombre de la campaña'], ['full_name', 'Nombre completo'], ['phone', 'Celular'], ['email', 'Correo'], ['address', 'Dirección'], ['city', 'Ciudad'], ['department', 'Departamento']];
-export function sheetMissing(sheet, items, payments) {
-  const missing = REQUIRED_SHEET_FIELDS.filter(([k]) => !String(sheet[k] ?? '').trim()).map(([, l]) => l);
+// Qué hace falta para enviar la ficha a auditoría. Devuelve la lista de faltantes. Los campos obligatorios salen de la configuración
+// (por defecto los que casi siempre llena la asesora en la ficha de papel).
+export const SHEET_FIELD_LABELS = { full_name: 'Nombre completo', phone: 'Celular', email: 'Correo', address: 'Dirección', city: 'Ciudad', department: 'Departamento', campaign: 'Nombre de la campaña', dpi: 'DPI', zone: 'Zona', address_ref: 'Referencia de la dirección' };
+export function sheetMissing(sheet, items, payments, cfg = LOGISTICS_DEFAULTS) {
+  const pickup = sheet.delivery_type === 'tienda';
+  const keys = [...new Set([...(cfg.requiredFields ?? []), ...(pickup ? [] : cfg.requiredForDelivery ?? [])])];
+  const missing = keys.filter((k) => SHEET_FIELD_LABELS[k] && !String(sheet[k] ?? '').trim()).map((k) => SHEET_FIELD_LABELS[k]);
+  if (pickup && !String(sheet.pickup_store ?? '').trim()) missing.push('Tienda donde recoge');
   if (!items.length) missing.push('Al menos una prenda');
+  else if (items.some((i) => !String(i.origin_warehouse ?? '').trim())) missing.push('Tienda de origen de cada prenda');
   if (!(Number(sheet.total) > 0)) missing.push('Total mayor a cero');
+  if (sheet.shipping_payment === 'al_recibir' && !(Number(sheet.shipping) > 0)) missing.push('Monto del flete (se cobra al recibir)');
   if (!payments.length) missing.push('Al menos un pago con su comprobante');
   else if (payments.some((p) => !p.attachment_id)) missing.push('Cada pago debe llevar su comprobante');
   if (payments.some((p) => !String(p.reference_number ?? '').trim())) missing.push('Cada pago necesita su número de referencia');
+  if (payments.some((p) => p.method === 'tarjeta_link' && !p.platform_verified)) missing.push('Confirmar que el pago con Link se verificó en NeoLink');
   return missing;
 }
 
-// Totales de la ficha a partir de sus prendas (el servidor recalcula siempre).
+// Traslados que hay que pedir: uno por cada tienda de origen distinta (aunque sea la misma bodega de despacho).
+export function transfersNeeded(items) {
+  const stores = new Map();
+  for (const i of items) {
+    const name = String(i.origin_warehouse ?? '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const cur = stores.get(key) ?? { store: name, units: 0, references: [] };
+    cur.units += Number(i.quantity) || 0;
+    cur.references.push(i.reference);
+    stores.set(key, cur);
+  }
+  return [...stores.values()];
+}
+
+// Totales de la ficha a partir de sus prendas (el servidor recalcula siempre). El flete va aparte: no entra en el total del pedido.
 export function computeTotals(items, shipping = 0) {
   const r2 = (n) => Math.round(n * 100) / 100;
   const subtotal = r2(items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0));
   const goods = r2(items.reduce((s, i) => s + Number(i.final_price) * Number(i.quantity), 0));
-  return { subtotal, discount_total: r2(subtotal - goods), shipping: r2(Number(shipping) || 0), total: r2(goods + (Number(shipping) || 0)) };
+  return { subtotal, discount_total: r2(subtotal - goods), shipping: r2(Number(shipping) || 0), total: goods };
 }
 
 // Qué pasa con la ficha cuando termina de auditarse un pago. payments: sus pagos con audit_status; devuelve el nuevo estado y el motivo.

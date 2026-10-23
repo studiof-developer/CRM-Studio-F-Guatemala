@@ -25,7 +25,7 @@ const TONES = {
 };
 export const STATUS_TONE = {
   BORRADOR: 'neutral', EN_AUDITORIA_PAGO: 'warn', OBSERVADA: 'danger', NUEVO_PEDIDO: 'accent', EN_VERIFICACION: 'accent', VERIFICADA: 'accent', TRASLADO_SOLICITADO: 'purple', TRASLADO_AUTORIZADO: 'purple',
-  RECIBIDO_BODEGA: 'purple', FALTANTE: 'warn', CONSOLIDADO: 'purple', PAGO_VALIDADO: 'accent', FACTURADO: 'accent', ANTICIPO_VALIDADO: 'accent', EMPACADO: 'warn', SELLADO: 'accent', GUIA_GENERADA: 'accent',
+  RECIBIDO_BODEGA: 'purple', FALTANTE: 'warn', CONSOLIDADO: 'purple', PAGO_VALIDADO: 'accent', FACTURADO: 'accent', ANTICIPO_VALIDADO: 'accent', EMPACADO: 'warn', SELLADO: 'accent', GUIA_GENERADA: 'accent', LISTO_RECOGER: 'purple',
   DESPACHADO: 'accent', EN_RUTA: 'accent', ENTREGADO: 'success', DEVUELTO: 'danger', CLIENTE_CONTACTADO: 'warn', ACREDITACION_REPORTADA: 'accent', ACREDITACION_VERIFICADA: 'accent', CERRADO: 'success', PAUSADA: 'warn', CANCELADA: 'neutral',
 };
 export const toneOf = (status) => TONES[STATUS_TONE[status] ?? 'neutral'];
@@ -57,7 +57,7 @@ export const STAGES = [
   { key: 'bodega', label: 'Bodega', icon: Warehouse, statuses: ['RECIBIDO_BODEGA', 'FALTANTE', 'CONSOLIDADO'] },
   { key: 'facturacion', label: 'Facturación', icon: Receipt, statuses: ['PAGO_VALIDADO', 'FACTURADO', 'ANTICIPO_VALIDADO'] },
   { key: 'empaque', label: 'Empaque', icon: PackageCheck, statuses: ['EMPACADO', 'SELLADO'] },
-  { key: 'despacho', label: 'Despacho', icon: Truck, statuses: ['GUIA_GENERADA', 'DESPACHADO'] },
+  { key: 'despacho', label: 'Despacho', icon: Truck, statuses: ['GUIA_GENERADA', 'LISTO_RECOGER', 'DESPACHADO'] },
   { key: 'ruta', label: 'En ruta', icon: MapPinned, statuses: ['EN_RUTA', 'DEVUELTO', 'CLIENTE_CONTACTADO'] },
   { key: 'entrega', label: 'Entrega', icon: ShieldCheck, statuses: ['ENTREGADO', 'ACREDITACION_REPORTADA', 'ACREDITACION_VERIFICADA'] },
   { key: 'cierre', label: 'Cierre', icon: PartyPopper, statuses: ['CERRADO'] },

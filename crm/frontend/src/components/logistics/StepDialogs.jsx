@@ -26,7 +26,7 @@ const Check = ({ checked, onChange, children }) => (
 
 // Paso del flujo: pinta los campos que declara el servidor (action.fields) y la evidencia que exige.
 export function StepDialog({ sheetId, action, onClose, onDone }) {
-  const [values, setValues] = useState(() => Object.fromEntries(action.fields.map((f) => [f.key, f.type === 'date' ? today() : f.type === 'bool' ? false : ''])));
+  const [values, setValues] = useState(() => Object.fromEntries(action.fields.map((f) => [f.key, action.defaults?.[f.key] ?? (f.type === 'date' ? today() : f.type === 'bool' ? false : '')])));
   const [note, setNote] = useState('');
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -72,7 +72,7 @@ export function StepDialog({ sheetId, action, onClose, onDone }) {
 
 // Agrega un pago a la ficha: archivo nuevo o un comprobante que el cliente ya mandó por el chat.
 export function PaymentDialog({ sheet, onClose, onDone }) {
-  const [form, setForm] = useState({ method: 'transferencia', amount: '', bank: '', reference_number: '', paid_at: today() });
+  const [form, setForm] = useState({ method: 'transferencia', amount: '', bank: '', reference_number: '', paid_at: today(), platform_verified: false });
   const [files, setFiles] = useState([]);
   const [chatId, setChatId] = useState(null);
   const [proofs, setProofs] = useState([]);
@@ -102,6 +102,12 @@ export function PaymentDialog({ sheet, onClose, onDone }) {
           <FieldRow label="No. de referencia *"><input className={inputCls} value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} /></FieldRow>
           <FieldRow label="Fecha del pago"><input className={inputCls} type="date" value={form.paid_at} onChange={(e) => set('paid_at', e.target.value)} /></FieldRow>
         </div>
+        {form.method === 'tarjeta_link' && (
+          <button type="button" role="checkbox" aria-checked={form.platform_verified} onClick={() => set('platform_verified', !form.platform_verified)} className={`flex w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${form.platform_verified ? 'border-success/40 bg-success/5 text-ink' : 'border-line text-greige-ink hover:border-greige'}`}>
+            {form.platform_verified ? <CheckSquare size={18} className="mt-px shrink-0 text-success" /> : <Square size={18} className="mt-px shrink-0 text-greige" />}
+            <span>Ya verifiqué en la plataforma de NeoLink que el movimiento fue exitoso. <span className="block text-xs text-greige">La auditora lo revisa después en el banco como segunda verificación.</span></span>
+          </button>
+        )}
         <Dropzone label="Comprobante" required files={files} onChange={(f) => { setFiles(f); setChatId(null); }} hint="Foto o PDF del comprobante" />
         {proofs.length > 0 && (
           <div>
@@ -160,6 +166,7 @@ export function AuditDialog({ sheetId, payment, onClose, onDone }) {
       <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
         <div>
           {payment.attachment_id && <ProofThumb id={payment.attachment_id} mime={payment.mime_type} filename={payment.filename} size="h-52 w-full" label="Toca para ampliar" />}
+          {payment.platform_verified && <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success"><CheckCircle2 size={14} className="mt-px shrink-0" />La asesora ya lo verificó en NeoLink. Falta tu revisión en el banco.</p>}
           <dl className="mt-3 space-y-1.5 text-sm">
             <div><dt className="text-[11px] text-greige">Monto declarado</dt><dd className="text-lg font-bold tabular-nums text-ink">{q(payment.amount)}</dd></div>
             <div><dt className="text-[11px] text-greige">Forma · banco</dt><dd className="text-ink">{METHOD_LABELS[payment.method]}{payment.bank ? ` · ${payment.bank}` : ''}</dd></div>

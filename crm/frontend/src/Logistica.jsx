@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Plus, Search, Zap, AlertTriangle, Clock, PackageCheck, Timer, Boxes, LayoutGrid, List as ListIcon, Route, SlidersHorizontal, Inbox, ShieldCheck, Warehouse, Truck, PartyPopper, PauseCircle, Lock, Package } from 'lucide-react';
+import { Plus, Search, Zap, AlertTriangle, Clock, PackageCheck, Timer, Boxes, LayoutGrid, List as ListIcon, Route, SlidersHorizontal, Inbox, ShieldCheck, Hash, ClipboardCheck, Warehouse, Truck, PartyPopper, PauseCircle, Lock, Package } from 'lucide-react';
 import { showError, showSuccess } from './components/Toast.jsx';
 import { SheetCard, SheetRow } from './components/logistics/SheetCards.jsx';
 import SheetDrawer from './components/logistics/SheetDrawer.jsx';
@@ -18,6 +18,7 @@ const COLUMN_STYLE = {
   excepciones: { icon: PauseCircle, tone: 'text-greige-ink bg-black/[0.05] dark:bg-white/[0.08]' },
 };
 const CLOSED_LIMIT = 8;
+const FIELD_LABELS = { full_name: 'Nombre y apellidos', phone: 'Teléfono', email: 'Correo', dpi: 'DPI', address: 'Dirección', department: 'Departamento', city: 'Ciudad', zone: 'Zona', address_ref: 'Vereda o referencia', campaign: 'Campaña' };
 
 function Toolbar({ filters, set, withStatus, me }) {
   return (
@@ -106,14 +107,20 @@ function Process({ me }) {
 function Config({ me }) {
   const [cfg, setCfg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [nextNum, setNextNum] = useState('');
   useEffect(() => { fetchLogisticsConfig().then((c) => setCfg({ ...c, holidays: c.holidays.join('\n'), warehouses: c.warehouses.join('\n') })).catch((e) => showError(e.message)); }, []);
   if (!cfg) return <div className="space-y-3"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>;
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
   const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
   async function save() {
     setBusy(true);
-    try { await saveLogisticsConfig({ ...cfg, holidays: lines(cfg.holidays), warehouses: lines(cfg.warehouses) }); showSuccess('Configuración guardada'); } catch (e) { showError(e.message); } finally { setBusy(false); }
+    try {
+      const saved = await saveLogisticsConfig({ ...cfg, holidays: lines(cfg.holidays), warehouses: lines(cfg.warehouses), numbering: { ...cfg.numbering, next: nextNum } });
+      setCfg({ ...saved, holidays: saved.holidays.join('\n'), warehouses: saved.warehouses.join('\n') }); setNextNum('');
+      showSuccess('Configuración guardada');
+    } catch (e) { showError(e.message); } finally { setBusy(false); }
   }
+  const toggleKey = (list, key) => set(list, cfg[list].includes(key) ? cfg[list].filter((x) => x !== key) : [...cfg[list], key]);
   const num = (k, label, hint, step = '1') => <FieldRow label={label} hint={hint}><input className={inputCls} type="number" min="0" step={step} value={cfg[k]} onChange={(e) => set(k, e.target.value)} /></FieldRow>;
   const toggle = (k, title, text) => (
     <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3.5 transition hover:border-greige">
@@ -136,6 +143,40 @@ function Config({ me }) {
           {num('codMaxAttempts', 'Intentos de entrega', 'Máximo en contraentrega.')}
           {num('amountToleranceQ', 'Diferencia tolerada (Q)', 'Entre lo pagado y lo debido.', '0.01')}
         </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {toggle('includeFreightInRequired', 'Si el flete ya está pagado, los pagos lo cubren', 'El pago exigido es el pedido más el flete cuando la asesora marca “ya pagó el flete”.')}
+          {toggle('allowCodGoods', 'Permitir contraentrega del pedido completo', 'Apagado: en las fichas actuales solo el flete se cobra al recibir. Enciéndelo solo si se vuelve a vender así.')}
+        </div>
+      </Panel>
+      <Panel title="Numeración de las fichas" icon={Hash}>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FieldRow label="Cómo numerar">
+            <select className={inputCls} value={cfg.numbering.mode} onChange={(e) => set('numbering', { ...cfg.numbering, mode: e.target.value })}>
+              <option value="auto">Automática (FIC-2026-00001)</option><option value="custom">Definir yo el número</option>
+            </select>
+          </FieldRow>
+          {cfg.numbering.mode === 'custom' && <>
+            <FieldRow label="Prefijo (opcional)" hint="Ej. vacío para 2287, o “STF-” para STF-2287."><input className={inputCls} value={cfg.numbering.prefix} onChange={(e) => set('numbering', { ...cfg.numbering, prefix: e.target.value })} /></FieldRow>
+            <FieldRow label="Próxima ficha empieza en" hint="Si quieres seguir el talonario de papel, pon el siguiente número. Déjalo vacío para no cambiarlo."><input className={inputCls} type="number" min="1" value={nextNum} onChange={(e) => setNextNum(e.target.value)} placeholder="2287" /></FieldRow>
+          </>}
+        </div>
+        <p className="mt-3 text-xs text-greige-ink">La próxima ficha que se cree será la <b className="text-ink">{cfg.nextNumber}</b>. No se repiten números ya usados.</p>
+      </Panel>
+      <Panel title="Datos obligatorios de la ficha" icon={ClipboardCheck}>
+        <p className="mb-3 text-xs text-greige-ink">Sin esto la ficha no sale a auditoría. Empezamos con lo que las asesoras llenan casi siempre en la ficha de papel; puedes endurecerlo cuando quieras.</p>
+        <div className="grid gap-6 sm:grid-cols-2">
+          {[['requiredFields', 'Siempre'], ['requiredForDelivery', 'Si va a domicilio o agencia']].map(([list, title]) => (
+            <div key={list}>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-greige-ink">{title}</h4>
+              <div className="grid gap-1.5">
+                {Object.entries(FIELD_LABELS).map(([k, label]) => (
+                  <label key={k} className="flex cursor-pointer items-center gap-2.5 text-sm text-ink"><input type="checkbox" className="h-4 w-4 rounded border-line text-accent focus:ring-accent" checked={cfg[list].includes(k)} onChange={() => toggleKey(list, k)} />{label}</label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-greige">Siempre se exigen, además: al menos una prenda con su tienda de origen, y un pago con comprobante y referencia.</p>
       </Panel>
       <Panel title="Bodegas" icon={Warehouse}>
         <div className="grid gap-4 sm:grid-cols-2">

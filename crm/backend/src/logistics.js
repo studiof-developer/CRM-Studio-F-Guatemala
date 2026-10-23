@@ -3,7 +3,7 @@ import { getSetting } from './routes/settings.js';
 import { saveAttachment } from './attachmentStorage.js';
 import {
   TRANSITIONS, ROLES, STATUS, BOARD, TERMINAL, EDITABLE_STATUSES, LOGISTICS_DEFAULTS, stepsFor, allowedFor, validateFields, addBusinessDays, requiredPayment,
-  sheetMissing, computeTotals, settleAudit, slaForStatus,
+  sheetMissing, computeTotals, settleAudit, slaForStatus, transfersNeeded, guatemalaDay, SHEET_FIELD_LABELS,
 } from './logisticsFlow.js';
 
 // Servicio del módulo logístico: fichas de pedido, auditoría de pagos y avance por el flujo. Cada cambio deja un sello inmutable en
@@ -13,10 +13,19 @@ const r2 = (n) => Math.round(Number(n) * 100) / 100;
 
 export async function getConfig() {
   const saved = (await getSetting('logistics_config', {})) ?? {};
-  return { ...LOGISTICS_DEFAULTS, ...saved, sla: { ...LOGISTICS_DEFAULTS.sla, ...(saved.sla ?? {}) } };
+  return { ...LOGISTICS_DEFAULTS, ...saved, sla: { ...LOGISTICS_DEFAULTS.sla, ...(saved.sla ?? {}) }, numbering: { ...LOGISTICS_DEFAULTS.numbering, ...(saved.numbering ?? {}) } };
 }
 
-const CONFIG_TYPES = { enforceSod: 'boolean', adminAllRoles: 'boolean', totalBusinessDays: 'int', holidays: 'dates', amountToleranceQ: 'number', codAdvancePct: 'number', codMaxAttempts: 'int', dispatchWarehouse: 'string', warehouses: 'strings', sla: 'sla' };
+// La configuración para la pantalla: incluye el próximo número de ficha que dará el sistema.
+export async function configForUi() {
+  const cfg = await getConfig();
+  const { rows: [seq] } = await pool.query('SELECT last_value, is_called FROM order_sheet_seq');
+  const n = Number(seq.last_value) + (seq.is_called ? 1 : 0);
+  return { ...cfg, nextNumber: cfg.numbering.mode === 'custom' ? `${cfg.numbering.prefix}${n}` : formatAutoNumber(n) };
+}
+const formatAutoNumber = (n) => `FIC-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
+
+const CONFIG_TYPES = { allowCodGoods: 'boolean', includeFreightInRequired: 'boolean', requiredFields: 'keys', requiredForDelivery: 'keys', numbering: 'numbering', enforceSod: 'boolean', adminAllRoles: 'boolean', totalBusinessDays: 'int', holidays: 'dates', amountToleranceQ: 'number', codAdvancePct: 'number', codMaxAttempts: 'int', dispatchWarehouse: 'string', warehouses: 'strings', sla: 'sla' };
 export async function saveConfig(patch, user) {
   const cur = await getConfig();
   const next = { ...cur };
@@ -30,6 +39,21 @@ export async function saveConfig(patch, user) {
       if (k === 'codAdvancePct' && n > 100) throw fail(400, 'El anticipo no puede pasar de 100%');
       next[k] = n;
     } else if (t === 'string') next[k] = String(v ?? '').trim().slice(0, 60) || cur[k];
+
+    else if (t === 'keys') next[k] = [...new Set((Array.isArray(v) ? v : []).filter((x) => SHEET_FIELD_LABELS[x]))];
+    else if (t === 'numbering') {
+      const prefix = String(v?.prefix ?? cur.numbering.prefix ?? '').trim();
+      if (!/^[A-Za-z0-9-]{0,10}$/.test(prefix)) throw fail(400, 'El prefijo solo admite letras, números y guion (máximo 10)');
+      const mode = v?.mode === 'custom' ? 'custom' : 'auto';
+      next.numbering = { mode, prefix };
+      if (mode === 'custom' && v?.next !== undefined && v?.next !== null && v?.next !== '') {
+        const n = Number(v.next);
+        if (!Number.isInteger(n) || n < 1) throw fail(400, 'El número inicial debe ser un entero mayor a cero');
+        const { rows } = await pool.query('SELECT 1 FROM order_sheets WHERE sheet_number = $1', [`${prefix}${n}`]);
+        if (rows.length) throw fail(409, `Ya existe la ficha ${prefix}${n}`);
+        await pool.query('SELECT setval($1, $2, false)', ['order_sheet_seq', n]);
+      }
+    }
     else if (t === 'strings') next[k] = [...new Set((Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean))].slice(0, 100);
     else if (t === 'dates') {
       const list = (Array.isArray(v) ? v : []).map(String);
@@ -112,9 +136,9 @@ export async function saveEvidenceFile(file) {
 }
 
 // — fichas —
-const SHEET_FIELDS = ['payment_mode', 'delivery_type', 'campaign', 'full_name', 'phone', 'phone_alt', 'email', 'address', 'address_ref', 'city', 'department', 'receiver_name', 'invoice_name', 'invoice_nit',
+const SHEET_FIELDS = ['payment_mode', 'delivery_type', 'shipping_payment', 'pickup_store', 'dpi', 'birthday_month', 'birthday_day', 'zone', 'advisor_code', 'sheet_date', 'campaign', 'full_name', 'phone', 'phone_alt', 'email', 'address', 'address_ref', 'city', 'department', 'receiver_name', 'invoice_name', 'invoice_nit',
   'origin_mode', 'origin_warehouses', 'dispatch_warehouse', 'notes'];
-const SHEET_ENUMS = { payment_mode: ['contado', 'contraentrega'], delivery_type: ['domicilio', 'agencia'], origin_mode: ['unica', 'multiple'] };
+const SHEET_ENUMS = { payment_mode: ['contado', 'contraentrega'], delivery_type: ['domicilio', 'agencia', 'tienda'], shipping_payment: ['al_recibir', 'pagado', 'sin_envio'], origin_mode: ['unica', 'multiple'] };
 
 function cleanSheetPatch(patch) {
   const out = {};
@@ -128,7 +152,29 @@ function cleanSheetPatch(patch) {
     }
   }
   if (out.email && !/^\S+@\S+\.\S+$/.test(out.email)) throw fail(400, 'El correo no es válido');
+  if (out.sheet_date && !/^\d{4}-\d{2}-\d{2}$/.test(out.sheet_date)) throw fail(400, 'La fecha de la ficha debe ser AAAA-MM-DD');
   return out;
+}
+
+// Lo que el papel deja en las notas amarillas ("recoge en Oakland", "paga envío al recibir") aquí queda estructurado y ligado entre sí.
+function reconcile(prev, patch, cfg) {
+  const m = { ...prev, ...patch };
+  const out = { ...patch };
+  if (patch.payment_mode === 'contraentrega' && prev.payment_mode !== 'contraentrega' && !cfg.allowCodGoods) throw fail(400, 'La contraentrega del pedido completo no está habilitada (solo se cobra el flete al recibir)');
+  if (m.delivery_type === 'tienda') {
+    if (m.payment_mode === 'contraentrega') throw fail(400, 'Recoger en tienda se paga completo por adelantado');
+    out.shipping_payment = 'sin_envio';
+    out.shipping = 0;
+    if (String(m.pickup_store ?? '').trim()) out.dispatch_warehouse = String(m.pickup_store).trim();
+  } else if (m.shipping_payment === 'sin_envio') out.shipping_payment = 'pagado';
+  return out;
+}
+
+// La tienda de origen de cada prenda manda: de ahí salen el tipo de origen (única o múltiple) y las tiendas de la ficha.
+async function syncOrigin(db, sheetId) {
+  const { rows } = await db.query('SELECT origin_warehouse, quantity, reference FROM order_sheet_items WHERE sheet_id = $1', [sheetId]);
+  const stores = transfersNeeded(rows).map((t) => t.store);
+  if (stores.length) await db.query('UPDATE order_sheets SET origin_warehouses = $2, origin_mode = $3 WHERE id = $1', [sheetId, stores, stores.length > 1 ? 'multiple' : 'unica']);
 }
 
 export function cleanItems(items) {
@@ -160,9 +206,14 @@ async function insertItems(db, sheetId, items) {
   }
 }
 
-async function nextSheetNumber(db) {
-  const { rows } = await db.query("SELECT nextval('order_sheet_seq') AS n");
-  return `FIC-${new Date().getFullYear()}-${String(rows[0].n).padStart(5, '0')}`;
+async function nextSheetNumber(db, cfg) {
+  for (let i = 0; i < 20; i += 1) {
+    const { rows } = await db.query("SELECT nextval('order_sheet_seq') AS n");
+    const number = cfg.numbering.mode === 'custom' ? `${cfg.numbering.prefix}${rows[0].n}` : formatAutoNumber(rows[0].n);
+    const { rows: used } = await db.query('SELECT 1 FROM order_sheets WHERE sheet_number = $1', [number]);
+    if (!used.length) return number;
+  }
+  throw fail(500, 'No se pudo asignar un número de ficha libre');
 }
 
 export async function createSheet({ customerId, quoteId = null, data = {}, items = null, user }) {
@@ -180,22 +231,27 @@ export async function createSheet({ customerId, quoteId = null, data = {}, items
       list = qi.map((i) => ({ product_id: i.product_id, reference: i.sku, description: i.name, size: i.size || '', color: i.color || '', quantity: i.quantity, unit_price: i.unit_price, discount_pct: i.discount_pct, final_price: i.final_price }));
     }
     const clean = list?.length ? cleanItems(list) : [];
-    const patch = cleanSheetPatch(data);
-    const totals = computeTotals(clean, data.shipping ?? 0);
-    const number = await nextSheetNumber(db);
+    const patch = reconcile({ payment_mode: 'contado', delivery_type: 'domicilio', shipping_payment: 'pagado' }, cleanSheetPatch(data), cfg);
+    const totals = computeTotals(clean, patch.shipping ?? data.shipping ?? 0);
+    const number = await nextSheetNumber(db, cfg);
     const phone = String(c.whatsapp_number).startsWith('social:') ? null : c.whatsapp_number;
-    const { rows: [sheet] } = await db.query(
-      `INSERT INTO order_sheets (sheet_number, customer_id, whatsapp_number_id, quote_id, created_by, advisor_name, payment_mode, delivery_type, campaign, full_name, phone, phone_alt, email, address, address_ref,
-         city, department, receiver_name, invoice_name, invoice_nit, origin_mode, origin_warehouses, dispatch_warehouse, subtotal, discount_total, shipping, total, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,
-      [number, c.id, data.whatsapp_number_id ?? quote?.whatsapp_number_id ?? null, quote?.id ?? null, user.id, user.fullName, patch.payment_mode ?? 'contado', patch.delivery_type ?? 'domicilio', patch.campaign ?? null,
-        patch.full_name ?? c.full_name, patch.phone ?? phone, patch.phone_alt ?? null, patch.email ?? c.email, patch.address ?? c.address, patch.address_ref ?? null, patch.city ?? c.municipio, patch.department ?? c.department,
-        patch.receiver_name ?? null, patch.invoice_name ?? null, patch.invoice_nit ?? null, patch.origin_mode ?? 'unica', patch.origin_warehouses ?? [], patch.dispatch_warehouse ?? cfg.dispatchWarehouse,
-        totals.subtotal, totals.discount_total, totals.shipping, totals.total, patch.notes ?? null]
-    );
+    const { rows: [last] } = await db.query('SELECT advisor_code FROM order_sheets WHERE created_by = $1 AND advisor_code IS NOT NULL ORDER BY id DESC LIMIT 1', [user.id]);
+    const row = {
+      sheet_number: number, customer_id: c.id, whatsapp_number_id: data.whatsapp_number_id ?? quote?.whatsapp_number_id ?? null, quote_id: quote?.id ?? null, created_by: user.id, advisor_name: user.fullName,
+      payment_mode: patch.payment_mode ?? 'contado', delivery_type: patch.delivery_type ?? 'domicilio', shipping_payment: patch.shipping_payment ?? 'pagado', pickup_store: patch.pickup_store ?? null,
+      campaign: patch.campaign ?? null, full_name: patch.full_name ?? c.full_name, phone: patch.phone ?? phone, phone_alt: patch.phone_alt ?? null, email: patch.email ?? c.email,
+      address: patch.address ?? c.address, address_ref: patch.address_ref ?? null, city: patch.city ?? c.municipio, department: patch.department ?? c.department, zone: patch.zone ?? null,
+      receiver_name: patch.receiver_name ?? null, invoice_name: patch.invoice_name ?? null, invoice_nit: patch.invoice_nit ?? null, dpi: patch.dpi ?? null,
+      birthday_month: patch.birthday_month ?? null, birthday_day: patch.birthday_day ?? null, advisor_code: patch.advisor_code ?? last?.advisor_code ?? null, sheet_date: patch.sheet_date ?? guatemalaDay(new Date()),
+      origin_mode: patch.origin_mode ?? 'unica', origin_warehouses: patch.origin_warehouses ?? [], dispatch_warehouse: patch.dispatch_warehouse ?? cfg.dispatchWarehouse,
+      subtotal: totals.subtotal, discount_total: totals.discount_total, shipping: totals.shipping, total: totals.total, notes: patch.notes ?? null,
+    };
+    const cols = Object.keys(row);
+    const { rows: [sheet] } = await db.query(`INSERT INTO order_sheets (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`, cols.map((k) => row[k]));
     await insertItems(db, sheet.id, clean);
+    await syncOrigin(db, sheet.id);
     await logEvent(db, { sheetId: sheet.id, user, action: 'create', to: 'BORRADOR', data: { quote_id: quote?.id ?? null, items: clean.length, total: totals.total } });
-    return sheet;
+    return (await db.query('SELECT * FROM order_sheets WHERE id = $1', [sheet.id])).rows[0];
   });
 }
 
@@ -215,12 +271,13 @@ async function canView(user, sheet) {
 const diff = (before, after) => Object.fromEntries(Object.keys(after).filter((k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null)).map((k) => [k, { de: before[k] ?? null, a: after[k] ?? null }]));
 
 export async function updateSheet(id, { data = {}, items }, user) {
+  const cfg = await getConfig();
   return withTx(async (db) => {
     const sheet = await loadSheet(db, id, { lock: true });
     await canView(user, sheet);
     if (!EDITABLE_STATUSES.includes(sheet.status)) throw fail(409, `La ficha está en "${STATUS[sheet.status]}": ya no se edita. Una corrección va como observación del verificador.`);
     if (sheet.created_by !== user.id && user.role !== 'admin') throw fail(403, 'Solo quien creó la ficha puede editarla');
-    const patch = cleanSheetPatch(data);
+    const patch = reconcile(sheet, cleanSheetPatch(data), cfg);
     let totals = {};
     let itemChange = null;
     if (items !== undefined) {
@@ -229,11 +286,11 @@ export async function updateSheet(id, { data = {}, items }, user) {
       const clean = cleanItems(items);
       const { rows: before } = await db.query('SELECT reference, size, color, quantity, unit_price, final_price FROM order_sheet_items WHERE sheet_id = $1 ORDER BY id', [id]);
       await insertItems(db, id, clean);
-      totals = computeTotals(clean, data.shipping ?? sheet.shipping);
+      totals = computeTotals(clean, patch.shipping ?? data.shipping ?? sheet.shipping);
       itemChange = { antes: before, ahora: clean.map(({ reference, size, color, quantity, unit_price, final_price }) => ({ reference, size, color, quantity, unit_price, final_price })) };
-    } else if (data.shipping !== undefined) {
+    } else if (data.shipping !== undefined || patch.shipping !== undefined) {
       const { rows: its } = await db.query('SELECT unit_price, quantity, final_price FROM order_sheet_items WHERE sheet_id = $1', [id]);
-      totals = computeTotals(its, data.shipping);
+      totals = computeTotals(its, patch.shipping ?? data.shipping);
     }
     const next = { ...patch, ...totals };
     const changes = diff(sheet, next);
@@ -243,8 +300,9 @@ export async function updateSheet(id, { data = {}, items }, user) {
       `UPDATE order_sheets SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}${cols.length ? ',' : ''} updated_at = now() WHERE id = $1 RETURNING *`,
       [id, ...cols.map((c) => next[c])]
     );
+    if (items !== undefined) await syncOrigin(db, id);
     await logEvent(db, { sheetId: id, user, action: 'edit', from: sheet.status, to: sheet.status, data: { cambios: changes, prendas: itemChange } });
-    return updated;
+    return items !== undefined ? (await db.query('SELECT * FROM order_sheets WHERE id = $1', [id])).rows[0] : updated;
   });
 }
 
@@ -267,7 +325,9 @@ function cleanPayment(p) {
   const reference = String(p.reference_number ?? '').trim();
   if (!reference) throw fail(400, 'Falta el número de referencia del comprobante');
   if (p.paid_at && !/^\d{4}-\d{2}-\d{2}$/.test(String(p.paid_at))) throw fail(400, 'La fecha del pago debe ser AAAA-MM-DD');
-  return { method: p.method, amount, bank: String(p.bank ?? '').trim().slice(0, 60) || null, reference_number: reference.slice(0, 80), paid_at: p.paid_at || null };
+  const platformVerified = p.platform_verified === true || p.platform_verified === 'true';
+  if (p.method === 'tarjeta_link' && !platformVerified) throw fail(400, 'Para un pago con Link confirma que ya verificaste el movimiento en NeoLink');
+  return { method: p.method, amount, bank: String(p.bank ?? '').trim().slice(0, 60) || null, reference_number: reference.slice(0, 80), paid_at: p.paid_at || null, platform_verified: platformVerified };
 }
 
 export async function addPayment(sheetId, input, file, user) {
@@ -285,8 +345,8 @@ export async function addPayment(sheetId, input, file, user) {
     if (!attachmentId) throw fail(400, 'Cada pago lleva su comprobante (sube el archivo o elige uno del chat)');
     try {
       const { rows: [pay] } = await db.query(
-        `INSERT INTO order_sheet_payments (sheet_id, method, amount, bank, reference_number, paid_at, attachment_id, added_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [sheetId, p.method, p.amount, p.bank, p.reference_number, p.paid_at, attachmentId, user.id]
+        `INSERT INTO order_sheet_payments (sheet_id, method, amount, bank, reference_number, paid_at, attachment_id, added_by, platform_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [sheetId, p.method, p.amount, p.bank, p.reference_number, p.paid_at, attachmentId, user.id, p.platform_verified]
       );
       await logEvent(db, { sheetId, user, action: 'add_payment', from: sheet.status, to: sheet.status, data: { payment_id: pay.id, ...p }, evidence: [attachmentId] });
       return pay;
@@ -323,7 +383,7 @@ export async function submitSheet(sheetId, user) {
     if (!ok.ok) throw fail(403, ok.reason);
     const { rows: items } = await db.query('SELECT * FROM order_sheet_items WHERE sheet_id = $1', [sheetId]);
     const { rows: payments } = await db.query('SELECT * FROM order_sheet_payments WHERE sheet_id = $1 ORDER BY id', [sheetId]);
-    const missing = sheetMissing(sheet, items, payments);
+    const missing = sheetMissing(sheet, items, payments, cfg);
     if (missing.length) throw fail(422, 'La ficha está incompleta', { missing });
     const settled = settleAudit(sheet, payments, cfg);
     const to = settled.status;
@@ -417,10 +477,17 @@ export async function advance(sheetId, key, { data = {}, note = null }, files, u
       const need = requiredPayment(sheet, cfg);
       if (clean.advance_amount + cfg.amountToleranceQ + 0.001 < need) throw fail(422, `El anticipo (Q${clean.advance_amount.toFixed(2)}) no llega al mínimo de Q${need.toFixed(2)} (${cfg.codAdvancePct}% del total)`);
     }
+    if (key === 'request_transfer') {
+      const { rows: its } = await db.query('SELECT origin_warehouse, quantity, reference FROM order_sheet_items WHERE sheet_id = $1', [sheetId]);
+      const need = transfersNeeded(its);
+      if (clean.tr_count !== need.length) throw fail(422, `La ficha sale de ${need.length} tienda(s) (${need.map((t) => t.store).join(', ')}): se piden ${need.length} TR`);
+    }
     if (key === 'generate_guide') {
-      const expectedType = sheet.payment_mode === 'contraentrega' ? 'xcobrar' : 'contado';
-      if (clean.guide_type !== expectedType) throw fail(422, `Un pedido de ${sheet.payment_mode} lleva guía "${expectedType}"`);
-      if (expectedType === 'xcobrar') {
+      const freightOnDelivery = sheet.shipping_payment === 'al_recibir';
+      const expectedType = sheet.payment_mode === 'contraentrega' || freightOnDelivery ? 'xcobrar' : 'contado';
+      if (clean.guide_type !== expectedType) throw fail(422, `Este pedido (${sheet.payment_mode}${freightOnDelivery ? ', flete al recibir' : ''}) lleva guía "${expectedType}"`);
+      if (expectedType === 'xcobrar' && sheet.payment_mode !== 'contraentrega' && !(clean.amount_to_collect > 0)) throw fail(422, 'Falta el monto que cobra la paquetería al recibir (el flete)');
+      if (sheet.payment_mode === 'contraentrega') {
         const { rows: [{ approved }] } = await db.query("SELECT COALESCE(sum(COALESCE(audit_amount, amount)), 0) AS approved FROM order_sheet_payments WHERE sheet_id = $1 AND audit_status = 'aprobado'", [sheetId]);
         const expected = r2(total - Number(approved));
         if (!(clean.amount_to_collect > 0)) throw fail(422, 'Falta el monto a cobrar al recibir');
@@ -560,17 +627,19 @@ export async function getSheet(id, user) {
   ]);
   const done = [...new Set(events.rows.filter((e) => e.actor_user_id === user.id).map((e) => e.action))];
   if (done.includes('create') || done.includes('add_payment')) done.push('submit_side');
+  const transfers = transfersNeeded(items.rows);
   const approved = payments.rows.filter((p) => p.audit_status === 'aprobado').reduce((s, p) => s + Number(p.audit_amount ?? p.amount), 0);
   const actions = stepsFor(sheet).map((s) => {
     const early = s.key === 'cancel' && sheet.created_by === user.id && ['BORRADOR', 'OBSERVADA', 'EN_AUDITORIA_PAGO'].includes(sheet.status);
     const ok = early ? { ok: true } : allowedFor({ step: s, sheet, userId: user.id, userRole: user.role, roles: scope.roles, done, cfg });
-    return { key: s.key, code: s.code, label: s.label, fields: s.fields, evidence: s.evidence, allowed: ok.ok, reason: ok.ok ? null : ok.reason, roles: s.roles.map((r) => (r === 'asesora' ? 'Asesora de la ficha' : ROLES[r])) };
+    const defaults = s.key === 'request_transfer' ? { tr_count: transfers.length, tr_warehouses: transfers.map((t) => t.store).join(', ') } : undefined;
+    return { defaults, key: s.key, code: s.code, label: s.label, fields: s.fields, evidence: s.evidence, allowed: ok.ok, reason: ok.ok ? null : ok.reason, roles: s.roles.map((r) => (r === 'asesora' ? 'Asesora de la ficha' : ROLES[r])) };
   });
   const canAudit = sheet.status === 'EN_AUDITORIA_PAGO' && (scope.roles.includes('auditor_ingresos') || (cfg.adminAllRoles && user.role === 'admin'));
   return {
     sheet: { ...sheet, statusLabel: STATUS[sheet.status], sla: slaInfo(sheet, cfg) }, customer: customer.rows[0], items: items.rows, payments: payments.rows, events: events.rows,
     paid: { required: requiredPayment(sheet, cfg), approved: r2(approved) }, actions, canAudit, editable: EDITABLE_STATUSES.includes(sheet.status) && (sheet.created_by === user.id || user.role === 'admin'),
-    missing: sheetMissing(sheet, items.rows, payments.rows), config: { codAdvancePct: cfg.codAdvancePct, warehouses: cfg.warehouses, dispatchWarehouse: cfg.dispatchWarehouse },
+    missing: sheetMissing(sheet, items.rows, payments.rows, cfg), transfers, config: { codAdvancePct: cfg.codAdvancePct, warehouses: cfg.warehouses, dispatchWarehouse: cfg.dispatchWarehouse, allowCodGoods: cfg.allowCodGoods, requiredFields: cfg.requiredFields, requiredForDelivery: cfg.requiredForDelivery },
   };
 }
 

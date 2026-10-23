@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  X, Check, Pencil, Plus, Trash2, Zap, Lock, Wallet, ShieldCheck, Send, MessageSquare, MapPin, Phone, Mail, User, Hash, FileText, CircleDot, CheckCircle2, AlertTriangle, PauseCircle, Ban, Clock,
+  X, Check, Pencil, Plus, Trash2, Zap, Lock, Wallet, ShieldCheck, Send, MessageSquare, MapPin, Phone, Mail, User, Hash, FileText, CircleDot, CheckCircle2, AlertTriangle, PauseCircle, Ban, Clock, StickyNote, Store, Truck,
 } from 'lucide-react';
 import Avatar from '../Avatar.jsx';
 import ConfirmDialog from '../ConfirmDialog.jsx';
@@ -137,6 +137,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          {sheet.notes && <Banner tone="note" icon={StickyNote} title="Observaciones del cliente">{sheet.notes}</Banner>}
           {sheet.status === 'OBSERVADA' && sheet.observation && <Banner tone="danger" icon={AlertTriangle} title="Debe corregirse">{sheet.observation}</Banner>}
           {sheet.status === 'PAUSADA' && <Banner tone="warn" icon={PauseCircle} title="Pedido pausado">{sheet.hold_reason}</Banner>}
           {sheet.status === 'CANCELADA' && <Banner tone="neutral" icon={Ban} title="Pedido cancelado">{sheet.hold_reason}</Banner>}
@@ -165,12 +166,17 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
                   <Row icon={User} label="Nombre"><CopyText text={sheet.full_name} /></Row>
                   <Row icon={Phone} label="Celular"><CopyText text={sheet.phone} />{sheet.phone_alt && <span className="text-greige"> · {sheet.phone_alt}</span>}</Row>
                   <Row icon={Mail} label="Correo"><CopyText text={sheet.email} /></Row>
-                  <Row icon={Hash} label="Factura">{[sheet.invoice_name, sheet.invoice_nit].filter(Boolean).join(' · ')}</Row>
+                  <Row icon={Hash} label="DPI · factura">{[sheet.dpi, [sheet.invoice_name, sheet.invoice_nit].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}</Row>
+                  {sheet.delivery_type === 'tienda' ? (
+                    <Row icon={Store} label="Recoge en tienda"><b>{sheet.pickup_store}</b></Row>
+                  ) : (
                   <Row icon={MapPin} label={sheet.delivery_type === 'agencia' ? 'Entrega en agencia' : 'Dirección de entrega'}>
                     <CopyText text={[sheet.address, sheet.address_ref, sheet.city, sheet.department].filter(Boolean).join(', ')}>{sheet.address}<span className="block text-xs text-greige-ink">{[sheet.address_ref, sheet.city, sheet.department].filter(Boolean).join(' · ')}</span></CopyText>
                     {sheet.receiver_name && <span className="block text-xs text-greige-ink">Recibe: {sheet.receiver_name}</span>}
                   </Row>
-                  <Row icon={FileText} label="Origen → despacho">{(sheet.origin_warehouses ?? []).join(', ') || '—'} → {sheet.dispatch_warehouse}{sheet.campaign && <span className="block text-xs text-greige-ink">Campaña: {sheet.campaign}</span>}</Row>
+                  )}
+                  {sheet.delivery_type !== 'tienda' && <Row icon={Truck} label="Flete (aparte del total)">{q(sheet.shipping)} · {sheet.shipping_payment === 'al_recibir' ? <b className="text-warning">se cobra al recibir</b> : 'ya pagado'}</Row>}
+                  <Row icon={FileText} label={`Origen → despacho · ${detail.transfers.length} TR`}>{(sheet.origin_warehouses ?? []).join(', ') || '—'} → {sheet.dispatch_warehouse}{sheet.advisor_code && <span className="block text-xs text-greige-ink">Código de vendedora: {sheet.advisor_code}</span>}{sheet.campaign && <span className="block text-xs text-greige-ink">Campaña: {sheet.campaign}</span>}</Row>
                 </div>
               </Panel>
               {captured.length > 0 && (
@@ -245,8 +251,8 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
               <dl className="space-y-1 border-t border-line-soft px-5 py-4 text-sm">
                 <div className="flex justify-between text-greige-ink"><dt>Subtotal</dt><dd className="tabular-nums">{q(sheet.subtotal)}</dd></div>
                 <div className="flex justify-between text-greige-ink"><dt>Descuento</dt><dd className="tabular-nums">−{q(sheet.discount_total)}</dd></div>
-                <div className="flex justify-between text-greige-ink"><dt>Envío</dt><dd className="tabular-nums">{q(sheet.shipping)}</dd></div>
-                <div className="flex justify-between border-t border-line-soft pt-2 text-base font-bold text-ink"><dt>Total</dt><dd className="tabular-nums">{q(sheet.total)}</dd></div>
+                <div className="flex justify-between border-t border-line-soft pt-2 text-base font-bold text-ink"><dt>Total del pedido</dt><dd className="tabular-nums">{q(sheet.total)}</dd></div>
+                <div className="flex justify-between text-xs text-greige"><dt>Flete (aparte){sheet.shipping_payment === 'al_recibir' ? ' · se cobra al recibir' : sheet.shipping_payment === 'pagado' ? ' · ya pagado' : ''}</dt><dd className="tabular-nums">{q(sheet.shipping)}</dd></div>
               </dl>
             </Panel>
           )}
@@ -292,7 +298,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
 }
 
 function Banner({ tone, icon: Icon, title, children }) {
-  const cls = { danger: 'border-danger/30 bg-danger-bg text-danger', warn: 'border-warning/30 bg-warning/10 text-warning', neutral: `border-line ${SOFT} text-greige-ink` }[tone];
+  const cls = { note: 'border-yellow-400/50 bg-yellow-300/25 text-ink', danger: 'border-danger/30 bg-danger-bg text-danger', warn: 'border-warning/30 bg-warning/10 text-warning', neutral: `border-line ${SOFT} text-greige-ink` }[tone];
   return (
     <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
       <Icon size={18} className="mt-0.5 shrink-0" />
