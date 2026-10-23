@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { UserPlus, Trash2, ShieldCheck, UserCog, User, Smartphone, Edit2 } from 'lucide-react';
-import { fetchUsers, createUser, updateUser, deleteUser, fetchWhatsappNumbers } from './api.js';
+import { fetchUsers, createUser, updateUser, deleteUser, fetchWhatsappNumbers, fetchLogisticsRoles, saveLogisticsRoles } from './api.js';
 import Badge from './components/Badge.jsx';
 import { Button } from './components/ui.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
-const EMPTY_FORM = { full_name: '', username: '', email: '', password: '', role: 'asesor', zone: '', assigned_lines: [] };
+const EMPTY_FORM = { full_name: '', username: '', email: '', password: '', role: 'asesor', zone: '', assigned_lines: [], logistics_roles: [] };
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor' };
 const ROLE_BADGE_VARIANT = { admin: 'danger', supervisor: 'purple', asesor: 'info' };
@@ -41,6 +41,7 @@ function Modal({ open, onClose, title, children }) {
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [whatsappNumbers, setWhatsappNumbers] = useState([]);
+  const [logistics, setLogistics] = useState({ roleLabels: {}, byUser: {} }); // roles de logística por usuario
   
   const [modal, setModal] = useState({ open: false, mode: 'create', data: null });
   const [form, setForm] = useState(EMPTY_FORM);
@@ -52,10 +53,11 @@ export default function Users() {
 
   const loadData = useCallback(() => {
     setLoading(true);
-    Promise.all([fetchUsers(), fetchWhatsappNumbers()])
-      .then(([usersData, linesData]) => {
+    Promise.all([fetchUsers(), fetchWhatsappNumbers(), fetchLogisticsRoles().catch(() => ({ users: [], roleLabels: {} }))])
+      .then(([usersData, linesData, logData]) => {
         setUsers(usersData);
         setWhatsappNumbers(linesData);
+        setLogistics({ roleLabels: logData.roleLabels, byUser: Object.fromEntries(logData.users.map((u) => [u.id, u.logistics_roles])) });
       })
       .catch(err => showError(err.message))
       .finally(() => setLoading(false));
@@ -90,7 +92,8 @@ export default function Users() {
       password: '',
       role: user.role,
       zone: user.zone || '',
-      assigned_lines: user.assigned_lines || []
+      assigned_lines: user.assigned_lines || [],
+      logistics_roles: logistics.byUser[user.id] ?? []
     });
     setUsernameTouched(true);
     setModal({ open: true, mode: 'edit', data: user });
@@ -122,17 +125,20 @@ export default function Users() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form };
+      const { logistics_roles: logisticsRoles, ...payload } = form;
       if (modal.mode === 'edit' && !payload.password) {
         delete payload.password;
       }
+      let userId = modal.data?.id;
       if (modal.mode === 'create') {
-        await createUser(payload);
+        userId = (await createUser(payload)).id;
         showSuccess('Usuario creado');
       } else {
-        await updateUser(modal.data.id, payload);
+        await updateUser(userId, payload);
         showSuccess('Usuario actualizado');
       }
+      const before = logistics.byUser[userId] ?? [];
+      if (logisticsRoles.length !== before.length || logisticsRoles.some((r) => !before.includes(r))) await saveLogisticsRoles(userId, logisticsRoles);
       setModal({ open: false, data: null });
       loadData();
     } catch (err) {
@@ -181,6 +187,7 @@ export default function Users() {
               <th className="p-4 font-medium">Nombre / Correo</th>
               <th className="p-4 font-medium">Rol</th>
               <th className="p-4 font-medium">Líneas Asignadas</th>
+              <th className="p-4 font-medium">Logística</th>
               <th className="p-4 font-medium text-right">Acciones</th>
             </tr>
           </thead>
@@ -225,6 +232,13 @@ export default function Users() {
                   ) : (
                     <span className="text-greige">Todo</span>
                   )}
+                </td>
+                <td className="p-4 text-xs text-greige-ink">
+                  {(logistics.byUser[u.id] ?? []).length ? (
+                    <div className="flex max-w-xs flex-wrap gap-1 whitespace-normal">
+                      {logistics.byUser[u.id].map((r) => <span key={r} className="rounded bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-ink dark:bg-white/[0.08]">{logistics.roleLabels[r] ?? r}</span>)}
+                    </div>
+                  ) : <span className="text-greige">—</span>}
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
@@ -300,6 +314,22 @@ export default function Users() {
               />
             </label>
           </div>
+
+          {Object.keys(logistics.roleLabels).length > 0 && (
+            <div className="mt-4 rounded-xl border border-line-soft bg-black/[0.03] p-4 dark:bg-white/[0.03]">
+              <h3 className="mb-1 flex items-center gap-2 font-semibold text-ink">Roles de logística</h3>
+              <p className="mb-3 text-xs text-greige-ink">Quien tenga al menos un rol ve las pestañas Logística y Fichas de pedido. Cada rol habilita sus pasos del proceso.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {Object.entries(logistics.roleLabels).map(([key, label]) => (
+                  <label key={key} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" className="h-4 w-4 rounded border-line text-accent focus:ring-accent" checked={form.logistics_roles.includes(key)}
+                      onChange={() => setForm((f) => ({ ...f, logistics_roles: f.logistics_roles.includes(key) ? f.logistics_roles.filter((r) => r !== key) : [...f.logistics_roles, key] }))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {form.role === 'asesor' && (
             <div className="mt-4 rounded-xl border border-line-soft bg-black/[0.03] dark:bg-white/[0.03] p-4">

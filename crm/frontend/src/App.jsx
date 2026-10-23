@@ -108,10 +108,9 @@ const SETTINGS_TABS = {
 // else lives in a named, collapsible group so the sidebar doesn't just grow a new row
 // every time a feature is added. A key only shows up if it's also present in the current
 // user's `tabs` (role-gated), so e.g. an asesor never sees an empty "Administración" group.
-const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
+const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers', 'logistica'];
 const NAV_GROUPS = [
-  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'quickReplies', 'campaigns', 'analysis'] },
-  { key: 'logistics', title: 'Logística', keys: ['fichas', 'logistica'] },
+  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'fichas', 'quickReplies', 'campaigns', 'analysis'] },
   { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
 ];
 
@@ -232,8 +231,7 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', false);
   const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
-  const [logisticsExpanded, setLogisticsExpanded] = usePersistedBool('sidebar:logisticsExpanded', true);
-  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded], logistics: [logisticsExpanded, setLogisticsExpanded] };
+  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
   const [hasLogisticsRole, setHasLogisticsRole] = useState(false);
   // "Ir al chat" (Pipeline, Auditoría's Sin responder) opens this overlay in place —
   // whatever tab you're on stays open underneath, instead of navigating away to

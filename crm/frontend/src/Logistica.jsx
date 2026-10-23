@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { PageHeader } from './components/ui.jsx';
 import { showError, showSuccess } from './components/Toast.jsx';
 import SheetTable from './components/logistics/SheetTable.jsx';
 import SheetDetail from './components/logistics/SheetDetail.jsx';
-import { fetchLogisticsMe, fetchLogisticsBoard, fetchSheets, fetchLogisticsConfig, saveLogisticsConfig, fetchLogisticsRoles, saveLogisticsRoles } from './api.js';
+import { fetchLogisticsMe, fetchLogisticsBoard, fetchSheets, fetchLogisticsConfig, saveLogisticsConfig } from './api.js';
 import { PrimaryBtn, FieldRow, inputCls } from './lib/logisticsUi.jsx';
 
-const TABS = [['board', 'Tablero'], ['list', 'Fichas'], ['process', 'Proceso'], ['config', 'Configuración', true], ['roles', 'Roles', true]];
+const TABS = [['board', 'Tablero'], ['list', 'Fichas'], ['process', 'Proceso'], ['config', 'Configuración', true]];
 
 function Board({ onPick }) {
   const [board, setBoard] = useState(null);
@@ -121,37 +121,6 @@ function Config({ me }) {
   );
 }
 
-function Roles() {
-  const [data, setData] = useState(null);
-  const [saving, setSaving] = useState(null);
-  const load = useCallback(() => fetchLogisticsRoles().then(setData).catch((e) => showError(e.message)), []);
-  useEffect(() => { load(); }, [load]);
-  if (!data) return <p className="py-10 text-center text-sm text-greige-ink">Cargando…</p>;
-  async function toggle(u, role) {
-    const roles = u.logistics_roles.includes(role) ? u.logistics_roles.filter((r) => r !== role) : [...u.logistics_roles, role];
-    setSaving(u.id);
-    try { await saveLogisticsRoles(u.id, roles); setData((d) => ({ ...d, users: d.users.map((x) => (x.id === u.id ? { ...x, logistics_roles: roles } : x)) })); } catch (e) { showError(e.message); } finally { setSaving(null); }
-  }
-  return (
-    <div>
-      <p className="mb-3 text-sm text-greige-ink">Marca qué hace cada persona en logística. Quien tenga al menos un rol verá las pestañas Fichas y Logística. Para auditar pagos, verificar, facturar, etc. la persona debe tener el rol correspondiente.</p>
-      <div className="overflow-x-auto rounded-2xl border border-line bg-paper">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-greige-ink"><th className="px-4 py-2.5">Persona</th>{Object.values(data.roleLabels).map((l) => <th key={l} className="px-2 py-2.5 text-center align-bottom"><span className="inline-block max-w-[90px] text-[10px] leading-tight">{l}</span></th>)}</tr></thead>
-          <tbody>
-            {data.users.map((u) => (
-              <tr key={u.id} className="border-b border-line-soft last:border-0">
-                <td className="px-4 py-2.5 text-ink">{u.full_name}<div className="text-[11px] text-greige-ink">{u.role}</div></td>
-                {Object.keys(data.roleLabels).map((r) => <td key={r} className="px-2 py-2.5 text-center"><input type="checkbox" disabled={saving === u.id} checked={u.logistics_roles.includes(r)} onChange={() => toggle(u, r)} /></td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 export default function Logistica({ user }) {
   const [me, setMe] = useState(null);
   const [tab, setTab] = useState('board');
@@ -173,7 +142,6 @@ export default function Logistica({ user }) {
       {tab === 'list' && <List key={status} me={me} initialStatus={status} onOpen={setOpenId} refreshKey={tick} />}
       {tab === 'process' && <Process me={me} />}
       {tab === 'config' && <Config me={me} />}
-      {tab === 'roles' && <Roles />}
       {openId && <SheetDetail sheetId={openId} me={me} onClose={() => setOpenId(null)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
   );
