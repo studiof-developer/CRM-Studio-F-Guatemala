@@ -402,8 +402,9 @@ export async function uploadCampaignHeaderMedia(file, lineId) {
   return res.json();
 }
 
-export async function searchCampaignAudience(temperature, q, lineId, { periodFrom, periodTo, countOnly } = {}) {
+export async function searchCampaignAudience(temperature, q, lineId, { periodFrom, periodTo, countOnly, erpOnly } = {}) {
   const params = new URLSearchParams();
+  if (erpOnly) params.set('erpOnly', '1');
   if (periodFrom && periodTo) { params.set('periodFrom', periodFrom); params.set('periodTo', periodTo); }
   if (countOnly) params.set('countOnly', '1');
   if (temperature) params.set('temperature', temperature);

@@ -251,7 +251,10 @@ function NewCampaignModal({ onClose, onSent }) {
   const [audienceMode, setAudienceMode] = useState('count');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
-  const [audienceCount, setAudienceCount] = useState(null);
+  // Solo clientes que ya compraron según el ERP: se cuenta con y sin el filtro para mostrar cuántos quedan.
+  const [erpOnly, setErpOnly] = useState(false);
+  const [baseCount, setBaseCount] = useState(null);
+  const [erpCount, setErpCount] = useState(null);
   const [manualQuery, setManualQuery] = useState('');
   const [manualResults, setManualResults] = useState([]);
   const [manualPicked, setManualPicked] = useState([]);
@@ -285,15 +288,17 @@ function NewCampaignModal({ onClose, onSent }) {
   }, [lineId]);
 
   useEffect(() => {
-    if (!temperature) { setAudienceCount(null); return; }
+    if (!temperature) { setBaseCount(null); setErpCount(null); return; }
     const byPeriod = audienceMode === 'period';
-    if (byPeriod && !(periodFrom && periodTo)) { setAudienceCount(null); return; }
+    if (byPeriod && !(periodFrom && periodTo)) { setBaseCount(null); setErpCount(null); return; }
     let cancelled = false;
-    searchCampaignAudience(temperature, '', lineId ? Number(lineId) : undefined, byPeriod ? { periodFrom, periodTo, countOnly: true } : {})
-      .then((res) => { if (!cancelled) setAudienceCount(byPeriod ? res.count : res.length); })
-      .catch(() => { if (!cancelled) setAudienceCount(null); });
+    const opts = { countOnly: true, ...(byPeriod ? { periodFrom, periodTo } : {}) };
+    const line = lineId ? Number(lineId) : undefined;
+    searchCampaignAudience(temperature, '', line, opts).then((res) => { if (!cancelled) setBaseCount(res.count); }).catch(() => { if (!cancelled) setBaseCount(null); });
+    searchCampaignAudience(temperature, '', line, { ...opts, erpOnly: true }).then((res) => { if (!cancelled) setErpCount(res.count); }).catch(() => { if (!cancelled) setErpCount(null); });
     return () => { cancelled = true; };
   }, [temperature, lineId, audienceMode, periodFrom, periodTo]);
+  const audienceCount = erpOnly ? erpCount : baseCount;
 
   useEffect(() => {
     if (!manualQuery.trim()) { setManualResults([]); return; }
@@ -459,6 +464,7 @@ function NewCampaignModal({ onClose, onSent }) {
         templateName: template.name,
         templateLanguage: template.language,
         temperature: temperature || undefined,
+        erpBuyersOnly: temperature && erpOnly ? true : undefined,
         count: temperature && audienceMode === 'count' ? count : undefined,
         periodFrom: temperature && audienceMode === 'period' ? periodFrom : undefined,
         periodTo: temperature && audienceMode === 'period' ? periodTo : undefined,
@@ -635,6 +641,17 @@ function NewCampaignModal({ onClose, onSent }) {
                     </button>
                   </div>
                 )}
+                {temperature && (
+                  <label className={`mt-3 flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors ${erpOnly ? 'border-accent bg-accent-soft' : 'border-line hover:border-greige'}`}>
+                    <input type="checkbox" checked={erpOnly} onChange={(e) => setErpOnly(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-line text-accent focus:ring-accent" />
+                    <span className="min-w-0 text-xs">
+                      <span className="block text-sm font-semibold text-ink">Solo clientes que ya compraron (según el ERP)</span>
+                      <span className="block text-greige-ink">
+                        {baseCount == null || erpCount == null ? 'Calculando…' : <><b className="text-ink">{erpCount}</b> de {baseCount} en esta audiencia tienen historial de compras. Los demás no recibirán la difusión.</>}
+                      </span>
+                    </span>
+                  </label>
+                )}
                 {temperature && audienceMode === 'count' && (
                   <div className="mt-2.5 flex items-center gap-2.5">
                     <input
@@ -645,7 +662,7 @@ function NewCampaignModal({ onClose, onSent }) {
                       className="w-24 rounded-lg border border-line bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:bg-paper"
                     />
                     <span className="text-xs text-greige-ink">
-                      de {audienceCount ?? '…'} disponibles con esa temperatura
+                      de {audienceCount ?? '…'} disponibles con esa temperatura{erpOnly ? ' y compras en el ERP' : ''}
                     </span>
                   </div>
                 )}
