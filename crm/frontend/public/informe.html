@@ -558,7 +558,7 @@
 
     <div class="subbar">
       <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('tab-modulos', this)">1. Los 21 Módulos del Sistema (Detalle Completo)</button>
+        <button class="tab-btn active" onclick="switchTab('tab-modulos', this)">1. Los 39 Módulos del Sistema (Detalle Completo)</button>
         <button class="tab-btn" onclick="switchTab('tab-recorrido', this)">2. Guía Didáctica: ¿Cómo Funciona Paso a Paso?</button>
         <button class="tab-btn" onclick="switchTab('tab-actual', this)">3. En Qué Estamos Trabajando Hoy y Próximas Fases</button>
         <button class="tab-btn" onclick="switchTab('tab-matriz', this)">4. Tabla Ejecutiva de Porcentajes</button>
@@ -579,36 +579,36 @@
       <div class="kpi-grid">
         <div class="kpi-box">
           <div class="kpi-label">AVANCE GLOBAL PONDERADO</div>
-          <div class="kpi-val" style="color: var(--ok);">92%</div>
-          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 92%;"></div></div>
-          <div class="kpi-sub">21 módulos desarrollados en 6 áreas de negocio.</div>
+          <div class="kpi-val" style="color: var(--ok);">83%</div>
+          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 83%;"></div></div>
+          <div class="kpi-sub">39 módulos desarrollados en 7 áreas de negocio.</div>
         </div>
 
         <div class="kpi-box">
           <div class="kpi-label">MÓDULOS 100% OPERATIVOS</div>
-          <div class="kpi-val" style="color: var(--primary);">17 de 21</div>
-          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 81%;"></div></div>
-          <div class="kpi-sub">Sedes Studio F, Línea Basshert, Chats, Pipeline, Clientes, Marketing, Auditoría, IA.</div>
+          <div class="kpi-val" style="color: var(--primary);">21 de 39</div>
+          <div class="progress-track"><div class="progress-fill fill-ok" style="width: 54%;"></div></div>
+          <div class="kpi-sub">Incluye el Cotizador, el Lector de Comprobantes (OCR) y las Métricas por Asesora, ya completados.</div>
         </div>
 
         <div class="kpi-box">
-          <div class="kpi-label">EN CIERRE Y CALIBRACIÓN HOY</div>
-          <div class="kpi-val" style="color: var(--warn);">3 Módulos</div>
-          <div class="progress-track"><div class="progress-fill fill-warn" style="width: 87%;"></div></div>
-          <div class="kpi-sub">Precios en Catálogo (95%), Cotizador (95%) y Métricas por Asesora (70%).</div>
+          <div class="kpi-label">EN VALIDACIÓN O PARCIALES</div>
+          <div class="kpi-val" style="color: var(--warn);">14 módulos</div>
+          <div class="progress-track"><div class="progress-fill fill-warn" style="width: 80%;"></div></div>
+          <div class="kpi-sub">Logística construida y probando con el equipo, informe de anuncios, PQRS y recompra.</div>
         </div>
 
         <div class="kpi-box">
-          <div class="kpi-label">PRÓXIMA FASE DEFINIDA</div>
-          <div class="kpi-val" style="color: var(--info);">1 Módulo</div>
-          <div class="progress-track"><div class="progress-fill fill-info" style="width: 15%;"></div></div>
-          <div class="kpi-sub">Módulo de Logística, Alistamiento y Guías de Envío (15% base lista).</div>
+          <div class="kpi-label">POR DESARROLLAR</div>
+          <div class="kpi-val" style="color: var(--info);">4 módulos</div>
+          <div class="progress-track"><div class="progress-fill fill-info" style="width: 3%;"></div></div>
+          <div class="kpi-sub">Post-venta (cambios, devoluciones, seguimiento) y mejoras de logística.</div>
         </div>
       </div>
     </section>
 
     <!-- =================================================================================
-         PESTAÑA 1: LOS 21 MÓDULOS DEL SISTEMA DIVIDIDOS EN 6 ÁREAS
+         PESTAÑA 1: LOS 39 MÓDULOS DEL SISTEMA DIVIDIDOS EN 7 ÁREAS
          ================================================================================= -->
     <div id="tab-modulos" class="view-panel active">
       <div class="split-layout">
@@ -617,27 +617,28 @@
         <aside class="side-index">
           <h3>Índice por Área de Negocio</h3>
           <nav class="side-links">
-            <a href="#area-1">1. Estructura Corporativa (4)</a>
+            <a href="#area-1">1. Estructura Corporativa y Accesos (4)</a>
             <a href="#area-2">2. Atención Omnicanal y Ventas (4)</a>
             <a href="#area-3">3. Catálogo, Cotizador e IA (5)</a>
-            <a href="#area-4">4. Marketing y Estrategia Meta (4)</a>
-            <a href="#area-5">5. Dirección, Métricas y Auditoría (3)</a>
-            <a href="#area-6">6. Post-Venta y Logística (1)</a>
+            <a href="#area-4">4. Marketing y Estrategia Meta (5)</a>
+            <a href="#area-5">5. Dirección, Auditoría y Métricas (4)</a>
+            <a href="#area-6">6. Logística: Pedidos, Pagos y Despacho (12)</a>
+            <a href="#area-7">7. Post-Venta (5)</a>
           </nav>
 
           <div class="side-filter-box">
             <h3>Filtrar por Estado</h3>
             <button class="filter-pill active" onclick="filterCards('all', this)">
-              <span>Todos los módulos</span> <strong>21</strong>
+              <span>Todos los módulos</span> <strong>39</strong>
             </button>
             <button class="filter-pill" onclick="filterCards('done', this)">
-              <span>✅ 100% Terminados</span> <strong>17</strong>
+              <span>✅ 100% Terminados</span> <strong>21</strong>
             </button>
             <button class="filter-pill" onclick="filterCards('active', this)">
-              <span>🔄 Trabajando Ahorita</span> <strong>3</strong>
+              <span>🔄 En validación / parciales</span> <strong>14</strong>
             </button>
             <button class="filter-pill" onclick="filterCards('pending', this)">
-              <span>📋 Pendiente Desarrollo</span> <strong>1</strong>
+              <span>📋 Por desarrollar</span> <strong>4</strong>
             </button>
           </div>
         </aside>
@@ -650,11 +651,11 @@
             <div class="area-header">
               <div class="area-tag">ÁREA 1 • ESTRUCTURA CORPORATIVA Y ADMINISTRACIÓN (4 MÓDULOS AL 100%)</div>
               <h2>Sedes de Studio F, Línea Basshert, Líneas de WhatsApp y Usuarios</h2>
-              <p>Es la base organizacional del sistema: permite que el CRM opere de forma ordenada para las sedes de Studio F y la línea Basshert, administrando sus líneas de WhatsApp y los permisos de cada asesora.</p>
+              <p>Es la base organizacional del sistema: permite que el CRM opere de forma ordenada para las sedes de Studio F y la línea Basshert, administrando sus líneas de WhatsApp y los permisos de cada persona.</p>
             </div>
 
             <div class="modules-grid">
-              <!-- MÓDULO 1 -->
+              <!-- MÓDULO 01 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
@@ -671,34 +672,34 @@
                   <ul class="mod-list">
                     <li>Permite crear, editar, activar o desactivar el registro empresarial en cualquier momento.</li>
                     <li>Vincula de forma ordenada la operación de Studio F y la línea Basshert.</li>
-                    <li>Mantiene separada y organizada la configuración de cada operación dentro del mismo CRM.</li>
+                    <li>Mantiene separada la configuración de cada operación dentro del mismo CRM.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 2 -->
+              <!-- MÓDULO 02 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
                       <div class="mod-num" style="color: var(--ok);">MÓDULO 02 • TERMINADO</div>
-                      <h3 class="mod-title">Gestión de Sedes de Studio F y Línea Basshert</h3>
+                      <h3 class="mod-title">Gestión de Sedes Studio F y Línea Basshert</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Permite registrar y administrar las <strong>sedes físicas de Studio F</strong> así como la operación de la línea <strong>Basshert</strong>.
+                    <strong>¿Qué es en sencillo?</strong> Permite registrar y administrar las sedes físicas de Studio F así como la operación de la línea <strong>Basshert</strong>.
                   </div>
                   <ul class="mod-list">
-                    <li>Organiza cada una de las sedes de Studio F y la línea Basshert dentro del sistema.</li>
-                    <li>Permite que cada línea de WhatsApp quede identificada con su sede de Studio F correspondiente o con Basshert.</li>
-                    <li>Ayuda a que la asesora y el Cotizador identifiquen siempre desde qué sede o línea están atendiendo al cliente.</li>
+                    <li>Organiza cada sede dentro del sistema.</li>
+                    <li>Cada línea de WhatsApp queda identificada con su sede o con Basshert.</li>
+                    <li>La asesora y el Cotizador siempre saben desde qué sede o línea atienden al cliente.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 3 -->
+              <!-- MÓDULO 03 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
@@ -710,33 +711,35 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Es el panel donde se conectan las líneas telefónicas de WhatsApp Business de <strong>Studio F</strong> y de <strong>Basshert</strong> para que funcionen simultáneamente dentro del CRM.
+                    <strong>¿Qué es en sencillo?</strong> Es el panel donde se conectan las líneas de WhatsApp Business de Studio F y de Basshert para que funcionen a la vez dentro del CRM.
                   </div>
                   <ul class="mod-list">
-                    <li>Conecta las líneas telefónicas asignadas a las sedes de Studio F y a la línea Basshert.</li>
-                    <li>Incluye un <strong>botón de prueba en vivo</strong> que verifica al instante si la conexión con Meta (WhatsApp) está sana.</li>
-                    <li>Aísla las conversaciones por línea: si un mismo cliente escribe a Studio F y también a la línea Basshert, cada línea mantiene su hilo separado y ordenado.</li>
+                    <li>Incluye un botón de prueba en vivo que verifica si la conexión con Meta está sana.</li>
+                    <li>Aísla las conversaciones por línea: cada línea mantiene su hilo separado.</li>
+                    <li>Cada línea tiene su propio cooldown y sus plantillas.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 4 -->
+              <!-- MÓDULO 04 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
                       <div class="mod-num" style="color: var(--ok);">MÓDULO 04 • TERMINADO</div>
-                      <h3 class="mod-title">Usuarios, Roles y Permisos por Línea</h3>
+                      <h3 class="mod-title">Usuarios, Roles, Accesos y Nuevo Inicio de Sesión</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Administra las cuentas de acceso de todo el personal con tres niveles de autoridad: <strong>Administrador, Supervisor y Asesora</strong>.
+                    <strong>¿Qué es en sencillo?</strong> Administra las cuentas de todo el personal con tres niveles de autoridad (Administrador, Supervisor y Asesora) y, ahora, los <strong>roles de logística</strong> de cada persona.
                   </div>
                   <ul class="mod-list">
-                    <li>Permite elegir exactamente <strong>qué líneas de WhatsApp puede ver y atender cada asesora</strong>.</li>
-                    <li>Protege los módulos sensibles (Auditoría, Marketing Masivo, Empresas, Configuración) para que solo entren Administradores o Supervisores.</li>
+                    <li>Elige qué líneas de WhatsApp puede ver y atender cada asesora.</li>
+                    <li>Protege los módulos sensibles para que solo entren Administradores o Supervisores.</li>
+                    <li>Los roles de logística (auditor de ingresos, verificador, facturador, empacador…) se asignan desde la misma pantalla de usuarios.</li>
+                    <li>Nueva pantalla de ingreso: claro/oscuro, ver contraseña, errores claros y vista en celular.</li>
                   </ul>
                 </div>
               </article>
@@ -752,29 +755,30 @@
             </div>
 
             <div class="modules-grid">
-              <!-- MÓDULO 5 -->
+              <!-- MÓDULO 05 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
                       <div class="mod-num" style="color: var(--ok);">MÓDULO 05 • TERMINADO</div>
-                      <h3 class="mod-title">Bandeja Omnicanal (WhatsApp, Instagram y Facebook)</h3>
+                      <h3 class="mod-title">Bandeja Omnicanal (WhatsApp, Instagram y Messenger)</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Una bandeja única donde entran todos los mensajes de WhatsApp (de todas las líneas), Instagram Direct y Facebook Messenger en tiempo real.
+                    <strong>¿Qué es en sencillo?</strong> Una bandeja única donde entran los mensajes de WhatsApp (todas las líneas), Instagram Direct y Facebook Messenger en tiempo real.
                   </div>
                   <ul class="mod-list">
-                    <li>Muestra en vivo <strong>qué asesora está viendo cada chat</strong> para no pisarse entre compañeras.</li>
-                    <li>Permite enviar textos, fotografías, notas de voz, documentos y responder mensajes específicos.</li>
-                    <li>Incluye <strong>Ventana de Chat Emergente</strong>: permite abrir cualquier conversación desde el Pipeline o Auditoría sin perder de vista la pantalla en la que se está trabajando.</li>
+                    <li>Muestra en vivo qué asesora está viendo cada chat para no pisarse.</li>
+                    <li>Permite enviar textos, fotos, notas de voz y documentos, y responder mensajes específicos.</li>
+                    <li>Filtro por canal y separadores de fecha también en Instagram y Messenger.</li>
+                    <li>Ventana de chat emergente: abre cualquier conversación desde el Pipeline o la Auditoría sin perder la pantalla actual.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 6 -->
+              <!-- MÓDULO 06 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
@@ -786,39 +790,41 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Un tablero de columnas donde cada cliente se ubica según su etapa de compra: <em>Frío → Tibio → Caliente → Pagado → Por Despacho → PQRS</em>.
+                    <strong>¿Qué es en sencillo?</strong> Un tablero de columnas donde cada cliente se ubica según su etapa de compra: Frío → Tibio → Caliente → Pagado → Por Despacho → PQRS.
                   </div>
                   <ul class="mod-list">
-                    <li>Mueve al cliente automáticamente cuando pregunta precios (Tibio), pide cuentas de pago (Caliente) o envía su boleta de pago (Por Despacho).</li>
-                    <li><strong>100% libre de duplicados:</strong> cada cliente tiene una única tarjeta consolidada por línea.</li>
-                    <li>Filtros por fecha, sede de Studio F, línea Basshert, línea de WhatsApp y canal de origen.</li>
+                    <li>Mueve al cliente automáticamente cuando pregunta precios, pide cuentas de pago o envía su comprobante.</li>
+                    <li>Cada cliente tiene una única tarjeta por línea (sin duplicados).</li>
+                    <li>Lista de <strong>pendientes de pago</strong> con ventana de 72 horas para no perder ventas por días.</li>
+                    <li>Filtros por fecha, sede, línea y canal de origen.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 7 -->
+              <!-- MÓDULO 07 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
                       <div class="mod-num" style="color: var(--ok);">MÓDULO 07 • TERMINADO</div>
-                      <h3 class="mod-title">Directorio Clientes 360° + Historial de Tiendas (ERP)</h3>
+                      <h3 class="mod-title">Clientes 360° + Historial de Tiendas (ERP)</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Conecta automáticamente el número de celular del cliente que escribe por WhatsApp con el historial de los <strong>+18,000 clientes de tiendas físicas</strong>.
+                    <strong>¿Qué es en sencillo?</strong> Conecta el número de celular del cliente con el historial de los +18,000 clientes de tiendas físicas.
                   </div>
                   <ul class="mod-list">
-                    <li>La asesora ve al instante: nombre completo, NIT/DPI, <strong>monto total gastado en tiendas</strong> y número de facturas.</li>
-                    <li>Muestra qué tipo de prendas compra más (blusas, jeans, vestidos, pantalones) y <strong>qué tallas usa</strong>.</li>
-                    <li>Indica cuál es su tienda favorita y cuántos días lleva sin comprar.</li>
+                    <li>La asesora ve nombre completo, monto gastado, facturas y última compra.</li>
+                    <li>Muestra qué prendas compra más y qué tallas usa.</li>
+                    <li>Indica su tienda favorita y cuántos días lleva sin comprar.</li>
+                    <li>Es la base del nuevo filtro de difusiones solo a quienes ya compraron.</li>
                   </ul>
                 </div>
               </article>
 
-              <!-- MÓDULO 8 -->
+              <!-- MÓDULO 08 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
@@ -830,10 +836,10 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Un catálogo de mensajes pre-redactados y autorizados por la empresa para que las asesoras contesten en un segundo escribiendo el símbolo <code>/</code>.
+                    <strong>¿Qué es en sencillo?</strong> Mensajes pre-redactados y autorizados para contestar en un segundo escribiendo el símbolo <strong>/</strong>.
                   </div>
                   <ul class="mod-list">
-                    <li>Ideal para enviar números de cuentas bancarias, requisitos de envío, saludos institucionales y políticas de garantía sin errores de digitación.</li>
+                    <li>Ideal para cuentas bancarias, requisitos de envío, saludos y políticas de garantía sin errores de digitación.</li>
                   </ul>
                 </div>
               </article>
@@ -843,33 +849,30 @@
           <!-- ÁREA 3 -->
           <section id="area-3" class="area-block">
             <div class="area-header">
-              <div class="area-tag">ÁREA 3 • CATÁLOGO DIGITAL, COTIZADOR VISUAL E INTELIGENCIA ARTIFICIAL (5 MÓDULOS)</div>
+              <div class="area-tag">ÁREA 3 • CATÁLOGO DIGITAL, COTIZADOR VISUAL E INTELIGENCIA ARTIFICIAL (5 MÓDULOS AL 100%)</div>
               <h2>Existencias en Vivo, Precios Oficiales, Fotos SFTP, Calculadora PNG y Bot IA</h2>
               <p>Conecta el inventario físico y las listas de precios del sistema central (ERP) directamente con el chat para que tanto el Agente de IA como las asesoras ofrezcan solo prendas disponibles y coticen al instante.</p>
             </div>
 
             <div class="modules-grid">
-              <!-- MÓDULO 9 -->
-              <article class="module-card status-active" data-status="active">
+              <!-- MÓDULO 09 -->
+              <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
-                      <div class="mod-num" style="color: var(--warn);">MÓDULO 09 • EN CIERRE FINAL HOY</div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 09 • TERMINADO</div>
                       <h3 class="mod-title">Catálogo Digital de Prendas, Existencias y Precios</h3>
                     </div>
-                    <span class="pct-badge badge-warn">95%</span>
+                    <span class="pct-badge badge-ok">100%</span>
                   </div>
-                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 95%;"></div></div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Buscador en vivo de todas las prendas por código de referencia (ej. <code>S219701</code>), código de barras, categoría o color, mostrando cuántas unidades reales hay para la venta.
+                    <strong>¿Qué es en sencillo?</strong> Buscador en vivo de todas las prendas por referencia, código de barras, categoría o color, mostrando cuántas unidades reales hay para la venta.
                   </div>
                   <ul class="mod-list">
-                    <li>Descarta automáticamente la bodega de imperfectos para nunca ofrecer prendas dañadas.</li>
-                    <li>Incluye botón directo <strong>"Sincronizar Precios ERP"</strong> para actualizar valores al instante.</li>
+                    <li>Descarta automáticamente la bodega de imperfectos.</li>
+                    <li>Precios oficiales del ERP (8,022 referencias) con botón de sincronización inmediata.</li>
                   </ul>
-                  <div class="work-box work-warn">
-                    <strong>🔄 En qué estamos hoy (5% restante):</strong> Ya subimos a producción la sincronización con el nuevo acceso oficial de precios (8,022 referencias) para que todas las prendas muestren su precio en Quetzales automáticamente.
-                  </div>
                 </div>
               </article>
 
@@ -885,36 +888,35 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Un sistema automático que revisa las más de <strong>4,760 fotografías oficiales</strong> subidas por el equipo de catálogo y las enlaza con su prenda correspondiente.
+                    <strong>¿Qué es en sencillo?</strong> Revisa las más de 4,760 fotografías oficiales subidas por el equipo de catálogo y las enlaza con su prenda.
                   </div>
                   <ul class="mod-list">
-                    <li>Reconoce la referencia aunque varíe la letra final o el formato del nombre del archivo.</li>
-                    <li>Permite ampliar la foto en pantalla completa o incluirla automáticamente en la tarjeta de cotización.</li>
+                    <li>Reconoce la referencia aunque varíe la letra final o el formato del archivo.</li>
+                    <li>La foto se amplía en pantalla completa o va automática en la tarjeta de cotización.</li>
                   </ul>
                 </div>
               </article>
 
               <!-- MÓDULO 11 -->
-              <article class="module-card status-active" data-status="active">
+              <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
-                      <div class="mod-num" style="color: var(--warn);">MÓDULO 11 • EN CIERRE FINAL HOY</div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 11 • TERMINADO</div>
                       <h3 class="mod-title">Cotizador / Calculadora Visual de Prendas</h3>
                     </div>
-                    <span class="pct-badge badge-warn">95%</span>
+                    <span class="pct-badge badge-ok">100%</span>
                   </div>
-                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 95%;"></div></div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Una calculadora comercial disponible tanto dentro de cada chat como en la pantalla de Catálogo. Permite armar una cotización formal en segundos.
+                    <strong>¿Qué es en sencillo?</strong> Calculadora comercial disponible dentro de cada chat y en el Catálogo. Arma una cotización formal en segundos.
                   </div>
                   <ul class="mod-list">
-                    <li>Busca la prenda por referencia, aplica descuentos por porcentaje (ej. 20%, 40%) o por monto final y calcula cuánto dinero ahorra el cliente.</li>
-                    <li>Genera automáticamente una <strong>imagen PNG de alta presentación</strong> con foto de la prenda, precios, ahorro y número de folio (<code>COT-2026-XXXX</code>), lista para enviar por WhatsApp o descargar.</li>
+                    <li>Busca la prenda por referencia y carga su precio oficial del ERP automáticamente.</li>
+                    <li>Aplica descuentos por porcentaje o por monto final y calcula el ahorro del cliente.</li>
+                    <li>Genera una imagen PNG con foto, precios, ahorro y folio (COT-2026-XXXX) lista para WhatsApp.</li>
+                    <li>La cotización alimenta la ficha de pedido de logística (las prendas se copian).</li>
                   </ul>
-                  <div class="work-box work-warn">
-                    <strong>🔄 En qué estamos hoy (5% restante):</strong> Con la actualización recién desplegada, al buscar una referencia en la calculadora cargará automáticamente su precio oficial del ERP.
-                  </div>
                 </div>
               </article>
 
@@ -930,32 +932,32 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Un panel técnico-ejecutivo para supervisar en vivo la comunicación con el servidor del ERP de la empresa.
+                    <strong>¿Qué es en sencillo?</strong> Panel técnico-ejecutivo para supervisar la comunicación con el ERP de la empresa.
                   </div>
                   <ul class="mod-list">
-                    <li>Permite probar qué accesos o tablas tiene habilitados el ERP (Existencias, Clientes, Precios por Referencia).</li>
-                    <li>Permite buscar una referencia puntual directamente en el ERP y disparar sincronizaciones manuales.</li>
+                    <li>Prueba qué accesos tiene habilitados el ERP (existencias, clientes, precios por referencia).</li>
+                    <li>Busca una referencia puntual y dispara sincronizaciones manuales.</li>
                   </ul>
                 </div>
               </article>
 
               <!-- MÓDULO 13 -->
-              <article class="module-card full-width" data-status="done">
+              <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
-                      <div class="mod-num" style="color: var(--ok);">MÓDULO 13 • TERMINADO Y OPERATIVO</div>
-                      <h3 class="mod-title">Agente de Inteligencia Artificial (Mar-IA 24/7) + Simulador Interno de Pruebas</h3>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 13 • TERMINADO</div>
+                      <h3 class="mod-title">Agente de IA 24/7 + Simulador de Pruebas</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Es el asistente virtual inteligente que recibe a los clientes las 24 horas, entiende qué prenda o talla buscan consultando el catálogo real del CRM y transfiere la conversación a una asesora humana cuando el cliente está listo para comprar o requiere ayuda especial.
+                    <strong>¿Qué es en sencillo?</strong> Asistente virtual que recibe a los clientes las 24 horas, consulta el catálogo real y transfiere a una asesora cuando el cliente está listo para comprar.
                   </div>
                   <ul class="mod-list">
-                    <li>Conectado en tiempo real a las existencias, referencias, precios e historial del cliente.</li>
-                    <li>Incluye un <strong>Módulo de Pruebas (/pruebas)</strong> dentro del CRM para que los supervisores puedan conversar con el bot y probar sus respuestas sin necesidad de usar un teléfono externo.</li>
+                    <li>Conectado a existencias, referencias, precios e historial del cliente.</li>
+                    <li>Módulo de Pruebas dentro del CRM para conversar con el bot sin un teléfono externo.</li>
                   </ul>
                 </div>
               </article>
@@ -965,9 +967,9 @@
           <!-- ÁREA 4 -->
           <section id="area-4" class="area-block">
             <div class="area-header">
-              <div class="area-tag">ÁREA 4 • MARKETING, DIFUSIONES MASIVAS Y ESTRATEGIA META (4 MÓDULOS AL 100%)</div>
-              <h2>Campañas Masivas, Plantillas Oficiales, Remarketing y Simulador Financiero Meta</h2>
-              <p>Permite ejecutar campañas promocionales por WhatsApp a miles de clientes cuidando la salud de las líneas telefónicas y controlando el retorno de inversión.</p>
+              <div class="area-tag">ÁREA 4 • MARKETING, DIFUSIONES MASIVAS Y ESTRATEGIA META (5 MÓDULOS • 4 AL 100%)</div>
+              <h2>Campañas Masivas, Plantillas Oficiales, Remarketing, Simulador y Informe de Anuncios</h2>
+              <p>Permite ejecutar campañas por WhatsApp cuidando la salud de las líneas, dirigirlas a quien más probabilidad de compra tiene y medir lo que rinde la inversión en anuncios.</p>
             </div>
 
             <div class="modules-grid">
@@ -983,11 +985,13 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Herramienta para enviar promociones masivas a grupos de clientes (por temperatura o selección manual) desde cualquiera de las líneas de WhatsApp.
+                    <strong>¿Qué es en sencillo?</strong> Envía promociones a grupos de clientes (por temperatura, por período o selección manual) desde cualquier línea.
                   </div>
                   <ul class="mod-list">
-                    <li>Muestra en tiempo real a cuántos clientes les llegó el mensaje, cuántos lo leyeron y si alguno falló (con botón para reintentar fallidos).</li>
-                    <li><strong>Candado anti-duplicados:</strong> garantiza que un mismo número nunca reciba el mismo mensaje masivo dos veces.</li>
+                    <li>Métricas en vivo: entregados, leídos y fallidos, con botón para reintentar.</li>
+                    <li>Candado anti-duplicados y pausa de 42 horas por número.</li>
+                    <li><strong>Nuevo:</strong> casilla "Solo clientes que ya compraron (según el ERP)" que muestra cuántos de cuántos quedan antes de enviar.</li>
+                    <li>Conteo real de la audiencia (ya no se topa en 200).</li>
                   </ul>
                 </div>
               </article>
@@ -1004,10 +1008,10 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Permite crear, subir imágenes de cabecera y enviar a aprobación ante Meta las plantillas necesarias para campañas masivas sin salir del CRM.
+                    <strong>¿Qué es en sencillo?</strong> Crea, sube imagen de cabecera y envía a aprobación de Meta las plantillas de campañas sin salir del CRM.
                   </div>
                   <ul class="mod-list">
-                    <li>Muestra el estado de aprobación en Meta (Aprobada, En revisión, Rechazada) por cada línea.</li>
+                    <li>Muestra el estado en Meta (Aprobada, En revisión, Rechazada) por línea.</li>
                   </ul>
                 </div>
               </article>
@@ -1024,8 +1028,12 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Un tablero especializado dentro de Marketing que agrupa a los clientes que se quedaron a mitad de camino (pidieron cotización o datos de pago pero aún no han comprado) para reactivarlos.
+                    <strong>¿Qué es en sencillo?</strong> Tablero que agrupa a los clientes que se quedaron a mitad de camino para reactivarlos.
                   </div>
+                  <ul class="mod-list">
+                    <li>Clientes con cotización abierta o datos de pago sin completar.</li>
+                    <li>Listos para difusión desde la misma pantalla.</li>
+                  </ul>
                 </div>
               </article>
 
@@ -1041,12 +1049,39 @@
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Una calculadora estratégica que protege los números de WhatsApp contra bloqueos y calcula cuánto costará una campaña antes de enviarla.
+                    <strong>¿Qué es en sencillo?</strong> Calculadora estratégica que protege los números contra bloqueos y estima lo que costará una campaña antes de enviarla.
                   </div>
                   <ul class="mod-list">
-                    <li>Recomienda automáticamente qué proporción enviar a clientes calientes, tibios y fríos.</li>
-                    <li>Calcula el presupuesto estimado de tarifas de Meta según el volumen de mensajes a enviar.</li>
+                    <li>Recomienda la proporción de clientes calientes, tibios y fríos.</li>
+                    <li>Calcula el presupuesto estimado de tarifas de Meta según el volumen.</li>
                   </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 18 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 18 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Informe de Anuncios de Meta (Admin y Supervisión)</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">90%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 90%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Trae desde Meta la inversión y el rendimiento por campaña, conjunto de anuncios y anuncio, con comparativo contra el período anterior.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Costo por conversación, clics, CPC, CTR, alcance real y frecuencia.</li>
+                    <li>Gráficas de inversión diaria y costo por conversación, con colores por rendimiento.</li>
+                    <li>Texto del reporte diario para copiar y exportación a Excel.</li>
+                    <li>Visible para administradores y supervisoras.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (10%)</strong><br/>
+                    Validar las cifras contra la cuenta real de anuncios durante unos días y, después, cruzar la inversión con las ventas del CRM.
+                  </div>
                 </div>
               </article>
             </div>
@@ -1055,75 +1090,97 @@
           <!-- ÁREA 5 -->
           <section id="area-5" class="area-block">
             <div class="area-header">
-              <div class="area-tag">ÁREA 5 • DIRECCIÓN, ANALÍTICA, AUDITORÍA Y CONFIGURACIÓN (3 MÓDULOS + SUBMÓDULOS)</div>
-              <h2>Dashboard Directivo, Configuración en Vivo, Auditoría Total y Métricas por Asesora</h2>
-              <p>Brinda a la gerencia y supervisión visibilidad completa sobre tiempos de respuesta, bitácora de seguridad, lectura de boletas bancarias y ventas logradas por cada asesora.</p>
+              <div class="area-tag">ÁREA 5 • DIRECCIÓN, ANALÍTICA, AUDITORÍA Y CONFIGURACIÓN (4 MÓDULOS AL 100%)</div>
+              <h2>Dashboard, Auditoría, Lector de Comprobantes y Ventas por Asesora</h2>
+              <p>Brinda a la gerencia y supervisión visibilidad sobre tiempos de respuesta, bitácora de seguridad, lectura automática de comprobantes y ventas logradas por cada asesora.</p>
             </div>
 
             <div class="modules-grid">
-              <!-- MÓDULO 18 -->
-              <article class="module-card" data-status="done">
-                <div>
-                  <div class="mod-top">
-                    <div>
-                      <div class="mod-num" style="color: var(--ok);">MÓDULO 18 • TERMINADO</div>
-                      <h3 class="mod-title">Dashboard General y Centro de Configuración (5 Pestañas)</h3>
-                    </div>
-                    <span class="pct-badge badge-ok">100%</span>
-                  </div>
-                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
-                  <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Combina el tablero de gráficas generales del negocio con el panel donde el Administrador ajusta las reglas del CRM sin depender de soporte técnico.
-                  </div>
-                  <ul class="mod-list">
-                    <li><strong>5 Pestañas de Configuración:</strong> (1) Personalización de columnas y colores del Pipeline, (2) Palabras clave de detección y OCR, (3) Conexión Meta Ads, (4) Conexión de Instagram/Facebook, y (5) Tiempos límite de respuesta (SLA).</li>
-                  </ul>
-                </div>
-              </article>
-
               <!-- MÓDULO 19 -->
               <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
                       <div class="mod-num" style="color: var(--ok);">MÓDULO 19 • TERMINADO</div>
-                      <h3 class="mod-title">Módulo de Auditoría, Alertas SLA y Bitácora Excel</h3>
+                      <h3 class="mod-title">Dashboard General y Centro de Configuración</h3>
                     </div>
                     <span class="pct-badge badge-ok">100%</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Es el centro de vigilancia y calidad de atención para supervisores y gerencia, dividido en 3 vistas:
+                    <strong>¿Qué es en sencillo?</strong> Tablero de gráficas del negocio y panel donde el Administrador ajusta las reglas del CRM sin depender de soporte técnico.
                   </div>
                   <ul class="mod-list">
-                    <li><strong>1. Chats sin responder:</strong> Muestra qué clientes llevan más tiempo esperando respuesta y calcula el porcentaje de descuento <em>Fashion Time</em> según la hora en que escribieron.</li>
-                    <li><strong>2. Decisiones del Bot IA:</strong> Explica por qué el asistente virtual tomó cada decisión.</li>
-                    <li><strong>3. Registro de Accesos y Cambios:</strong> Bitácora de seguridad que guarda quién inició sesión, quién vio un chat, quién movió un cliente o quién marcó un pago, con <strong>descarga directa a Excel (.xlsx)</strong>.</li>
+                    <li>Configuración de columnas y colores del Pipeline, palabras clave y OCR, conexión de Meta Ads, Instagram/Facebook y tiempos de respuesta (SLA).</li>
                   </ul>
                 </div>
               </article>
 
               <!-- MÓDULO 20 -->
-              <article class="module-card full-width status-active" data-status="active">
+              <article class="module-card" data-status="done">
                 <div>
                   <div class="mod-top">
                     <div>
-                      <div class="mod-num" style="color: var(--warn);">MÓDULO 20 • EN CALIBRACIÓN ACTIVA (PRIORIDAD ACTUAL)</div>
-                      <h3 class="mod-title">Motor Lector de Boletas (OCR) y Reporte de Métricas de Ventas por Asesora</h3>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 20 • TERMINADO</div>
+                      <h3 class="mod-title">Auditoría, Alertas SLA (Fashion Time) y Bitácora Excel</h3>
                     </div>
-                    <span class="pct-badge badge-warn">70%</span>
+                    <span class="pct-badge badge-ok">100%</span>
                   </div>
-                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 70%;"></div></div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Es el módulo que detecta cuando un cliente envía la foto de su comprobante de pago (transferencia, depósito bancario o voucher de tarjeta), extrae el monto en Quetzales y le suma la venta a la asesora que atendió al cliente.
+                    <strong>¿Qué es en sencillo?</strong> Centro de vigilancia y calidad de atención para supervisión y gerencia.
                   </div>
                   <ul class="mod-list">
-                    <li><strong>Lo que ya está funcionando (70%):</strong> Lectura de boletas bancarias de los principales bancos de Guatemala, tabla comparativa de asesoras, filtro por día/rango de fechas, botón para copiar resumen de cierre a WhatsApp y auditoría detallada de chats.</li>
+                    <li>Chats sin responder con el porcentaje de descuento Fashion Time según la hora.</li>
+                    <li>Decisiones del Bot IA explicadas.</li>
+                    <li>Registro de accesos y cambios con descarga a Excel.</li>
                   </ul>
-                  <div class="work-box work-warn">
-                    <strong>🛠️ ¿Por qué está en 70% y qué estamos trabajando ahorita (30% restante)?</strong><br/>
-                    En la operación real ocurren dos situaciones especiales: (1) un mismo cliente es atendido por una asesora en la mañana y envía el comprobante en la tarde cuando otra asesora abre el chat; y (2) en el chat se envían imágenes de catálogo o promociones con números que no son boletas bancarias. Estamos perfeccionando el motor de atribución para que asigne cada venta con <strong>100% de exactitud a la asesora correcta sin ajustes manuales</strong>.
+                </div>
+              </article>
+
+              <!-- MÓDULO 21 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 21 • TERMINADO</div>
+                      <h3 class="mod-title">Motor Lector de Comprobantes (OCR)</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
                   </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Detecta cuando el cliente envía la foto de su comprobante (transferencia, depósito o voucher), lee el monto en Quetzales y lo guarda para la venta.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Lectura de comprobantes de los principales bancos de Guatemala, con caché para no leer dos veces.</li>
+                    <li>Descarta pantallas de rechazo, códigos de verificación e imágenes de catálogo que no son pago.</li>
+                    <li>Reglas de ventana de 24 horas entre la información de pago y el comprobante.</li>
+                    <li>Sirve también de apoyo al cargar pagos en la ficha de logística (monto leído de referencia).</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 22 -->
+              <article class="module-card" data-status="done">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--ok);">MÓDULO 22 • TERMINADO</div>
+                      <h3 class="mod-title">Ventas y Métricas por Asesora</h3>
+                    </div>
+                    <span class="pct-badge badge-ok">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-ok" style="width: 100%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Reporte de ventas por asesora con atribución automática a quien dio la información de pago, salvo que otra asesora haya llevado la conversación.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Tabla comparativa de asesoras por día o rango, con totales y venta por forma de pago.</li>
+                    <li>Cierre de ventas del día con resumen para copiar a WhatsApp y corte automático nocturno.</li>
+                    <li>Reconstrucción histórica día por día con pantalla de revisión (confirmar, reasignar, descartar) y explicación de cada decisión.</li>
+                    <li>Pendientes de pago visibles hasta 72 horas; la regla de 24 horas se mantiene para atribución y cierres.</li>
+                  </ul>
                 </div>
               </article>
             </div>
@@ -1131,33 +1188,468 @@
 
           <!-- ÁREA 6 -->
           <section id="area-6" class="area-block">
-            <div class="area-header" style="border-left-color: var(--info);">
-              <div class="area-tag" style="color: var(--info);">ÁREA 6 • POST-VENTA Y LOGÍSTICA (DEFINIDO / PENDIENTE DE DESARROLLO)</div>
-              <h2>Módulo de Logística, Alistamiento de Pedidos y Guías de Despacho</h2>
-              <p>Es el módulo que cerrará el ciclo operativo una vez que la venta ha sido pagada y verificada en el chat.</p>
+            <div class="area-header" style="border-left-color: var(--warn);">
+              <div class="area-tag" style="color: var(--warn);">ÁREA 6 • LOGÍSTICA — DE LA FICHA DE PEDIDO A LA ENTREGA (12 MÓDULOS • 0 AL 100%)</div>
+              <h2>Ficha de Pedido, Auditoría de Pagos, Traslados, Empaque, Despacho y Seguimiento</h2>
+              <p>Cierra el ciclo operativo cuando el cliente paga: la ficha de papel pasa al sistema, cada pago se audita, cada paso lo hace la persona con el rol correspondiente y deja evidencia sellada. Ya está construido y en validación con el equipo antes de ponerlo en uso diario.</p>
             </div>
 
             <div class="modules-grid">
-              <!-- MÓDULO 21 -->
-              <article class="module-card full-width status-pending" data-status="pending">
+              <!-- MÓDULO 23 -->
+              <article class="module-card status-active" data-status="active">
                 <div>
                   <div class="mod-top">
                     <div>
-                      <div class="mod-num" style="color: var(--info);">MÓDULO 21 • DEFINIDO / PRÓXIMA FASE DE DESARROLLO</div>
-                      <h3 class="mod-title">Panel Operativo de Logística, Empaque y Seguimiento de Envíos</h3>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 23 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Ficha de Pedido Digital (Asistente Paso a Paso)</h3>
                     </div>
-                    <span class="pct-badge badge-info">15%</span>
+                    <span class="pct-badge badge-warn">90%</span>
                   </div>
-                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 15%;"></div></div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 90%;"></div></div>
                   <div class="mod-explain">
-                    <strong>¿Qué es en sencillo?</strong> Una pantalla pensada exclusivamente para el personal de despacho/bodega, donde recibirán todos los pedidos pagados para prepararlos, empacarlos, asignarles número de guía de mensajería y confirmar su entrega.
+                    <strong>¿Qué es en sencillo?</strong> La asesora crea la ficha cuando el cliente paga, siguiendo el mismo orden de la ficha de papel, con un asistente de 5 pasos que se guarda como borrador.
                   </div>
                   <ul class="mod-list">
-                    <li><strong>✅ Lo que ya existe hoy (15%):</strong> La columna <em>"Por Despacho"</em> en el Pipeline ya agrupa automáticamente a todos los clientes con pago confirmado, y las asesoras ya solicitan en el chat la plantilla completa de datos de envío (Nombre, Dirección, Ciudad, Zona, Departamento, Celular de quien recibe, NIT/DPI y Correo).</li>
+                    <li>Parte de una cotización o se arma buscando en el catálogo, con la tienda de origen de cada prenda.</li>
+                    <li>Campos de la ficha de papel: datos del cliente, entrega a domicilio, en agencia o recoge en tienda, flete aparte, observaciones, código de vendedora.</li>
+                    <li>No deja enviar una ficha incompleta: la revisión dice exactamente qué falta.</li>
+                    <li>Numeración configurable para continuar la del talonario.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (10%)</strong><br/>
+                    Validarla con las asesoras en operación real y ajustar campos obligatorios según lo que se vea en el uso diario.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 24 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 24 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Auditoría de Pagos y Comprobantes</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">90%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 90%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una persona distinta a la que cargó el pago verifica que sea real contra el banco antes de que el pedido pase a logística.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Varios pagos por ficha que se suman al total, cada uno con su comprobante y referencia.</li>
+                    <li>Una misma referencia no puede respaldar dos pagos (control contra comprobantes repetidos).</li>
+                    <li>Pagos con Link: la asesora los verifica en la plataforma y la auditora los confirma en el banco.</li>
+                    <li>Aprobar, observar o rechazar con motivo; las observaciones regresan la ficha a la asesora.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (10%)</strong><br/>
+                    Probar el flujo con la auditora real y afinar la tolerancia de diferencia de montos.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 25 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 25 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Tablero de Logística y Cola de Trabajo</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">90%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 90%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Pantalla principal de logística: ve de un vistazo cuántos pedidos hay, cuáles vencen y qué le toca hacer a cada persona.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Indicadores: pedidos en proceso, los que te tocan, plazo vencido, vencen en 24 horas, entregados y ciclo promedio.</li>
+                    <li>Tablero por etapas con tarjetas (cliente, prendas, pago, plazo, observaciones).</li>
+                    <li>Filtros: lo que me toca, vencidas, contado o contraentrega.</li>
+                    <li>Se actualiza solo cada 30 segundos.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (10%)</strong><br/>
+                    Ajustar el orden de prioridades con el uso real.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 26 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 26 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Verificación de Pedidos y Existencias</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">85%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 85%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> La persona verificadora toma el pedido, confirma que la ficha esté completa y que las existencias cubran las prendas; si algo falla, lo devuelve con observación.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Evidencia obligatoria: captura de la disponibilidad en el ERP.</li>
+                    <li>Devolver a la asesora con la corrección exacta que debe hacer.</li>
+                    <li>No puede verificar quien auditó el pago de esa misma ficha.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (15%)</strong><br/>
+                    Consulta automática del stock en el ERP desde la ficha (hoy se confirma y se adjunta la captura).
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 27 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 27 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Traslados entre Tiendas y Bodega</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">85%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 85%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Cuando las prendas están en distintas tiendas, se piden los traslados (TR) necesarios, se autorizan, se reciben con video y se consolida el paquete completo.
+                  </div>
+                  <ul class="mod-list">
+                    <li>El sistema calcula cuántos TR hacen falta según la tienda de cada prenda.</li>
+                    <li>Solicita una persona y autoriza otra (separación de funciones).</li>
+                    <li>Recepción con video; si falta algo, se separa y se sigue el faltante hasta completar.</li>
+                    <li>Consolidación contra la ficha: referencias, tallas, colores y cantidades.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (15%)</strong><br/>
+                    Definir tiempos máximos por traslado según la realidad de las tiendas.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 28 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 28 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Facturación</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">85%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 85%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Emite la factura una vez validado el pago, con su número y copia como evidencia.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Valida comprobante, forma de pago y monto antes de facturar.</li>
+                    <li>Quien auditó el pago no factura la misma ficha.</li>
+                    <li>La indicación "no enviar factura" del cliente viaja en las observaciones.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (15%)</strong><br/>
+                    Conexión con el sistema de facturación para no digitar el número (hoy se registra a mano).
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 29 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 29 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Empaque y Auditoría de Empaque</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">85%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 85%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Una persona empaca y otra revisa el contenido contra la ficha y lo que existe físicamente antes de sellar el paquete.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Lista de verificación de 7 puntos y número de sello.</li>
+                    <li>Foto o video del contenido antes de sellar como evidencia.</li>
+                    <li>Si no conforma, regresa a empaque con el hallazgo.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (15%)</strong><br/>
+                    Impresión de etiqueta/ficha en PDF para pegar en el paquete.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 30 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 30 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Despacho, Guías y Recogida en Tienda</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">85%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 85%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Para envíos: se genera la guía, se entrega el paquete con manifiesto y se envía la guía a la asesora. Para recoger en tienda: queda listo en la tienda y se entrega con foto o firma.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Guía de contado o por cobrar según quién pague el flete.</li>
+                    <li>Manifiesto de entrega como evidencia.</li>
+                    <li>Recogida en tienda sin guía: aviso a la asesora y entrega con constancia.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (15%)</strong><br/>
+                    Generar la guía directamente con la paquetería (hoy se registra el número) y definir quién confirma las entregas en tienda.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 31 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 31 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Seguimiento, Entrega y Cierre</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">80%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 80%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Sigue el pedido hasta que el cliente confirma que lo recibió; en contraentrega controla devoluciones, reintentos y acreditación.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Confirmación de entrega y cierre por parte del cliente.</li>
+                    <li>Si el cliente no recibe: regresa a la bodega, la asesora lo contacta y se reprograma hasta el máximo de intentos.</li>
+                    <li>Acreditación de la paquetería verificada en el banco antes de facturar y cerrar (contraentrega).</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (20%)</strong><br/>
+                    Aviso automático al cliente con su guía por WhatsApp y pausar o cancelar con motivo desde el tablero para el jefe de logística (ya existe, falta afinarlo con uso).
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 32 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 32 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Roles, Separación de Funciones y Bitácora Sellada</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">95%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 95%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Define quién puede hacer cada paso y evita que una misma persona haga un paso y el que lo controla.
+                  </div>
+                  <ul class="mod-list">
+                    <li>10 roles de logística asignables desde Usuarios.</li>
+                    <li>Separación de funciones configurable.</li>
+                    <li>Cada paso deja un sello inmutable: quién, cuándo, qué datos y qué evidencia.</li>
+                    <li>La base de datos impide editar o borrar el historial.</li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- MÓDULO 33 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 33 • EN VALIDACIÓN CON EL EQUIPO</div>
+                      <h3 class="mod-title">Plazos, Alertas y Configuración del Proceso</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">90%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 90%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Mide el plazo de entrega en días hábiles desde que se aprueba el pago y permite ajustar las reglas sin tocar código.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Plazo total, feriados, anticipo y reintentos configurables.</li>
+                    <li>Datos obligatorios de la ficha editables por el administrador.</li>
+                    <li>Alertas de vencimiento en el tablero.</li>
+                    <li>Los puntos que aún se validan con el negocio están marcados como parámetros.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>🔎 Qué falta (10%)</strong><br/>
+                    Cerrar con el negocio los parámetros pendientes (anticipo, reintentos, tiempos por estado).
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 34 -->
+              <article class="module-card status-pending" data-status="pending">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--info);">MÓDULO 34 • POR DESARROLLAR</div>
+                      <h3 class="mod-title">Pendientes de Logística (Mejoras Definidas)</h3>
+                    </div>
+                    <span class="pct-badge badge-info">5%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 5%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Mejoras que ya están identificadas y no se han construido todavía.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Aviso automático de la guía al WhatsApp del cliente.</li>
+                    <li>Generación de la guía directamente con la paquetería.</li>
+                    <li>Etiqueta y ficha impresas en PDF.</li>
+                    <li>Vista de bodega para celular con lectura de código de barras.</li>
+                    <li>Reportes de logística: tiempos por etapa, faltantes, devoluciones y desempeño por persona.</li>
+                    <li>Llenado de la ficha a partir de la foto de la ficha de papel.</li>
                   </ul>
                   <div class="work-box work-info">
-                    <strong>📋 Lo que está definido y pendiente de programar (85% restante):</strong><br/>
-                    Construir el módulo dedicado de Logística con: (1) Bandeja de pedidos pagados pendientes de alistar con las prendas cotizadas, (2) Control de estados logísticos (<em>Pendiente de empaque → Empacado → Guía asignada / En ruta → Entregado / Novedad</em>), y (3) Envío automático del número de guía al WhatsApp del cliente.
+                    <strong>📋 Pendiente</strong><br/>
+                    Se prioriza después de validar el flujo base en operación real.
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ÁREA 7 -->
+          <section id="area-7" class="area-block">
+            <div class="area-header" style="border-left-color: var(--info);">
+              <div class="area-tag" style="color: var(--info);">ÁREA 7 • POST-VENTA — DESPUÉS DE LA ENTREGA (5 MÓDULOS • 0 AL 100%)</div>
+              <h2>Cambios, Devoluciones, Reclamos, Seguimiento y Recompra</h2>
+              <p>Lo que sucede cuando el cliente ya recibió su pedido. Hoy existe la etapa PQRS en el Pipeline y los datos para recompra; el proceso formal de cambios y devoluciones por las asesoras online está pendiente de definir y construir.</p>
+            </div>
+
+            <div class="modules-grid">
+              <!-- MÓDULO 35 -->
+              <article class="module-card status-pending" data-status="pending">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--info);">MÓDULO 35 • POR DESARROLLAR</div>
+                      <h3 class="mod-title">Cambios y Devoluciones (Asesoras Online)</h3>
+                    </div>
+                    <span class="pct-badge badge-info">5%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 5%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> El proceso para que las asesoras online atiendan cambios y devoluciones con el mismo rigor que una venta: con evidencia, responsable y plazo.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Solicitud del cliente con motivo y fotos.</li>
+                    <li>Validación contra la política de cambios (plazos, estado de la prenda).</li>
+                    <li>Recepción física y revisión de la prenda.</li>
+                    <li>Resolución: cambio por otra prenda, nota de crédito o devolución de dinero.</li>
+                    <li>Cierre con bitácora sellada, igual que logística.</li>
+                  </ul>
+                  <div class="work-box work-info">
+                    <strong>📋 Pendiente de definir y construir</strong><br/>
+                    Falta definir con el negocio la política de cambios y devoluciones, quién autoriza cada resolución y cómo se registra el dinero devuelto.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 36 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 36 • PARCIALMENTE LISTO</div>
+                      <h3 class="mod-title">PQRS y Reclamos</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">30%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 30%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Los clientes con una queja o reclamo ya se ubican en la etapa PQRS del Pipeline.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Etapa PQRS disponible en el Pipeline y en filtros.</li>
+                    <li>Chat con todo el historial del cliente al alcance.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>📋 Pendiente (70%)</strong><br/>
+                    Ficha de reclamo con motivo, responsable, plazo de respuesta, evidencia y resolución.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 37 -->
+              <article class="module-card status-pending" data-status="pending">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--info);">MÓDULO 37 • POR DESARROLLAR</div>
+                      <h3 class="mod-title">Seguimiento Después de la Entrega</h3>
+                    </div>
+                    <span class="pct-badge badge-info">0%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 0%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Un mensaje automático después de la entrega para confirmar que el pedido llegó bien y pedir una calificación.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Confirmación de recibido ligada al cierre del pedido.</li>
+                    <li>Encuesta corta de satisfacción por WhatsApp.</li>
+                    <li>Alerta a la asesora si el cliente reporta un problema.</li>
+                  </ul>
+                  <div class="work-box work-info">
+                    <strong>📋 Pendiente</strong><br/>
+                    Depende del aviso automático de guía y de definir el texto con el negocio.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 38 -->
+              <article class="module-card status-active" data-status="active">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--warn);">MÓDULO 38 • PARCIALMENTE LISTO</div>
+                      <h3 class="mod-title">Fidelización y Recompra</h3>
+                    </div>
+                    <span class="pct-badge badge-warn">40%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-warn" style="width: 40%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Aprovecha el historial de compras para volver a vender a quien ya compró.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Filtro de difusiones solo a clientes con compras en el ERP (hecho).</li>
+                    <li>La ficha de pedido ya captura cumpleaños del cliente.</li>
+                    <li>Historial, tallas y tienda favorita visibles para la asesora.</li>
+                  </ul>
+                  <div class="work-box work-warn">
+                    <strong>📋 Pendiente (60%)</strong><br/>
+                    Segmentar por días desde la última compra, difusiones de cumpleaños y reactivación automática.
+                  </div>
+                </div>
+              </article>
+
+              <!-- MÓDULO 39 -->
+              <article class="module-card status-pending" data-status="pending">
+                <div>
+                  <div class="mod-top">
+                    <div>
+                      <div class="mod-num" style="color: var(--info);">MÓDULO 39 • POR DESARROLLAR</div>
+                      <h3 class="mod-title">Reportes de Post-Venta</h3>
+                    </div>
+                    <span class="pct-badge badge-info">0%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-info" style="width: 0%;"></div></div>
+                  <div class="mod-explain">
+                    <strong>¿Qué es en sencillo?</strong> Indicadores para entender por qué se devuelven las prendas y mejorar el producto y la atención.
+                  </div>
+                  <ul class="mod-list">
+                    <li>Motivos más frecuentes por referencia y talla.</li>
+                    <li>Tasa de cambios y devoluciones por asesora y por mes.</li>
+                    <li>Tiempo promedio de resolución.</li>
+                  </ul>
+                  <div class="work-box work-info">
+                    <strong>📋 Pendiente</strong><br/>
+                    Se construye cuando exista el módulo de cambios y devoluciones.
                   </div>
                 </div>
               </article>
@@ -1176,7 +1668,7 @@
         <div class="eyebrow">GUÍA DIDÁCTICA PARA CUALQUIER INTEGRANTE DE LA EMPRESA</div>
         <h2 class="hero-title">¿Cómo funciona Bagneres CRM desde que un cliente saluda hasta que compra?</h2>
         <p class="hero-lead">
-          Si alguien nuevo llega hoy a la empresa y pregunta <em>"¿Cómo trabaja el sistema?"</em>, estos son los <strong>6 pasos sencillos</strong> que ocurren en cada venta:
+          Si alguien nuevo llega hoy a la empresa y pregunta <em>"¿Cómo trabaja el sistema?"</em>, estos son los <strong>8 pasos sencillos</strong> que ocurren en cada venta:
         </p>
 
         <div class="journey-grid">
@@ -1200,31 +1692,47 @@
             <div class="step-circle">3</div>
             <h3 class="mod-title">Búsqueda de prenda con foto, stock y precio real</h3>
             <p style="font-size: 13px; color: var(--muted);">
-              La asesora escribe el código de referencia (ej. <code>S219701</code>) en el <strong>Catálogo</strong> o en el <strong>Cotizador</strong>. El sistema le muestra la fotografía oficial, el precio en Quetzales y cuántas unidades disponibles hay en las sedes.
+              La asesora escribe el código de referencia (ej. <code>S219701</code>) en el <strong>Catálogo</strong> o en el <strong>Cotizador</strong>. El sistema le muestra la fotografía oficial, el precio en Quetzales y cuántas unidades hay disponibles.
             </p>
           </div>
 
           <div class="journey-card">
             <div class="step-circle">4</div>
-            <h3 class="mod-title">Envío de Tarjeta de Cotización desde la Calculadora</h3>
+            <h3 class="mod-title">Cotización con la Calculadora Visual</h3>
             <p style="font-size: 13px; color: var(--muted);">
-              En el <strong>Cotizador</strong>, la asesora selecciona las prendas, aplica el descuento promocional del día y con un clic envía al WhatsApp de la clienta una tarjeta gráfica con foto, precio regular, descuento y total a pagar.
+              En el <strong>Cotizador</strong>, la asesora selecciona las prendas, aplica el descuento del día y con un clic envía al WhatsApp de la clienta una tarjeta gráfica con foto, precio regular, descuento y total a pagar.
             </p>
           </div>
 
           <div class="journey-card">
             <div class="step-circle">5</div>
-            <h3 class="mod-title">Pago, lectura de boleta y suma a Métricas</h3>
+            <h3 class="mod-title">Pago, lectura del comprobante y ficha de pedido</h3>
             <p style="font-size: 13px; color: var(--muted);">
-              La clienta realiza su transferencia o depósito y manda la foto del comprobante al chat. El sistema detecta el pago, mueve a la clienta a la columna <strong>"Por Despacho"</strong> y registra la venta en el reporte de la asesora.
+              La clienta paga y manda su comprobante. El sistema lo lee y suma la venta a la asesora. Luego la asesora crea la <strong>ficha de pedido</strong> en el CRM (con su cotización, entrega y comprobantes) y la envía a auditoría de pago.
             </p>
           </div>
 
           <div class="journey-card">
             <div class="step-circle">6</div>
-            <h3 class="mod-title">Alistamiento, Guía y Entrega (Fase Logística)</h3>
+            <h3 class="mod-title">Auditoría del pago y verificación del pedido</h3>
             <p style="font-size: 13px; color: var(--muted);">
-              Con los datos de dirección capturados en el chat, el pedido en columna <strong>"Por Despacho"</strong> pasa al área encargada de empacar la prenda, generar la guía de mensajería y enviarla hasta la puerta del cliente.
+              Una persona distinta verifica en el banco que el pago sea real. Si todo cuadra, el pedido aparece en Logística como <strong>Nuevo pedido</strong> y otra persona confirma la ficha y que haya existencias en la tienda de origen.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">7</div>
+            <h3 class="mod-title">Traslados, facturación, empaque y despacho</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              Se piden los traslados entre tiendas, se consolida el paquete, se factura, se empaca y otra persona audita el empaque antes de sellar. Después se genera la guía y se entrega a la paquetería, o queda listo para recoger en tienda.
+            </p>
+          </div>
+
+          <div class="journey-card">
+            <div class="step-circle">8</div>
+            <h3 class="mod-title">Entrega, cierre y post-venta</h3>
+            <p style="font-size: 13px; color: var(--muted);">
+              El pedido se sigue hasta que el cliente confirma que lo recibió. Después entra la etapa de <strong>post-venta</strong> (cambios, devoluciones, reclamos y recompra), que está definida y pendiente de construir.
             </p>
           </div>
         </div>
@@ -1239,46 +1747,59 @@
         <div class="eyebrow">FOCO DE TRABAJO ACTUAL Y HOJA DE RUTA</div>
         <h2 class="hero-title">¿En qué estamos trabajando ahorita mismo?</h2>
         <p class="hero-lead">
-          Con 17 de los 21 módulos ya terminados al 100%, el equipo de desarrollo está concentrado hoy en <strong>3 objetivos puntuales</strong> para llevar toda la plataforma al 100%:
+          Con 21 de los 39 módulos ya terminados al 100% (incluidos el Cotizador, el Lector de Comprobantes y las Métricas por Asesora), el equipo está concentrado en <strong>4 frentes</strong> para llevar toda la plataforma al 100%:
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 18px;">
           <div class="module-card status-active">
             <div class="mod-top">
               <div>
-                <div class="mod-num" style="color: var(--ok);">FRENTE 1 • RECIÉN DESPLEGADO HOY (95% → 100%)</div>
-                <h3 class="mod-title">Sincronización Automática de Precios Oficiales en Catálogo y Cotizador</h3>
+                <div class="mod-num" style="color: var(--warn);">FRENTE 1 • EN VALIDACIÓN CON EL EQUIPO (90% → 100%)</div>
+                <h3 class="mod-title">Puesta en uso de la Logística</h3>
               </div>
-              <span class="pct-badge badge-ok">Listo en Producción</span>
+              <span class="pct-badge badge-warn">En Validación (90%)</span>
             </div>
             <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
-              <strong>Situación:</strong> El ERP habilitó el nuevo acceso <code>/api/data/ref-precio</code> con los precios oficiales de <strong>8,022 referencias</strong>. Hoy subimos la actualización para que el CRM sincronice esos precios de forma prioritaria e instantánea al abrir el Catálogo o buscar una prenda en la Calculadora de Cotizaciones, e incluimos el botón directo <em>"Sincronizar Precios ERP"</em>.
-            </p>
-          </div>
-
-          <div class="module-card status-active">
-            <div class="mod-top">
-              <div>
-                <div class="mod-num" style="color: var(--warn);">FRENTE 2 • EN TRABAJO ACTIVO AHORITA (70% → 100%)</div>
-                <h3 class="mod-title">Precisión Definitiva del Reporte de Métricas y Ventas por Asesora</h3>
-              </div>
-              <span class="pct-badge badge-warn">En Calibración (70%)</span>
-            </div>
-            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
-              <strong>Situación:</strong> Actualmente el reporte de ventas por asesora funciona al 70% porque cuando dos asesoras atienden a un mismo cliente en distintos turnos, o cuando el cliente envía fotos de prendas junto con comprobantes bancarios, se han requerido ajustes manuales para cuadrar el cierre. Estamos rediseñando la regla de atribución para que vincule de forma limpia la cotización, la asesora que gestionó la venta y el comprobante real de pago, logrando <strong>100% de exactitud automática</strong>.
+              <strong>Situación:</strong> La logística completa ya está construida: ficha de pedido, auditoría de pagos, traslados, facturación, empaque, despacho y seguimiento. Falta probarla con las personas reales de cada rol, ajustar los datos obligatorios y cerrar con el negocio los parámetros que aún se validan (anticipos, reintentos y tiempos por estado).
             </p>
           </div>
 
           <div class="module-card status-pending">
             <div class="mod-top">
               <div>
-                <div class="mod-num" style="color: var(--info);">FRENTE 3 • SIGUIENTE FASE DE DESARROLLO (15% → 100%)</div>
-                <h3 class="mod-title">Construcción del Módulo Completo de Logística y Despachos</h3>
+                <div class="mod-num" style="color: var(--info);">FRENTE 2 • SIGUIENTE FASE (5% → 100%)</div>
+                <h3 class="mod-title">Post-Venta: Cambios, Devoluciones y Reclamos</h3>
               </div>
-              <span class="pct-badge badge-info">Definido (15%)</span>
+              <span class="pct-badge badge-info">Por definir y construir</span>
             </div>
             <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
-              <strong>Situación:</strong> El flujo comercial ya deja a los clientes pagados en la columna <em>"Por Despacho"</em> con sus datos de entrega. El siguiente paso de desarrollo es construir la pantalla operativa de Logística para administrar el alistamiento de prendas, asignación de número de guía de transporte y confirmación de entrega al cliente.
+              <strong>Situación:</strong> Es el siguiente gran módulo. Primero se define con el negocio la política de cambios y devoluciones, quién autoriza cada resolución y cómo se maneja el dinero devuelto; luego se construye con el mismo rigor que la logística: responsable, evidencia, plazo y bitácora sellada.
+            </p>
+          </div>
+
+          <div class="module-card status-pending">
+            <div class="mod-top">
+              <div>
+                <div class="mod-num" style="color: var(--info);">FRENTE 3 • MEJORAS DE LOGÍSTICA (5% → 100%)</div>
+                <h3 class="mod-title">Aviso automático de guía, guía con la paquetería, etiquetas y vista de bodega</h3>
+              </div>
+              <span class="pct-badge badge-info">Definido</span>
+            </div>
+            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
+              <strong>Situación:</strong> Mejoras ya identificadas para quitarle trabajo manual al equipo: aviso de la guía al WhatsApp del cliente, generación de la guía directamente con la paquetería, etiqueta impresa para el paquete, vista de bodega en celular y reportes de logística.
+            </p>
+          </div>
+
+          <div class="module-card status-active">
+            <div class="mod-top">
+              <div>
+                <div class="mod-num" style="color: var(--warn);">FRENTE 4 • MARKETING (90% → 100%)</div>
+                <h3 class="mod-title">Validar el Informe de Anuncios y cruzar la inversión con las ventas</h3>
+              </div>
+              <span class="pct-badge badge-warn">En Validación (90%)</span>
+            </div>
+            <p style="font-size: 13.5px; color: var(--muted); margin: 8px 0 0;">
+              <strong>Situación:</strong> El informe de anuncios ya trae la inversión y el costo por conversación desde Meta; falta validarlo unos días contra la cuenta real y cruzarlo con las ventas del CRM para medir el retorno por campaña.
             </p>
           </div>
         </div>
@@ -1290,9 +1811,9 @@
          ================================================================================= -->
     <div id="tab-matriz" class="view-panel">
       <div class="hero-card">
-        <div class="eyebrow">MATRIZ CONSOLIDADA DE LOS 21 MÓDULOS</div>
+        <div class="eyebrow">MATRIZ CONSOLIDADA DE LOS 39 MÓDULOS</div>
         <h2 class="hero-title">Tabla Resumen de Avance Funcional</h2>
-        <p class="hero-lead">Vista rápida en formato de tabla ejecutiva de los 21 módulos que conforman Bagneres CRM.</p>
+        <p class="hero-lead">Vista rápida en formato de tabla ejecutiva de los 39 módulos que conforman Bagneres CRM.</p>
 
         <div style="overflow-x: auto;">
           <table class="corp-table">
@@ -1307,27 +1828,45 @@
               </tr>
             </thead>
             <tbody>
-              <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Estructura Corporativa)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Organización de Studio F y línea Basshert.</td></tr>
-              <tr><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Sedes Studio F y Línea Basshert</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Sedes físicas de Studio F y línea Basshert.</td></tr>
-              <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Líneas Studio F y Basshert con prueba en vivo en Meta.</td></tr>
-              <tr><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles y Permisos por Línea</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Admin, Supervisor y Asesora con líneas asignadas.</td></tr>
-              <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal + Chat Emergente</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>WhatsApp, Instagram y Facebook en vivo con presencia.</td></tr>
-              <tr><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Kanban)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Etapas de venta automatizadas sin duplicados.</td></tr>
-              <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial Tiendas ERP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Cruce con +18,000 clientes, compras y tallas.</td></tr>
-              <tr><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Atajos rápidos (<code>/</code>) para cuentas, saludos y envíos.</td></tr>
-              <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital, Stock y Precios ERP</strong></td><td><strong>95%</strong></td><td>🔄 Cerrando hoy</td><td>Stock real + 8,022 precios sincronizados del ERP.</td></tr>
-              <tr><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático de Fotos SFTP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Enlace automático de +4,760 fotos de prendas.</td></tr>
-              <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual PNG</strong></td><td><strong>95%</strong></td><td>🔄 Cerrando hoy</td><td>Calculadora de descuentos y tarjeta PNG en chat/catálogo.</td></tr>
-              <tr><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola de Diagnóstico e Inspector ERP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Pruebas en vivo de endpoints y sincronización manual.</td></tr>
-              <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente IA 24/7 + Simulador de Pruebas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Bot conectado a stock real con pantalla de pruebas.</td></tr>
-              <tr><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Envíos masivos con métricas y bloqueo anti-duplicados.</td></tr>
-              <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales Meta</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Creación y aprobación de plantillas desde el CRM.</td></tr>
-              <tr><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Recuperación de clientes con cotización abierta.</td></tr>
-              <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta y Simulador de Costos</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Salud de líneas y cálculo financiero de campañas.</td></tr>
-              <tr><td>18</td><td>Dirección y Control</td><td><strong>Dashboard General y Configuración (5 tabs)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>KPIs generales y ajustes de Pipeline, OCR, Ads, Redes y SLA.</td></tr>
-              <tr><td>19</td><td>Dirección y Control</td><td><strong>Auditoría, SLA (Fashion Time) y Excel</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Chats sin responder, decisiones IA y bitácora en Excel.</td></tr>
-              <tr><td>20</td><td>Dirección y Control</td><td><strong>Motor OCR y Métricas de Ventas por Asesora</strong></td><td><strong>70%</strong></td><td>🛠️ En calibración</td><td>Lectura de boletas y ventas; afinando exactitud por turno.</td></tr>
-              <tr><td>21</td><td>Post-Venta y Logística</td><td><strong>Módulo de Logística, Alistamiento y Guías</strong></td><td><strong>15%</strong></td><td>📋 Por desarrollar</td><td>Etapa Por Despacho lista; falta panel de bodega y guías.</td></tr>
+              <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Estructura Corporativa)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Estructura corporativa que agrupa Studio F y la línea Basshert.</td></tr>
+              <tr><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Sedes Studio F y Línea Basshert</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Registro de las sedes físicas de Studio F y operación de Basshert.</td></tr>
+              <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas de WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Conexión de líneas de Studio F y Basshert con prueba en vivo en Meta.</td></tr>
+              <tr><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles, Accesos y Nuevo Inicio de Sesión</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Perfiles Admin, Supervisor y Asesora; roles de logística; pantalla de ingreso renovada.</td></tr>
+              <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal (WhatsApp, Instagram y Messenger)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>WhatsApp, Instagram y Facebook unificados en tiempo real.</td></tr>
+              <tr><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Visual de Ventas)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Embudo Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS.</td></tr>
+              <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial de Tiendas (ERP)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Cruce con +18,000 clientes de sedes: compras, tallas y NIT.</td></tr>
+              <tr><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas (/atajos)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Plantillas rápidas con atajo "/" para cuentas, saludos y envíos.</td></tr>
+              <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital de Prendas, Existencias y Precios</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Stock real y 8,022 precios sincronizados del ERP.</td></tr>
+              <tr><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático de Fotografías (SFTP)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Enlace automático de +4,760 fotos oficiales por referencia.</td></tr>
+              <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual de Prendas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Descuentos, ahorro y tarjeta PNG con precios del ERP.</td></tr>
+              <tr><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola de Diagnóstico e Inspección del ERP</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Pruebas en vivo de endpoints y sincronización manual.</td></tr>
+              <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente de IA 24/7 + Simulador de Pruebas</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Bot conectado a stock real con pantalla interna de pruebas.</td></tr>
+              <tr><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas por WhatsApp</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Envíos masivos con filtro de compradores del ERP y anti-duplicados.</td></tr>
+              <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales de Meta</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Creación y aprobación de plantillas desde el CRM.</td></tr>
+              <tr><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing y Recuperación</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Recuperación de clientes con cotización o pago pendiente.</td></tr>
+              <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta, Salud de Línea y Simulador de Costos</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Salud de líneas y calculadora financiera de presupuesto.</td></tr>
+              <tr><td>18</td><td>Marketing y Meta</td><td><strong>Informe de Anuncios de Meta (Admin y Supervisión)</strong></td><td><strong>90%</strong></td><td>🔄 En validación</td><td>Inversión, conversaciones, costo por conversación, alcance y CTR por anuncio.</td></tr>
+              <tr><td>19</td><td>Dirección y Control</td><td><strong>Dashboard General y Centro de Configuración</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>KPIs operativos y ajustes del Pipeline, OCR, SLA y Ads.</td></tr>
+              <tr><td>20</td><td>Dirección y Control</td><td><strong>Auditoría, Alertas SLA (Fashion Time) y Bitácora Excel</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Chats sin responder, decisiones del bot y bitácora en Excel.</td></tr>
+              <tr><td>21</td><td>Dirección y Control</td><td><strong>Motor Lector de Comprobantes (OCR)</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Lee boletas y vouchers, extrae el monto y descarta pantallas que no son pago.</td></tr>
+              <tr><td>22</td><td>Dirección y Control</td><td><strong>Ventas y Métricas por Asesora</strong></td><td><strong>100%</strong></td><td>✅ Terminado</td><td>Atribución automática, cierre del día y reconstrucción histórica con revisión.</td></tr>
+              <tr><td>23</td><td>Logística</td><td><strong>Ficha de Pedido Digital (Asistente Paso a Paso)</strong></td><td><strong>90%</strong></td><td>🔄 En validación</td><td>La ficha de papel pasa al CRM: cliente, prendas, entrega, pagos y revisión.</td></tr>
+              <tr><td>24</td><td>Logística</td><td><strong>Auditoría de Pagos y Comprobantes</strong></td><td><strong>90%</strong></td><td>🔄 En validación</td><td>Cada pago con su comprobante, referencia única y doble verificación.</td></tr>
+              <tr><td>25</td><td>Logística</td><td><strong>Tablero de Logística y Cola de Trabajo</strong></td><td><strong>90%</strong></td><td>🔄 En validación</td><td>Indicadores, tablero tipo kanban, lista y "lo que me toca".</td></tr>
+              <tr><td>26</td><td>Logística</td><td><strong>Verificación de Pedidos y Existencias</strong></td><td><strong>85%</strong></td><td>🔄 En validación</td><td>Revisa la ficha y confirma que hay stock en la tienda de origen.</td></tr>
+              <tr><td>27</td><td>Logística</td><td><strong>Traslados entre Tiendas y Bodega</strong></td><td><strong>85%</strong></td><td>🔄 En validación</td><td>Un traslado por tienda de origen: solicitud, autorización, recepción y consolidación.</td></tr>
+              <tr><td>28</td><td>Logística</td><td><strong>Facturación</strong></td><td><strong>85%</strong></td><td>🔄 En validación</td><td>Factura de contado o de entrega, con evidencia.</td></tr>
+              <tr><td>29</td><td>Logística</td><td><strong>Empaque y Auditoría de Empaque</strong></td><td><strong>85%</strong></td><td>🔄 En validación</td><td>Quien empaca no audita: revisión de referencia, talla, color, cantidad y estado antes de sellar.</td></tr>
+              <tr><td>30</td><td>Logística</td><td><strong>Despacho, Guías y Recogida en Tienda</strong></td><td><strong>85%</strong></td><td>🔄 En validación</td><td>Guía de la paquetería, entrega a la paquetería o pedido listo para recoger.</td></tr>
+              <tr><td>31</td><td>Logística</td><td><strong>Seguimiento, Entrega y Cierre</strong></td><td><strong>80%</strong></td><td>🔄 En validación</td><td>En ruta, entregado, devuelto con reintentos y cierre.</td></tr>
+              <tr><td>32</td><td>Logística</td><td><strong>Roles, Separación de Funciones y Bitácora Sellada</strong></td><td><strong>95%</strong></td><td>🔄 En validación</td><td>Cada paso lo hace su rol; nada se edita ni se borra.</td></tr>
+              <tr><td>33</td><td>Logística</td><td><strong>Plazos, Alertas y Configuración del Proceso</strong></td><td><strong>90%</strong></td><td>🔄 En validación</td><td>Plazo de 4 días hábiles, feriados, tiempos por estado y reglas editables.</td></tr>
+              <tr><td>34</td><td>Logística</td><td><strong>Pendientes de Logística (Mejoras Definidas)</strong></td><td><strong>5%</strong></td><td>📋 Por desarrollar</td><td>Aviso automático de guía, guía por API, etiquetas, app de bodega y reportes.</td></tr>
+              <tr><td>35</td><td>Post-Venta</td><td><strong>Cambios y Devoluciones (Asesoras Online)</strong></td><td><strong>5%</strong></td><td>📋 Por desarrollar</td><td>Solicitud, validación, recepción y resolución de cambios y devoluciones.</td></tr>
+              <tr><td>36</td><td>Post-Venta</td><td><strong>PQRS y Reclamos</strong></td><td><strong>30%</strong></td><td>🔄 Parcial</td><td>Etapa PQRS en el Pipeline; falta el seguimiento formal con responsable y plazo.</td></tr>
+              <tr><td>37</td><td>Post-Venta</td><td><strong>Seguimiento Después de la Entrega</strong></td><td><strong>0%</strong></td><td>📋 Por desarrollar</td><td>Confirmar recibido y medir satisfacción automáticamente.</td></tr>
+              <tr><td>38</td><td>Post-Venta</td><td><strong>Fidelización y Recompra</strong></td><td><strong>40%</strong></td><td>🔄 Parcial</td><td>Difusión a compradores del ERP, cumpleaños y reactivación por días sin compra.</td></tr>
+              <tr><td>39</td><td>Post-Venta</td><td><strong>Reportes de Post-Venta</strong></td><td><strong>0%</strong></td><td>📋 Por desarrollar</td><td>Motivos y tasa de cambios y devoluciones, tiempos de resolución.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1344,8 +1883,8 @@
       </h1>
       <p style="font-size: 10.5pt; color: #4b5563; margin-top: 0;">
         <strong>Operación:</strong> Sedes de Studio F y Línea Basshert &nbsp;|&nbsp;
-        <strong>Fecha:</strong> 17 de octubre de 2026 &nbsp;|&nbsp;
-        <strong>Avance Global Ponderado:</strong> 92% (21 Módulos Funcionales)
+        <strong>Fecha:</strong> 23 de octubre de 2026 &nbsp;|&nbsp;
+        <strong>Avance Global Ponderado:</strong> 83% (39 Módulos Funcionales)
       </p>
 
       <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
@@ -1359,16 +1898,18 @@
         2. Recorrido Paso a Paso de una Venta en el Sistema
       </h2>
       <ol style="font-size: 10.5pt;">
-        <li style="margin-bottom: 4pt;"><strong>Recepción Omnicanal:</strong> El cliente escribe por WhatsApp, Instagram o Facebook y su conversación aparece en vivo en la Bandeja Omnicanal de Studio F o de la línea Basshert según corresponda.</li>
-        <li style="margin-bottom: 4pt;"><strong>Reconocimiento Clientes 360°:</strong> El sistema cruza su teléfono con los +18,000 clientes de sedes físicas y muestra cuánto ha comprado históricamente, qué tallas usa y cuál es su sede preferida.</li>
-        <li style="margin-bottom: 4pt;"><strong>Consulta en Catálogo Digital:</strong> La asesora o el Bot IA consulta la referencia viendo existencias disponibles reales (sin imperfectos), fotografía oficial y precio en Quetzales.</li>
-        <li style="margin-bottom: 4pt;"><strong>Cotización en Calculadora Visual:</strong> La asesora selecciona las prendas en el Cotizador, aplica el descuento correspondiente y envía una tarjeta gráfica PNG con el resumen y ahorro directo al WhatsApp del cliente.</li>
-        <li style="margin-bottom: 4pt;"><strong>Confirmación de Pago y Métricas:</strong> Cuando el cliente envía la foto de su comprobante bancario, el sistema registra el pago, mueve al cliente a la columna <em>Por Despacho</em> y suma la venta a la asesora.</li>
-        <li style="margin-bottom: 4pt;"><strong>Despacho y Logística:</strong> El área de logística recibe los pedidos en estado <em>Por Despacho</em> para alistar las prendas, asignar guía de transporte y entregar al cliente.</li>
+        <li style="margin-bottom: 4pt;"><strong>El cliente escribe por redes o WhatsApp:</strong> El cliente ve un anuncio o publicación de <strong>Studio F</strong> o de la línea <strong>Basshert</strong> y envía un mensaje por WhatsApp, Instagram o Facebook preguntando por una prenda. El mensaje entra de inmediato a la <strong>Bandeja Omnicanal</strong>.</li>
+        <li style="margin-bottom: 4pt;"><strong>El Bot IA o la Asesora lo recibe sabiendo quién es:</strong> El sistema cruza su teléfono con la base de sedes físicas y le muestra a la asesora si es una clienta frecuente, cuánto ha comprado antes, cuál es su talla de blusa/jean/calzado y en qué sede suele comprar.</li>
+        <li style="margin-bottom: 4pt;"><strong>Búsqueda de prenda con foto, stock y precio real:</strong> La asesora escribe el código de referencia (ej. <code>S219701</code>) en el <strong>Catálogo</strong> o en el <strong>Cotizador</strong>. El sistema le muestra la fotografía oficial, el precio en Quetzales y cuántas unidades hay disponibles.</li>
+        <li style="margin-bottom: 4pt;"><strong>Cotización con la Calculadora Visual:</strong> En el <strong>Cotizador</strong>, la asesora selecciona las prendas, aplica el descuento del día y con un clic envía al WhatsApp de la clienta una tarjeta gráfica con foto, precio regular, descuento y total a pagar.</li>
+        <li style="margin-bottom: 4pt;"><strong>Pago, lectura del comprobante y ficha de pedido:</strong> La clienta paga y manda su comprobante. El sistema lo lee y suma la venta a la asesora. Luego la asesora crea la <strong>ficha de pedido</strong> en el CRM (con su cotización, entrega y comprobantes) y la envía a auditoría de pago.</li>
+        <li style="margin-bottom: 4pt;"><strong>Auditoría del pago y verificación del pedido:</strong> Una persona distinta verifica en el banco que el pago sea real. Si todo cuadra, el pedido aparece en Logística como <strong>Nuevo pedido</strong> y otra persona confirma la ficha y que haya existencias en la tienda de origen.</li>
+        <li style="margin-bottom: 4pt;"><strong>Traslados, facturación, empaque y despacho:</strong> Se piden los traslados entre tiendas, se consolida el paquete, se factura, se empaca y otra persona audita el empaque antes de sellar. Después se genera la guía y se entrega a la paquetería, o queda listo para recoger en tienda.</li>
+        <li style="margin-bottom: 4pt;"><strong>Entrega, cierre y post-venta:</strong> El pedido se sigue hasta que el cliente confirma que lo recibió. Después entra la etapa de <strong>post-venta</strong> (cambios, devoluciones, reclamos y recompra), que está definida y pendiente de construir.</li>
       </ol>
 
       <h2 style="color: #1e3a8a; font-size: 14pt; margin-top: 16pt; margin-bottom: 6pt;">
-        3. Matriz Completa de los 21 Módulos del CRM por Área de Negocio
+        3. Matriz Completa de los 39 Módulos del CRM por Área de Negocio
       </h2>
       <table border="1" cellspacing="0" cellpadding="6" style="width: 100%; border-collapse: collapse; font-size: 9.5pt; border-color: #cbd5e1;">
         <thead>
@@ -1382,27 +1923,45 @@
           </tr>
         </thead>
         <tbody>
-          <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Estructura Corporativa)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Organización de la operación de Studio F y la línea Basshert.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Sedes Studio F y Línea Basshert</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Administración de las sedes físicas de Studio F y la línea Basshert.</td></tr>
-          <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas WhatsApp</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Conexión de las líneas de Studio F y Basshert con prueba en vivo ante Meta.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles y Permisos por Línea</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Perfiles Admin, Supervisor y Asesora con asignación de líneas por usuario.</td></tr>
-          <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal + Chat Emergente</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>WhatsApp, Instagram y Facebook unificados con indicador de presencia en vivo.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Kanban)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Clasificación Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS sin duplicados.</td></tr>
-          <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial Tiendas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Cruce con +18,000 clientes del ERP: compras en tiendas, tallas y NIT.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Atajos rápidos (/) para cuentas bancarias, saludos y datos de envío.</td></tr>
-          <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital, Stock y Precios ERP</strong></td><td align="center"><strong>95%</strong></td><td>Cerrando hoy</td><td>Inventario disponible real y sincronización de 8,022 precios del ERP.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático Fotos SFTP</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Vinculación automática de +4,760 fotografías oficiales con cada referencia.</td></tr>
-          <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual PNG</strong></td><td align="center"><strong>95%</strong></td><td>Cerrando hoy</td><td>Calculadora de descuentos en chat y catálogo que genera tarjeta gráfica PNG.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola Diagnóstico e Inspector ERP</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Inspección en vivo de endpoints del ERP y sincronización bajo demanda.</td></tr>
-          <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente IA 24/7 + Simulador Pruebas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Bot conectado a inventario real con simulador interno de conversación.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Envíos masivos por WhatsApp con métricas de lectura y candado anti-duplicados.</td></tr>
-          <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales Meta</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Creación y aprobación oficial de plantillas de WhatsApp desde el CRM.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Embudo para recuperar clientes con cotización abierta o pago pendiente.</td></tr>
-          <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta y Simulador Costos</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Salud de líneas, distribución sugerida y simulador financiero de envíos.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>18</td><td>Dirección y Control</td><td><strong>Dashboard General y Configuración</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Gráficas ejecutivas y 5 pestañas de configuración (Pipeline, OCR, Ads, Redes, SLA).</td></tr>
-          <tr><td>19</td><td>Dirección y Control</td><td><strong>Auditoría, SLA (Fashion Time) y Excel</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Alertas de chats sin responder, decisiones IA y bitácora exportable a Excel.</td></tr>
-          <tr style="background-color:#f8fafc;"><td>20</td><td>Dirección y Control</td><td><strong>Motor OCR y Métricas por Asesora</strong></td><td align="center"><strong>70%</strong></td><td>En calibración</td><td>Lectura de comprobantes y ventas por asesora; afinando precisión entre turnos.</td></tr>
-          <tr><td>21</td><td>Post-Venta y Logística</td><td><strong>Módulo de Logística y Guías</strong></td><td align="center"><strong>15%</strong></td><td>Por desarrollar</td><td>Columna Por Despacho activa; pendiente construir panel de bodega y guías.</td></tr>
+          <tr><td>01</td><td>Estructura Corporativa</td><td><strong>Gestión de Empresas (Estructura Corporativa)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Estructura corporativa que agrupa Studio F y la línea Basshert.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>02</td><td>Estructura Corporativa</td><td><strong>Gestión de Sedes Studio F y Línea Basshert</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Registro de las sedes físicas de Studio F y operación de Basshert.</td></tr>
+          <tr><td>03</td><td>Estructura Corporativa</td><td><strong>Administración de Líneas de WhatsApp</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Conexión de líneas de Studio F y Basshert con prueba en vivo en Meta.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>04</td><td>Estructura Corporativa</td><td><strong>Usuarios, Roles, Accesos y Nuevo Inicio de Sesión</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Perfiles Admin, Supervisor y Asesora; roles de logística; pantalla de ingreso renovada.</td></tr>
+          <tr><td>05</td><td>Atención Omnicanal</td><td><strong>Bandeja Omnicanal (WhatsApp, Instagram y Messenger)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>WhatsApp, Instagram y Facebook unificados en tiempo real.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>06</td><td>Atención Omnicanal</td><td><strong>Pipeline Comercial (Embudo Visual de Ventas)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Embudo Frío, Tibio, Caliente, Pagado, Por Despacho y PQRS.</td></tr>
+          <tr><td>07</td><td>Atención Omnicanal</td><td><strong>Clientes 360° + Historial de Tiendas (ERP)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Cruce con +18,000 clientes de sedes: compras, tallas y NIT.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>08</td><td>Atención Omnicanal</td><td><strong>Biblioteca de Respuestas Rápidas (/atajos)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Plantillas rápidas con atajo "/" para cuentas, saludos y envíos.</td></tr>
+          <tr><td>09</td><td>Catálogo, Cotizador e IA</td><td><strong>Catálogo Digital de Prendas, Existencias y Precios</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Stock real y 8,022 precios sincronizados del ERP.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>10</td><td>Catálogo, Cotizador e IA</td><td><strong>Sincronizador Automático de Fotografías (SFTP)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Enlace automático de +4,760 fotos oficiales por referencia.</td></tr>
+          <tr><td>11</td><td>Catálogo, Cotizador e IA</td><td><strong>Cotizador / Calculadora Visual de Prendas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Descuentos, ahorro y tarjeta PNG con precios del ERP.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>12</td><td>Catálogo, Cotizador e IA</td><td><strong>Consola de Diagnóstico e Inspección del ERP</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Pruebas en vivo de endpoints y sincronización manual.</td></tr>
+          <tr><td>13</td><td>Catálogo, Cotizador e IA</td><td><strong>Agente de IA 24/7 + Simulador de Pruebas</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Bot conectado a stock real con pantalla interna de pruebas.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>14</td><td>Marketing y Meta</td><td><strong>Difusiones y Campañas Masivas por WhatsApp</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Envíos masivos con filtro de compradores del ERP y anti-duplicados.</td></tr>
+          <tr><td>15</td><td>Marketing y Meta</td><td><strong>Gestor de Plantillas Oficiales de Meta</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Creación y aprobación de plantillas desde el CRM.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>16</td><td>Marketing y Meta</td><td><strong>Pipeline de Remarketing y Recuperación</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Recuperación de clientes con cotización o pago pendiente.</td></tr>
+          <tr><td>17</td><td>Marketing y Meta</td><td><strong>Estrategia Meta, Salud de Línea y Simulador de Costos</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Salud de líneas y calculadora financiera de presupuesto.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>18</td><td>Marketing y Meta</td><td><strong>Informe de Anuncios de Meta (Admin y Supervisión)</strong></td><td align="center"><strong>90%</strong></td><td>En validación</td><td>Inversión, conversaciones, costo por conversación, alcance y CTR por anuncio.</td></tr>
+          <tr><td>19</td><td>Dirección y Control</td><td><strong>Dashboard General y Centro de Configuración</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>KPIs operativos y ajustes del Pipeline, OCR, SLA y Ads.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>20</td><td>Dirección y Control</td><td><strong>Auditoría, Alertas SLA (Fashion Time) y Bitácora Excel</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Chats sin responder, decisiones del bot y bitácora en Excel.</td></tr>
+          <tr><td>21</td><td>Dirección y Control</td><td><strong>Motor Lector de Comprobantes (OCR)</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Lee boletas y vouchers, extrae el monto y descarta pantallas que no son pago.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>22</td><td>Dirección y Control</td><td><strong>Ventas y Métricas por Asesora</strong></td><td align="center"><strong>100%</strong></td><td>Terminado</td><td>Atribución automática, cierre del día y reconstrucción histórica con revisión.</td></tr>
+          <tr><td>23</td><td>Logística</td><td><strong>Ficha de Pedido Digital (Asistente Paso a Paso)</strong></td><td align="center"><strong>90%</strong></td><td>En validación</td><td>La ficha de papel pasa al CRM: cliente, prendas, entrega, pagos y revisión.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>24</td><td>Logística</td><td><strong>Auditoría de Pagos y Comprobantes</strong></td><td align="center"><strong>90%</strong></td><td>En validación</td><td>Cada pago con su comprobante, referencia única y doble verificación.</td></tr>
+          <tr><td>25</td><td>Logística</td><td><strong>Tablero de Logística y Cola de Trabajo</strong></td><td align="center"><strong>90%</strong></td><td>En validación</td><td>Indicadores, tablero tipo kanban, lista y "lo que me toca".</td></tr>
+          <tr style="background-color:#f8fafc;"><td>26</td><td>Logística</td><td><strong>Verificación de Pedidos y Existencias</strong></td><td align="center"><strong>85%</strong></td><td>En validación</td><td>Revisa la ficha y confirma que hay stock en la tienda de origen.</td></tr>
+          <tr><td>27</td><td>Logística</td><td><strong>Traslados entre Tiendas y Bodega</strong></td><td align="center"><strong>85%</strong></td><td>En validación</td><td>Un traslado por tienda de origen: solicitud, autorización, recepción y consolidación.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>28</td><td>Logística</td><td><strong>Facturación</strong></td><td align="center"><strong>85%</strong></td><td>En validación</td><td>Factura de contado o de entrega, con evidencia.</td></tr>
+          <tr><td>29</td><td>Logística</td><td><strong>Empaque y Auditoría de Empaque</strong></td><td align="center"><strong>85%</strong></td><td>En validación</td><td>Quien empaca no audita: revisión de referencia, talla, color, cantidad y estado antes de sellar.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>30</td><td>Logística</td><td><strong>Despacho, Guías y Recogida en Tienda</strong></td><td align="center"><strong>85%</strong></td><td>En validación</td><td>Guía de la paquetería, entrega a la paquetería o pedido listo para recoger.</td></tr>
+          <tr><td>31</td><td>Logística</td><td><strong>Seguimiento, Entrega y Cierre</strong></td><td align="center"><strong>80%</strong></td><td>En validación</td><td>En ruta, entregado, devuelto con reintentos y cierre.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>32</td><td>Logística</td><td><strong>Roles, Separación de Funciones y Bitácora Sellada</strong></td><td align="center"><strong>95%</strong></td><td>En validación</td><td>Cada paso lo hace su rol; nada se edita ni se borra.</td></tr>
+          <tr><td>33</td><td>Logística</td><td><strong>Plazos, Alertas y Configuración del Proceso</strong></td><td align="center"><strong>90%</strong></td><td>En validación</td><td>Plazo de 4 días hábiles, feriados, tiempos por estado y reglas editables.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>34</td><td>Logística</td><td><strong>Pendientes de Logística (Mejoras Definidas)</strong></td><td align="center"><strong>5%</strong></td><td>Por desarrollar</td><td>Aviso automático de guía, guía por API, etiquetas, app de bodega y reportes.</td></tr>
+          <tr><td>35</td><td>Post-Venta</td><td><strong>Cambios y Devoluciones (Asesoras Online)</strong></td><td align="center"><strong>5%</strong></td><td>Por desarrollar</td><td>Solicitud, validación, recepción y resolución de cambios y devoluciones.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>36</td><td>Post-Venta</td><td><strong>PQRS y Reclamos</strong></td><td align="center"><strong>30%</strong></td><td>Parcial</td><td>Etapa PQRS en el Pipeline; falta el seguimiento formal con responsable y plazo.</td></tr>
+          <tr><td>37</td><td>Post-Venta</td><td><strong>Seguimiento Después de la Entrega</strong></td><td align="center"><strong>0%</strong></td><td>Por desarrollar</td><td>Confirmar recibido y medir satisfacción automáticamente.</td></tr>
+          <tr style="background-color:#f8fafc;"><td>38</td><td>Post-Venta</td><td><strong>Fidelización y Recompra</strong></td><td align="center"><strong>40%</strong></td><td>Parcial</td><td>Difusión a compradores del ERP, cumpleaños y reactivación por días sin compra.</td></tr>
+          <tr><td>39</td><td>Post-Venta</td><td><strong>Reportes de Post-Venta</strong></td><td align="center"><strong>0%</strong></td><td>Por desarrollar</td><td>Motivos y tasa de cambios y devoluciones, tiempos de resolución.</td></tr>
         </tbody>
       </table>
 
@@ -1410,9 +1969,10 @@
         4. Detalle de Frentes Activos de Trabajo (En qué estamos ahorita mismo)
       </h2>
       <p style="font-size: 10.5pt;">
-        <strong>1. Cierre de Precios Automáticos en Catálogo y Cotizador (95% → 100%):</strong> Ya se conectó el nuevo endpoint del ERP (<code>/api/data/ref-precio</code> con 8,022 referencias) con sincronización rápida e independiente para que cada referencia muestre su precio en Quetzales tanto en el Catálogo como en la Calculadora de Cotizaciones.<br/><br/>
-        <strong>2. Calibración Definitiva de Métricas y Ventas por Asesora (70% → 100%):</strong> Estamos perfeccionando la regla de atribución para que cuando más de una asesora interviene en el mismo chat o se envían fotos de prendas junto con comprobantes, el sistema asigne la venta con 100% de exactitud a la asesora correcta sin ajustes manuales.<br/><br/>
-        <strong>3. Próximo Desarrollo — Módulo de Logística y Seguimiento de Despachos (15% → 100%):</strong> Construcción del panel operativo para el equipo de bodega/logística con control de alistamiento, registro de número de guía de transporte y notificación automática de envío al cliente.
+        <strong>1. Puesta en uso de la Logística:</strong> La logística completa ya está construida: ficha de pedido, auditoría de pagos, traslados, facturación, empaque, despacho y seguimiento. Falta probarla con las personas reales de cada rol, ajustar los datos obligatorios y cerrar con el negocio los parámetros que aún se validan (anticipos, reintentos y tiempos por estado).<br/><br/>
+        <strong>2. Post-Venta: Cambios, Devoluciones y Reclamos:</strong> Es el siguiente gran módulo. Primero se define con el negocio la política de cambios y devoluciones, quién autoriza cada resolución y cómo se maneja el dinero devuelto; luego se construye con el mismo rigor que la logística: responsable, evidencia, plazo y bitácora sellada.<br/><br/>
+        <strong>3. Aviso automático de guía, guía con la paquetería, etiquetas y vista de bodega:</strong> Mejoras ya identificadas para quitarle trabajo manual al equipo: aviso de la guía al WhatsApp del cliente, generación de la guía directamente con la paquetería, etiqueta impresa para el paquete, vista de bodega en celular y reportes de logística.<br/><br/>
+        <strong>4. Validar el Informe de Anuncios y cruzar la inversión con las ventas:</strong> El informe de anuncios ya trae la inversión y el costo por conversación desde Meta; falta validarlo unos días contra la cuenta real y cruzarlo con las ventas del CRM para medir el retorno por campaña.<br/><br/>
       </p>
     </div>
   </div>
