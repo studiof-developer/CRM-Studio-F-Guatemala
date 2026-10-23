@@ -58,7 +58,7 @@ const MSG_COLUMNS = `h.id, h.session_id, h.created_at, h.message->>'content' AS 
 const NOT_READ_YET = `NOT EXISTS (SELECT 1 FROM payment_links p WHERE p.message_id = h.id AND (p.amount IS NOT NULL OR p.fetched_at > now() - interval '10 minutes'))`;
 
 let lastSync = 0;
-// Lee los links que las asesoras mandaron en las últimas 72 h y todavía no se han leído. Pensado para llamarse al abrir el
+// Lee los links que las asesoras mandaron en los últimos 8 días y todavía no se han leído. Pensado para llamarse al abrir el
 // Dashboard: como mucho una vez cada 30 s, y los que fallan se reintentan cada 10 minutos.
 export async function syncRecentPaymentLinks({ throttleMs = 30000 } = {}) {
   if (Date.now() - lastSync < throttleMs) return;
@@ -87,7 +87,7 @@ export async function applyLinkAmounts(pending) {
   return pending;
 }
 
-// Links mandados en las últimas 72 h al cliente que todavía no tiene una venta registrada después. Si a un cliente le mandaron
+// Links mandados en los últimos 8 días al cliente que todavía no tiene una venta registrada después. Si a un cliente le mandaron
 // varios links, cuenta solo el último. El resumen y la unión con los pendientes del chat están en pendingPayments.js.
 export async function pendingFromLinks() {
   const { rows } = await pool.query(

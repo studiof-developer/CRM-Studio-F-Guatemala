@@ -9,6 +9,7 @@ import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './convers
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
 import { fetchReport, validRange } from '../metaAdsReport.js';
+import { erpBuyerSql, parseIdleDays } from '../erpAudience.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
@@ -365,12 +366,6 @@ function periodRange(from, to) {
   return a <= b ? { from: a, to: b } : null;
 }
 
-// Cliente con historial de compras en el ERP: mismo cruce por los últimos 8 dígitos del teléfono que usa la ficha del cliente.
-const ERP_BUYER_SQL = `EXISTS (
-  SELECT 1 FROM erp_customers e
-  WHERE COALESCE(e.facturas_totales, 0) > 0 AND (e.telefono = right(c.whatsapp_number, 8) OR e.celular = right(c.whatsapp_number, 8))
-)`;
-
 function periodClauseSql(temperature, range, params) {
   params.push(range.from);
   const f = params.length;
@@ -402,7 +397,9 @@ router.get('/audience', async (req, res, next) => {
     const clauses = ['c.opted_out_campaigns = false'];
     if (temperature) { params.push(temperature); clauses.push(`(${EFFECTIVE_STATUS_SQL}) = $${params.length}`); }
     if (temperature && range) clauses.push(periodClauseSql(temperature, range, params));
-    if (temperature && req.query.erpOnly === '1') clauses.push(ERP_BUYER_SQL);
+    let idleDays;
+    try { idleDays = parseIdleDays(req.query.buyDays); } catch (e) { return res.status(400).json({ error: e.message }); }
+    if (temperature && (req.query.erpOnly === '1' || idleDays)) clauses.push(erpBuyerSql(idleDays));
     if (q?.trim()) {
       params.push(`%${q.trim().toLowerCase()}%`);
       clauses.push(`(lower(c.full_name) LIKE $${params.length} OR c.whatsapp_number LIKE $${params.length})`);
@@ -825,7 +822,7 @@ async function resolveTemplate(templateName, templateLanguage, lineId) {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { erpBuyersOnly, templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken, whatsappNumberId, periodFrom, periodTo } = req.body ?? {};
+    const { erpBuyersOnly, buyersIdleDays, templateName, templateLanguage, temperature, count, order, customerIds, newRecipients, headerMediaId, headerImageToken, whatsappNumberId, periodFrom, periodTo } = req.body ?? {};
     const range = periodRange(periodFrom, periodTo);
     if ((periodFrom || periodTo) && !range) return res.status(400).json({ error: 'Período inválido: usa fechas AAAA-MM-DD con "desde" antes de "hasta"' });
     if (!templateName?.trim() || !templateLanguage?.trim()) {
@@ -838,6 +835,8 @@ router.post('/', async (req, res, next) => {
     if (temperature && !VALID_TEMPERATURES.includes(temperature)) {
       return res.status(400).json({ error: 'invalid temperature' });
     }
+    let idleDays;
+    try { idleDays = parseIdleDays(buyersIdleDays); } catch (e) { return res.status(400).json({ error: e.message }); }
     const lineId = whatsappNumberId ? Number(whatsappNumberId) : undefined;
     const sortOrder = order === 'oldest' ? 'ASC' : 'DESC';
 
@@ -915,7 +914,7 @@ router.post('/', async (req, res, next) => {
          WHERE (${EFFECTIVE_STATUS_SQL}) = $1
            AND NOT (c.whatsapp_number = ANY($3::text[]))
            AND c.opted_out_campaigns = false
-           ${erpBuyersOnly === true ? `AND ${ERP_BUYER_SQL}` : ''}
+           ${erpBuyersOnly === true || idleDays ? `AND ${erpBuyerSql(idleDays)}` : ''}
            ${lineClause}
            ${periodClause}
          ORDER BY act.last_seen ${sortOrder} NULLS LAST

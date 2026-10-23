@@ -110,9 +110,9 @@ function sortedByTime(events) {
 // Medios de pago "recientes": una cuenta o link enviado hace días (de una compra que no se cerró)
 // no hace dueña de la venta a quien lo mandó si otra asesora fue quien atendió al cliente al pagar.
 export const PAYINFO_FRESH_MS = 24 * 3600000;
-// Cuánto tiempo sigue "pendiente de pago" un cliente al que se le dieron los medios de pago (lista en vivo del Dashboard). Es más largo que
+// Cuánto tiempo sigue "pendiente de pago" un cliente al que se le dieron los medios de pago (lista en vivo del Dashboard): 8 días. Es más largo que
 // PAYINFO_FRESH_MS a propósito: ese 24 h decide si un comprobante vale como venta y a quién se atribuye; no se toca.
-export const PENDING_HOURS = 72;
+export const PENDING_HOURS = 8 * 24;
 export const PENDING_FRESH_MS = PENDING_HOURS * 3600000;
 
 // Un comprobante del cliente con monto ya es una venta: la confirmación de la asesora la verifica, pero no es requisito.

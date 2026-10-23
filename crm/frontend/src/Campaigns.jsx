@@ -255,6 +255,9 @@ function NewCampaignModal({ onClose, onSent }) {
   const [erpOnly, setErpOnly] = useState(false);
   const [baseCount, setBaseCount] = useState(null);
   const [erpCount, setErpCount] = useState(null);
+  // Solo a quien lleva más de N días sin comprar (10 a 30, de 5 en 5): no se le escribe a quien compró hace 2 o 3 días.
+  const [idleDays, setIdleDays] = useState('');
+  const [idleCount, setIdleCount] = useState(null);
   const [manualQuery, setManualQuery] = useState('');
   const [manualResults, setManualResults] = useState([]);
   const [manualPicked, setManualPicked] = useState([]);
@@ -296,9 +299,11 @@ function NewCampaignModal({ onClose, onSent }) {
     const line = lineId ? Number(lineId) : undefined;
     searchCampaignAudience(temperature, '', line, opts).then((res) => { if (!cancelled) setBaseCount(res.count); }).catch(() => { if (!cancelled) setBaseCount(null); });
     searchCampaignAudience(temperature, '', line, { ...opts, erpOnly: true }).then((res) => { if (!cancelled) setErpCount(res.count); }).catch(() => { if (!cancelled) setErpCount(null); });
+    if (idleDays) searchCampaignAudience(temperature, '', line, { ...opts, erpOnly: true, buyDays: idleDays }).then((res) => { if (!cancelled) setIdleCount(res.count); }).catch(() => { if (!cancelled) setIdleCount(null); });
+    else setIdleCount(null);
     return () => { cancelled = true; };
-  }, [temperature, lineId, audienceMode, periodFrom, periodTo]);
-  const audienceCount = erpOnly ? erpCount : baseCount;
+  }, [temperature, lineId, audienceMode, periodFrom, periodTo, idleDays]);
+  const audienceCount = erpOnly ? (idleDays ? idleCount : erpCount) : baseCount;
 
   useEffect(() => {
     if (!manualQuery.trim()) { setManualResults([]); return; }
@@ -465,6 +470,7 @@ function NewCampaignModal({ onClose, onSent }) {
         templateLanguage: template.language,
         temperature: temperature || undefined,
         erpBuyersOnly: temperature && erpOnly ? true : undefined,
+        buyersIdleDays: temperature && erpOnly && idleDays ? Number(idleDays) : undefined,
         count: temperature && audienceMode === 'count' ? count : undefined,
         periodFrom: temperature && audienceMode === 'period' ? periodFrom : undefined,
         periodTo: temperature && audienceMode === 'period' ? periodTo : undefined,
@@ -651,6 +657,14 @@ function NewCampaignModal({ onClose, onSent }) {
                       </span>
                     </span>
                   </label>
+                )}
+                {temperature && erpOnly && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-greige-ink">
+                    <span>Que lleven más de</span>
+                    <select value={idleDays} onChange={(e) => setIdleDays(e.target.value)} className="rounded-lg border border-line bg-paper px-2 py-1 text-xs text-ink"><option value="">cualquier tiempo</option>{[10, 15, 20, 25, 30].map((d) => <option key={d} value={d}>{d} días</option>)}</select>
+                    <span>sin comprar</span>
+                    {idleDays && <span>→ <b className="text-ink">{idleCount ?? '…'}</b> clientes cumplen. Se deja fuera a quien compró en ese lapso, en tienda o por el CRM.</span>}
+                  </div>
                 )}
                 {temperature && audienceMode === 'count' && (
                   <div className="mt-2.5 flex items-center gap-2.5">

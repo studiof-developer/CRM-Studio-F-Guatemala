@@ -426,7 +426,7 @@ router.get('/by-advisor', async (req, res, next) => {
       transParams
     );
 
-    // Pendiente de pago: links de NeoLink mandados en las últimas 72 h sin venta registrada después. Leer los links nuevos puede
+    // Pendiente de pago: links de NeoLink mandados en los últimos 8 días sin venta registrada después. Leer los links nuevos puede
     // tardar unos segundos (se abre la página de pago); se espera como máximo 6 s y el resto se completa en la siguiente carga.
     let pending = null;
     try {

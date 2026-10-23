@@ -4,16 +4,16 @@ import { createLazyOcrRunner } from './ocrRunner.js';
 import { pendingFromLinks } from './paymentLinks.js';
 import { PENDING_HOURS, PENDING_FRESH_MS } from './salesRules.js';
 
-// Pendiente de pago AHORA: ventas que la asesora ya dejó "cerradas" (entregó los medios de pago en las últimas 72 h, por cuenta o
+// Pendiente de pago AHORA: ventas que la asesora ya dejó "cerradas" (entregó los medios de pago en los últimos 8 días, por cuenta o
 // por link) y de las que todavía no hay comprobante ni venta registrada. Dos fuentes que se juntan por cliente:
 //   - links de NeoLink: el monto sale de la página del link (paymentLinks.js);
 //   - el chat: el mismo motor del Cierre del día (findPending), con el monto que la asesora cotizó.
 // Si hay las dos para un mismo cliente se usa el link, que trae el monto exacto.
-const CACHE_MS = 60000;
-const MAX_CANDIDATES = 150; // la ventana pasó de 24 a 72 h: caben más clientes (la lista se recalcula como mucho cada minuto)
+const CACHE_MS = 120000;
+const MAX_CANDIDATES = 400; // la ventana pasó de 24 h a 8 días: caben más clientes (la lista se recalcula como mucho cada 2 minutos)
 let cache = null; // { at, promise }
 
-// Clientes a los que una asesora les mandó, en las últimas 72 h, algo que parece medios de pago: texto con cuenta, banco o link,
+// Clientes a los que una asesora les mandó, en los últimos 8 días, algo que parece medios de pago: texto con cuenta, banco o link,
 // o una imagen (la tarjeta de medios de pago se manda como imagen; el motor decide cuáles lo son leyéndolas, con caché).
 const CANDIDATES_SQL = `
   SELECT DISTINCT c.id, c.whatsapp_number, c.full_name, c.manual_status
@@ -24,8 +24,19 @@ const CANDIDATES_SQL = `
          OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = h.id AND a.kind = 'image'))
   LIMIT ${MAX_CANDIDATES}`;
 
+// Instagram y Messenger: lo que escribe la asesora vive en social_messages (texto: cuenta, banco o link; la tarjeta de medios de pago como imagen
+// solo se reconoce en WhatsApp, donde se puede leer con el OCR).
+const SOCIAL_CANDIDATES_SQL = `
+  SELECT DISTINCT c.id, c.whatsapp_number, c.full_name, c.manual_status
+  FROM social_messages sm JOIN social_contacts sc ON sc.id = sm.contact_id JOIN customers c ON c.id = sc.customer_id
+  WHERE sm.direction = 'out' AND sm.created_at >= now() - interval '${PENDING_HOURS} hours'
+    AND sm.body ~* '(https?://|neolink|banrural|banco industrial|\\mbac\\M|n[uú]mero de cuenta|cuenta (monetaria|de ahorros?|corriente)|a nombre de|puedes? pagar)'
+  LIMIT ${MAX_CANDIDATES}`;
+
 async function pendingFromChats() {
-  const { rows: customers } = await pool.query(CANDIDATES_SQL);
+  const [wa, social] = await Promise.all([pool.query(CANDIDATES_SQL), pool.query(SOCIAL_CANDIDATES_SQL)]);
+  const seen = new Set();
+  const customers = [...wa.rows, ...social.rows].filter((c) => !seen.has(c.id) && seen.add(c.id));
   const canonical = nameResolver();
   const ocr = createLazyOcrRunner({ maxReads: 8, throttle: false });
   const out = [];

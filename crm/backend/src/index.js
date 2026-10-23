@@ -33,6 +33,7 @@ import { requireAuth, requireRole } from './auth.js';
 import { addClient, removeClient } from './events.js';
 import { startListener } from './listener.js';
 import { startCloseScheduler } from './salesClose.js';
+import { startPendingPromotion } from './pipelinePromote.js';
 import { runMigrations } from './migrate.js';
 import { seedDefaultWhatsappNumber, syncWabaSubscriptions } from './seedWhatsappNumber.js';
 
@@ -139,6 +140,7 @@ app.get('/api/events', requireAuth, (req, res) => {
 
 startListener();
 startCloseScheduler();
+startPendingPromotion();
 
 // A deploy landing mid-send used to strand that message forever. The startup pass
 // catches whatever the restart just orphaned; the interval catches sends that hung
