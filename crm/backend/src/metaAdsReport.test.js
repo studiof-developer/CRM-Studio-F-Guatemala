@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rowMetrics, totalsOf, previousRange, observations, validRange, fillDaily } from './metaAdsReport.js';
+import { rowMetrics, totalsOf, previousRange, observations, validRange, fillDaily, DEFAULT_THRESHOLDS } from './metaAdsReport.js';
 
 const row = (name, spend, conv, clicks, ctr, id = name) => ({ campaign_id: id, campaign_name: name, spend: String(spend), impressions: '10000', reach: '8000', frequency: '1.2', inline_link_clicks: String(clicks), inline_link_click_ctr: String(ctr), cpm: '500', actions: conv == null ? [] : [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: String(conv) }] });
 const money = (n) => `$${Math.round(n)}`;
@@ -57,4 +57,17 @@ test('la serie por día trae todos los días del período, con ceros donde no hu
   const d = fillDaily([{ date: '2026-10-20', spend: 100, conversations: 2, costPerConversation: 50, linkClicks: 9, impressions: 500 }], '2026-10-19', '2026-10-21');
   assert.deepEqual(d.map((x) => [x.date, x.spend, x.conversations]), [['2026-10-19', 0, 0], ['2026-10-20', 100, 2], ['2026-10-21', 0, 0]]);
   assert.equal(d[0].costPerConversation, null);
+});
+
+test('la serie por día calcula la conversión, el CPC y el CTR de cada día con las sumas del día', () => {
+  const d = fillDaily([{ date: '2026-10-20', spend: 443030, conversations: 230, costPerConversation: 1926.2, linkClicks: 840, impressions: 40000 }], '2026-10-20', '2026-10-21');
+  assert.equal(d[0].conversionPct.toFixed(2), '27.38');
+  assert.equal(Math.round(d[0].cpc), 527);
+  assert.equal(d[0].ctr.toFixed(2), '2.10');
+  assert.equal(d[1].conversionPct, null);
+  assert.equal(d[1].cpc, null);
+});
+
+test('los umbrales de calificación traen los valores del traficker por defecto', () => {
+  assert.deepEqual(DEFAULT_THRESHOLDS, { cprGood: 1200, cprRegular: 2500, convGood: 25, convRegular: 20 });
 });

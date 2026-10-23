@@ -1,4 +1,5 @@
 import { getMetaAdsCredentials, graphGet } from './metaAds.js';
+import { getSetting } from './routes/settings.js';
 
 // Informe de anuncios de Meta (solo lectura, ads_read): las mismas columnas que el Administrador de anuncios usa en los reportes de
 // la pauta (gasto, conversaciones con mensajes, costo por conversación, % de conversión, clics en el enlace, CPC y CTR) por campaña,
@@ -11,6 +12,10 @@ const LEVELS = {
 };
 const METRICS = ['spend', 'impressions', 'reach', 'frequency', 'inline_link_clicks', 'inline_link_click_ctr', 'cpm', 'actions'];
 const CTR_GOAL = 2; // % de CTR sobre el enlace que se considera sano (el que usan en los reportes diarios)
+// Umbrales con los que el traficker califica la pauta (en la moneda de la cuenta); se pueden cambiar en app_settings.meta_ads_thresholds.
+export const DEFAULT_THRESHOLDS = { cprGood: 1200, cprRegular: 2500, convGood: 25, convRegular: 20 };
+const CACHE_MS = 60 * 1000; // varias personas mirando el informe no multiplican las llamadas a Meta
+const cache = new Map();
 const COST_UP = 0.15; // un costo por conversación que sube más de 15% contra el período anterior se avisa
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -58,7 +63,8 @@ export function fillDaily(rows, since, until) {
   const out = [];
   for (let d = since; d <= until; d = new Date(+new Date(`${d}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)) {
     const r = byDate.get(d);
-    out.push({ date: d, spend: r?.spend ?? 0, conversations: r?.conversations ?? 0, costPerConversation: r?.costPerConversation ?? null, linkClicks: r?.linkClicks ?? 0, impressions: r?.impressions ?? 0 });
+    const spend = r?.spend ?? 0; const conversations = r?.conversations ?? 0; const linkClicks = r?.linkClicks ?? 0; const impressions = r?.impressions ?? 0;
+    out.push({ date: d, spend, conversations, costPerConversation: r?.costPerConversation ?? null, linkClicks, impressions, conversionPct: linkClicks > 0 ? (conversations / linkClicks) * 100 : null, cpc: div(spend, linkClicks), ctr: impressions > 0 ? (linkClicks / impressions) * 100 : null });
   }
   return out;
 }
@@ -102,20 +108,21 @@ export function observations({ rows, previous, totals, since, until, fmt }) {
   return out;
 }
 
-async function insights(creds, level, since, until) {
+// daily = un renglón por cada día y cada campaña/conjunto/anuncio (para el detalle por día).
+async function insights(creds, level, since, until, daily = false) {
   const L = LEVELS[level];
   const range = encodeURIComponent(JSON.stringify({ since, until }));
-  const fields = [...L.fields, ...METRICS].join(',');
+  const fields = [...(daily ? ['date_start'] : []), ...L.fields, ...METRICS].join(',');
   const rows = [];
   let after = '';
-  for (let page = 0; page < 5; page++) {
-    const body = await graphGet(`act_${creds.accountId}/insights?level=${level}&fields=${fields}&time_range=${range}&limit=200${after}`, creds.token);
+  for (let page = 0; page < (daily ? 12 : 5); page++) {
+    const body = await graphGet(`act_${creds.accountId}/insights?level=${level}&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}&limit=200${after}`, creds.token);
     rows.push(...(body.data ?? []));
     const cursor = body.paging?.cursors?.after;
     if (!body.paging?.next || !cursor) break;
     after = `&after=${encodeURIComponent(cursor)}`;
   }
-  return rows.map((r) => rowMetrics(r, level));
+  return rows.map((r) => (daily ? { ...rowMetrics(r, level), date: r.date_start } : rowMetrics(r, level)));
 }
 
 // Estado de entrega (activa / desactivada…) de cada campaña, conjunto o anuncio.
@@ -126,15 +133,26 @@ async function statuses(creds, level) {
 
 export async function fetchReport({ since, until, level = 'campaign', fmt }) {
   if (!LEVELS[level]) throw Object.assign(new Error('Nivel no válido'), { status: 400 });
+  const key = `${since}|${until}|${level}`;
+  const hit = cache.get(key);
+  if (!fmt && hit && Date.now() - hit.at < CACHE_MS) return hit.report;
+  const report = await buildReport({ since, until, level, fmt });
+  if (!fmt) cache.set(key, { at: Date.now(), report });
+  return report;
+}
+
+async function buildReport({ since, until, level, fmt }) {
   const creds = await getMetaAdsCredentials();
   if (!creds) throw Object.assign(new Error('Meta Ads no está configurado — guarda el ID de cuenta y el token en Configuración'), { status: 409 });
   const prevRange = previousRange(since, until);
   const multiDay = daysBetween(since, until) > 1;
-  const [current, previous, status, account, accNow, accPrev, accDaily] = await Promise.all([
+  const [current, previous, status, account, accNow, accPrev, accDaily, dayRowsRaw, savedThresholds] = await Promise.all([
     insights(creds, level, since, until), insights(creds, level, prevRange.since, prevRange.until), statuses(creds, level).catch(() => new Map()),
     graphGet(`act_${creds.accountId}?fields=name,currency`, creds.token),
     accountInsights(creds, since, until, false).catch(() => []), accountInsights(creds, prevRange.since, prevRange.until, false).catch(() => []),
     multiDay ? accountInsights(creds, since, until, true).catch(() => []) : Promise.resolve([]),
+    multiDay ? insights(creds, level, since, until, true).catch(() => []) : Promise.resolve([]),
+    getSetting('meta_ads_thresholds', {}).catch(() => ({})),
   ]);
   const rows = current.map((r) => ({ ...r, status: status.get(r.id) ?? null })).sort((a, b) => b.spend - a.spend);
   const withAccount = (t, acc) => ({ ...t, reach: acc?.reach ?? null, frequency: acc?.frequency ?? null });
@@ -145,6 +163,8 @@ export async function fetchReport({ since, until, level = 'campaign', fmt }) {
   const money = fmt ?? ((n) => (account.currency === 'COP' ? `$${dots(n)}` : `${account.currency} ${dots(n)}`));
   return {
     since, until, level, currency: account.currency, accountName: account.name, days: daysBetween(since, until), previousRange: prevRange,
+    fetchedAt: new Date().toISOString(), thresholds: { ...DEFAULT_THRESHOLDS, ...(savedThresholds ?? {}) },
+    dayRows: dayRowsRaw.filter((r) => r.spend > 0 || r.conversations > 0).map((r) => ({ ...r, status: status.get(r.id) ?? null })).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.spend - a.spend)),
     rows, totals, previousTotals: prevTotals, daily: multiDay ? fillDaily(accDaily, since, until) : [], observations: observations({ rows, previous, totals, since, until, fmt: money }),
   };
 }
