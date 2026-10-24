@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { X, Search, Plus, Trash2, Check, ChevronLeft, ChevronRight, Send, Loader2, ImageIcon, Wallet, Truck, CreditCard, CheckCircle2, Circle, ShieldCheck, Store, Home, Building2, StickyNote } from 'lucide-react';
-import { fetchCustomers, fetchCustomerQuotes, fetchProducts, productImageUrl, createSheet, fetchSheet, updateSheet, runSheetStep, fetchChatProofs } from '../../api.js';
+import { fetchCustomers, fetchCustomerQuotes, fetchProducts, fetchProductStock, productImageUrl, createSheet, fetchSheet, updateSheet, runSheetStep, fetchChatProofs } from '../../api.js';
 import { showSuccess, showError } from '../Toast.jsx';
 import Avatar from '../Avatar.jsx';
 import { PaymentDialog, ProofThumbStatic } from './StepDialogs.jsx';
@@ -133,13 +133,20 @@ function ItemsStep({ items, setItems, warehouses, locked }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [allStore, setAllStore] = useState('');
+  // Tiendas con existencia por producto: salen del catálogo (ERP) y se piden solo para las prendas que todavía no se conocen.
+  const [stock, setStock] = useState({});
+  const idsKey = items.map((i) => i.product_id).filter((id) => id && !(id in stock)).join(',');
+  useEffect(() => {
+    if (!idsKey) return;
+    fetchProductStock(idsKey.split(',').map(Number)).then((m) => setStock((s) => ({ ...s, ...m }))).catch(() => {});
+  }, [idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (term.trim().length < 2) { setResults([]); return undefined; }
     setLoading(true);
     const t = setTimeout(() => fetchProducts(term).then(setResults).catch(() => setResults([])).finally(() => setLoading(false)), 350);
     return () => clearTimeout(t);
   }, [term]);
-  const add = (p) => { setItems((l) => [...l, { product_id: p.id, reference: String(p.reference || p.sku || ''), description: p.name ?? '', size: p.size ?? '', color: p.color ?? '', quantity: 1, unit_price: Number(p.price) || 0, discount_pct: Number(p.discount_pct) || 0, origin_warehouse: '' }]); setTerm(''); setResults([]); };
+  const add = (p) => { setStock((s) => ({ ...s, [p.id]: p.stores ?? [] })); setItems((l) => [...l, { product_id: p.id, reference: String(p.reference || p.sku || ''), description: p.name ?? '', size: p.size ?? '', color: p.color ?? '', quantity: 1, unit_price: Number(p.price) || 0, discount_pct: Number(p.discount_pct) || 0, origin_warehouse: p.stores?.length === 1 ? p.stores[0].store : '' }]); setTerm(''); setResults([]); };
   const set = (n, k, v) => setItems((l) => l.map((it, i) => (i === n ? { ...it, [k]: v } : it)));
   const goods = items.reduce((s, i) => s + Number(i.unit_price || 0) * (1 - Number(i.discount_pct || 0) / 100) * Number(i.quantity || 0), 0);
   const stores = new Set(items.map((i) => String(i.origin_warehouse ?? '').trim().toLowerCase()).filter(Boolean));
@@ -182,7 +189,15 @@ function ItemsStep({ items, setItems, warehouses, locked }) {
               <input aria-label="Cantidad" type="number" min="1" className={inputCls} disabled={locked} value={it.quantity} onChange={(e) => set(n, 'quantity', e.target.value)} />
               <input aria-label="Precio" type="number" step="0.01" min="0" className={inputCls} disabled={locked} value={it.unit_price} onChange={(e) => set(n, 'unit_price', e.target.value)} />
               <input aria-label="Descuento %" type="number" min="0" max="100" className={inputCls} disabled={locked} value={it.discount_pct} onChange={(e) => set(n, 'discount_pct', e.target.value)} />
-              <input aria-label="Tienda de origen" list="wiz-stores" placeholder="Tienda de origen" className={inputCls} disabled={locked} value={it.origin_warehouse ?? ''} onChange={(e) => set(n, 'origin_warehouse', e.target.value)} />
+              {stock[it.product_id]?.length > 0 ? (
+                <select aria-label="Tienda de origen" className={inputCls} disabled={locked} value={it.origin_warehouse ?? ''} onChange={(e) => set(n, 'origin_warehouse', e.target.value)}>
+                  <option value="">Elige la tienda…</option>
+                  {stock[it.product_id].map((s) => <option key={s.store} value={s.store}>{s.store} · {s.quantity} disp.{s.quantity < Number(it.quantity || 0) ? ' (no alcanza)' : ''}</option>)}
+                  {it.origin_warehouse && !stock[it.product_id].some((s) => s.store === it.origin_warehouse) && <option value={it.origin_warehouse}>{it.origin_warehouse} · sin existencia</option>}
+                </select>
+              ) : (
+                <input aria-label="Tienda de origen" list="wiz-stores" placeholder="Tienda de origen" className={inputCls} disabled={locked} value={it.origin_warehouse ?? ''} onChange={(e) => set(n, 'origin_warehouse', e.target.value)} />
+              )}
               {!locked && <button type="button" aria-label="Quitar prenda" onClick={() => setItems((l) => l.filter((_, i) => i !== n))} className="rounded-lg p-2 text-greige hover:text-danger"><Trash2 size={16} /></button>}
             </li>
           ))}

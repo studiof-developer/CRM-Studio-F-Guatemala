@@ -33,6 +33,31 @@ async function enrichRowsWithErpPrices(rows) {
   return rows;
 }
 
+// Tiendas con existencia de cada artículo (de mayor a menor): [{ store, quantity }]. Vacío si el ERP aún no ha dado el desglose.
+async function storesBySku(skus) {
+  const map = new Map();
+  if (!skus.length) return map;
+  const { rows } = await pool.query('SELECT sku, sucursal, quantity FROM product_store_stock WHERE sku = ANY($1) ORDER BY quantity DESC, sucursal', [skus]);
+  for (const r of rows) { if (!map.has(r.sku)) map.set(r.sku, []); map.get(r.sku).push({ store: r.sucursal, quantity: r.quantity }); }
+  return map;
+}
+async function attachStores(rows) {
+  const map = await storesBySku(rows.map((r) => r.sku));
+  for (const r of rows) r.stores = map.get(r.sku) ?? [];
+  return rows;
+}
+
+// GET /api/products/stock?ids=1,2,3 — las tiendas con existencia de esos productos, por id (la ficha de pedido las pide para las prendas que ya trae).
+router.get('/stock', async (req, res, next) => {
+  try {
+    const ids = String(req.query.ids ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 100);
+    if (!ids.length) return res.json({});
+    const { rows } = await pool.query('SELECT id, sku FROM products WHERE id = ANY($1)', [ids]);
+    const map = await storesBySku(rows.map((r) => r.sku));
+    res.json(Object.fromEntries(rows.map((r) => [r.id, map.get(r.sku) ?? []])));
+  } catch (err) { next(err); }
+});
+
 router.get('/', async (req, res, next) => {
   try {
     const q = req.query.q?.trim();
@@ -47,6 +72,7 @@ router.get('/', async (req, res, next) => {
       );
 
       await enrichRowsWithErpPrices(rows);
+      await attachStores(rows);
 
       // Si algún producto no tiene foto vinculada aún, busca coincidencia en tiempo real
       for (const row of rows) {
@@ -67,6 +93,7 @@ router.get('/', async (req, res, next) => {
        FROM products ORDER BY id DESC LIMIT 500`
     );
     await enrichRowsWithErpPrices(rows);
+    await attachStores(rows);
     res.json(rows);
   } catch (err) { next(err); }
 });

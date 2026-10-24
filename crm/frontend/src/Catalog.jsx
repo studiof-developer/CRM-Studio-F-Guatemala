@@ -291,6 +291,11 @@ export default function Catalog({ user }) {
                   ) : (
                     p.stock_quantity
                   )}
+                  {p.stores?.length > 0 && (
+                    <span className="mt-0.5 block max-w-[220px] text-[11px] font-normal leading-snug text-muted-foreground">
+                      {p.stores.map((s) => `${s.store} ${s.quantity}`).join(' · ')}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <Badge variant={p.active ? 'success' : 'neutral'}>{p.active ? 'Activo' : 'Inactivo'}</Badge>

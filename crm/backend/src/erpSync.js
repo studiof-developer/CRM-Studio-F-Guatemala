@@ -66,6 +66,44 @@ function isSellableSucursal(sucursal) {
   return !/imperfecto/i.test(sucursal || '');
 }
 
+// La llave de un artículo vendible (la misma que products.sku): código de barras o referencia + talla + color.
+export const skuKeyOf = (r) => r.CodBarras || `${r.Referencia}_${r.Talla || 'U'}_${r.Color || r.ColorSF || 'U'}`;
+
+// Existencia vendible por artículo y sucursal: [{ sku, sucursal, quantity }], sin las bodegas de imperfectos ni las existencias en cero.
+export function collectStoreStock(rows) {
+  const bySku = new Map();
+  for (const r of rows) {
+    if (!r.CodBarras && !r.Referencia) continue;
+    const sucursal = String(r.Sucursal ?? '').trim();
+    const qty = Number(r.ExistenciaDisponible) || 0;
+    if (!sucursal || !isSellableSucursal(sucursal) || qty <= 0) continue;
+    const key = skuKeyOf(r);
+    if (!bySku.has(key)) bySku.set(key, new Map());
+    const stores = bySku.get(key);
+    stores.set(sucursal, (stores.get(sucursal) ?? 0) + qty);
+  }
+  return [...bySku].flatMap(([sku, stores]) => [...stores].map(([sucursal, quantity]) => ({ sku, sucursal, quantity })));
+}
+
+// Reemplaza el desglose completo en una sola transacción (quien lee ve el anterior hasta que termina). Si el ERP no devolvió nada, no borra lo que había.
+async function replaceStoreStock(entries) {
+  if (!entries.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM product_store_stock');
+    const CHUNK = 5000;
+    for (let i = 0; i < entries.length; i += CHUNK) {
+      const part = entries.slice(i, i + CHUNK);
+      await client.query(
+        'INSERT INTO product_store_stock (sku, sucursal, quantity) SELECT * FROM unnest($1::text[], $2::text[], $3::int[]) ON CONFLICT (sku, sucursal) DO UPDATE SET quantity = EXCLUDED.quantity, synced_at = now()',
+        [part.map((e) => e.sku), part.map((e) => e.sucursal), part.map((e) => e.quantity)]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) { await client.query('ROLLBACK').catch(() => {}); throw err; } finally { client.release(); }
+}
+
 let cachedPriceMaps = { exactMap: new Map(), baseMap: new Map() };
 let lastPriceSyncAt = 0;
 let inflightPriceSync = null;
@@ -230,7 +268,7 @@ async function syncErpInventory() {
   const bySku = new Map();
   for (const r of rows) {
     if (!r.CodBarras && !r.Referencia) continue;
-    const skuKey = r.CodBarras || `${r.Referencia}_${r.Talla || 'U'}_${r.Color || r.ColorSF || 'U'}`;
+    const skuKey = skuKeyOf(r);
     let p = bySku.get(skuKey);
     if (!p) {
       const refPrice = lookupReferencePrice(priceMaps, r.Referencia);
@@ -267,6 +305,8 @@ async function syncErpInventory() {
     products,
     (p) => [p.sku, p.reference, p.barcode, p.erp_article_id, p.name, p.category, p.line, p.size, p.color, p.price, 0, p.stock, true]
   );
+
+  await replaceStoreStock(collectStoreStock(rows));
 
   const extraPriceUpdates = await applyReferencePricesToExistingProducts(priceMaps);
   return { productsCount: products.length, refPricesCount: priceMaps.exactMap.size, extraPriceUpdates };

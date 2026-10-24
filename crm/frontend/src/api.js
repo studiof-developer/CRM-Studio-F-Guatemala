@@ -600,6 +600,14 @@ export async function fetchProducts(query) {
   return res.json();
 }
 
+// Tiendas con existencia por id de producto: { [id]: [{ store, quantity }] }.
+export async function fetchProductStock(ids) {
+  if (!ids.length) return {};
+  const res = await apiFetch(`/api/products/stock?ids=${ids.join(',')}`);
+  if (!res.ok) throw new Error('No se pudo consultar la existencia por tienda');
+  return res.json();
+}
+
 export async function createQuote(payload) {
   const res = await apiFetch('/api/quotes', {
     method: 'POST',
