@@ -71,10 +71,10 @@ export function StepDialog({ sheetId, action, onClose, onDone }) {
 }
 
 // Agrega un pago a la ficha: archivo nuevo o un comprobante que el cliente ya mandó por el chat.
-export function PaymentDialog({ sheet, onClose, onDone }) {
-  const [form, setForm] = useState({ method: 'transferencia', amount: '', bank: '', reference_number: '', paid_at: today(), platform_verified: false });
+export function PaymentDialog({ sheet, preset = null, onClose, onDone }) {
+  const [form, setForm] = useState({ method: 'transferencia', amount: preset?.amount ?? '', bank: '', reference_number: '', paid_at: today(), platform_verified: false });
   const [files, setFiles] = useState([]);
-  const [chatId, setChatId] = useState(null);
+  const [chatId, setChatId] = useState(preset?.chatId ?? null);
   const [proofs, setProofs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -132,7 +132,7 @@ export function PaymentDialog({ sheet, onClose, onDone }) {
 }
 
 // Miniatura sin visor (la selección del chat usa el clic para elegir).
-function ProofThumbStatic({ id, mime, ocr }) {
+export function ProofThumbStatic({ id, mime, ocr }) {
   return (
     <span className={`relative block h-20 w-20 overflow-hidden rounded-xl border border-line ${SOFT}`}>
       {mime?.startsWith('image/') ? <img src={logisticsFileUrl(id)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <span className="flex h-full items-center justify-center text-[10px] text-greige-ink">PDF</span>}

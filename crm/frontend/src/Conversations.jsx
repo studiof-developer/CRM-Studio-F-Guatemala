@@ -24,6 +24,7 @@ import Select from './components/Select.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import EditCustomerModal from './components/EditCustomerModal.jsx';
 import QuoteModal from './components/QuoteModal.jsx';
+import OrderSheetButton from './components/OrderSheetButton.jsx';
 import { showSuccess, showError } from './components/Toast.jsx';
 
 // Same icon/color pairing as the ticket-status pills in the list and header below —
@@ -760,6 +761,7 @@ function SocialThreadPanel({
               >
                 <Calculator size={18} />
               </button>
+              <OrderSheetButton customer={info?.customerId ? { id: info.customerId, full_name: currentName, whatsapp_number: `social:${contactId}` } : null} />
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -2907,6 +2909,7 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
                   >
                     <Calculator size={18} />
                   </button>
+                  <OrderSheetButton customer={thread?.customerId ? { id: thread.customerId, full_name: thread.customerName, whatsapp_number: thread.whatsappNumber || (selectedId ? selectedId.split('__')[0] : '') } : null} />
                   <div className="relative flex-1">
                     {slashResults.length > 0 && (
                       <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-paper shadow-lg">

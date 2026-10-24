@@ -69,6 +69,8 @@ const BASE_TABS = {
   quickReplies: { label: 'Respuestas rápidas', icon: Zap, Component: QuickReplies },
   // Informe de anuncios de Meta: para todos los roles (la ruta /api/meta-ads solo pide sesión).
   adsReport: { label: 'Informe de anuncios', icon: BarChart3, Component: AdsReportPage },
+  // Cada asesora crea (también desde el chat) y sigue sus propias fichas; la ruta solo le muestra las suyas.
+  fichas: { label: 'Fichas de pedido', icon: ClipboardList, Component: Fichas },
 };
 
 // Admin and supervisor only.
@@ -95,7 +97,6 @@ const ADMIN_TABS = {
 
 // Logística: por ahora solo el administrador y quien tenga un rol de logística asignado (se amplía a las asesoras cuando el proceso esté validado).
 const LOGISTICS_TABS = {
-  fichas: { label: 'Fichas de pedido', icon: ClipboardList, Component: Fichas },
   logistica: { label: 'Logística', icon: Truck, Component: Logistica },
 };
 

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { X, Search, Plus, Trash2, Check, ChevronLeft, ChevronRight, Send, Loader2, ImageIcon, Wallet, Truck, CreditCard, CheckCircle2, Circle, ShieldCheck, Store, Home, Building2, StickyNote } from 'lucide-react';
-import { fetchCustomers, fetchCustomerQuotes, fetchProducts, productImageUrl, createSheet, fetchSheet, updateSheet, runSheetStep } from '../../api.js';
+import { fetchCustomers, fetchCustomerQuotes, fetchProducts, productImageUrl, createSheet, fetchSheet, updateSheet, runSheetStep, fetchChatProofs } from '../../api.js';
 import { showSuccess, showError } from '../Toast.jsx';
 import Avatar from '../Avatar.jsx';
-import { PaymentDialog } from './StepDialogs.jsx';
+import { PaymentDialog, ProofThumbStatic } from './StepDialogs.jsx';
 import { Drawer, Panel, PrimaryBtn, GhostBtn, FieldRow, ProofThumb, AuditPill, inputCls, SOFT, METHOD_LABELS, q, fmtDT } from '../../lib/logisticsUi.jsx';
 
 const STEPS = [['cliente', 'Cliente'], ['prendas', 'Prendas'], ['entrega', 'Entrega y datos'], ['pagos', 'Pagos'], ['revision', 'Revisión']];
@@ -55,7 +55,7 @@ const Option = ({ checked, onClick, title, text }) => (
 );
 
 // — paso 1: cliente y cotización —
-function CustomerStep({ onCreate, busy }) {
+function CustomerStep({ onCreate, busy, initialCustomer = null }) {
   const [term, setTerm] = useState('');
   const [results, setResults] = useState([]);
   const [customer, setCustomer] = useState(null);
@@ -66,7 +66,12 @@ function CustomerStep({ onCreate, busy }) {
     const t = setTimeout(() => fetchCustomers(term.trim(), undefined, 15).then((r) => setResults(Array.isArray(r) ? r : (r.customers ?? []))).catch(() => {}), 300);
     return () => clearTimeout(t);
   }, [term, customer]);
-  const pick = (c) => { setCustomer(c); setQuoteId(null); fetchCustomerQuotes(c.id).then(setQuotes).catch(() => setQuotes([])); };
+  // Desde el chat el cliente ya viene elegido y se propone su cotización más reciente (la asesora puede cambiarla o quitarla).
+  const pick = (c, preselect = false) => {
+    setCustomer(c); setQuoteId(null);
+    fetchCustomerQuotes(c.id).then((qs) => { setQuotes(qs); if (preselect && qs.length) setQuoteId([...qs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].id); }).catch(() => setQuotes([]));
+  };
+  useEffect(() => { if (initialCustomer) pick(initialCustomer, true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-4">
@@ -87,7 +92,7 @@ function CustomerStep({ onCreate, busy }) {
         <>
           <Panel>
             <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-3"><Avatar name={customer.full_name} size={40} /><span><span className="block text-sm font-semibold text-ink">{customer.full_name}</span><span className="block text-xs text-greige-ink">{customer.whatsapp_number}</span></span></span>
-              <button type="button" onClick={() => { setCustomer(null); setQuotes([]); }} className="text-xs font-semibold text-accent hover:underline">Cambiar</button></div>
+              {!initialCustomer && <button type="button" onClick={() => { setCustomer(null); setQuotes([]); }} className="text-xs font-semibold text-accent hover:underline">Cambiar</button>}</div>
           </Panel>
           <Panel title="¿Parte de una cotización?" icon={CreditCard}>
             <div className="space-y-2">
@@ -244,6 +249,11 @@ function DeliveryStep({ data, set, config, transfers }) {
 // — paso 4: pagos —
 function PaymentsStep({ detail, onAdd }) {
   const { payments, paid, sheet } = detail;
+  // Comprobantes que el cliente mandó por el chat y todavía no respaldan un pago de esta ficha: un clic y el pago nace con su comprobante y el monto leído.
+  const [proofs, setProofs] = useState([]);
+  useEffect(() => { fetchChatProofs(sheet.customer_id).then((r) => setProofs(r.proofs)).catch(() => {}); }, [sheet.customer_id]);
+  const used = new Set(payments.map((p) => p.attachment_id));
+  const suggested = proofs.filter((p) => !used.has(p.id)).sort((a, b) => (b.ocr_amount != null) - (a.ocr_amount != null)).slice(0, 8);
   const declared = payments.filter((p) => p.audit_status !== 'rechazado').reduce((s, p) => s + Number(p.amount), 0);
   const withFreight = paid.required > Number(sheet.total) + 0.001;
   return (
@@ -257,6 +267,16 @@ function PaymentsStep({ detail, onAdd }) {
         </div>
         {declared + 0.001 < paid.required && <p className="mt-2 text-xs text-warning">Faltan {q(paid.required - declared)} por cargar.</p>}
       </Panel>
+      {suggested.length > 0 && (
+        <Panel title="Comprobantes del chat" icon={ImageIcon}>
+          <p className="mb-2 text-xs text-greige-ink">Esto mandó el cliente por el chat. Toca uno para agregarlo como pago; el monto sobre la imagen es lo que leyó el sistema, confírmalo.</p>
+          <div className="flex flex-wrap gap-2">
+            {suggested.map((p) => (
+              <button key={p.id} type="button" onClick={() => onAdd({ chatId: p.id, amount: p.ocr_amount ?? '' })} title={fmtDT(p.created_at)} className="block rounded-xl ring-2 ring-transparent transition hover:ring-accent"><ProofThumbStatic id={p.id} mime={p.mime_type} ocr={p.ocr_amount} /></button>
+            ))}
+          </div>
+        </Panel>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {payments.map((p) => (
           <div key={p.id} className="flex gap-3 rounded-2xl border border-line bg-paper p-3.5 shadow-sm">
@@ -264,7 +284,7 @@ function PaymentsStep({ detail, onAdd }) {
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b className="tabular-nums text-ink">{q(p.amount)}</b><AuditPill status={p.audit_status} /></div><p className="mt-1 text-xs text-greige-ink">{METHOD_LABELS[p.method]}{p.bank ? ` · ${p.bank}` : ''}</p><p className="break-all font-mono text-[11px] text-greige-ink">ref. {p.reference_number}</p>{p.platform_verified && <p className="mt-1 flex items-center gap-1 text-[11px] text-success"><ShieldCheck size={11} />Verificado en NeoLink</p>}</div>
           </div>
         ))}
-        <button type="button" onClick={onAdd} className="flex min-h-[112px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-line text-sm font-medium text-greige-ink transition hover:border-accent hover:text-accent"><Plus size={20} />Agregar pago</button>
+        <button type="button" onClick={() => onAdd()} className="flex min-h-[112px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-line text-sm font-medium text-greige-ink transition hover:border-accent hover:text-accent"><Plus size={20} />Agregar pago</button>
       </div>
     </div>
   );
@@ -303,7 +323,7 @@ const toForm = (sheet) => ({
 const toItems = (d) => d.items.map((i) => ({ product_id: i.product_id, reference: i.reference, description: i.description ?? '', size: i.size, color: i.color, quantity: i.quantity, unit_price: i.unit_price, discount_pct: i.discount_pct, origin_warehouse: i.origin_warehouse ?? '' }));
 
 // Asistente para crear o completar una ficha: cada paso se guarda al avanzar, así que nada se pierde si se cierra.
-export default function SheetWizard({ sheetId: initialId = null, onClose }) {
+export default function SheetWizard({ sheetId: initialId = null, customer = null, onClose }) {
   const [sheetId, setSheetId] = useState(initialId);
   const [detail, setDetail] = useState(null);
   const [step, setStep] = useState(initialId ? 1 : 0);
@@ -361,12 +381,12 @@ export default function SheetWizard({ sheetId: initialId = null, onClose }) {
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {step === 0 && <CustomerStep onCreate={create} busy={busy} />}
+          {step === 0 && <CustomerStep onCreate={create} busy={busy} initialCustomer={customer} />}
           {step > 0 && !ready && !error && <div className="flex justify-center py-20 text-greige"><Loader2 className="animate-spin" /></div>}
           {step > 0 && typeof error === 'string' && <p className="text-sm text-danger">{error}</p>}
           {ready && step === 1 && <ItemsStep items={items} setItems={setItems} warehouses={detail.config.warehouses} locked={hasApproved} />}
           {ready && step === 2 && <DeliveryStep data={form} set={setField} config={detail.config} transfers={liveTransfers} />}
-          {ready && step === 3 && <PaymentsStep detail={detail} onAdd={() => setPaying(true)} />}
+          {ready && step === 3 && <PaymentsStep detail={detail} onAdd={(preset) => setPaying(preset ?? true)} />}
           {ready && step === 4 && <ReviewStep detail={detail} />}
           {error && typeof error !== 'string' && (
             <div role="alert" className="mt-4 rounded-xl border border-danger/25 bg-danger-bg px-4 py-3 text-sm text-danger"><p className="font-semibold">{error.message}</p>{error.missing?.length > 0 && <ul className="mt-1 list-disc pl-4">{error.missing.map((m) => <li key={m}>{m}</li>)}</ul>}</div>
@@ -385,7 +405,7 @@ export default function SheetWizard({ sheetId: initialId = null, onClose }) {
           </footer>
         )}
       </Drawer>
-      <AnimatePresence>{paying && <PaymentDialog sheet={detail.sheet} onClose={() => setPaying(false)} onDone={() => { setPaying(false); load(sheetId); }} />}</AnimatePresence>
+      <AnimatePresence>{paying && <PaymentDialog sheet={detail.sheet} preset={typeof paying === 'object' ? paying : null} onClose={() => setPaying(false)} onDone={() => { setPaying(false); load(sheetId); }} />}</AnimatePresence>
     </>
   );
 }
