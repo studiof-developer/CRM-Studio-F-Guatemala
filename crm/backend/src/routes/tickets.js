@@ -859,9 +859,8 @@ function buildDateRangeClause(query, params, dateExpr) {
 // to first advisor response) — all for whatever date range the popup's own period
 // selector is set to, independent of the board's own filter. One round trip, three cheap
 // queries, no caching layer (an on-demand popup, not a page load).
-// Admin-only for now (2026-09-12 request) — meant to widen to every role once it's had
-// a bit of real-world use, same reasoning as campaigns.js's admin-only template routes.
-router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, res, next) => {
+// Abierto a todos los roles (2026-10-24; antes admin y supervisor): la asesora ve los totales de sus líneas asignadas.
+router.get('/pipeline/stats', async (req, res, next) => {
   try {
     const bucketParams = [];
     const bucketDateClause = buildDateRangeClause(req.query, bucketParams, 'stage_since');
@@ -893,7 +892,7 @@ router.get('/pipeline/stats', requireRole('admin', 'supervisor'), async (req, re
                  ${TICKET_LAST_MSG_AT_SQL} AS last_message_at,
                  ROW_NUMBER() OVER (PARTITION BY t.customer_id, ${parsedLineId ? '1' : 'COALESCE(t.whatsapp_number_id, 1)'} ORDER BY t.created_at DESC, t.id DESC) AS ticket_rn
           FROM tickets t JOIN customers c ON c.id = t.customer_id
-          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} ${statsLineSql}
+          WHERE t.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL} ${EXCLUDE_PHANTOM_LINE_TICKET_SQL} ${statsLineSql} ${linesClause(req.user, 't')}
         ),
         -- Same duplicate-open-ticket collapse as /pipeline — see its comment. Has to
         -- happen before bucket_total/unread_total are counted, or a duplicate would

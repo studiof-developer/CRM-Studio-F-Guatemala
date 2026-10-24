@@ -96,10 +96,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
   // 2026-09-11: search/period/column filters are admin+supervisor only — an asesor
   // gets the full board (defaults do the rest: "Todo" period, no column narrowing) plus
   // just "Solo no leídos", which stays available to every role.
-  // Admin+supervisor — same reach as canFilter below, since both the stats popup and
-  // "Descargar Conversaciones" are informational/read-only, not something that changes
-  // customer data (2026-09-16: widened from admin-only per request, asesores excluded
-  // on purpose — this is analysis/reporting, not day-to-day chat work).
+  // Las estadísticas (botón +) son para todos los roles desde 2026-10-24; los filtros de periodo/columna y "Descargar Conversaciones" siguen siendo de admin y supervisor.
   const canFilter = user.role === 'admin' || user.role === 'supervisor';
   const [columns, setColumns] = useState(emptyColumns);
   const [search, setSearch] = useState('');
@@ -655,16 +652,14 @@ export default function HandoffQueue({ user, onOpenConversation }) {
                 </div>
               );
             })}
-            {canFilter && (
-              <button
-                type="button"
-                onClick={() => setStatsOpen(true)}
-                title="Ver todos los estados sin excepción, mensajes por hora y demora en respuesta"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-paper text-greige-ink shadow-sm transition-colors hover:text-ink"
-              >
-                <Plus size={14} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setStatsOpen(true)}
+              title="Ver todos los estados sin excepción, mensajes por hora y demora en respuesta"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-paper text-greige-ink shadow-sm transition-colors hover:text-ink"
+            >
+              <Plus size={14} />
+            </button>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -931,7 +926,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           );
         })}
       </div>
-      {canFilter && <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} lineId={selectedLine || undefined} />}
+      <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} lineId={selectedLine || undefined} />
 
       {canFilter && (
         <ConfirmDialog

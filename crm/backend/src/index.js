@@ -20,6 +20,7 @@ import whatsappNumbersRouter from './routes/whatsappNumbers.js';
 import brandsRouter from './routes/brands.js';
 import companiesRouter from './routes/companies.js';
 import campaignsRouter from './routes/campaigns.js';
+import metaAdsRouter from './routes/metaAds.js';
 import agentTestRouter from './routes/agentTest.js';
 import agentToolsRouter from './routes/agentTools.js';
 import settingsRouter from './routes/settings.js';
@@ -91,6 +92,8 @@ app.use('/api/companies', requireAuth, requireRole('admin'), companiesRouter);
 // A broadcast reaches hundreds of customers at once and costs real money per message —
 // restricted the same way WhatsApp number configuration is, not opened to every asesor.
 app.use('/api/campaigns', requireAuth, requireRole('admin', 'supervisor'), campaignsRouter);
+// El informe de anuncios sí es para todos los roles (2026-10-24).
+app.use('/api/meta-ads', requireAuth, metaAdsRouter);
 // Admin only — a sandbox to talk to the AI agent before it ever reaches a real customer.
 app.use('/api/agent-test', requireAuth, requireRole('admin'), agentTestRouter);
 // Readable by any logged-in role (the Pipeline board needs pipeline_columns to render

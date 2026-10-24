@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { BarChart3, Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Workflow, ShieldCheck } from 'lucide-react';
+import { Megaphone, Send, Search, X, Plus, Clock, ArrowDownWideNarrow, Users, Loader2, Image as ImageIcon, RotateCcw, FileText, Workflow, ShieldCheck } from 'lucide-react';
 import MarketingPipeline from './MarketingPipeline.jsx';
 import MetaStrategyTab from './MetaStrategyTab.jsx';
-import MetaAdsReport from './MetaAdsReport.jsx';
 import Templates from './Templates.jsx';
 import {
   fetchCampaignTemplates, searchCampaignAudience, fetchCampaigns, fetchCampaign, createCampaign,
@@ -62,7 +61,6 @@ export default function Campaigns({ user, onOpenConversation }) {
             { key: 'pipeline', label: 'Pipeline', icon: Workflow },
             { key: 'difusion', label: 'Difusión', icon: Megaphone },
             { key: 'metaStrategy', label: 'Estrategia Meta & Costos', icon: ShieldCheck },
-            ...(canManageTemplates ? [{ key: 'metaReport', label: 'Informe de anuncios', icon: BarChart3 }] : []),
             ...(canManageTemplates ? [{ key: 'templates', label: 'Plantillas', icon: FileText }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -82,7 +80,6 @@ export default function Campaigns({ user, onOpenConversation }) {
         {tab === 'difusion' && <DifusionTab />}
         {tab === 'pipeline' && <MarketingPipeline onOpenConversation={onOpenConversation} />}
         {tab === 'metaStrategy' && <MetaStrategyTab />}
-        {tab === 'metaReport' && canManageTemplates && <MetaAdsReport />}
         {tab === 'templates' && canManageTemplates && <Templates />}
       </div>
     </div>

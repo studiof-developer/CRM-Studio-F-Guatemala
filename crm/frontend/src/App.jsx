@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense, Component as ReactComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2, Search, Truck, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Inbox, MessagesSquare, Users as UsersIcon, UserCog, ShoppingBag, ShieldCheck, LogOut, Menu, X, Zap, Smartphone, Megaphone, TestTube, ChevronDown, Loader2, Store, Building2, Search, Truck, ClipboardList, BarChart3 } from 'lucide-react';
 import { fetchMe, logout, fetchTickets, fetchUnreadCount, fetchLogisticsMe } from './api.js';
 import { useLiveEvent } from './lib/liveEvents.js';
 import { playChime, requestNotificationPermission, showDesktopNotification } from './lib/notifications.js';
@@ -16,6 +16,7 @@ const Audit = lazy(() => import('./Audit.jsx'));
 const ChatAnalysis = lazy(() => import('./ChatAnalysis.jsx'));
 const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
 const Campaigns = lazy(() => import('./Campaigns.jsx'));
+const AdsReportPage = lazy(() => import('./AdsReportPage.jsx'));
 const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
 const Configuracion = lazy(() => import('./Configuracion.jsx'));
 const AgentTest = lazy(() => import('./AgentTest.jsx'));
@@ -66,6 +67,8 @@ const BASE_TABS = {
   conversations: { label: 'Conversaciones', icon: MessagesSquare, Component: Conversations },
   catalog: { label: 'Catálogo', icon: ShoppingBag, Component: Catalog },
   quickReplies: { label: 'Respuestas rápidas', icon: Zap, Component: QuickReplies },
+  // Informe de anuncios de Meta: para todos los roles (la ruta /api/meta-ads solo pide sesión).
+  adsReport: { label: 'Informe de anuncios', icon: BarChart3, Component: AdsReportPage },
 };
 
 // Admin and supervisor only.
@@ -79,7 +82,7 @@ const AUDIT_TABS = {
 // every asesor. Matches the backend's own requireRole('admin', 'supervisor') on
 // /api/campaigns.
 const CAMPAIGN_TABS = {
-  campaigns: { label: 'Marketing', icon: Megaphone, Component: Campaigns },
+  campaigns: { label: 'Difusión y plantillas', icon: Megaphone, Component: Campaigns },
 };
 
 // Admin only.
@@ -108,10 +111,14 @@ const SETTINGS_TABS = {
 // else lives in a named, collapsible group so the sidebar doesn't just grow a new row
 // every time a feature is added. A key only shows up if it's also present in the current
 // user's `tabs` (role-gated), so e.g. an asesor never sees an empty "Administración" group.
-const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers', 'logistica'];
+// Agrupado por lo que la persona hace, no por módulo: el día a día arriba y fijo; el resto en grupos que solo aparecen si el rol tiene algo adentro.
+const PINNED_KEYS = ['dashboard', 'conversations', 'handoff', 'customers'];
 const NAV_GROUPS = [
-  { key: 'catalog', title: 'Catálogo y ventas', keys: ['catalog', 'fichas', 'quickReplies', 'campaigns', 'analysis'] },
-  { key: 'admin', title: 'Administración', keys: ['audit', 'users', 'companies', 'brands', 'whatsappNumbers'] },
+  { key: 'orders', title: 'Pedidos', keys: ['fichas', 'logistica'], defaultOpen: true },
+  { key: 'sell', title: 'Vender', keys: ['catalog', 'quickReplies'], defaultOpen: true },
+  { key: 'marketing', title: 'Marketing', keys: ['adsReport', 'campaigns'], defaultOpen: true },
+  { key: 'supervision', title: 'Supervisión', keys: ['audit', 'analysis'], defaultOpen: false },
+  { key: 'admin', title: 'Administración', keys: ['users', 'companies', 'brands', 'whatsappNumbers'], defaultOpen: false },
 ];
 
 // Every tab reachable at its own bookmarkable URL — an explicit map rather than
@@ -128,6 +135,7 @@ const TAB_PATHS = {
   catalog: '/catalogo',
   quickReplies: '/respuestas-rapidas',
   campaigns: '/difusion',
+  adsReport: '/anuncios',
   audit: '/auditoria',
   analysis: '/analisis',
   users: '/usuarios',
@@ -229,9 +237,7 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [catalogExpanded, setCatalogExpanded] = usePersistedBool('sidebar:catalogExpanded', false);
-  const [adminExpanded, setAdminExpanded] = usePersistedBool('sidebar:adminExpanded', false);
-  const groupExpandState = { catalog: [catalogExpanded, setCatalogExpanded], admin: [adminExpanded, setAdminExpanded] };
+  const groupExpandState = Object.fromEntries(NAV_GROUPS.map((g) => [g.key, usePersistedBool(`sidebar:${g.key}Expanded`, g.defaultOpen)])); // eslint-disable-line react-hooks/rules-of-hooks -- NAV_GROUPS es una constante: el número de hooks nunca cambia
   const [hasLogisticsRole, setHasLogisticsRole] = useState(false);
   // "Ir al chat" (Pipeline, Auditoría's Sin responder) opens this overlay in place —
   // whatever tab you're on stays open underneath, instead of navigating away to

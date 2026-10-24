@@ -417,13 +417,13 @@ export async function searchCampaignAudience(temperature, q, lineId, { periodFro
 }
 
 export async function fetchMetaAdsReport({ since, until, level }) {
-  const res = await apiFetch(`/api/campaigns/meta-ads-report?${new URLSearchParams({ since, until, level })}`);
+  const res = await apiFetch(`/api/meta-ads/report?${new URLSearchParams({ since, until, level })}`);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo consultar a Meta');
   return res.json();
 }
 
 export async function fetchMetaAdCreative(adId) {
-  const res = await apiFetch(`/api/campaigns/meta-ads-creative/${adId}`);
+  const res = await apiFetch(`/api/meta-ads/creative/${adId}`);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo cargar la imagen');
   return res.json();
 }
