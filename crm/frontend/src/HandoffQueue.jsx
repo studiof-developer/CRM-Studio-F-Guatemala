@@ -757,7 +757,9 @@ export default function HandoffQueue({ user, onOpenConversation }) {
 
       {error && <p className="p-4 text-sm text-danger">{error}</p>}
       <div className="flex flex-1 gap-3 overflow-x-auto p-4">
-        {displayOrder.filter((key) => searching || !onlyColumn || key === onlyColumn).map((key) => {
+        {/* Con "Solo no leídos" una columna sin chats por leer se oculta; reaparece sola cuando entra un mensaje (el parche en vivo le suma el chat). */}
+        {unreadOnly && !searching && visibleColumnKeys.every((key) => (columns[key]?.total ?? 0) === 0) && <p className="m-auto text-sm text-muted-foreground">No hay chats sin leer.</p>}
+        {displayOrder.filter((key) => (searching || !onlyColumn || key === onlyColumn) && !(unreadOnly && !searching && (columns[key]?.total ?? 0) === 0)).map((key) => {
           const meta = metaFor(key);
           const Icon = meta.icon;
           const col = columns[key] || emptyColumn(key);

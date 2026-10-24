@@ -86,7 +86,8 @@ const TICKET_LAST_MSG_AT_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 
 const TICKET_LAST_MSG_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_message, c.last_message) ELSE t.last_message END`;
 const TICKET_LAST_CUST_MSG_AT_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_customer_message_at, c.last_customer_message_at) ELSE t.last_customer_message_at END`;
 const TICKET_LAST_CUST_MSG_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.last_customer_message, c.last_customer_message) ELSE t.last_customer_message END`;
-const TICKET_HAS_UNREAD_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.has_unread, c.has_unread, false) ELSE COALESCE(t.has_unread, false) END`;
+// Instagram/Messenger: el webhook social solo enciende customers.has_unread (el ticket queda en false, no en NULL), así que ahí manda el cliente.
+const TICKET_HAS_UNREAD_SQL = `CASE WHEN c.channel <> 'whatsapp' THEN COALESCE(c.has_unread, false) WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.has_unread, c.has_unread, false) ELSE COALESCE(t.has_unread, false) END`;
 const TICKET_AWAITING_REPLY_SQL = `CASE WHEN COALESCE(t.whatsapp_number_id, 1) = 1 THEN COALESCE(t.awaiting_reply, c.awaiting_reply, false) ELSE COALESCE(t.awaiting_reply, false) END`;
 const EXCLUDE_PHANTOM_LINE_TICKET_SQL = `AND (COALESCE(t.whatsapp_number_id, 1) = 1 OR t.last_message_at IS NOT NULL OR t.last_customer_message_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM tickets t1 WHERE t1.customer_id = t.customer_id AND COALESCE(t1.whatsapp_number_id, 1) = 1 AND t1.status NOT IN ${HIDDEN_TICKET_STATUSES_SQL}))`;
 
