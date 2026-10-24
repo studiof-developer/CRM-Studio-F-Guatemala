@@ -289,10 +289,10 @@ function PaymentsStep({ detail, onAdd }) {
       </Panel>
       {suggested.length > 0 && (
         <Panel title="Comprobantes del chat" icon={ImageIcon}>
-          <p className="mb-2 text-xs text-greige-ink">Esto mandó el cliente por el chat. Toca uno para agregarlo como pago; el monto sobre la imagen es lo que leyó el sistema, confírmalo.</p>
+          <p className="mb-2 text-xs text-greige-ink">Lo que mandó el cliente o reenvió la asesora (marcado "Asesora"). Toca uno para agregarlo como pago; el monto sobre la imagen es lo que leyó el sistema, confírmalo.</p>
           <div className="flex flex-wrap gap-2">
             {suggested.map((p) => (
-              <button key={p.id} type="button" onClick={() => onAdd({ chatId: p.id, amount: p.ocr_amount ?? '' })} title={fmtDT(p.created_at)} className="block rounded-xl ring-2 ring-transparent transition hover:ring-accent"><ProofThumbStatic id={p.id} mime={p.mime_type} ocr={p.ocr_amount} /></button>
+              <button key={p.id} type="button" onClick={() => onAdd({ chatId: p.id, amount: p.ocr_amount ?? '' })} title={fmtDT(p.created_at)} className="block rounded-xl ring-2 ring-transparent transition hover:ring-accent"><ProofThumbStatic id={p.id} mime={p.mime_type} ocr={p.ocr_amount} fromAdvisor={p.from_advisor} /></button>
             ))}
           </div>
         </Panel>

@@ -660,14 +660,16 @@ export async function deleteTestSheet(sheetId, user) {
   });
 }
 
-// Comprobantes que el cliente mandó por el chat (imágenes y PDF recientes) para adjuntarlos a la ficha sin volver a subirlos.
+// Comprobantes del chat (imágenes y PDF recientes) para adjuntarlos a la ficha sin volver a subirlos: lo que mandó el cliente y lo que la asesora reenvió
+// (from_advisor), sin contar las imágenes de cotización que genera el propio CRM.
 export async function chatProofs(customerId) {
   const { rows } = await pool.query(
-    `SELECT a.id, a.kind, a.mime_type, a.filename, h.created_at, o.amount AS ocr_amount
-     FROM customers c JOIN n8n_chat_histories h ON split_part(h.session_id, '__', 1) = c.whatsapp_number AND h.message->>'type' = 'human'
+    `SELECT a.id, a.kind, a.mime_type, a.filename, h.created_at, o.amount AS ocr_amount, (h.message->>'type' <> 'human') AS from_advisor
+     FROM customers c JOIN n8n_chat_histories h ON split_part(h.session_id, '__', 1) = c.whatsapp_number
+       AND (h.message->>'type' = 'human' OR (h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor'))
      JOIN message_attachments a ON a.n8n_message_id = h.id AND (a.kind = 'image' OR a.mime_type = 'application/pdf')
      LEFT JOIN attachment_ocr o ON o.attachment_id = a.id
-     WHERE c.id = $1 AND h.created_at > now() - interval '30 days' ORDER BY h.created_at DESC LIMIT 30`, [customerId]
+     WHERE c.id = $1 AND h.created_at > now() - interval '30 days' AND COALESCE(a.filename, '') NOT ILIKE 'cotizacion-%' ORDER BY h.created_at DESC LIMIT 40`, [customerId]
   );
   return rows;
 }

@@ -111,12 +111,12 @@ export function PaymentDialog({ sheet, preset = null, onClose, onDone }) {
         <Dropzone label="Comprobante" required files={files} onChange={(f) => { setFiles(f); setChatId(null); }} hint="Foto o PDF del comprobante" />
         {proofs.length > 0 && (
           <div>
-            <span className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-greige-ink"><ImageIcon size={13} />…o elige uno que el cliente mandó por el chat (últimos 30 días)</span>
+            <span className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-greige-ink"><ImageIcon size={13} />…o elige uno que el cliente mandó por el chat (últimos 30 días, lo del cliente y lo que reenvió la asesora)</span>
             <div className="flex max-h-44 flex-wrap gap-2 overflow-y-auto p-1">
               {proofs.map((p) => (
                 <div key={p.id} className="relative">
                   <button type="button" onClick={() => { setChatId(chatId === p.id ? null : p.id); setFiles([]); }} aria-pressed={chatId === p.id} title={fmtDT(p.created_at)} className={`block rounded-xl ring-2 transition ${chatId === p.id ? 'ring-accent' : 'ring-transparent hover:ring-line'}`}>
-                    <ProofThumbStatic id={p.id} mime={p.mime_type} ocr={p.ocr_amount} />
+                    <ProofThumbStatic id={p.id} mime={p.mime_type} ocr={p.ocr_amount} fromAdvisor={p.from_advisor} />
                   </button>
                   {chatId === p.id && <CheckCircle2 size={18} className="absolute -right-1 -top-1 rounded-full bg-paper text-accent" />}
                 </div>
@@ -132,10 +132,11 @@ export function PaymentDialog({ sheet, preset = null, onClose, onDone }) {
 }
 
 // Miniatura sin visor (la selección del chat usa el clic para elegir).
-export function ProofThumbStatic({ id, mime, ocr }) {
+export function ProofThumbStatic({ id, mime, ocr, fromAdvisor = false }) {
   return (
     <span className={`relative block h-20 w-20 overflow-hidden rounded-xl border border-line ${SOFT}`}>
       {mime?.startsWith('image/') ? <img src={logisticsFileUrl(id)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <span className="flex h-full items-center justify-center text-[10px] text-greige-ink">PDF</span>}
+      {fromAdvisor && <span className="absolute left-0 top-0 rounded-br-lg bg-black/65 px-1.5 text-[9px] font-semibold text-white">Asesora</span>}
       {ocr != null && <span className="absolute inset-x-0 bottom-0 bg-black/65 text-[10px] font-semibold text-white">{q(ocr)}</span>}
     </span>
   );
