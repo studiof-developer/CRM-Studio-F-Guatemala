@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Zap, Package, Store, Truck, StickyNote } from 'lucide-react';
 import Avatar from '../Avatar.jsx';
-import { StatusBadge, ModeBadge, SlaChip, SOFT, q, fmtDT } from '../../lib/logisticsUi.jsx';
+import { StatusBadge, ModeBadge, SlaChip, TestBadge, SOFT, q, fmtDT } from '../../lib/logisticsUi.jsx';
 
 const NowPill = () => <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white"><Zap size={10} />Te toca</span>;
 
@@ -22,7 +22,7 @@ export function SheetCard({ sheet, onOpen, showStatus = true }) {
     <motion.button layout="position" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -2 }} type="button" onClick={() => onOpen(sheet.id)}
       className={`block w-full rounded-xl border bg-paper p-3.5 text-left shadow-sm transition-shadow hover:shadow-md ${sheet.actionable ? 'border-accent/50 ring-1 ring-accent/20' : 'border-line'}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <span className="flex items-center gap-2 whitespace-nowrap"><span className="text-[11px] font-semibold tabular-nums text-greige">{sheet.sheet_number}</span><ModeBadge mode={sheet.payment_mode} /></span>
+        <span className="flex items-center gap-2 whitespace-nowrap"><span className="text-[11px] font-semibold tabular-nums text-greige">{sheet.sheet_number}</span><ModeBadge mode={sheet.payment_mode} />{sheet.is_test && <TestBadge />}</span>
         {sheet.actionable && <NowPill />}
       </div>
       <p className="mt-2 truncate text-sm font-semibold text-ink">{sheet.full_name ?? 'Sin nombre'}</p>
@@ -49,7 +49,7 @@ export function SheetRow({ sheet, onOpen, showAdvisor = true }) {
     <motion.button layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} type="button" onClick={() => onOpen(sheet.id)}
       className={`grid w-full grid-cols-2 items-center gap-x-4 gap-y-2 rounded-xl border bg-paper px-4 py-3 text-left shadow-sm transition hover:shadow-md md:grid-cols-[1.1fr_1.6fr_auto_1.5fr_auto] ${sheet.actionable ? 'border-accent/50 ring-1 ring-accent/20' : 'border-line'}`}>
       <span className="min-w-0">
-        <span className="flex items-center gap-2"><span className="text-sm font-semibold tabular-nums text-ink">{sheet.sheet_number}</span><ModeBadge mode={sheet.payment_mode} /></span>
+        <span className="flex items-center gap-2"><span className="text-sm font-semibold tabular-nums text-ink">{sheet.sheet_number}</span><ModeBadge mode={sheet.payment_mode} />{sheet.is_test && <TestBadge />}</span>
         <span className="text-[11px] text-greige">{fmtDT(sheet.status_changed_at)}</span>
       </span>
       <span className="min-w-0 md:order-none">

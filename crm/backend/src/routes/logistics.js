@@ -3,7 +3,7 @@ import multer from 'multer';
 import { requireRole } from '../auth.js';
 import {
   getConfig, configForUi, saveConfig, userRoles, listRoleAssignments, setUserRoles, viewerScope, createSheet, updateSheet, addPayment, removePayment, submitSheet, auditPayment, advance, addNote,
-  listSheets, boardCounts, getSheet, chatProofs,
+  listSheets, boardCounts, getSheet, chatProofs, deleteTestSheet,
 } from '../logistics.js';
 import { ROLES, STATUS, TRANSITIONS } from '../logisticsFlow.js';
 
@@ -42,12 +42,13 @@ router.get('/sheets', guard(async (req, res) => {
   res.json({ sheets: await listSheets({ user: req.user, scope, status, q, mode, overdue: overdue === '1', limit }) });
 }));
 router.post('/sheets', guard(async (req, res) => {
-  const { customerId, quoteId, data, items } = req.body ?? {};
+  const { customerId, quoteId, data, items, isTest } = req.body ?? {};
   const cid = Number(customerId);
   if (!Number.isInteger(cid) || cid < 1) return res.status(400).json({ error: 'Indica el cliente' });
-  res.status(201).json(await createSheet({ customerId: cid, quoteId: quoteId ? Number(quoteId) : null, data: data ?? {}, items: items ?? null, user: req.user }));
+  res.status(201).json(await createSheet({ customerId: cid, quoteId: quoteId ? Number(quoteId) : null, data: data ?? {}, items: items ?? null, isTest: isTest === true, user: req.user }));
 }));
 router.get('/sheets/:id', guard(async (req, res) => { res.json(await getSheet(id(req), req.user)); }));
+router.delete('/sheets/:id', guard(async (req, res) => { res.json(await deleteTestSheet(id(req), req.user)); }));
 router.patch('/sheets/:id', guard(async (req, res) => { res.json(await updateSheet(id(req), { data: req.body?.data ?? {}, items: req.body?.items }, req.user)); }));
 router.post('/sheets/:id/submit', guard(async (req, res) => { res.json(await submitSheet(id(req), req.user)); }));
 

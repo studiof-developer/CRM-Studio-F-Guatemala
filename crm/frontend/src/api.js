@@ -446,6 +446,7 @@ export const saveLogisticsRoles = (userId, roles) => logCall(`/roles/${userId}`,
 export const fetchLogisticsBoard = () => logCall('/board', undefined, 'No se pudo cargar el tablero');
 export const fetchSheets = (params = {}) => logCall(`/sheets?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''))}`, undefined, 'No se pudieron cargar las fichas');
 export const createSheet = (body) => logCall('/sheets', jsonBody('POST', body), 'No se pudo crear la ficha');
+export const deleteTestSheet = (id) => logCall(`/sheets/${id}`, { method: 'DELETE' }, 'No se pudo eliminar la ficha de prueba');
 export const fetchSheet = (id) => logCall(`/sheets/${id}`, undefined, 'No se pudo cargar la ficha');
 export const updateSheet = (id, body) => logCall(`/sheets/${id}`, jsonBody('PATCH', body), 'No se pudo guardar la ficha');
 export const submitSheet = (id) => logCall(`/sheets/${id}/submit`, { method: 'POST' }, 'No se pudo enviar la ficha');

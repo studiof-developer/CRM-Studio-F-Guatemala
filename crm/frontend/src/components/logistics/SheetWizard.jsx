@@ -5,7 +5,7 @@ import { fetchCustomers, fetchCustomerQuotes, fetchProducts, productImageUrl, cr
 import { showSuccess, showError } from '../Toast.jsx';
 import Avatar from '../Avatar.jsx';
 import { PaymentDialog, ProofThumbStatic } from './StepDialogs.jsx';
-import { Drawer, Panel, PrimaryBtn, GhostBtn, FieldRow, ProofThumb, AuditPill, inputCls, SOFT, METHOD_LABELS, q, fmtDT } from '../../lib/logisticsUi.jsx';
+import { Drawer, Panel, PrimaryBtn, GhostBtn, FieldRow, ProofThumb, AuditPill, TestBadge, inputCls, SOFT, METHOD_LABELS, q, fmtDT } from '../../lib/logisticsUi.jsx';
 
 const STEPS = [['cliente', 'Cliente'], ['prendas', 'Prendas'], ['entrega', 'Entrega y datos'], ['pagos', 'Pagos'], ['revision', 'Revisión']];
 const NOTE_CHIPS = ['Paga envío al recibir', 'Ya pagó envío', 'Recoge en tienda', 'No enviar factura (solicitud del cliente)', 'Pendiente datos'];
@@ -56,6 +56,7 @@ const Option = ({ checked, onClick, title, text }) => (
 
 // — paso 1: cliente y cotización —
 function CustomerStep({ onCreate, busy, initialCustomer = null }) {
+  const [isTest, setIsTest] = useState(false);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState([]);
   const [customer, setCustomer] = useState(null);
@@ -67,6 +68,7 @@ function CustomerStep({ onCreate, busy, initialCustomer = null }) {
     return () => clearTimeout(t);
   }, [term, customer]);
   // Desde el chat el cliente ya viene elegido y se propone su cotización más reciente (la asesora puede cambiarla o quitarla).
+  const chosen = quotes.find((x) => x.id === quoteId) ?? null;
   const pick = (c, preselect = false) => {
     setCustomer(c); setQuoteId(null);
     fetchCustomerQuotes(c.id).then((qs) => { setQuotes(qs); if (preselect && qs.length) setQuoteId([...qs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].id); }).catch(() => setQuotes([]));
@@ -100,7 +102,25 @@ function CustomerStep({ onCreate, busy, initialCustomer = null }) {
               {quotes.map((qt) => <Option key={qt.id} checked={quoteId === qt.id} onClick={() => setQuoteId(qt.id)} title={`${qt.quoteNumber} · ${q(qt.grandTotal)}`} text={`${qt.items.length} prenda(s) · ${fmtDT(qt.createdAt)} · ${qt.advisorName ?? ''}`} />)}
             </div>
           </Panel>
-          <div className="flex justify-end"><PrimaryBtn disabled={busy} onClick={() => onCreate(customer.id, quoteId)}>{busy ? <Loader2 size={16} className="animate-spin" /> : null}Crear borrador y continuar<ChevronRight size={16} /></PrimaryBtn></div>
+          {chosen && (
+            <Panel title={`Lo que lleva la cotización ${chosen.quoteNumber}`} icon={CheckCircle2}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[460px] text-left text-sm">
+                  <thead><tr className="text-[11px] uppercase tracking-wide text-greige"><th className="py-1.5 pr-3 font-semibold">Referencia</th><th className="py-1.5 pr-3 font-semibold">Prenda</th><th className="py-1.5 pr-3 font-semibold">Talla / color</th><th className="py-1.5 pr-3 text-right font-semibold">Cant.</th><th className="py-1.5 text-right font-semibold">Precio</th></tr></thead>
+                  <tbody>{chosen.items.map((it) => <tr key={it.id} className="border-t border-line-soft"><td className="py-2 pr-3 font-mono text-xs">{it.sku}</td><td className="py-2 pr-3 text-ink">{it.name}</td><td className="py-2 pr-3 text-greige-ink">{[it.size, it.color].filter(Boolean).join(' · ') || '—'}</td><td className="py-2 pr-3 text-right tabular-nums">{it.quantity}</td><td className="py-2 text-right font-semibold tabular-nums">{q(it.final_price ?? it.unit_price)}</td></tr>)}</tbody>
+                </table>
+              </div>
+              <div className="mt-2 flex justify-end gap-4 text-sm"><span className="text-greige-ink">Total de la cotización</span><b className="tabular-nums text-ink">{q(chosen.grandTotal)}</b></div>
+              <p className="mt-1 text-xs text-greige">Estas prendas pasan a la ficha; en el paso siguiente puedes ajustarlas y elegir la tienda de cada una.</p>
+            </Panel>
+          )}
+          <Panel title="¿Es una ficha de prueba?" icon={StickyNote}>
+            <button type="button" role="checkbox" aria-checked={isTest} onClick={() => setIsTest((v) => !v)} className={`flex w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${isTest ? 'border-accent bg-accent-soft' : 'border-line hover:border-greige'}`}>
+              {isTest ? <CheckCircle2 size={18} className="mt-px shrink-0 text-accent" /> : <Circle size={18} className="mt-px shrink-0 text-greige" />}
+              <span><span className="block font-semibold text-ink">Crearla de prueba</span><span className="block text-xs text-greige-ink">Se marca como PRUEBA y tú (o el administrador) la puedes eliminar por completo en cualquier momento. Una ficha real nunca se borra, solo se cancela. Esta decisión no se puede cambiar después.</span></span>
+            </button>
+          </Panel>
+          <div className="flex justify-end"><PrimaryBtn disabled={busy} onClick={() => onCreate(customer.id, quoteId, isTest)}>{busy ? <Loader2 size={16} className="animate-spin" /> : null}Crear borrador y continuar<ChevronRight size={16} /></PrimaryBtn></div>
         </>
       )}
     </div>
@@ -342,9 +362,9 @@ export default function SheetWizard({ sheetId: initialId = null, customer = null
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const liveTransfers = (() => { const m = new Map(); for (const i of items) { const n = String(i.origin_warehouse ?? '').trim(); if (n) m.set(n.toLowerCase(), { store: n }); } return [...m.values()]; })();
 
-  async function create(customerId, quoteId) {
+  async function create(customerId, quoteId, isTest) {
     setBusy(true);
-    try { const s = await createSheet({ customerId, quoteId }); setSheetId(s.id); await load(s.id); setStep(1); setMaxStep(4); } catch (e) { showError(e.message); } finally { setBusy(false); }
+    try { const s = await createSheet({ customerId, quoteId, isTest }); setSheetId(s.id); await load(s.id); setStep(1); setMaxStep(4); } catch (e) { showError(e.message); } finally { setBusy(false); }
   }
 
   // Guarda lo del paso actual en el servidor (si aplica) y devuelve true si se puede avanzar.
@@ -374,7 +394,7 @@ export default function SheetWizard({ sheetId: initialId = null, customer = null
       <Drawer onClose={() => onClose(sheetId)} width="max-w-[900px]" locked={busy || paying}>
         <header className="shrink-0 border-b border-line bg-paper px-6 pb-3 pt-5">
           <div className="flex items-start justify-between gap-4">
-            <div><h2 className="text-lg font-bold tracking-tight text-ink">{sheetId ? `Ficha ${detail?.sheet.sheet_number ?? ''}` : 'Nueva ficha de pedido'}</h2><p className="text-sm text-greige-ink">Se guarda como borrador mientras avanzas.</p></div>
+            <div><h2 className="flex items-center gap-2 text-lg font-bold tracking-tight text-ink">{sheetId ? `Ficha ${detail?.sheet.sheet_number ?? ''}` : 'Nueva ficha de pedido'}{detail?.sheet.is_test && <TestBadge />}</h2><p className="text-sm text-greige-ink">Se guarda como borrador mientras avanzas.</p></div>
             <button type="button" onClick={() => onClose(sheetId)} aria-label="Cerrar" className="rounded-lg p-2 text-greige hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]"><X size={20} /></button>
           </div>
           <div className="mt-3"><Progress step={step} maxStep={maxStep} onGo={go} lockFirst={!!sheetId} /></div>

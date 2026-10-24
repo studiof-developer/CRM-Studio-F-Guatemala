@@ -35,6 +35,8 @@ export function StatusBadge({ status, label }) {
   return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${t.pill}`}><span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />{label ?? status}</span>;
 }
 
+export const TestBadge = () => <span title="Ficha de prueba: se puede eliminar" className="inline-flex rounded-md bg-yellow-300/40 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink">Prueba</span>;
+
 export const ModeBadge = ({ mode }) => (
   <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${mode === 'contraentrega' ? 'bg-purple/10 text-purple' : 'bg-accent-soft text-accent'}`}>{mode === 'contraentrega' ? 'Contraentrega' : 'Contado'}</span>
 );

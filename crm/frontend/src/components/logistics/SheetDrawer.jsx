@@ -6,11 +6,11 @@ import {
 import Avatar from '../Avatar.jsx';
 import ConfirmDialog from '../ConfirmDialog.jsx';
 import { showSuccess, showError } from '../Toast.jsx';
-import { fetchSheet, removeSheetPayment, addSheetNote } from '../../api.js';
+import { fetchSheet, removeSheetPayment, addSheetNote, deleteTestSheet } from '../../api.js';
 import { StepDialog, PaymentDialog, AuditDialog } from './StepDialogs.jsx';
 import SheetWizard from './SheetWizard.jsx';
 import {
-  Drawer, Panel, StatusBadge, ModeBadge, SlaChip, ProofThumb, AuditPill, PrimaryBtn, GhostBtn, DangerBtn, Skeleton, CopyText, STAGES, stageIndex, SOFT, inputCls, q, fmtDT, fmtDay, METHOD_LABELS,
+  Drawer, Panel, StatusBadge, ModeBadge, SlaChip, TestBadge, ProofThumb, AuditPill, PrimaryBtn, GhostBtn, DangerBtn, Skeleton, CopyText, STAGES, stageIndex, SOFT, inputCls, q, fmtDT, fmtDay, METHOD_LABELS,
 } from '../../lib/logisticsUi.jsx';
 
 const EVENT_LABELS = { create: 'Ficha creada', edit: 'Ficha editada', add_payment: 'Pago agregado', remove_payment: 'Pago retirado', audit_payment: 'Pago auditado', auto_status: 'Cambio automático', note: 'Nota', submit: 'Enviada a auditoría de pago' };
@@ -73,6 +73,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
   const [error, setError] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [removing, setRemoving] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState('resumen');
   const [note, setNote] = useState('');
@@ -95,7 +96,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
     return <Drawer onClose={onClose}><div className="flex flex-col gap-4 p-6"><Skeleton className="h-10 w-2/3" /><Skeleton className="h-16" /><Skeleton className="h-32" /><Skeleton className="h-64" /></div></Drawer>;
   }
 
-  const { sheet, customer, items, payments, events, paid, actions, canAudit, editable, missing } = detail;
+  const { sheet, customer, items, payments, events, paid, actions, canAudit, editable, canDeleteTest, missing } = detail;
   const allowed = actions.filter((a) => a.allowed);
   const waiting = actions.filter((a) => !a.allowed && !['hold', 'cancel', 'resume'].includes(a.key));
   const exceptional = allowed.filter((a) => ['hold', 'cancel', 'resume'].includes(a.key));
@@ -108,19 +109,22 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
   async function remove() {
     try { await removeSheetPayment(sheet.id, removing.id); showSuccess('Pago retirado'); setRemoving(null); refresh(); } catch (e) { showError(e.message); setRemoving(null); }
   }
+  async function removeTest() {
+    try { await deleteTestSheet(sheet.id); showSuccess('Ficha de prueba eliminada'); setDeleting(false); onChanged?.(); onClose(); } catch (e) { showError(e.message); setDeleting(false); }
+  }
   async function saveNote() {
     try { await addSheetNote(sheet.id, note); setNote(''); load(); } catch (e) { showError(e.message); }
   }
 
   return (
     <>
-      <Drawer onClose={onClose} locked={!!dialog || !!removing || editing}>
+      <Drawer onClose={onClose} locked={!!dialog || !!removing || deleting || editing}>
         <header className="shrink-0 border-b border-line bg-paper px-6 pb-3 pt-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-bold tracking-tight text-ink tabular-nums">{sheet.sheet_number}</h2>
-                <StatusBadge status={sheet.status} label={sheet.statusLabel} /><ModeBadge mode={sheet.payment_mode} /><SlaChip sla={sheet.sla} status={sheet.status} />
+                <StatusBadge status={sheet.status} label={sheet.statusLabel} /><ModeBadge mode={sheet.payment_mode} />{sheet.is_test && <TestBadge />}<SlaChip sla={sheet.sla} status={sheet.status} />
               </div>
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-greige-ink">
                 <span className="font-medium text-ink">{customer?.full_name ?? sheet.full_name}</span><span>·</span>
@@ -129,6 +133,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {canDeleteTest && <GhostBtn className="!px-3 !py-2 !text-danger" onClick={() => setDeleting(true)}><Trash2 size={14} />Eliminar prueba</GhostBtn>}
               {editable && <GhostBtn className="!px-3 !py-2" onClick={() => setEditing(true)}><Pencil size={14} />Editar</GhostBtn>}
               <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-lg p-2 text-greige hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]"><X size={20} /></button>
             </div>
@@ -292,6 +297,7 @@ export default function SheetDrawer({ sheetId, me, onClose, onChanged }) {
         {dialog?.type === 'audit' && <AuditDialog key="audit" sheetId={sheet.id} payment={dialog.payment} onClose={() => setDialog(null)} onDone={refresh} />}
       </AnimatePresence>
       {editing && <SheetWizard sheetId={sheet.id} onClose={() => { setEditing(false); refresh(); }} />}
+      <ConfirmDialog open={deleting} danger title="¿Eliminar esta ficha de prueba?" message={`${sheet.sheet_number} se borra por completo con sus pagos y su historial. Los comprobantes del chat no se tocan. No se puede deshacer.`} confirmLabel="Eliminar" onConfirm={removeTest} onCancel={() => setDeleting(false)} />
       <ConfirmDialog open={!!removing} danger title="¿Retirar este pago?" message={removing ? `${q(removing.amount)} · ref. ${removing.reference_number}. Queda registrado en el historial.` : ''} confirmLabel="Retirar" onConfirm={remove} onCancel={() => setRemoving(null)} />
     </>
   );

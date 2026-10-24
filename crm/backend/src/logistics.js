@@ -1,6 +1,7 @@
 import { pool } from './db.js';
 import { getSetting } from './routes/settings.js';
 import { saveAttachment } from './attachmentStorage.js';
+import { logAccess } from './auditLog.js';
 import {
   TRANSITIONS, ROLES, STATUS, BOARD, TERMINAL, EDITABLE_STATUSES, LOGISTICS_DEFAULTS, stepsFor, allowedFor, validateFields, addBusinessDays, requiredPayment,
   sheetMissing, computeTotals, settleAudit, slaForStatus, transfersNeeded, guatemalaDay, SHEET_FIELD_LABELS,
@@ -216,7 +217,7 @@ async function nextSheetNumber(db, cfg) {
   throw fail(500, 'No se pudo asignar un número de ficha libre');
 }
 
-export async function createSheet({ customerId, quoteId = null, data = {}, items = null, user }) {
+export async function createSheet({ customerId, quoteId = null, data = {}, items = null, isTest = false, user }) {
   const cfg = await getConfig();
   return withTx(async (db) => {
     const { rows: [c] } = await db.query('SELECT id, whatsapp_number, full_name, email, address, municipio, department FROM customers WHERE id = $1', [customerId]);
@@ -233,11 +234,12 @@ export async function createSheet({ customerId, quoteId = null, data = {}, items
     const clean = list?.length ? cleanItems(list) : [];
     const patch = reconcile({ payment_mode: 'contado', delivery_type: 'domicilio', shipping_payment: 'pagado' }, cleanSheetPatch(data), cfg);
     const totals = computeTotals(clean, patch.shipping ?? data.shipping ?? 0);
-    const number = await nextSheetNumber(db, cfg);
+    // Las de prueba llevan su propia numeración: así borrarlas no deja huecos en la numeración real.
+    const number = isTest ? `PRUEBA-${(await db.query("SELECT nextval('order_sheet_test_seq') AS n")).rows[0].n}` : await nextSheetNumber(db, cfg);
     const phone = String(c.whatsapp_number).startsWith('social:') ? null : c.whatsapp_number;
     const { rows: [last] } = await db.query('SELECT advisor_code FROM order_sheets WHERE created_by = $1 AND advisor_code IS NOT NULL ORDER BY id DESC LIMIT 1', [user.id]);
     const row = {
-      sheet_number: number, customer_id: c.id, whatsapp_number_id: data.whatsapp_number_id ?? quote?.whatsapp_number_id ?? null, quote_id: quote?.id ?? null, created_by: user.id, advisor_name: user.fullName,
+      sheet_number: number, is_test: !!isTest, customer_id: c.id, whatsapp_number_id: data.whatsapp_number_id ?? quote?.whatsapp_number_id ?? null, quote_id: quote?.id ?? null, created_by: user.id, advisor_name: user.fullName,
       payment_mode: patch.payment_mode ?? 'contado', delivery_type: patch.delivery_type ?? 'domicilio', shipping_payment: patch.shipping_payment ?? 'pagado', pickup_store: patch.pickup_store ?? null,
       campaign: patch.campaign ?? null, full_name: patch.full_name ?? c.full_name, phone: patch.phone ?? phone, phone_alt: patch.phone_alt ?? null, email: patch.email ?? c.email,
       address: patch.address ?? c.address, address_ref: patch.address_ref ?? null, city: patch.city ?? c.municipio, department: patch.department ?? c.department, zone: patch.zone ?? null,
@@ -250,7 +252,7 @@ export async function createSheet({ customerId, quoteId = null, data = {}, items
     const { rows: [sheet] } = await db.query(`INSERT INTO order_sheets (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`, cols.map((k) => row[k]));
     await insertItems(db, sheet.id, clean);
     await syncOrigin(db, sheet.id);
-    await logEvent(db, { sheetId: sheet.id, user, action: 'create', to: 'BORRADOR', data: { quote_id: quote?.id ?? null, items: clean.length, total: totals.total } });
+    await logEvent(db, { sheetId: sheet.id, user, action: 'create', to: 'BORRADOR', data: { quote_id: quote?.id ?? null, items: clean.length, total: totals.total, ...(isTest ? { prueba: true } : {}) } });
     return (await db.query('SELECT * FROM order_sheets WHERE id = $1', [sheet.id])).rows[0];
   });
 }
@@ -639,8 +641,23 @@ export async function getSheet(id, user) {
   return {
     sheet: { ...sheet, statusLabel: STATUS[sheet.status], sla: slaInfo(sheet, cfg) }, customer: customer.rows[0], items: items.rows, payments: payments.rows, events: events.rows,
     paid: { required: requiredPayment(sheet, cfg), approved: r2(approved) }, actions, canAudit, editable: EDITABLE_STATUSES.includes(sheet.status) && (sheet.created_by === user.id || user.role === 'admin'),
+    canDeleteTest: sheet.is_test && (sheet.created_by === user.id || user.role === 'admin'),
     missing: sheetMissing(sheet, items.rows, payments.rows, cfg), transfers, config: { codAdvancePct: cfg.codAdvancePct, warehouses: cfg.warehouses, dispatchWarehouse: cfg.dispatchWarehouse, allowCodGoods: cfg.allowCodGoods, requiredFields: cfg.requiredFields, requiredForDelivery: cfg.requiredForDelivery },
   };
+}
+
+// Una ficha de prueba se puede eliminar por completo (pagos, prendas y su registro) en cualquier estado, por quien la creó o el administrador.
+// Las reales nunca: solo se cancelan. Queda constancia en la auditoría de accesos del cliente.
+export async function deleteTestSheet(sheetId, user) {
+  return withTx(async (db) => {
+    const sheet = await loadSheet(db, sheetId, { lock: true });
+    if (!sheet.is_test) throw fail(409, 'Solo se pueden eliminar las fichas de prueba. Una ficha real se cancela desde logística.');
+    if (sheet.created_by !== user.id && user.role !== 'admin') throw fail(403, 'Solo quien creó la ficha de prueba o el administrador puede eliminarla');
+    await db.query('DELETE FROM order_sheet_events WHERE sheet_id = $1', [sheetId]);
+    await db.query('DELETE FROM order_sheets WHERE id = $1', [sheetId]);
+    await logAccess(user, sheet.customer_id, 'test_sheet_deleted', `Ficha de prueba ${sheet.sheet_number} eliminada`);
+    return { ok: true };
+  });
 }
 
 // Comprobantes que el cliente mandó por el chat (imágenes y PDF recientes) para adjuntarlos a la ficha sin volver a subirlos.
