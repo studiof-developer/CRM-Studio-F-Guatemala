@@ -518,6 +518,11 @@ export default function QuoteModal({
                           <p className="text-xs text-greige-ink truncate">
                             {prod.name} {prod.color ? `· ${prod.color}` : ''} {prod.size ? `· Talla ${prod.size}` : ''}
                           </p>
+                          {prod.stores?.length > 0 && (
+                            <p className="text-[11px] font-medium text-accent truncate" title={prod.stores.map((s) => `${s.store} ${s.quantity}`).join(' · ')}>
+                              {prod.stores.map((s) => `${s.store} ${s.quantity}`).join(' · ')}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
