@@ -8,7 +8,7 @@ import { EFFECTIVE_STATUS_SQL, VALID_TEMPERATURES } from './customers.js';
 import { findConversationThread, MIME_KIND, WHATSAPP_MAX_BYTES } from './conversations.js';
 import { writeAttachmentFile, linkExistingFile } from '../attachmentStorage.js';
 import { requireRole } from '../auth.js';
-import { fetchReport, validRange } from '../metaAdsReport.js';
+import { fetchReport, fetchAdCreative, validRange } from '../metaAdsReport.js';
 import { erpBuyerSql, parseIdleDays } from '../erpAudience.js';
 import { logBusinessAction } from '../auditLog.js';
 import { getSetting } from './settings.js';
@@ -101,6 +101,17 @@ router.get('/meta-ads-report', requireRole('admin', 'supervisor'), async (req, r
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     // el error de Meta (token vencido, sin permiso ads_read…) sirve tal cual a quien administra
+    if (/Meta|token|permission|OAuth/i.test(err.message)) return res.status(502).json({ error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/campaigns/meta-ads-creative/:adId — imagen y video del anuncio, en vivo desde Meta (admin y supervisor)
+router.get('/meta-ads-creative/:adId', requireRole('admin', 'supervisor'), async (req, res, next) => {
+  try {
+    res.json(await fetchAdCreative(req.params.adId));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     if (/Meta|token|permission|OAuth/i.test(err.message)) return res.status(502).json({ error: err.message });
     next(err);
   }

@@ -5,6 +5,7 @@ import { fetchMetaAdsReport } from './api.js';
 import { guatemalaToday, addDays } from './lib/pipelinePeriod.js';
 import { rateCpr, rateConv, CPR_LABEL, CONV_LABEL, longDay, executiveReading, DEFAULT_THRESHOLDS } from './lib/metaAdsRating.js';
 import { showError, showSuccess } from './components/Toast.jsx';
+import { AdThumb, AdViewer } from './components/AdCreative.jsx';
 
 // Informe de anuncios de Meta (admin y supervisión): el mismo informe ejecutivo que el traficker le entrega al gerente, pero con los
 // datos en vivo de Meta. Se vuelve a pedir solo cada 5 minutos; Meta suele reflejar el gasto del día con unos minutos de retraso.
@@ -110,6 +111,7 @@ export default function MetaAdsReport() {
   const [sort, setSort] = useState({ key: 'conversations', desc: true });
   const [day, setDay] = useState('all');
   const [shown, setShown] = useState(60);
+  const [viewer, setViewer] = useState(null);
 
   const range = useMemo(() => rangeOf(preset, today, custom), [preset, today, custom]);
 
@@ -263,14 +265,15 @@ export default function MetaAdsReport() {
               <table className="w-full min-w-[860px] text-left text-xs">
                 <thead>
                   <tr className="bg-black/[0.02] text-[11px] uppercase tracking-wide text-greige-ink dark:bg-white/[0.03]">
-                    <Th k="name" sort={sort} onSort={onSort} right={false}>{levelWord}</Th><th className="px-3 py-2.5">Estado</th>
+                    {level === 'ad' && <th className="px-3 py-2.5">Imagen</th>}<Th k="name" sort={sort} onSort={onSort} right={false}>{levelWord}</Th><th className="px-3 py-2.5">Estado</th>
                     <Th k="spend" sort={sort} onSort={onSort}>Inversión</Th><Th k="conversations" sort={sort} onSort={onSort}>Conversaciones</Th><Th k="costPerConversation" sort={sort} onSort={onSort}>Costo / conversación</Th>
                     <Th k="conversionPct" sort={sort} onSort={onSort}>Conversión</Th><Th k="linkClicks" sort={sort} onSort={onSort}>Clics</Th><Th k="cpc" sort={sort} onSort={onSort}>CPC</Th><Th k="ctr" sort={sort} onSort={onSort}>CTR</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {rows.map((r, i) => (
                     <tr key={r.id} className="border-t border-line-soft align-top hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+                      {level === 'ad' && <td className="px-3 py-2.5"><AdThumb adId={r.id} name={r.name} onOpen={() => setViewer(i)} /></td>}
                       <td className="px-3 py-2.5 font-semibold text-ink">{r.name}{level !== 'campaign' && <div className="text-[10px] font-normal text-greige-ink">{[r.campaign, level === 'ad' ? r.adset : null].filter(Boolean).join(' › ')}</div>}</td>
                       <td className="px-3 py-2.5">{r.status && <span className={`whitespace-nowrap text-[11px] font-bold ${STATUS[r.status]?.[1] ? 'text-success' : 'text-greige-ink'}`}>● {STATUS[r.status]?.[0] ?? r.status}</span>}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{money(r.spend)}{T.spend > 0 && <div className="text-[10px] text-greige-ink">{((r.spend / T.spend) * 100).toFixed(0)}% del gasto</div>}</td>
@@ -282,11 +285,11 @@ export default function MetaAdsReport() {
                       <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.ctr != null && r.spend > 0 ? (r.ctr >= 2 ? 'text-success' : 'text-warning') : 'text-greige-ink'}`}>{pct(r.ctr)}</td>
                     </tr>
                   ))}
-                  {!rows.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-greige-ink">Sin resultados en este período.</td></tr>}
+                  {!rows.length && <tr><td colSpan={level === 'ad' ? 10 : 9} className="px-3 py-8 text-center text-greige-ink">Sin resultados en este período.</td></tr>}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-line bg-black/[0.03] font-bold text-ink dark:bg-white/[0.04]">
-                    <td className="px-3 py-2.5" colSpan={2}>Total ({rows.length})</td>
+                    <td className="px-3 py-2.5" colSpan={level === 'ad' ? 3 : 2}>Total ({rows.length})</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{money(T.spend)}</td><td className="px-3 py-2.5 text-right tabular-nums">{count(T.conversations)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{money(T.costPerConversation)}</td><td className="px-3 py-2.5 text-right tabular-nums">{pct(T.conversionPct)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{count(T.linkClicks)}</td><td className="px-3 py-2.5 text-right tabular-nums">{money(T.cpc)}</td><td className="px-3 py-2.5 text-right tabular-nums">{pct(T.ctr)}</td>
@@ -354,6 +357,7 @@ export default function MetaAdsReport() {
           </div>
         </>
       )}
+      {viewer != null && rows[viewer] && <AdViewer ads={rows} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />}
     </div>
   );
 }

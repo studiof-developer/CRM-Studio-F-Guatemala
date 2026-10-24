@@ -422,6 +422,12 @@ export async function fetchMetaAdsReport({ since, until, level }) {
   return res.json();
 }
 
+export async function fetchMetaAdCreative(adId) {
+  const res = await apiFetch(`/api/campaigns/meta-ads-creative/${adId}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'No se pudo cargar la imagen');
+  return res.json();
+}
+
 // — Logística: fichas de pedido, auditoría de pagos y avance por el flujo —
 async function logCall(path, options, fallback) {
   const res = await apiFetch(`/api/logistics${path}`, options);

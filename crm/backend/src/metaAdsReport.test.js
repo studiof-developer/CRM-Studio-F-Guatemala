@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rowMetrics, totalsOf, previousRange, observations, validRange, fillDaily, DEFAULT_THRESHOLDS } from './metaAdsReport.js';
+import { rowMetrics, totalsOf, previousRange, observations, validRange, fillDaily, fetchAdCreative, DEFAULT_THRESHOLDS } from './metaAdsReport.js';
 
 const row = (name, spend, conv, clicks, ctr, id = name) => ({ campaign_id: id, campaign_name: name, spend: String(spend), impressions: '10000', reach: '8000', frequency: '1.2', inline_link_clicks: String(clicks), inline_link_click_ctr: String(ctr), cpm: '500', actions: conv == null ? [] : [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: String(conv) }] });
 const money = (n) => `$${Math.round(n)}`;
@@ -70,4 +70,8 @@ test('la serie por día calcula la conversión, el CPC y el CTR de cada día con
 
 test('los umbrales de calificación traen los valores del traficker por defecto', () => {
   assert.deepEqual(DEFAULT_THRESHOLDS, { cprGood: 1200, cprRegular: 2500, convGood: 25, convRegular: 20 });
+});
+
+test('el id del anuncio solo admite dígitos: nada se cuela en la ruta que se pide a Meta', async () => {
+  for (const bad of ['', undefined, '123/../me', '12?fields=x', 'abc']) await assert.rejects(fetchAdCreative(bad), { status: 400 });
 });

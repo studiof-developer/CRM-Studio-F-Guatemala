@@ -168,3 +168,29 @@ async function buildReport({ since, until, level, fmt }) {
     rows, totals, previousTotals: prevTotals, daily: multiDay ? fillDaily(accDaily, since, until) : [], observations: observations({ rows, previous, totals, since, until, fmt: money }),
   };
 }
+
+// Imagen (y video, si lo hay) de un anuncio, leída en vivo de Meta: las URLs de Meta caducan, por eso no se guardan; solo se
+// recuerdan 30 min para no repetir la llamada cada vez que alguien abre el informe.
+const CREATIVE_MS = 30 * 60 * 1000;
+const creativeCache = new Map();
+
+export async function fetchAdCreative(adId) {
+  if (!/^\d+$/.test(adId ?? '')) throw Object.assign(new Error('Anuncio no válido'), { status: 400 });
+  const hit = creativeCache.get(adId);
+  if (hit && Date.now() - hit.at < CREATIVE_MS) return hit.creative;
+  const creds = await getMetaAdsCredentials();
+  if (!creds) throw Object.assign(new Error('Meta Ads no está configurado — guarda el ID de cuenta y el token en Configuración'), { status: 409 });
+  const ad = await graphGet(`${adId}?fields=creative{thumbnail_url,image_url,object_story_spec{video_data{video_id,image_url},link_data{picture},photo_data{url}}}`, creds.token);
+  const c = ad.creative ?? {};
+  const spec = c.object_story_spec ?? {};
+  const videoId = spec.video_data?.video_id;
+  // El MP4 exige un permiso extra: si falta, se muestra solo la imagen.
+  const videoUrl = videoId ? (await graphGet(`${videoId}?fields=source`, creds.token).catch(() => null))?.source ?? null : null;
+  const creative = {
+    thumbnailUrl: c.thumbnail_url ?? null,
+    imageUrl: c.image_url ?? spec.video_data?.image_url ?? spec.link_data?.picture ?? spec.photo_data?.url ?? null,
+    videoUrl,
+  };
+  creativeCache.set(adId, { at: Date.now(), creative });
+  return creative;
+}
