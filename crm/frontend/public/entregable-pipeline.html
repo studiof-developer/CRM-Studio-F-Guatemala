@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" href="/favicon.svg" />
-  <title>Entregable Ejecutivo: Métricas del Pipeline y Productividad Omnicanal — Bagneres CRM</title>
+  <title>Requerimiento Ejecutivo: Métricas del Pipeline y Productividad Omnicanal — Bagneres CRM</title>
   <style>
     :root {
       --bg: #f4f5f8;
@@ -39,10 +39,10 @@
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
-      line-height: 1.45;
+      line-height: 1.48;
     }
 
-    /* ---- Topbar (mismo estilo del Checklist e Informe Corporativo) ---- */
+    /* ---- Topbar (idéntico al Checklist e Informe Corporativo) ---- */
     .topbar-wrap {
       position: sticky;
       top: 0;
@@ -131,7 +131,7 @@
       padding: 24px 24px 64px;
     }
 
-    /* ---- Hero & KPIs Compactos ---- */
+    /* ---- Hero & KPIs ---- */
     .hero-card {
       background: var(--paper);
       border: 1px solid var(--line);
@@ -139,14 +139,6 @@
       padding: 22px 24px;
       box-shadow: var(--shadow-sm);
       margin-bottom: 20px;
-    }
-    .hero-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 14px;
     }
     .eyebrow {
       display: inline-flex;
@@ -172,8 +164,8 @@
     .hero-sub {
       font-size: 13.5px;
       color: var(--muted);
-      margin: 4px 0 0;
-      max-width: 960px;
+      margin: 6px 0 16px;
+      max-width: 980px;
     }
 
     .kpi-strip {
@@ -207,12 +199,7 @@
       text-align: right;
     }
 
-    /* ---- Grid de Áreas (2 columnas en escritorio igual que checklist.html) ---- */
-    .areas-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 18px;
-    }
+    /* ---- Tarjeta Única Principal con Subítems Completos ---- */
     .area-card {
       background: var(--paper);
       border: 1px solid var(--line);
@@ -222,43 +209,50 @@
       display: flex;
       flex-direction: column;
     }
-    .area-card.full-span {
-      grid-column: span 2;
-    }
     .area-head {
       background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
       color: #ffffff;
-      padding: 13px 18px;
+      padding: 15px 22px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 10px;
     }
     .area-head h2 {
-      font-size: 14.5px;
+      font-size: 15.5px;
       font-weight: 800;
       margin: 0;
     }
     .area-head span {
-      font-size: 11.5px;
+      font-size: 12px;
       font-weight: 800;
       background: rgba(255, 255, 255, 0.16);
       border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 3px 9px;
+      padding: 4px 11px;
       border-radius: 999px;
       white-space: nowrap;
     }
 
-    /* ---- Lista Compacta de Items ---- */
+    .explain-banner {
+      background: var(--paper-soft);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 22px;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    .explain-banner strong { color: var(--ink); }
+
     .item-list {
-      divide-y: 1px solid var(--line-soft);
+      display: flex;
+      flex-direction: column;
     }
     .check-item {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      padding: 11px 16px;
+      gap: 16px;
+      padding: 15px 22px;
       border-bottom: 1px solid var(--line-soft);
     }
     .check-item:last-child { border-bottom: none; }
@@ -267,40 +261,52 @@
     .item-left {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
+      gap: 12px;
       min-width: 0;
       flex: 1;
     }
     .box-icon {
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 12.5px;
       font-weight: 900;
       flex-shrink: 0;
-      margin-top: 1px;
+      margin-top: 2px;
     }
-    .icon-ok { background: var(--ok); color: #fff; }
-    .icon-warn { background: var(--warn-bg); color: var(--warn); border: 1.5px solid #f59e0b; }
-    .icon-info { background: var(--info-bg); color: var(--info); border: 1.5px solid #38bdf8; }
     .icon-primary { background: var(--primary-light); color: var(--primary); border: 1.5px solid var(--primary); }
+    .icon-info { background: var(--info-bg); color: var(--info); border: 1.5px solid #38bdf8; }
+    .icon-ok { background: var(--ok); color: #fff; }
 
     .item-text {
       min-width: 0;
+      flex: 1;
     }
     .item-name {
-      font-size: 13.5px;
-      font-weight: 700;
+      font-size: 14px;
+      font-weight: 800;
       color: var(--ink);
-      margin: 0;
+      margin: 0 0 3px;
     }
     .item-mini-desc {
-      font-size: 12px;
+      font-size: 12.8px;
       color: var(--muted);
-      margin: 1px 0 0;
+      margin: 0;
+    }
+    .sub-bullets {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .sub-bullets li {
+      margin-bottom: 3px;
+    }
+    .sub-bullets li strong {
+      color: var(--ink);
     }
 
     .item-right {
@@ -308,19 +314,19 @@
       flex-direction: column;
       align-items: flex-end;
       flex-shrink: 0;
-      width: 96px;
+      width: 125px;
+      margin-top: 2px;
     }
     .pct-pill {
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 800;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 999px;
       white-space: nowrap;
     }
-    .pill-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
-    .pill-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
-    .pill-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
     .pill-primary { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-border); }
+    .pill-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+    .pill-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
 
     .mini-track {
       width: 100%;
@@ -328,20 +334,19 @@
       background: #e5e7eb;
       border-radius: 999px;
       overflow: hidden;
-      margin-top: 5px;
+      margin-top: 6px;
     }
-    .mini-fill-ok { height: 100%; background: var(--ok); }
-    .mini-fill-warn { height: 100%; background: #f59e0b; }
-    .mini-fill-info { height: 100%; background: #0284c7; }
     .mini-fill-primary { height: 100%; background: var(--primary); }
+    .mini-fill-info { height: 100%; background: #0284c7; }
+    .mini-fill-ok { height: 100%; background: var(--ok); }
 
     @media (max-width: 960px) {
-      .areas-grid { grid-template-columns: 1fr; }
-      .area-card.full-span { grid-column: span 1; }
       .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 560px) {
       .kpi-strip { grid-template-columns: 1fr; }
+      .check-item { flex-direction: column; gap: 8px; }
+      .item-right { align-items: flex-start; width: 100%; }
       .topbar, .container { padding-left: 14px; padding-right: 14px; }
     }
     @media print {
@@ -360,17 +365,17 @@
       <div class="brand">
         <div class="brand-badge">✓</div>
         <div class="brand-text">
-          <h1>Bagneres CRM — Entregable de Métricas del Pipeline y Productividad</h1>
-          <p>Plan de Implementación y Estado de Módulos — Sedes de Studio F y Línea Basshert</p>
+          <h1>Bagneres CRM — Entregable: Estadísticas Reales y Reporte del Pipeline</h1>
+          <p>Desglose Completo del Requerimiento — Studio F Online y Línea Basshert</p>
         </div>
       </div>
 
       <div class="actions">
         <a href="/" class="btn btn-outline">← Volver al CRM</a>
-        <a href="/checklist.html" class="btn btn-outline">📋 Ver Checklist</a>
+        <a href="/checklist.html" class="btn btn-outline">☑️ Ver Checklist</a>
         <a href="/informe.html" class="btn btn-outline">📄 Ver Informe</a>
         <button onclick="window.print()" class="btn btn-outline">🖨️ Imprimir / PDF</button>
-        <button onclick="exportEntregableToWord()" class="btn btn-primary">📥 Descargar en Word (.doc)</button>
+        <button onclick="exportRequerimientoToWord()" class="btn btn-primary">📥 Descargar en Word (.doc)</button>
       </div>
     </div>
   </header>
@@ -379,17 +384,34 @@
 
     <!-- ENCABEZADO RESUMEN -->
     <section class="hero-card">
-      <div class="hero-top">
-        <div>
-          <div class="eyebrow">NUEVO ENTREGABLE PRIORITARIO • CORTE 24 OCTUBRE 2026</div>
-          <h2 class="hero-title">Métricas Reales del Pipeline, Desglose Omnicanal y Productividad Diaria</h2>
-          <p class="hero-sub">
-            Integración en las <strong>Estadísticas del Pipeline</strong> del reporte gerencial en vivo: lo que realmente ingresa y atienden las asesoras día por día en <strong>WhatsApp, Instagram y Messenger</strong>, cruzado con ventas y conversión real.
-          </p>
-        </div>
-      </div>
+      <div class="eyebrow">REQUERIMIENTO EN DESARROLLO • ENTREGA 28 OCTUBRE 2026</div>
+      <h2 class="hero-title">Conversión de Métricas Gerenciales al Pipeline en Vivo (Datos Reales del CRM)</h2>
+      <p class="hero-sub">
+        Objetivo: pasar las métricas gerenciales de mensajes, conversaciones y ventas directamente a las <strong>Estadísticas del Pipeline</strong> con los datos reales en vivo del CRM (lo que efectivamente atienden las asesoras en WhatsApp y redes sociales), discriminado por línea de negocio y reactivo a cualquier periodo de fecha seleccionado.
+      </p>
 
       <div class="kpi-strip">
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Requerimiento</div>
+            <div class="kpi-mini-sub">Con 10 subítems completos</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--primary);">1 Módulo</div>
+        </div>
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Filtro de Líneas</div>
+            <div class="kpi-mini-sub">Studio F Online / Basshert</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--ink);">2 Líneas</div>
+        </div>
+        <div class="kpi-mini">
+          <div>
+            <div class="kpi-mini-label">Canales Incluidos</div>
+            <div class="kpi-mini-sub">WhatsApp + IG + Messenger</div>
+          </div>
+          <div class="kpi-mini-val" style="color: var(--info);">Omnicanal</div>
+        </div>
         <div class="kpi-mini">
           <div>
             <div class="kpi-mini-label">Fecha de Entrega</div>
@@ -397,370 +419,245 @@
           </div>
           <div class="kpi-mini-val" style="color: var(--ok);">28 Oct</div>
         </div>
-        <div class="kpi-mini">
-          <div>
-            <div class="kpi-mini-label">Líneas de Negocio</div>
-            <div class="kpi-mini-sub">Filtro discriminado</div>
-          </div>
-          <div class="kpi-mini-val" style="color: var(--primary);">2 Líneas</div>
-        </div>
-        <div class="kpi-mini">
-          <div>
-            <div class="kpi-mini-label">Canales Medidos</div>
-            <div class="kpi-mini-sub">Studio F Online (Omnicanal)</div>
-          </div>
-          <div class="kpi-mini-val" style="color: var(--info);">WA · IG · FB</div>
-        </div>
-        <div class="kpi-mini">
-          <div>
-            <div class="kpi-mini-label">Prioridad Actual</div>
-            <div class="kpi-mini-sub">Desarrollo inmediato</div>
-          </div>
-          <div class="kpi-mini-val" style="color: var(--warn);">Foco #1</div>
-        </div>
       </div>
     </section>
 
-    <!-- CUADRÍCULA ESTILO CHECKLIST -->
-    <div class="areas-grid">
+    <!-- 1 ÚNICO ÍTEM CENTRAL CON TODOS SUS SUBÍTEMS COMPLETOS -->
+    <section class="area-card">
+      <div class="area-head">
+        <h2>Ítem Único: Estadísticas del Pipeline y Reporte Totalizado de Mensajes, Asesoras, Ventas y Redes Sociales</h2>
+        <span>Entrega: Miércoles 28 de Octubre</span>
+      </div>
 
-      <!-- BLOQUE 1: ESTADO DE MÓDULOS CLAVE -->
-      <section class="area-card">
-        <div class="area-head">
-          <h2>1. Estado Actual de Módulos Clave del CRM</h2>
-          <span>Corte Octubre 2026</span>
-        </div>
-        <div class="item-list">
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-ok">✓</span>
-              <div class="item-text">
-                <p class="item-name">01. Cotizador y Existencias por Sucursal (ERP)</p>
-                <p class="item-mini-desc">Calculadora visual con tarjeta PNG y stock por tienda en resultados de búsqueda.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-ok">Listo 100%</span>
-              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+      <div class="explain-banner">
+        <strong>¿Qué implica este desarrollo?</strong> Acomodar las estadísticas del Pipeline para que reemplacen el cálculo estático en Excel por la operación real en vivo del CRM, permitiendo filtrar por línea y por temporalidad, corrigiendo el bloque de "Resumen" y generando el reporte diario y totalizado de mensajes por canal, atención por asesora, ventas y porcentaje de conversión.
+      </div>
+
+      <div class="item-list">
+
+        <!-- SUBÍTEM 1.1 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-primary">1.1</span>
+            <div class="item-text">
+              <p class="item-name">Filtro por Línea de Negocio (Studio F Online y Basshert)</p>
+              <p class="item-mini-desc">Incorporación del selector de línea directamente dentro de las Estadísticas del Pipeline para discriminar la información entre ambas operaciones.</p>
+              <ul class="sub-bullets">
+                <li>Permite ver los indicadores consolidados (<strong>Todas las líneas</strong>) o aislar individualmente <strong>Studio F Online</strong> o <strong>Basshert</strong>.</li>
+                <li>Al seleccionar una línea, todas las métricas de estados, mensajes, asesoras, ventas y costos se filtran únicamente para esa línea.</li>
+              </ul>
             </div>
           </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-ok">✓</span>
-              <div class="item-text">
-                <p class="item-name">02. Reporte de Métricas para Asesoras de Studio F</p>
-                <p class="item-mini-desc">Atribución automática de ventas (OCR/chat), metas mensuales, turnos y cierres.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-ok">Listo 100%</span>
-              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-ok">✓</span>
-              <div class="item-text">
-                <p class="item-name">03. Informe Ejecutivo de Meta Ads en Vivo</p>
-                <p class="item-mini-desc">Inversión, conversaciones, costo por resultado, conversión clic → mensaje y CTR.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-ok">Listo 100%</span>
-              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-ok">✓</span>
-              <div class="item-text">
-                <p class="item-name">04. Imágenes y Videos de Anuncios (Creativos Meta)</p>
-                <p class="item-mini-desc">Miniaturas en vivo en la tabla de anuncios y visor interactivo con imagen/video.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-ok">Listo 100%</span>
-              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-warn">⏳</span>
-              <div class="item-text">
-                <p class="item-name">05. Módulo de Logística y Fichas de Pedido</p>
-                <p class="item-mini-desc">En desarrollo (creación desde el chat, prendas, pagos, traslados, empaque y despacho).</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-warn">En Desarrollo</span>
-              <div class="mini-track"><div class="mini-fill-warn" style="width:50%"></div></div>
-            </div>
+          <div class="item-right">
+            <span class="pct-pill pill-primary">Filtro de Línea</span>
+            <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
         </div>
-      </section>
 
-      <!-- BLOQUE 2: AJUSTES DE FILTROS Y COMPORTAMIENTO EN PIPELINE -->
-      <section class="area-card">
-        <div class="area-head">
-          <h2>2. Ajustes en Filtros y Resumen del Pipeline</h2>
-          <span>Prioridad Inmediata</span>
-        </div>
-        <div class="item-list">
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-primary">★</span>
-              <div class="item-text">
-                <p class="item-name">06. Filtro Discriminado por Línea de Negocio</p>
-                <p class="item-mini-desc">Selector directo para separar métricas entre Studio F Online y Línea Basshert.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-primary">28 Oct</span>
-              <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
+        <!-- SUBÍTEM 1.2 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-primary">1.2</span>
+            <div class="item-text">
+              <p class="item-name">Ajuste del Selector de Periodo ("Hoy" por Defecto y Eliminación de "Todo")</p>
+              <p class="item-mini-desc">Reestructuración de las opciones de temporalidad para que el tablero y las estadísticas trabajen siempre sobre un rango de fechas concreto.</p>
+              <ul class="sub-bullets">
+                <li>Se elimina la opción <strong>"Todo"</strong> del selector de periodos por no aportar un corte operativo útil.</li>
+                <li>Por defecto, al abrir el Pipeline y sus Estadísticas, el filtro inicia en <strong>"Hoy"</strong>.</li>
+                <li>Al cambiar a <strong>Ayer, Última semana, Mes (ej. Octubre 2026) o Periodo personalizado</strong>, absolutamente todos los bloques e indicadores cambian en consecuencia.</li>
+              </ul>
             </div>
           </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-primary">★</span>
-              <div class="item-text">
-                <p class="item-name">07. Selector de Periodo ("Hoy" por Defecto, sin "Todo")</p>
-                <p class="item-mini-desc">Se retira la opción "Todo"; inicia en "Hoy" y recalcula todo al cambiar la fecha.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-primary">28 Oct</span>
-              <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-primary">★</span>
-              <div class="item-text">
-                <p class="item-name">08. Columna "Resumen" 100% Dinámica por Periodo</p>
-                <p class="item-mini-desc">El bloque Resumen cambiará automáticamente según el día, semana o mes seleccionado.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-primary">28 Oct</span>
-              <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-primary">★</span>
-              <div class="item-text">
-                <p class="item-name">09. Corrección de Corte Histórico (Octubre Completo)</p>
-                <p class="item-mini-desc">Muestra el volumen real del mes sin ocultar conversaciones de más de 24 horas.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-primary">28 Oct</span>
-              <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
-            </div>
+          <div class="item-right">
+            <span class="pct-pill pill-primary">Temporalidad</span>
+            <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
         </div>
-      </section>
 
-      <!-- BLOQUE 3: REPORTE DIARIO, ASESORAS Y CANALES -->
-      <section class="area-card">
-        <div class="area-head">
-          <h2>3. Reporte Totalizado Diario y por Asesora</h2>
-          <span>Datos Reales del CRM</span>
-        </div>
-        <div class="item-list">
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">📊</span>
-              <div class="item-text">
-                <p class="item-name">10. Mensajes y Conversaciones Ingresadas por Día</p>
-                <p class="item-mini-desc">Conteo real diario de ingresos en el CRM dentro del periodo seleccionado.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">Diario + Total</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+        <!-- SUBÍTEM 1.3 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-primary">1.3</span>
+            <div class="item-text">
+              <p class="item-name">Actualización Dinámica de la Columna "Resumen" según el Periodo y Línea</p>
+              <p class="item-mini-desc">Corrección del primer bloque ("Resumen") en la primera columna de las Estadísticas del Pipeline, que actualmente permanece fijo en el día de hoy.</p>
+              <ul class="sub-bullets">
+                <li>Los indicadores de <strong>Nuevas conversaciones, Conversaciones activas, Nuevos clientes, Recurrentes activos y Por Anuncios Meta</strong> se actualizarán dinámicamente según el periodo escogido (día, semana, mes completo o rango personalizado) y la línea seleccionada.</li>
+                <li>Corrección del conteo histórico del periodo (ej. todo Octubre) para reflejar el volumen real atendido sin descartar conversaciones con más de 24 horas de antigüedad.</li>
+              </ul>
             </div>
           </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">👩‍💼</span>
-              <div class="item-text">
-                <p class="item-name">11. Mensajes Atendidos por Cada Asesora por Día</p>
-                <p class="item-mini-desc">Volumen real atendido por cada asesora en cada fecha y acumulado del periodo.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">Por Asesora</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">💰</span>
-              <div class="item-text">
-                <p class="item-name">12. Ventas por Asesora por Día</p>
-                <p class="item-mini-desc">Cantidad de ventas cerradas y monto vendido por asesora en cada día del rango.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">Por Asesora</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">📈</span>
-              <div class="item-text">
-                <p class="item-name">13. Porcentaje de Conversión por Día y Totalizado</p>
-                <p class="item-mini-desc">Tasa de cierre diaria y global (Ventas cerradas ÷ Conversaciones atendidas).</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">% Conversión</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
-            </div>
+          <div class="item-right">
+            <span class="pct-pill pill-primary">Resumen Vivo</span>
+            <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
         </div>
-      </section>
 
-      <!-- BLOQUE 4: DESGLOSE POR REDES SOCIALES Y CRONOGRAMA -->
-      <section class="area-card">
-        <div class="area-head">
-          <h2>4. Desglose por Canal y Cronograma de Entrega</h2>
-          <span>Meta: Mié 28 Octubre</span>
-        </div>
-        <div class="item-list">
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">💬</span>
-              <div class="item-text">
-                <p class="item-name">14. Mensajes por WhatsApp (Studio F Online y Basshert)</p>
-                <p class="item-mini-desc">Separando ingresos de Anuncios Meta, Difusiones y tráfico orgánico por línea.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">WhatsApp</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+        <!-- SUBÍTEM 1.4 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-info">1.4</span>
+            <div class="item-text">
+              <p class="item-name">Conteo de Cuántos Mensajes y Conversaciones Ingresaron por Día</p>
+              <p class="item-mini-desc">Registro diario exacto de todo el tráfico entrante real recibido en el CRM dentro del periodo consultado.</p>
+              <ul class="sub-bullets">
+                <li>Desglose fecha por fecha (ej. del 1 al 31 de octubre) mostrando cuántos mensajes y conversaciones ingresaron cada día y su suma totalizada.</li>
+                <li>Diferenciación entre ingresos provenientes de <strong>Anuncios Pagos (Meta Ads)</strong>, respuestas a <strong>Difusiones Pagas</strong> e ingresos <strong>Orgánicos / Directos</strong>.</li>
+              </ul>
             </div>
           </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">📸</span>
-              <div class="item-text">
-                <p class="item-name">15. Mensajes por Instagram (Exclusivo Studio F Online)</p>
-                <p class="item-mini-desc">Conteo diario y totalizado de mensajes directos e historias atendidas en Instagram.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">Instagram</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-info">📨</span>
-              <div class="item-text">
-                <p class="item-name">16. Mensajes por Messenger (Exclusivo Studio F Online)</p>
-                <p class="item-mini-desc">Conteo diario y totalizado de conversaciones entrantes desde Facebook Messenger.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-info">Messenger</span>
-              <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="item-left">
-              <span class="box-icon icon-ok">📅</span>
-              <div class="item-text">
-                <p class="item-name">17. Plan de Trabajo y Puesta en Producción (24 al 28 Oct)</p>
-                <p class="item-mini-desc">Desarrollo backend/frontend (26-27 Oct) y entrega auditada el Miércoles 28 Oct.</p>
-              </div>
-            </div>
-            <div class="item-right">
-              <span class="pct-pill pill-ok">28 Oct 2026</span>
-              <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
-            </div>
+          <div class="item-right">
+            <span class="pct-pill pill-info">Ingresos x Día</span>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
           </div>
         </div>
-      </section>
 
-    </div>
+        <!-- SUBÍTEM 1.5 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-info">1.5</span>
+            <div class="item-text">
+              <p class="item-name">Conteo de Cuántos Mensajes Atendió Cada Asesora por Día</p>
+              <p class="item-mini-desc">Medición real de la carga operativa atendida por cada asesora en cada fecha del periodo elegido.</p>
+              <ul class="sub-bullets">
+                <li>Muestra por día y en el acumulado del periodo cuántos mensajes y conversaciones gestionó efectivamente cada asesora desde el CRM.</li>
+                <li>Incluye tanto la atención realizada en las líneas de <strong>WhatsApp</strong> como las respuestas enviadas en <strong>Instagram y Messenger</strong> (excluyendo envíos masivos automáticos de difusiones).</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-info">Atención x Día</span>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <!-- SUBÍTEM 1.6 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-info">1.6</span>
+            <div class="item-text">
+              <p class="item-name">Conteo de Cuántas Ventas Realizó Cada Asesora por Día</p>
+              <p class="item-mini-desc">Cruce directo entre la atención diaria de cada asesora y sus ventas confirmadas en el CRM.</p>
+              <ul class="sub-bullets">
+                <li>Desglose por asesora y por día indicando <strong>cantidad de ventas cerradas</strong> y <strong>valor vendido</strong> (en Quetzales y su equivalencia en COP para el cuadro gerencial).</li>
+                <li>Totalizado general del periodo por asesora y de todo el equipo comercial.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-info">Ventas x Día</span>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <!-- SUBÍTEM 1.7 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-info">1.7</span>
+            <div class="item-text">
+              <p class="item-name">Porcentaje de Conversión por Día y Totalizado</p>
+              <p class="item-mini-desc">Cálculo automático de la efectividad comercial diaria, por asesora y global del periodo.</p>
+              <ul class="sub-bullets">
+                <li><strong>% de Conversión Diario del Equipo:</strong> Ventas cerradas del día ÷ Total de conversaciones/mensajes ingresados y atendidos en el día.</li>
+                <li><strong>% de Conversión Individual por Asesora:</strong> Ventas de la asesora ÷ Conversaciones atendidas por esa asesora en el mismo periodo.</li>
+                <li><strong>Fila Totalizada:</strong> Tasa de cierre consolidada de todo el rango de fechas y cálculo de ROAS frente a la inversión en pauta.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-info">% Conversión</span>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <!-- SUBÍTEM 1.8 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-info">1.8</span>
+            <div class="item-text">
+              <p class="item-name">Desglose de Mensajes por Canal: WhatsApp, Instagram y Messenger</p>
+              <p class="item-mini-desc">Separación clara del volumen recibido y atendido en cada canal de comunicación dentro del periodo seleccionado.</p>
+              <ul class="sub-bullets">
+                <li><strong>Cuántos mensajes por WhatsApp:</strong> Discriminado para <em>Studio F Online</em> y <em>Basshert</em> (anuncios pagos, difusiones y orgánico).</li>
+                <li><strong>Cuántos mensajes por Instagram:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
+                <li><strong>Cuántos mensajes por Messenger:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-info">WA · IG · FB</span>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <!-- SUBÍTEM 1.9 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-ok">1.9</span>
+            <div class="item-text">
+              <p class="item-name">Tabla Consolidada (Formato Excel Gerencial) y Descarga Directa</p>
+              <p class="item-mini-desc">Integración de la tabla tipo Excel de Octubre dentro del modal de Estadísticas del Pipeline con botón de exportación.</p>
+              <ul class="sub-bullets">
+                <li>Visualización en pantalla y descarga en <strong>Excel (.xlsx)</strong> con todas las columnas gerenciales: <em>Fecha, Clics, CPC, CTR, % Conversión Pauta, Mensajes WA, Inversión, Difusiones (Enviadas/Leídos/Respuestas), Instagram, Messenger, Total Omnicanal, Atención y Ventas por Asesora, Tasa de Cierre y ROAS</em>.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-ok">Reporte + Excel</span>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+          </div>
+        </div>
+
+        <!-- SUBÍTEM 1.10 -->
+        <div class="check-item">
+          <div class="item-left">
+            <span class="box-icon icon-ok">1.10</span>
+            <div class="item-text">
+              <p class="item-name">Cronograma de Desarrollo y Entrega en Producción (28 de Octubre)</p>
+              <p class="item-mini-desc">Proceso de implementación técnica, cruce de bases de datos y auditoría de las cifras reales de Octubre.</p>
+              <ul class="sub-bullets">
+                <li><strong>Día 1 (Lun 26 Oct):</strong> Ajuste de filtros de periodo ("Hoy" por defecto, retiro de "Todo"), selector de línea (Studio F Online / Basshert), columna "Resumen" dinámica y consultas backend omnicanal.</li>
+                <li><strong>Día 2 (Mar 27 Oct):</strong> Construcción de la tabla diaria y por asesora en Estadísticas del Pipeline, cálculo de % de conversión y exportador Excel.</li>
+                <li><strong>Entrega Final (Mié 28 Oct 2026):</strong> Validación completa con los datos reales de Octubre y despliegue final en producción.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="pct-pill pill-ok">28 Oct 2026</span>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
 
   </main>
 
   <script>
-    function exportEntregableToWord() {
-      const sections = [
-        {
-          title: '1. Estado Actual de Módulos Clave del CRM',
-          items: [
-            ['[ X ]', '01. Cotizador y Existencias por Sucursal (ERP)', 'Calculadora visual con tarjeta PNG y stock por tienda en resultados de búsqueda.', 'Listo 100%'],
-            ['[ X ]', '02. Reporte de Métricas para Asesoras de Studio F', 'Atribución automática de ventas (OCR/chat), metas mensuales, turnos y cierres.', 'Listo 100%'],
-            ['[ X ]', '03. Informe Ejecutivo de Meta Ads en Vivo', 'Inversión, conversaciones, costo por resultado, conversión clic a mensaje y CTR.', 'Listo 100%'],
-            ['[ X ]', '04. Imágenes y Videos de Anuncios (Creativos Meta)', 'Miniaturas en vivo en la tabla de anuncios y visor interactivo con imagen/video.', 'Listo 100%'],
-            ['[ ~ ]', '05. Módulo de Logística y Fichas de Pedido', 'En desarrollo (creación desde el chat, prendas, pagos, traslados, empaque y despacho).', 'En Desarrollo (~50%)']
-          ]
-        },
-        {
-          title: '2. Ajustes en Filtros y Resumen del Pipeline (Prioridad Actual)',
-          items: [
-            ['[ ★ ]', '06. Filtro Discriminado por Línea de Negocio', 'Selector directo para separar métricas entre Studio F Online y Línea Basshert.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '07. Selector de Periodo ("Hoy" por Defecto, sin "Todo")', 'Se retira la opción "Todo"; inicia en "Hoy" y recalcula todo al cambiar la fecha.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '08. Columna "Resumen" 100% Dinámica por Periodo', 'El bloque Resumen cambiará automáticamente según el día, semana o mes seleccionado.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '09. Corrección de Corte Histórico (Octubre Completo)', 'Muestra el volumen real del mes sin ocultar conversaciones de más de 24 horas.', 'Entrega 28 Oct']
-          ]
-        },
-        {
-          title: '3. Reporte Totalizado Diario y por Asesora (Datos Reales del CRM)',
-          items: [
-            ['[ ★ ]', '10. Mensajes y Conversaciones Ingresadas por Día', 'Conteo real diario de ingresos en el CRM dentro del periodo seleccionado.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '11. Mensajes Atendidos por Cada Asesora por Día', 'Volumen real atendido por cada asesora en cada fecha y acumulado del periodo.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '12. Ventas por Asesora por Día', 'Cantidad de ventas cerradas y monto vendido por asesora en cada día del rango.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '13. Porcentaje de Conversión por Día y Totalizado', 'Tasa de cierre diaria y global (Ventas cerradas / Conversaciones atendidas).', 'Entrega 28 Oct']
-          ]
-        },
-        {
-          title: '4. Desglose Omnicanal por Red Social y Cronograma',
-          items: [
-            ['[ ★ ]', '14. Mensajes por WhatsApp (Studio F Online y Basshert)', 'Separando ingresos de Anuncios Meta, Difusiones y tráfico orgánico por línea.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '15. Mensajes por Instagram (Exclusivo Studio F Online)', 'Conteo diario y totalizado de mensajes directos e historias atendidas en Instagram.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '16. Mensajes por Messenger (Exclusivo Studio F Online)', 'Conteo diario y totalizado de conversaciones entrantes desde Facebook Messenger.', 'Entrega 28 Oct'],
-            ['[ ★ ]', '17. Puesta en Producción y Validación de Octubre', 'Desarrollo 26-27 Oct y entrega auditada en producción el Miércoles 28 de Octubre.', '28 Oct 2026']
-          ]
-        }
+    function exportRequerimientoToWord() {
+      const items = [
+        ['1.1', 'Filtro por Línea de Negocio (Studio F Online y Basshert)', 'Selector directo en las Estadísticas del Pipeline para ver Todas las líneas o discriminar entre Studio F Online y Basshert en todas las métricas.', 'Filtro de Línea'],
+        ['1.2', 'Ajuste del Selector de Periodo ("Hoy" por Defecto, sin "Todo")', 'Se retira la opción "Todo"; inicia por defecto en "Hoy" y actualiza todas las métricas al elegir Ayer, Última semana, Mes o Periodo personalizado.', 'Temporalidad'],
+        ['1.3', 'Columna "Resumen" 100% Dinámica según Periodo y Línea', 'El bloque Resumen se actualiza con los datos reales del rango de fechas y línea elegida (nuevas, activas, recurrentes y pauta Meta), sin ocultar chats de más de 24h en consultas históricas.', 'Resumen Vivo'],
+        ['1.4', 'Cuántos Mensajes y Conversaciones Ingresaron por Día', 'Conteo diario y totalizado de todos los ingresos reales en el CRM (separando Anuncios Pagos a WhatsApp, Difusiones Pagas y Orgánico).', 'Ingresos x Día'],
+        ['1.5', 'Cuántos Mensajes Atendió Cada Asesora por Día', 'Medición diaria y acumulada de los mensajes y conversaciones atendidas por cada asesora en WhatsApp, Instagram y Messenger.', 'Atención x Día'],
+        ['1.6', 'Cuántas Ventas Realizó Cada Asesora por Día', 'Cantidad de ventas confirmadas y monto vendido por cada asesora en cada fecha del periodo seleccionado y su total acumulado.', 'Ventas x Día'],
+        ['1.7', 'Porcentaje de Conversión por Día y Totalizado', 'Cálculo automático de la tasa de cierre por día, por asesora y totalizada del periodo (Ventas cerradas / Conversaciones atendidas), más ROAS.', '% Conversión'],
+        ['1.8', 'Desglose por Canal: WhatsApp, Instagram y Messenger', 'Conteo diario y totalizado de mensajes por WhatsApp (Studio F Online y Basshert), mensajes por Instagram y mensajes por Messenger (Studio F Online).', 'WA / IG / FB'],
+        ['1.9', 'Tabla Consolidada (Estilo Excel Gerencial) y Exportación', 'Vista unificada en el modal del Pipeline y descarga en Excel (.xlsx) con el cuadro completo del periodo.', 'Reporte + Excel'],
+        ['1.10', 'Proceso de Implementación y Fecha de Entrega', 'Desarrollo de backend/frontend (26 y 27 de octubre) y entrega auditada en producción el Miércoles 28 de Octubre de 2026.', 'Entrega 28 Oct']
       ];
 
       let rowsHtml = '';
-      sections.forEach((sec) => {
+      items.forEach((it) => {
         rowsHtml += `
-          <tr style="background-color:#e0e7ff; color:#1e1b4b; font-weight:bold;">
-            <td colspan="4" style="padding:7px 10px;">${sec.title}</td>
+          <tr>
+            <td align="center" style="font-family:Consolas,monospace; font-weight:bold; width:8%;">${it[0]}</td>
+            <td style="width:30%;"><strong>${it[1]}</strong></td>
+            <td style="width:48%; color:#374151;">${it[2]}</td>
+            <td align="center" style="width:14%;"><strong>${it[3]}</strong></td>
           </tr>
         `;
-        sec.items.forEach((it) => {
-          rowsHtml += `
-            <tr>
-              <td align="center" style="font-family:Consolas,monospace; font-weight:bold; width:9%;">${it[0]}</td>
-              <td style="width:32%;"><strong>${it[1]}</strong></td>
-              <td style="width:45%; color:#374151;">${it[2]}</td>
-              <td align="center" style="width:14%;"><strong>${it[3]}</strong></td>
-            </tr>
-          `;
-        });
       });
 
       const wordDoc = `
@@ -777,19 +674,19 @@
         </head>
         <body>
           <h1 style="font-size:16pt; color:#1e1b4b; border-bottom:2px solid #3730a3; padding-bottom:5pt; margin-bottom:4pt;">
-            PLAN DE ENTREGABLE: MÉTRICAS DEL PIPELINE Y PRODUCTIVIDAD OMNICANAL — BAGNERES CRM
+            ENTREGABLE: ESTADÍSTICAS REALES DEL PIPELINE Y REPORTE OMNICANAL — BAGNERES CRM
           </h1>
           <p style="font-size:10pt; color:#4b5563; margin-top:0;">
-            <strong>Operación:</strong> Studio F Online y Línea Basshert &nbsp;|&nbsp;
-            <strong>Fecha Comprometida de Implementación:</strong> Miércoles 28 de Octubre de 2026
+            <strong>Líneas:</strong> Studio F Online y Basshert &nbsp;|&nbsp;
+            <strong>Fecha de Entrega en Producción:</strong> Miércoles 28 de Octubre de 2026
           </p>
           <table border="1" cellspacing="0" cellpadding="6" style="width:100%; border-collapse:collapse; border-color:#cbd5e1; font-size:9.5pt;">
             <thead>
-              <tr style="background-color:#1e293b; color:#ffffff;">
-                <th align="center">Estado</th>
-                <th align="left">Módulo / Requerimiento</th>
-                <th align="left">Descripción Resumida</th>
-                <th align="center">Entrega / Avance</th>
+              <tr style="background-color:#1e1b4b; color:#ffffff;">
+                <th align="center">Subítem</th>
+                <th align="left">Alcance del Requerimiento</th>
+                <th align="left">Detalle Completo de Implementación</th>
+                <th align="center">Indicador</th>
               </tr>
             </thead>
             <tbody>
