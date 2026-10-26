@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { X, Loader2, Calendar, Mail } from 'lucide-react';
-import { fetchPipelineStats, fetchPipelineStatsCosts } from '../api.js';
+import { X, Loader2, Calendar, Mail, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
+import { showError } from './Toast.jsx';
 import Select from './Select.jsx';
 import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
 import { DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from '../lib/pipelineColumns.js';
@@ -64,6 +66,75 @@ function StatCard({ label, value, unit, iconBg, iconText, icon: Icon, sub }) {
   );
 }
 
+const money0 = (n) => Math.round(n).toLocaleString('es-GT');
+
+// Atención y ventas por asesora en el periodo. Conversión = ventas de la asesora ÷ conversaciones que atendió.
+function AdvisorTable({ adv }) {
+  if (!adv) return <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>;
+  if (adv.failed) return <p className="text-xs text-danger">No se pudo cargar la atención por asesora.</p>;
+  if (!adv.advisors.length) return <p className="text-xs text-muted-foreground">Sin atención ni ventas de asesoras en este periodo.</p>;
+  const tot = adv.advisors.reduce((t, a) => ({ c: t.c + a.conversations, m: t.m + a.messages, s: t.s + a.sales, v: t.v + a.salesAmount }), { c: 0, m: 0, s: 0, v: 0 });
+  const th = 'px-3 py-2 text-right font-semibold';
+  return (
+    <div className="max-h-64 overflow-auto rounded-xl border border-line">
+      <table className="w-full min-w-[760px] text-xs">
+        <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
+          <tr><th className="px-3 py-2 text-left font-semibold">Asesora</th><th className={th}>Conversaciones atendidas</th><th className={th}>Mensajes enviados</th><th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Conversión</th></tr>
+        </thead>
+        <tbody>
+          {adv.advisors.map((a) => (
+            <tr key={a.advisor} className="border-t border-line-soft tabular-nums">
+              <td className="px-3 py-1.5 text-left text-ink">{a.advisor}</td>
+              <td className="px-3 py-1.5 text-right">{a.conversations}</td><td className="px-3 py-1.5 text-right text-greige-ink">{a.messages}</td>
+              <td className="px-3 py-1.5 text-right font-semibold text-ink">{a.sales}</td><td className="px-3 py-1.5 text-right">{money0(a.salesAmount)}</td>
+              <td className="px-3 py-1.5 text-right text-greige-ink">{money0(a.salesAmount * adv.fxQtoCop)}</td><td className="px-3 py-1.5 text-right text-greige-ink">{pctText(a.conversionRate)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
+            <td className="px-3 py-2 text-left">Total</td><td className="px-3 py-2 text-right">{tot.c}</td><td className="px-3 py-2 text-right">{tot.m}</td><td className="px-3 py-2 text-right">{tot.s}</td>
+            <td className="px-3 py-2 text-right">{money0(tot.v)}</td><td className="px-3 py-2 text-right">{money0(tot.v * adv.fxQtoCop)}</td><td className="px-3 py-2 text-right">{pctText(tot.c > 0 ? tot.s / tot.c : null)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// Excel gerencial: el mismo formato de la hoja del trafficker, con la pauta de Meta (filtro de campaña activo) y lo que atendió el CRM.
+async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
+  try {
+    let meta = [];
+    try { meta = (await fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign' })).daily ?? []; } catch { /* sin Meta: esas columnas salen vacías */ }
+    const metaBy = Object.fromEntries(meta.map((d) => [d.date, d]));
+    const fx = adv?.fxQtoCop ?? 420;
+    const rows = data.dailyConversations.map((d) => {
+      const m = metaBy[d.day];
+      const omni = d.total;
+      return {
+        Fecha: d.day, Clics: m?.linkClicks ?? '', 'Costo por clic': m?.cpc ?? '', CTR: m?.ctr != null ? m.ctr / 100 : '', '% conversión': m?.conversionPct != null ? m.conversionPct / 100 : '',
+        'Mensajes (Meta)': m?.conversations ?? '', 'Costo por mensaje': m?.costPerConversation ?? '', Inversión: m?.spend ?? '',
+        'Difusiones enviadas': d.broadcastSent, Leídos: d.broadcastRead, '% tasa de lectura': d.broadcastSent > 0 ? d.broadcastRead / d.broadcastSent : 0, 'Respuestas a difusión (CRM)': d.broadcast,
+        Instagram: d.instagram, Messenger: d.messenger, 'Omnicanal (CRM)': omni, 'Mensajes recibidos': d.messages ?? 0,
+        Ventas: d.sales, 'Vlr Ventas (Q)': d.salesAmount, 'Vlr Ventas COP': d.salesAmount * fx, 'Tasa de cierre': omni > 0 ? d.sales / omni : 0, ROAS: m?.spend > 0 ? (d.salesAmount * fx) / m.spend : '',
+      };
+    });
+    const sumK = (k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0);
+    const spend = sumK('Inversión'); const cop = sumK('Vlr Ventas COP'); const omniT = sumK('Omnicanal (CRM)'); const ventas = sumK('Ventas');
+    rows.push({ Fecha: 'Total', Clics: sumK('Clics'), Inversión: spend, 'Mensajes (Meta)': sumK('Mensajes (Meta)'), 'Difusiones enviadas': sumK('Difusiones enviadas'), Leídos: sumK('Leídos'), 'Respuestas a difusión (CRM)': sumK('Respuestas a difusión (CRM)'),
+      Instagram: sumK('Instagram'), Messenger: sumK('Messenger'), 'Omnicanal (CRM)': omniT, 'Mensajes recibidos': sumK('Mensajes recibidos'), Ventas: ventas, 'Vlr Ventas (Q)': sumK('Vlr Ventas (Q)'), 'Vlr Ventas COP': cop,
+      'Tasa de cierre': omniT > 0 ? ventas / omniT : 0, ROAS: spend > 0 ? cop / spend : '' });
+    const byAdvisor = (adv?.daily ?? []).map((r) => ({ Fecha: r.day, Asesora: r.advisor, 'Conversaciones atendidas': r.conversations, 'Mensajes enviados': r.messages, Ventas: r.sales, 'Valor (Q)': r.salesAmount, 'Valor (COP)': r.salesAmount * fx,
+      Conversión: r.conversations > 0 ? r.sales / r.conversations : '' }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Gerencial');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byAdvisor.length ? byAdvisor : [{ Aviso: 'Sin datos de asesoras en el periodo' }]), 'Por asesora y día');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Periodo: `${dateFrom} a ${dateTo}`, Línea: line || 'Todas', 'Tipo de cambio Q→COP': fx, Nota: 'Pauta (clics, costo, inversión, mensajes Meta) = Meta con el filtro de campaña del Informe de anuncios. Lo demás = CRM.' }]), 'Notas');
+    XLSX.writeFile(wb, `estadisticas-${dateFrom}_${dateTo}.xlsx`);
+  } catch (err) { showError(err.message || 'No se pudo generar el Excel'); }
+}
+
 function SumRow({ label, value, strong, purple }) {
   return (
     <div className={`flex items-center justify-between ${purple ? 'text-purple-600 dark:text-purple-400' : ''}`}>
@@ -82,15 +153,16 @@ function DailyTable({ rows }) {
   return (
     <div className="rounded-xl border border-line">
       <div className="max-h-72 overflow-auto">
-      <table className="w-full min-w-[820px] text-xs">
+      <table className="w-full min-w-[900px] text-xs">
         <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
-          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
+          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th><th className={th}>Mensajes</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.day} className="border-t border-line-soft tabular-nums">
               <td className="px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
               <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
+              <td className="px-3 py-1.5 text-right text-greige-ink">{r.messages ?? 0}</td>
               {COLS.map(([k]) => <td key={k} className="px-3 py-1.5 text-right text-greige-ink">{r[k]}</td>)}
               <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{r.salesAmount ? Math.round(r.salesAmount).toLocaleString('es-GT') : '—'}</td>
@@ -100,7 +172,7 @@ function DailyTable({ rows }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
-            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td>
+            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td><td className="px-3 py-2 text-right">{sum('messages')}</td>
             {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
             <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('total') > 0 ? pctText(sales / sum('total')) : '—'}</td>
           </tr>
@@ -121,7 +193,7 @@ function DailyTable({ rows }) {
 const STATS_PERIODS = PERIOD_OPTIONS.filter((o) => o.value !== 'todo');
 const pctText = (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
 
-export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) {
+export default function StatsModal({ open, onClose, lineId, lineOptions = [], role }) {
   const [periodPreset, setPeriodPreset] = useState('hoy');
   const [line, setLine] = useState(lineId ?? '');
   useEffect(() => { setLine(lineId ?? ''); }, [lineId]);
@@ -157,6 +229,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
   }
 
   const [data, setData] = useState(null);
+  const [adv, setAdv] = useState(null);
   const [costs, setCosts] = useState(null); // los costos vienen de Meta y tardan más: la pantalla se arma sin esperarlos
   const [error, setError] = useState(null);
   useEffect(() => {
@@ -164,10 +237,14 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
     let current = true;
     setData(null);
     setCosts(null);
+    setAdv(null);
     setError(null);
     fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined })
       .then((d) => { if (current) setData(d); })
       .catch((err) => { if (current) setError(err.message); });
+    fetchPipelineStatsAdvisors({ from: dateFrom, to: dateTo, lineId: line || undefined })
+      .then((a) => { if (current) setAdv(a); })
+      .catch(() => { if (current) setAdv({ advisors: [], daily: [], fxQtoCop: 420, failed: true }); });
     fetchPipelineStatsCosts({ from: dateFrom, to: dateTo })
       .then((c) => { if (current) setCosts(c); })
       .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
@@ -276,15 +353,17 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                     <div className="flex flex-col gap-2">
                       <StatCard
                         label="Conversaciones"
-                        value={data.conversations.people}
+                        value={data.conversations.conversations}
                         iconBg="bg-accent-soft"
                         iconText="text-accent"
                         icon={Calendar}
-                        sub="Clientes distintos que escribieron en el periodo, por WhatsApp, Instagram o Messenger"
+                        sub="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta). WhatsApp, Instagram y Messenger"
                       />
                       <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
-                        <SumRow label="Nuevos clientes" value={data.conversations.newPeople} strong />
-                        <SumRow label="Recurrentes" value={data.conversations.returning} />
+                        <SumRow label="Mensajes recibidos" value={data.conversations.messages} strong />
+                        <SumRow label="Clientes distintos" value={data.conversations.people} />
+                        <SumRow label="• Nuevos" value={data.conversations.newPeople} />
+                        <SumRow label="• Recurrentes" value={data.conversations.returning} />
                         <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por canal</p>
                         <SumRow label="WhatsApp" value={data.conversations.byChannel.whatsapp} />
                         <SumRow label="Instagram" value={data.conversations.byChannel.instagram} />
@@ -469,6 +548,13 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                       <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
                     </div>
                   </div>
+                </div>
+                <div className="lg:col-span-4">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Atención y ventas por asesora</p>
+                    {role !== 'asesor' && <button type="button" onClick={() => downloadExcel({ data, adv, dateFrom, dateTo, line })} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted"><Download size={13} />Descargar Excel</button>}
+                  </div>
+                  <AdvisorTable adv={adv} />
                 </div>
                 {data.dailyConversations?.length > 1 && (
                   <div className="lg:col-span-4">

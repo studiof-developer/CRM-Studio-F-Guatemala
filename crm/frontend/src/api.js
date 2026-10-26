@@ -141,6 +141,13 @@ export async function fetchPipelineStatsCosts(filters = {}) {
   return res.json();
 }
 
+export async function fetchPipelineStatsAdvisors(filters = {}) {
+  const params = pipelineFilterParams(filters);
+  const res = await apiFetch(`/api/tickets/pipeline/stats/advisors?${params}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Error al cargar la atención por asesora');
+  return res.json();
+}
+
 export async function fetchPipelineStats(filters = {}) {
   const params = pipelineFilterParams(filters);
   const res = await apiFetch(`/api/tickets/pipeline/stats?${params}`);

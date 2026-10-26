@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { isValidStatus } from '../ticketStatus.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
+import { getSetting } from './settings.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { fetchAdSpend } from '../metaAds.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
@@ -881,7 +882,7 @@ async function conversationStats(query, lineIds) {
   const { rows } = await pool.query(`
     WITH wa AS (
       SELECT split_part(h.session_id, '__', 1) AS ref, 'whatsapp' AS channel, (h.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-             bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad, min(h.created_at) AS first_at
+             bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad, min(h.created_at) AS first_at, count(*) AS msgs
       FROM n8n_chat_histories h
       WHERE h.message->>'type' = 'human' ${hDate} ${waLineSql(lineIds)}
       GROUP BY 1, 3
@@ -892,7 +893,7 @@ async function conversationStats(query, lineIds) {
       WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL
         AND s.created_at >= (SELECT min(first_at) FROM wa) - interval '24 hours' AND s.created_at < (SELECT max(first_at) FROM wa)
     )
-    SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.channel, wa.ref, wa.ad,
+    SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.channel, wa.ref, wa.ad, wa.msgs,
            (c.created_at AT TIME ZONE 'America/Guatemala')::date = wa.day AS is_new,
            (NOT wa.ad AND EXISTS (
              SELECT 1 FROM sends s WHERE s.ref = wa.ref AND s.at >= wa.first_at - interval '24 hours' AND s.at < wa.first_at
@@ -901,7 +902,7 @@ async function conversationStats(query, lineIds) {
   let social = [];
   if (socialIncluded) {
     ({ rows: social } = await pool.query(`
-      SELECT to_char((sm.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, sc.provider AS channel, 'social:' || sc.id AS ref, false AS ad,
+      SELECT to_char((sm.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, sc.provider AS channel, 'social:' || sc.id AS ref, false AS ad, count(*) AS msgs,
              bool_or((c.created_at AT TIME ZONE 'America/Guatemala')::date = (sm.created_at AT TIME ZONE 'America/Guatemala')::date) AS is_new, false AS broadcast
       FROM social_messages sm JOIN social_contacts sc ON sc.id = sm.contact_id LEFT JOIN customers c ON c.id = sc.customer_id
       WHERE sm.direction = 'in' ${sDate}
@@ -912,7 +913,8 @@ async function conversationStats(query, lineIds) {
   const people = new Map();
   for (const r of all) {
     const origin = r.ad ? 'ads' : r.broadcast ? 'broadcast' : 'organic';
-    const d = daily.get(r.day) ?? { day: r.day, total: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 };
+    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 };
+    d.messages += Number(r.msgs) || 0;
     d.total += 1; d[r.channel] = (d[r.channel] ?? 0) + 1; d[origin] += 1;
     daily.set(r.day, d);
     const p = people.get(r.ref) ?? { channel: r.channel, origin: 'organic', isNew: false };
@@ -922,12 +924,16 @@ async function conversationStats(query, lineIds) {
   }
   const list = [...people.values()];
   const count = (fn) => list.filter(fn).length;
+  const days = [...daily.values()].sort((a, b) => a.day.localeCompare(b.day));
+  const sum = (k) => days.reduce((n, d) => n + (d[k] ?? 0), 0);
   return {
-    daily: [...daily.values()].sort((a, b) => a.day.localeCompare(b.day)),
+    daily: days,
     summary: {
+      // Conversaciones = clientes por día, sumados (como cuentan Meta y el Excel gerencial); "clientes distintos" es aparte.
+      conversations: sum('total'), messages: sum('messages'),
+      byChannel: { whatsapp: sum('whatsapp'), instagram: sum('instagram'), messenger: sum('messenger') },
+      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic') },
       people: list.length, newPeople: count((p) => p.isNew), returning: count((p) => !p.isNew),
-      byChannel: { whatsapp: count((p) => p.channel === 'whatsapp'), instagram: count((p) => p.channel === 'instagram'), messenger: count((p) => p.channel === 'messenger') },
-      byOrigin: { ads: count((p) => p.origin === 'ads'), broadcast: count((p) => p.origin === 'broadcast'), organic: count((p) => p.origin === 'organic') },
     },
   };
 }
@@ -949,6 +955,16 @@ async function conversationsByHourQuery(query, lineIds) {
   return byHour;
 }
 
+// Difusiones enviadas y leídas por día (mensajes de campaña; el estado "read" lo escribe el seguimiento de WhatsApp).
+async function broadcastByDay(query, lineIds) {
+  const p = [];
+  const dateClause = buildDateRangeClause(query, p, 'h.created_at');
+  const { rows } = await pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(*) AS sent,
+      count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'read') AS read
+    FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${dateClause} ${waLineSql(lineIds)} GROUP BY 1`, p);
+  return Object.fromEntries(rows.map((r) => [r.day, { sent: Number(r.sent), read: Number(r.read) }]));
+}
+
 // Ventas confirmadas por día (las mismas del módulo de ventas: estado confirmada y con monto), con su valor en Q. Una venta sin línea es de la línea 1.
 async function paidByDay(query, lineIds) {
   const p = [];
@@ -966,10 +982,61 @@ function fillDays(daily, from, to) {
   const out = [];
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`) && out.length < 400; t += 86400000) {
     const day = new Date(t).toISOString().slice(0, 10);
-    out.push(byDay.get(day) ?? { day, total: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 });
+    out.push(byDay.get(day) ?? { day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 });
   }
   return out;
 }
+
+// Atención y ventas por asesora y por día (1.5, 1.6, 1.7). La asesora solo ve lo suyo; admin y supervisor ven a todas.
+// Atención = lo que escribió desde el CRM (WhatsApp, Instagram y Messenger), sin las difusiones masivas; venta = a nombre de quien la cerró en el módulo de ventas.
+router.get('/pipeline/stats/advisors', async (req, res, next) => {
+  try {
+    const parsedLineId = req.query.lineId ? parseInt(req.query.lineId, 10) : null;
+    let lineIds = parsedLineId ? [parsedLineId] : null;
+    if (req.user.role === 'asesor') {
+      const { rows: mine } = await pool.query('SELECT whatsapp_number_id FROM user_whatsapp_numbers WHERE user_id = $1', [req.user.id]);
+      const own = mine.map((r) => r.whatsapp_number_id);
+      lineIds = parsedLineId && own.includes(parsedLineId) ? [parsedLineId] : own;
+    }
+    const socialIncluded = !lineIds?.length || lineIds.includes(1);
+    const hp = []; const sp = []; const vp = [];
+    const hDate = buildDateRangeClause(req.query, hp, 'h.created_at');
+    const sDate = buildDateRangeClause(req.query, sp, 'sm.created_at');
+    const vDate = buildDateRangeClause(req.query, vp, 's.created_at');
+    const saleLine = lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
+    const [wa, soc, sales, fx] = await Promise.all([
+      pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, h.message->'additional_kwargs'->>'advisorName' AS advisor,
+          count(*) AS msgs, count(DISTINCT split_part(h.session_id, '__', 1)) AS convs
+        FROM n8n_chat_histories h
+        WHERE h.message->>'type' = 'ai' AND h.message->'additional_kwargs'->>'sentBy' = 'advisor' AND h.message->'additional_kwargs'->>'campaignId' IS NULL ${hDate} ${waLineSql(lineIds)}
+        GROUP BY 1, 2`, hp),
+      socialIncluded ? pool.query(`SELECT to_char((sm.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, sm.advisor_name AS advisor, count(*) AS msgs, count(DISTINCT sm.contact_id) AS convs
+        FROM social_messages sm WHERE sm.direction = 'out' AND sm.advisor_name IS NOT NULL ${sDate} GROUP BY 1, 2`, sp) : { rows: [] },
+      pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, s.advisor_name AS advisor, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
+        FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${vDate}${saleLine} GROUP BY 1, 2`, vp),
+      getSetting('fx_q_cop', 420).catch(() => 420),
+    ]);
+    const norm = (n) => String(n ?? '').trim() || 'Sin asignar';
+    const rows = new Map();
+    const at = (day, advisor) => { const k = `${day}|${norm(advisor)}`; if (!rows.has(k)) rows.set(k, { day, advisor: norm(advisor), conversations: 0, messages: 0, sales: 0, salesAmount: 0 }); return rows.get(k); };
+    for (const r of [...wa.rows, ...soc.rows]) { const x = at(r.day, r.advisor); x.messages += Number(r.msgs); x.conversations += Number(r.convs); }
+    for (const r of sales.rows) { const x = at(r.day, r.advisor); x.sales += Number(r.n); x.salesAmount += Number(r.amount); }
+    let daily = [...rows.values()];
+    if (req.user.role === 'asesor') daily = daily.filter((r) => r.advisor === norm(req.user.fullName));
+    daily.sort((a, b) => a.day.localeCompare(b.day) || a.advisor.localeCompare(b.advisor));
+    const byAdvisor = new Map();
+    for (const r of daily) {
+      const a = byAdvisor.get(r.advisor) ?? { advisor: r.advisor, conversations: 0, messages: 0, sales: 0, salesAmount: 0 };
+      a.conversations += r.conversations; a.messages += r.messages; a.sales += r.sales; a.salesAmount += r.salesAmount;
+      byAdvisor.set(r.advisor, a);
+    }
+    const advisors = [...byAdvisor.values()].map((a) => ({ ...a, conversionRate: a.conversations > 0 ? a.sales / a.conversations : null })).sort((a, b) => b.salesAmount - a.salesAmount || b.conversations - a.conversations);
+    res.json({ advisors, daily, fxQtoCop: Number(fx) > 0 ? Number(fx) : 420 });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
 
 // Costos de pauta y de mensajes: salen de Meta (llamadas externas, lentas), así que van aparte y la pantalla ya se ve mientras llegan.
 // Se recuerdan 5 minutos por periodo: abrir y cerrar el modal no vuelve a preguntarle a Meta.
@@ -1103,7 +1170,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
       statsLineSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${bucketParams.length}`;
     }
 
-    const [buckets, byHourMap, responseDelay, conv, paid] = await Promise.all([
+    const [buckets, byHourMap, responseDelay, conv, paid, broadcasts] = await Promise.all([
       pool.query(`
         WITH temped AS (
           SELECT t.status AS ticket_status, ${EFFECTIVE_STATUS_SQL} AS temperature,
@@ -1152,6 +1219,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
       timed('conversaciones', conversationStats(req.query, lineIds)),
       timed('ventas', paidByDay(req.query, lineIds)),
+      timed('difusiones', broadcastByDay(req.query, lineIds)),
     ]);
 
     // Zero-fill every bucket/hour a GROUP BY silently drops instead of returning it as
@@ -1167,10 +1235,10 @@ router.get('/pipeline/stats', async (req, res, next) => {
     const { from: qFrom, to: qTo, since: qSince, until: qUntil } = req.query;
     const rangeFrom = qSince ? guatemalaDay(qSince) : qFrom;
     const rangeTo = qUntil ? guatemalaDay(new Date(Date.parse(qUntil) - 1).toISOString()) : qTo;
-    const daily = fillDays(conv.daily, rangeFrom, rangeTo).map((d) => ({ ...d, sales: paid[d.day]?.n ?? 0, salesAmount: paid[d.day]?.amount ?? 0 }));
+    const daily = fillDays(conv.daily, rangeFrom, rangeTo).map((d) => ({ ...d, sales: paid[d.day]?.n ?? 0, salesAmount: paid[d.day]?.amount ?? 0, broadcastSent: broadcasts[d.day]?.sent ?? 0, broadcastRead: broadcasts[d.day]?.read ?? 0 }));
     const sales = daily.reduce((n, d) => n + d.sales, 0);
     const salesAmount = daily.reduce((n, d) => n + d.salesAmount, 0);
-    const conversations = { ...conv.summary, sales, salesAmount, closeRate: conv.summary.people > 0 ? sales / conv.summary.people : null };
+    const conversations = { ...conv.summary, sales, salesAmount, closeRate: conv.summary.conversations > 0 ? sales / conv.summary.conversations : null };
 
     // Costo de conversión (2026-09-13): gasto en pauta (Meta Ads, act_ account in
     // Configuración) ÷ clientes QUE LLEGARON POR ESA PAUTA y pasaron a Pagado en el
