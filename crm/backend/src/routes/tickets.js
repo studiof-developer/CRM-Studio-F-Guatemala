@@ -861,7 +861,7 @@ function buildDateRangeClause(query, params, dateExpr) {
 // queries, no caching layer (an on-demand popup, not a page load).
 // — Conversaciones reales del periodo (WhatsApp + Instagram + Messenger) para el modal de estadísticas —
 // Una "conversación" es un cliente que escribió ese día. Origen del cliente en el periodo: por anuncio (algún mensaje suyo vino con referral de Meta),
-// respuesta a difusión (se le mandó una difusión en los 3 días anteriores) u orgánico. Instagram y Messenger cuentan como línea 1 (no tienen línea propia).
+// respuesta a difusión (se le mandó una difusión en las 24 horas anteriores a su primer mensaje del día) u orgánico. Instagram y Messenger cuentan como línea 1 (no tienen línea propia).
 const guatemalaDay = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
 
 function waLineSql(ids) {
@@ -879,7 +879,7 @@ async function conversationStats(query, lineIds) {
   const { rows } = await pool.query(`
     WITH wa AS (
       SELECT split_part(h.session_id, '__', 1) AS ref, 'whatsapp' AS channel, (h.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-             bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad
+             bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad, min(h.created_at) AS first_at
       FROM n8n_chat_histories h
       WHERE h.message->>'type' = 'human' ${hDate} ${waLineSql(lineIds)}
       GROUP BY 1, 3
@@ -889,7 +889,7 @@ async function conversationStats(query, lineIds) {
            (NOT wa.ad AND EXISTS (
              SELECT 1 FROM n8n_chat_histories s
              WHERE s.session_id LIKE wa.ref || '%' AND s.message->'additional_kwargs'->>'campaignId' IS NOT NULL
-               AND s.created_at >= ((wa.day - 3)::timestamp AT TIME ZONE 'America/Guatemala') AND s.created_at < ((wa.day + 1)::timestamp AT TIME ZONE 'America/Guatemala')
+               AND s.created_at >= wa.first_at - interval '24 hours' AND s.created_at < wa.first_at
            )) AS broadcast
     FROM wa LEFT JOIN customers c ON c.whatsapp_number = wa.ref`, hp);
   let social = [];
@@ -943,13 +943,14 @@ async function conversationsByHourQuery(query, lineIds) {
   return byHour;
 }
 
-// Ventas confirmadas (cliente marcado como pagado) por día, para la tasa de cierre.
-async function paidByDay(query) {
+// Ventas confirmadas por día (las mismas del módulo de ventas: estado confirmada y con monto), con su valor en Q. Una venta sin línea es de la línea 1.
+async function paidByDay(query, lineIds) {
   const p = [];
-  const dateClause = buildDateRangeClause(query, p, 'aa.accessed_at');
-  const { rows } = await pool.query(`SELECT to_char((aa.accessed_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(DISTINCT aa.customer_id) AS n
-    FROM access_audit aa WHERE aa.action = 'customer_marked_paid' ${dateClause} GROUP BY 1`, p);
-  return Object.fromEntries(rows.map((r) => [r.day, Number(r.n)]));
+  const dateClause = buildDateRangeClause(query, p, 's.created_at');
+  const lineClause = lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
+  const { rows } = await pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
+    FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${dateClause}${lineClause} GROUP BY 1`, p);
+  return Object.fromEntries(rows.map((r) => [r.day, { n: Number(r.n), amount: Number(r.amount) }]));
 }
 
 // Todos los días del rango con ceros donde no hubo conversaciones (el modal los dibuja completos).
@@ -1036,7 +1037,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
         WHERE t.first_response_at IS NOT NULL ${responseDateClause} ${parsedLineId ? `AND COALESCE(t.whatsapp_number_id, 1) = $${responseParams.length + 1}` : ''}
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
       conversationStats(req.query, lineIds),
-      paidByDay(req.query),
+      paidByDay(req.query, lineIds),
     ]);
 
     // Zero-fill every bucket/hour a GROUP BY silently drops instead of returning it as
@@ -1052,11 +1053,10 @@ router.get('/pipeline/stats', async (req, res, next) => {
     const { from: qFrom, to: qTo, since: qSince, until: qUntil } = req.query;
     const rangeFrom = qSince ? guatemalaDay(qSince) : qFrom;
     const rangeTo = qUntil ? guatemalaDay(new Date(Date.parse(qUntil) - 1).toISOString()) : qTo;
-    // La venta no tiene línea: con una línea elegida (o una asesora) se deja en blanco en vez de mostrar el número de otra cosa.
-    const salesKnown = !parsedLineId && req.user.role !== 'asesor';
-    const daily = fillDays(conv.daily, rangeFrom, rangeTo).map((d) => ({ ...d, sales: salesKnown ? (paid[d.day] ?? 0) : null }));
-    const sales = salesKnown ? daily.reduce((n, d) => n + d.sales, 0) : null;
-    const conversations = { ...conv.summary, sales, closeRate: sales != null && conv.summary.people > 0 ? sales / conv.summary.people : null };
+    const daily = fillDays(conv.daily, rangeFrom, rangeTo).map((d) => ({ ...d, sales: paid[d.day]?.n ?? 0, salesAmount: paid[d.day]?.amount ?? 0 }));
+    const sales = daily.reduce((n, d) => n + d.sales, 0);
+    const salesAmount = daily.reduce((n, d) => n + d.salesAmount, 0);
+    const conversations = { ...conv.summary, sales, salesAmount, closeRate: conv.summary.people > 0 ? sales / conv.summary.people : null };
 
     // Costo de conversión (2026-09-13): gasto en pauta (Meta Ads, act_ account in
     // Configuración) ÷ clientes QUE LLEGARON POR ESA PAUTA y pasaron a Pagado en el
@@ -1150,6 +1150,8 @@ router.get('/pipeline/stats', async (req, res, next) => {
       buckets: bucketStats,
       conversations,
       dailyConversations: daily,
+      // El gasto de pauta y el costo por mensaje salen de Meta y no se separan por línea: con una línea elegida siguen siendo de toda la cuenta.
+      costsAreAccountWide: !!parsedLineId,
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
       conversionCost,

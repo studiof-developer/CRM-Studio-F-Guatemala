@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip } from 'chart.js';
+import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { X, Loader2, Calendar, Mail } from 'lucide-react';
 import { fetchPipelineStats } from '../api.js';
 import Select from './Select.jsx';
 import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
 import { DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from '../lib/pipelineColumns.js';
 
-Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
+Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 function useChart(canvasRef, buildConfig, deps) {
   useEffect(() => {
@@ -80,10 +80,11 @@ function DailyTable({ rows }) {
   const COLS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['messenger', 'Messenger'], ['ads', 'Anuncios'], ['broadcast', 'Difusión'], ['organic', 'Orgánico']];
   const th = 'px-3 py-2 text-right font-semibold';
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
-      <table className="w-full min-w-[720px] text-xs">
-        <thead className="bg-black/[0.03] uppercase tracking-wide text-greige-ink dark:bg-white/[0.04]">
-          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Cierre</th></tr>
+    <div className="rounded-xl border border-line">
+      <div className="max-h-72 overflow-auto">
+      <table className="w-full min-w-[820px] text-xs">
+        <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
+          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
@@ -92,6 +93,7 @@ function DailyTable({ rows }) {
               <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
               {COLS.map(([k]) => <td key={k} className="px-3 py-1.5 text-right text-greige-ink">{r[k]}</td>)}
               <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
+              <td className="px-3 py-1.5 text-right text-greige-ink">{r.salesAmount ? Math.round(r.salesAmount).toLocaleString('es-GT') : '—'}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{r.sales != null && r.total > 0 ? pctText(r.sales / r.total) : '—'}</td>
             </tr>
           ))}
@@ -100,10 +102,11 @@ function DailyTable({ rows }) {
           <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
             <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td>
             {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
-            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{sales != null && sum('total') > 0 ? pctText(sales / sum('total')) : '—'}</td>
+            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('total') > 0 ? pctText(sales / sum('total')) : '—'}</td>
           </tr>
         </tfoot>
       </table>
+      </div>
       <p className="border-t border-line-soft px-3 py-2 text-[11px] text-muted-foreground">Un cliente que escribe dos días distintos cuenta en cada día; por eso la suma de días puede ser mayor que las conversaciones del resumen.</p>
     </div>
   );
@@ -165,6 +168,29 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dateFrom, dateTo, line]);
 
+  const dayRef = useRef(null);
+  const days = data?.dailyConversations ?? [];
+  useChart(dayRef, () => ({
+    type: 'bar',
+    data: {
+      labels: days.map((d) => `${d.day.slice(8)}/${d.day.slice(5, 7)}`),
+      datasets: [
+        { label: 'Anuncios', data: days.map((d) => d.ads), backgroundColor: '#4338ca', borderRadius: 2 },
+        { label: 'Difusión', data: days.map((d) => d.broadcast), backgroundColor: '#f59e0b', borderRadius: 2 },
+        { label: 'Orgánico', data: days.map((d) => d.organic), backgroundColor: '#10b981', borderRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+        y: { stacked: true, beginAtZero: true, grid: { color: '#e4e4e7' }, ticks: { precision: 0 } },
+      },
+    },
+  }), [data]);
+
   const hourRef = useRef(null);
   useChart(hourRef, () => ({
     type: 'bar',
@@ -203,7 +229,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
-            className="glass-card w-full max-w-7xl max-h-[85vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className="glass-card w-full max-w-7xl max-h-[92vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -262,6 +288,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                         <SumRow label="Orgánico" value={data.conversations.byOrigin.organic} />
                         <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
                         <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
+                        <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
                         <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
                       </div>
                       <StatCard
@@ -311,6 +338,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
+                    {data.costsAreAccountWide && <p className="mt-0.5 rounded bg-warning/15 px-2 py-1 text-[11px] font-medium text-warning">Los costos de pauta y de mensajes son de toda la cuenta de Meta: no se separan por línea.</p>}
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Dos formas de medirlo: lo que Meta cuenta como "resultado" (conversaciones iniciadas) y lo que el CRM confirma como venta real. No tienen por qué coincidir.</p>
                     {data.conversionCost && (
                       <div className="flex flex-col gap-3">
@@ -417,10 +445,20 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                   </div>
                 </div>
 
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
-                  <div style={{ position: 'relative', height: 380 }}>
-                    <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
+                <div className="flex flex-col gap-4">
+                  {days.length > 1 && (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por día</p>
+                      <div style={{ position: 'relative', height: 230 }}>
+                        <canvas ref={dayRef} role="img" aria-label="Conversaciones por día, por origen" />
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por hora del día</p>
+                    <div style={{ position: 'relative', height: days.length > 1 ? 200 : 380 }}>
+                      <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
+                    </div>
                   </div>
                 </div>
                 {data.dailyConversations?.length > 1 && (
