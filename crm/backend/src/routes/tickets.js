@@ -4,6 +4,7 @@ import { isValidStatus } from '../ticketStatus.js';
 import { logAccess, logBusinessAction } from '../auditLog.js';
 import { requireRole } from '../auth.js';
 import { getSetting } from './settings.js';
+import { buildSalesFilter } from './sales.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
 import { fetchAdSpend } from '../metaAds.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
@@ -970,12 +971,13 @@ async function broadcastByDay(query, lineIds) {
 }
 
 // Ventas confirmadas por día (las mismas del módulo de ventas: estado confirmada y con monto), con su valor en Q. Una venta sin línea es de la línea 1.
-async function paidByDay(query, lineIds) {
+// Mismo filtro del reporte de ventas (buildSalesFilter: periodo, línea y comprobantes no reconocidos), para que el total del día sea el de ese reporte: la suma de las asesoras de la línea.
+async function paidByDay(query, lineId, advisorId = null) {
   const p = [];
-  const dateClause = buildDateRangeClause(query, p, 's.created_at');
-  const lineClause = lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
+  const filter = buildSalesFilter('personalizado', query.from, query.to, lineId, p);
+  if (advisorId) p.push(advisorId);
   const { rows } = await pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
-    FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${dateClause}${lineClause} GROUP BY 1`, p);
+    FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${filter}${advisorId ? ` AND s.advisor_id = $${p.length}` : ''} GROUP BY 1`, p);
   return Object.fromEntries(rows.map((r) => [r.day, { n: Number(r.n), amount: Number(r.amount) }]));
 }
 
@@ -1006,8 +1008,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
     const hp = []; const sp = []; const vp = [];
     const hDate = buildDateRangeClause(req.query, hp, 'h.created_at');
     const sDate = buildDateRangeClause(req.query, sp, 'sm.created_at');
-    const vDate = buildDateRangeClause(req.query, vp, 's.created_at');
-    const saleLine = req.user.role === 'asesor' && lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
+    const saleFilter = buildSalesFilter('personalizado', req.query.from, req.query.to, parsedLineId, vp);
     const [wa, soc, sales, fx] = await Promise.all([
       pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, h.message->'additional_kwargs'->>'advisorName' AS advisor,
           count(*) AS msgs, count(DISTINCT split_part(h.session_id, '__', 1)) AS convs
@@ -1017,7 +1018,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
       socialIncluded ? pool.query(`SELECT to_char((sm.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, sm.advisor_name AS advisor, count(*) AS msgs, count(DISTINCT sm.contact_id) AS convs
         FROM social_messages sm WHERE sm.direction = 'out' AND sm.advisor_name IS NOT NULL ${sDate} GROUP BY 1, 2`, sp) : { rows: [] },
       pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, s.advisor_name AS advisor, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
-        FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${vDate}${saleLine} GROUP BY 1, 2`, vp),
+        FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${saleFilter} GROUP BY 1, 2`, vp),
       getSetting('fx_q_cop', 420).catch(() => 420),
     ]);
     const norm = (n) => String(n ?? '').trim() || 'Sin asignar';
@@ -1222,8 +1223,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
         WHERE t.first_response_at IS NOT NULL ${responseDateClause} ${parsedLineId ? `AND COALESCE(t.whatsapp_number_id, 1) = $${responseParams.length + 1}` : ''}
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
       timed('conversaciones', conversationStats(req.query, lineIds)),
-      // Las ventas son del reporte de métricas diario y cuentan las dos líneas juntas, aunque se filtre una línea (la asesora solo ve sus líneas).
-      timed('ventas', paidByDay(req.query, req.user.role === 'asesor' ? lineIds : null)),
+      timed('ventas', paidByDay(req.query, parsedLineId, req.user.role === 'asesor' ? req.user.id : null)),
       timed('difusiones', broadcastByDay(req.query, lineIds)),
     ]);
 

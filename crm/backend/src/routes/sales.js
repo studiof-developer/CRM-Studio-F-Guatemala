@@ -68,7 +68,7 @@ function periodClauses(col, period, from, to, params) {
   return clauses;
 }
 
-function buildSalesFilter(period, from, to, lineId, params = []) {
+export function buildSalesFilter(period, from, to, lineId, params = []) {
   const clauses = [
     `COALESCE(s.notes, '') NOT LIKE '%no se reconoció como comprobante%'`,
     ...periodClauses('s.created_at', period, from, to, params),

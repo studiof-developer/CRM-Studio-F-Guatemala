@@ -381,7 +381,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
                         <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
                         <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
-                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas de las dos líneas ÷ total gerencial. Las ventas no se separan por línea.</p>
+                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial.</p>
                       </div>
                       <StatCard
                         label="No leídos"
