@@ -12,16 +12,13 @@ const Conversations = lazy(() => import('./Conversations.jsx'));
 const Customers = lazy(() => import('./Customers.jsx'));
 const Users = lazy(() => import('./Users.jsx'));
 const Catalog = lazy(() => import('./Catalog.jsx'));
-const Audit = lazy(() => import('./Audit.jsx'));
-const ChatAnalysis = lazy(() => import('./ChatAnalysis.jsx'));
+const SupervisionPage = lazy(() => import('./SupervisionPage.jsx'));
 const QuickReplies = lazy(() => import('./QuickReplies.jsx'));
 const Campaigns = lazy(() => import('./Campaigns.jsx'));
 const AdsReportPage = lazy(() => import('./AdsReportPage.jsx'));
-const WhatsappNumbers = lazy(() => import('./WhatsappNumbers.jsx'));
 const Configuracion = lazy(() => import('./Configuracion.jsx'));
 const AgentTest = lazy(() => import('./AgentTest.jsx'));
-const Companies = lazy(() => import('./Companies.jsx'));
-const Brands = lazy(() => import('./Brands.jsx'));
+const OrganizacionPage = lazy(() => import('./OrganizacionPage.jsx'));
 const Fichas = lazy(() => import('./Fichas.jsx'));
 const Logistica = lazy(() => import('./Logistica.jsx'));
 // Pulls in Conversations.jsx (which ChatPopup renders directly, not lazily) the first
@@ -75,8 +72,7 @@ const BASE_TABS = {
 
 // Admin and supervisor only.
 const AUDIT_TABS = {
-  audit: { label: 'Auditoría', icon: ShieldCheck, Component: Audit },
-  analysis: { label: 'Análisis', icon: Search, Component: ChatAnalysis },
+  supervision: { label: 'Auditoría y análisis', icon: ShieldCheck, Component: SupervisionPage },
 };
 
 // Admin and supervisor only — a broadcast reaches many customers at once and costs real
@@ -90,9 +86,7 @@ const CAMPAIGN_TABS = {
 // Admin only.
 const ADMIN_TABS = {
   users: { label: 'Usuarios', icon: UserCog, Component: Users },
-  companies: { label: 'Empresas', icon: Building2, Component: Companies },
-  brands: { label: 'Marcas', icon: Store, Component: Brands },
-  whatsappNumbers: { label: 'Líneas', icon: Smartphone, Component: WhatsappNumbers },
+  organization: { label: 'Organización', icon: Building2, Component: OrganizacionPage },
 };
 
 // Logística: por ahora solo el administrador y quien tenga un rol de logística asignado (se amplía a las asesoras cuando el proceso esté validado).
@@ -118,8 +112,8 @@ const NAV_GROUPS = [
   { key: 'orders', title: 'Pedidos', keys: ['fichas', 'logistica'], defaultOpen: true },
   { key: 'sell', title: 'Vender', keys: ['catalog', 'quickReplies'], defaultOpen: true },
   { key: 'marketing', title: 'Marketing', keys: ['adsReport', 'campaigns'], defaultOpen: true },
-  { key: 'supervision', title: 'Supervisión', keys: ['audit', 'analysis'], defaultOpen: false },
-  { key: 'admin', title: 'Administración', keys: ['users', 'companies', 'brands', 'whatsappNumbers'], defaultOpen: false },
+  { key: 'supervision', title: 'Supervisión', keys: ['supervision'], defaultOpen: false },
+  { key: 'admin', title: 'Administración', keys: ['users', 'organization'], defaultOpen: false },
 ];
 
 // Every tab reachable at its own bookmarkable URL — an explicit map rather than
@@ -137,18 +131,17 @@ const TAB_PATHS = {
   quickReplies: '/respuestas-rapidas',
   campaigns: '/difusion',
   adsReport: '/anuncios',
-  audit: '/auditoria',
-  analysis: '/analisis',
+  supervision: '/supervision',
   users: '/usuarios',
-  companies: '/empresas',
-  brands: '/marcas',
-  whatsappNumbers: '/lineas',
+  organization: '/organizacion',
   configuracion: '/configuracion',
   fichas: '/fichas',
   logistica: '/logistica',
   pruebas: '/pruebas',
 };
-const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([key, path]) => [path, key]));
+// Enlaces viejos: las pantallas que se juntaron siguen abriéndose desde su dirección anterior.
+const LEGACY_PATHS = { '/empresas': 'organization', '/marcas': 'organization', '/lineas': 'organization', '/auditoria': 'supervision', '/analisis': 'supervision' };
+const TAB_BY_PATH = { ...Object.fromEntries(Object.entries(TAB_PATHS).map(([key, path]) => [path, key])), ...LEGACY_PATHS };
 
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', asesor: 'Asesor de zona' };
 
