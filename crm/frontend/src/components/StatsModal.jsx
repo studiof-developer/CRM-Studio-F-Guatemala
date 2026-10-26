@@ -381,6 +381,8 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
                         <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
                         <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
+                        <SumRow label="ROAS" value={costs?.conversionCost?.spend > 0 ? ((data.conversations.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…'} />
+                        <p className="text-[10px] leading-tight text-muted-foreground">Valor vendido en COP ÷ inversión de pauta.</p>
                         <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial.</p>
                       </div>
                       <StatCard
@@ -430,7 +432,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
-                    {data.costsAreAccountWide && <p className="mt-0.5 rounded bg-warning/15 px-2 py-1 text-[11px] font-medium text-warning">Los costos de pauta y de mensajes son de toda la cuenta de Meta: no se separan por línea.</p>}
+                    {costs?.conversionCost?.nameFilter && <p className="mt-0.5 text-[11px] text-muted-foreground">Pauta: campañas que contienen “{costs.conversionCost.nameFilter}”, igual que el Informe de anuncios.</p>}
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Dos formas de medirlo: lo que Meta cuenta como "resultado" (conversaciones iniciadas) y lo que el CRM confirma como venta real. No tienen por qué coincidir.</p>
                     {costs?.conversionCost && (
                       <div className="flex flex-col gap-3">
@@ -492,6 +494,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
+                    {data.costsAreAccountWide && <p className="mt-0.5 text-[11px] text-warning">Facturación de toda la cuenta de WhatsApp: no se separa por línea.</p>}
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Lo que WhatsApp cobra por cada mensaje enviado — facturación de la plataforma, no gasto en pauta. No tiene por qué coincidir con "Costo de conversión".</p>
                     {costs?.messageCost && (
                       <>

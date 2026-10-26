@@ -21,6 +21,7 @@ import brandsRouter from './routes/brands.js';
 import companiesRouter from './routes/companies.js';
 import campaignsRouter from './routes/campaigns.js';
 import metaAdsRouter from './routes/metaAds.js';
+import { startStatsWarmup } from './statsDays.js';
 import agentTestRouter from './routes/agentTest.js';
 import agentToolsRouter from './routes/agentTools.js';
 import settingsRouter from './routes/settings.js';
@@ -164,6 +165,9 @@ setTimeout(() => {
 // erpSync.js. Off entirely if the credentials aren't configured (local dev, or before
 // they're set in production), same graceful-degradation pattern as WhatsApp's env-var
 // fallback. 20 minutes, inside the 15-30 min window agreed on.
+// Deja listos los días cerrados de las Estadísticas del Pipeline (se calculan una vez y luego solo se leen).
+startStatsWarmup();
+
 if (process.env.ERP_API_KEY) {
   const ERP_SYNC_INTERVAL_MS = 20 * 60 * 1000;
   setTimeout(() => {

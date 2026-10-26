@@ -280,6 +280,10 @@
     .icon-primary { background: var(--primary-light); color: var(--primary); border: 1.5px solid var(--primary); }
     .icon-info { background: var(--info-bg); color: var(--info); border: 1.5px solid #38bdf8; }
     .icon-ok { background: var(--ok); color: #fff; }
+    .status-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 6px; }
+    .status-done { background: #dcfce7; color: #166534; }
+    .status-val { background: #dbeafe; color: #1e40af; }
+    .status-dev { background: #fef3c7; color: #92400e; }
 
     .item-text {
       min-width: 0;
@@ -415,9 +419,9 @@
         <div class="kpi-mini">
           <div>
             <div class="kpi-mini-label">Fecha de Entrega</div>
-            <div class="kpi-mini-sub">Implementado en producción</div>
+            <div class="kpi-mini-sub">3 terminados · 5 en validación · 2 desarrollando</div>
           </div>
-          <div class="kpi-mini-val" style="color: var(--ok);">28 Oct</div>
+          <div class="kpi-mini-val" style="color: var(--info);">28 Oct</div>
         </div>
       </div>
     </section>
@@ -449,6 +453,7 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-done">Terminado</span>
             <span class="pct-pill pill-primary">Filtro de Línea</span>
             <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
@@ -469,6 +474,7 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-done">Terminado</span>
             <span class="pct-pill pill-primary">Temporalidad</span>
             <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
@@ -488,6 +494,7 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-done">Terminado</span>
             <span class="pct-pill pill-primary">Resumen Vivo</span>
             <div class="mini-track"><div class="mini-fill-primary" style="width:100%"></div></div>
           </div>
@@ -507,8 +514,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-info">Ingresos x Día</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -526,8 +534,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-info">Atención x Día</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -545,8 +554,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-info">Ventas x Día</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -565,8 +575,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-info">% Conversión</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -585,8 +596,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-info">WA · IG · FB</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -603,8 +615,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-dev">Desarrollando</span>
             <span class="pct-pill pill-ok">Reporte + Excel</span>
-            <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:55%"></div></div>
           </div>
         </div>
 
@@ -623,8 +636,9 @@
             </div>
           </div>
           <div class="item-right">
+            <span class="status-pill status-dev">Desarrollando</span>
             <span class="pct-pill pill-ok">28 Oct 2026</span>
-            <div class="mini-track"><div class="mini-fill-ok" style="width:100%"></div></div>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:55%"></div></div>
           </div>
         </div>
 

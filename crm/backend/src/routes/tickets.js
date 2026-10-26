@@ -6,7 +6,8 @@ import { requireRole } from '../auth.js';
 import { getSetting } from './settings.js';
 import { buildSalesFilter } from './sales.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
-import { fetchAdSpend } from '../metaAds.js';
+import { fetchReport } from '../metaAdsReport.js';
+import { loadConversationStats, dayRange, servicePattern, notService } from '../statsDays.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
 
 const router = Router();
@@ -867,7 +868,6 @@ function buildDateRangeClause(query, params, dateExpr) {
 const guatemalaDay = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
 
 // Las difusiones "novedad pedido" y "seguimiento asesor" son avisos de servicio, no campañas: el trafficker no las cuenta ni en enviadas, ni en leídas, ni en respuestas.
-const notServiceBroadcast = (alias) => ` AND NOT EXISTS (SELECT 1 FROM campaigns ca WHERE ca.id::text = ${alias}.message->'additional_kwargs'->>'campaignId' AND ca.template_name ~* 'novedad[ _-]*pedido|seguimiento[ _-]*asesor')`;
 
 function waLineSql(ids) {
   if (!ids?.length) return '';
@@ -878,95 +878,20 @@ function waLineSql(ids) {
 
 const timed = async (name, promise) => { const t0 = Date.now(); const out = await promise; console.log(`[stats] ${name}: ${Date.now() - t0} ms`); return out; };
 
-async function conversationStats(query, lineIds) {
-  const hp = []; const sp = [];
-  const hDate = buildDateRangeClause(query, hp, 'h.created_at');
-  const sDate = buildDateRangeClause(query, sp, 'sm.created_at');
-  const socialIncluded = !lineIds?.length || lineIds.includes(1);
-  const { rows } = await pool.query(`
-    WITH wa AS (
-      SELECT split_part(h.session_id, '__', 1) AS ref, 'whatsapp' AS channel, (h.created_at AT TIME ZONE 'America/Guatemala')::date AS day,
-             bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad, min(h.created_at) AS first_at, count(*) AS msgs
-      FROM n8n_chat_histories h
-      WHERE h.message->>'type' = 'human' ${hDate} ${waLineSql(lineIds)}
-      GROUP BY 1, 3
-    ),
-    -- Las difusiones del periodo (y el día anterior), leídas una sola vez en vez de buscarlas cliente por cliente.
-    sends AS (
-      SELECT split_part(s.session_id, '__', 1) AS ref, s.created_at AS at FROM n8n_chat_histories s
-      WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${notServiceBroadcast('s')}
-        AND s.created_at >= (SELECT min(first_at) FROM wa) - interval '24 hours' AND s.created_at < (SELECT max(first_at) FROM wa)
-    )
-    SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.channel, wa.ref, wa.ad, wa.msgs,
-           (c.created_at AT TIME ZONE 'America/Guatemala')::date = wa.day AS is_new,
-           (NOT wa.ad AND EXISTS (
-             SELECT 1 FROM sends s WHERE s.ref = wa.ref AND s.at >= wa.first_at - interval '24 hours' AND s.at < wa.first_at
-           )) AS broadcast
-    FROM wa LEFT JOIN customers c ON c.whatsapp_number = wa.ref`, hp);
-  let social = [];
-  if (socialIncluded) {
-    ({ rows: social } = await pool.query(`
-      SELECT to_char((sm.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, sc.provider AS channel, 'social:' || sc.id AS ref, false AS ad, count(*) AS msgs,
-             bool_or((c.created_at AT TIME ZONE 'America/Guatemala')::date = (sm.created_at AT TIME ZONE 'America/Guatemala')::date) AS is_new, false AS broadcast
-      FROM social_messages sm JOIN social_contacts sc ON sc.id = sm.contact_id LEFT JOIN customers c ON c.id = sc.customer_id
-      WHERE sm.direction = 'in' ${sDate}
-      GROUP BY 1, 2, sc.id`, sp));
-  }
-  const all = [...rows, ...social];
-  const daily = new Map();
-  const people = new Map();
-  for (const r of all) {
-    const origin = r.channel !== 'whatsapp' ? 'social' : r.ad ? 'ads' : r.broadcast ? 'broadcast' : 'organic';
-    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0, social: 0 };
-    d.messages += Number(r.msgs) || 0;
-    d.total += 1; d[r.channel] = (d[r.channel] ?? 0) + 1; d[origin] += 1;
-    daily.set(r.day, d);
-    const p = people.get(r.ref) ?? { channel: r.channel, origin: 'organic', isNew: false };
-    if (origin === 'ads' || (origin === 'broadcast' && p.origin !== 'ads')) p.origin = origin;
-    p.isNew = p.isNew || !!r.is_new;
-    people.set(r.ref, p);
-  }
-  const list = [...people.values()];
-  const count = (fn) => list.filter(fn).length;
-  // Total gerencial (como lo arma el trafficker): anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No incluye el orgánico de WhatsApp.
-  const days = [...daily.values()].map((d) => ({ ...d, managerTotal: d.ads + d.broadcast + d.social })).sort((a, b) => a.day.localeCompare(b.day));
-  const sum = (k) => days.reduce((n, d) => n + (d[k] ?? 0), 0);
-  return {
-    daily: days,
-    summary: {
-      // Conversaciones = clientes por día, sumados (como cuentan Meta y el Excel gerencial); "clientes distintos" es aparte.
-      conversations: sum('total'), messages: sum('messages'),
-      byChannel: { whatsapp: sum('whatsapp'), instagram: sum('instagram'), messenger: sum('messenger') },
-      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic'), social: sum('social') }, managerTotal: sum('managerTotal'),
-      people: list.length, newPeople: count((p) => p.isNew), returning: count((p) => !p.isNew),
-    },
-  };
-}
-
-// Conversaciones por hora: clientes distintos que escribieron en cada hora, en cualquier canal.
-async function conversationsByHourQuery(query, lineIds) {
-  const hp = []; const sp = [];
-  const hDate = buildDateRangeClause(query, hp, 'h.created_at');
-  const sDate = buildDateRangeClause(query, sp, 'sm.created_at');
-  const socialIncluded = !lineIds?.length || lineIds.includes(1);
-  const [wa, soc] = await Promise.all([
-    pool.query(`SELECT extract(hour FROM h.created_at AT TIME ZONE 'America/Guatemala')::int AS hour, count(DISTINCT h.session_id) AS total
-      FROM n8n_chat_histories h WHERE h.message->>'type' = 'human' ${hDate} ${waLineSql(lineIds)} GROUP BY hour`, hp),
-    socialIncluded ? pool.query(`SELECT extract(hour FROM sm.created_at AT TIME ZONE 'America/Guatemala')::int AS hour, count(DISTINCT sm.contact_id) AS total
-      FROM social_messages sm WHERE sm.direction = 'in' ${sDate} GROUP BY hour`, sp) : { rows: [] },
-  ]);
-  const byHour = {};
-  for (const r of [...wa.rows, ...soc.rows]) byHour[r.hour] = (byHour[r.hour] ?? 0) + Number(r.total);
-  return byHour;
+// Conversaciones por día, canal y origen, y por hora: los días cerrados salen de las tablas de statsDays.js (se calculan una sola vez).
+function conversationStats(query, lineIds) {
+  const { from, to } = dayRange(query);
+  return loadConversationStats({ from, to, lineIds });
 }
 
 // Difusiones enviadas y leídas por día (mensajes de campaña; el estado "read" lo escribe el seguimiento de WhatsApp).
 async function broadcastByDay(query, lineIds) {
   const p = [];
+  const pattern = await servicePattern();
   const dateClause = buildDateRangeClause(query, p, 'h.created_at');
   const { rows } = await pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(*) AS sent,
       count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'read') AS read
-    FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${notServiceBroadcast('h')} ${dateClause} ${waLineSql(lineIds)} GROUP BY 1`, p);
+    FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${notService('h', pattern)} ${dateClause} ${waLineSql(lineIds)} GROUP BY 1`, p);
   return Object.fromEntries(rows.map((r) => [r.day, { sent: Number(r.sent), read: Number(r.read) }]));
 }
 
@@ -1083,20 +1008,21 @@ async function statsCosts(query) {
              )`,
           conversionParams
         ),
-        fetchAdSpend(metaSinceDate, metaUntilDate),
+        fetchReport({ since: metaSinceDate, until: metaUntilDate, level: 'campaign' }),
       ]);
-      if (spend !== null) {
+      if (spend) {
         const conversions = Number(conversionsResult.rows[0].conversions);
         conversionCost = {
-          spend: spend.spend,
+          spend: spend.totals.spend,
           currency: spend.currency,
+          nameFilter: spend.nameFilter,
           conversions,
-          costPerConversion: conversions > 0 ? spend.spend / conversions : null,
+          costPerConversion: conversions > 0 ? spend.totals.spend / conversions : null,
           // Meta Ads' own "Costo por resultado" — spend ÷ conversations STARTED via
           // the ad, not ÷ actual sales like costPerConversion above (2026-09-16
           // report: the two read as the same thing but aren't).
-          results: spend.results,
-          costPerResult: spend.costPerResult,
+          results: spend.totals.conversations,
+          costPerResult: spend.totals.costPerConversation,
         };
       } else {
         // A period WAS picked (that's the only way this branch runs at all) — null
@@ -1175,6 +1101,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
       statsLineSql = ` AND COALESCE(t.whatsapp_number_id, 1) = $${bucketParams.length}`;
     }
 
+    const convPromise = timed('conversaciones', conversationStats(req.query, lineIds));
     const [buckets, byHourMap, responseDelay, conv, paid, broadcasts] = await Promise.all([
       pool.query(`
         WITH temped AS (
@@ -1216,13 +1143,13 @@ router.get('/pipeline/stats', async (req, res, next) => {
                count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) AS new_today_total
         FROM bucketed GROUP BY bucket
       `, bucketParams),
-      timed('por hora', conversationsByHourQuery(req.query, lineIds)),
+      convPromise.then((c) => c.byHour),
       pool.query(`
         SELECT round(avg(extract(epoch FROM (t.first_response_at - t.created_at)))/60) AS avg_min
         FROM tickets t JOIN customers c ON c.id = t.customer_id
         WHERE t.first_response_at IS NOT NULL ${responseDateClause} ${parsedLineId ? `AND COALESCE(t.whatsapp_number_id, 1) = $${responseParams.length + 1}` : ''}
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
-      timed('conversaciones', conversationStats(req.query, lineIds)),
+      convPromise,
       timed('ventas', paidByDay(req.query, parsedLineId, req.user.role === 'asesor' ? req.user.id : null)),
       timed('difusiones', broadcastByDay(req.query, lineIds)),
     ]);
