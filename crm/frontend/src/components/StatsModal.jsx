@@ -79,13 +79,13 @@ function AdvisorTable({ adv }) {
     <div className="max-h-64 overflow-auto rounded-xl border border-line">
       <table className="w-full min-w-[760px] text-xs">
         <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
-          <tr><th className="px-3 py-2 text-left font-semibold">Asesora</th><th className={th}>Conversaciones atendidas</th><th className={th}>Mensajes enviados</th><th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Conversión</th></tr>
+          <tr><th className="px-3 py-2 text-left font-semibold">Asesora</th><th className={th}>Conversaciones atendidas</th><th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Conversión</th></tr>
         </thead>
         <tbody>
           {adv.advisors.map((a) => (
             <tr key={a.advisor} className="border-t border-line-soft tabular-nums">
               <td className="px-3 py-1.5 text-left text-ink">{a.advisor}</td>
-              <td className="px-3 py-1.5 text-right">{a.conversations}</td><td className="px-3 py-1.5 text-right text-greige-ink">{a.messages}</td>
+              <td className="px-3 py-1.5 text-right">{a.conversations}</td>
               <td className="px-3 py-1.5 text-right font-semibold text-ink">{a.sales}</td><td className="px-3 py-1.5 text-right">{money0(a.salesAmount)}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{money0(a.salesAmount * adv.fxQtoCop)}</td><td className="px-3 py-1.5 text-right text-greige-ink">{pctText(a.conversionRate)}</td>
             </tr>
@@ -93,7 +93,7 @@ function AdvisorTable({ adv }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
-            <td className="px-3 py-2 text-left">Total</td><td className="px-3 py-2 text-right">{tot.c}</td><td className="px-3 py-2 text-right">{tot.m}</td><td className="px-3 py-2 text-right">{tot.s}</td>
+            <td className="px-3 py-2 text-left">Total</td><td className="px-3 py-2 text-right">{tot.c}</td><td className="px-3 py-2 text-right">{tot.s}</td>
             <td className="px-3 py-2 text-right">{money0(tot.v)}</td><td className="px-3 py-2 text-right">{money0(tot.v * adv.fxQtoCop)}</td><td className="px-3 py-2 text-right">{pctText(tot.c > 0 ? tot.s / tot.c : null)}</td>
           </tr>
         </tfoot>
@@ -120,7 +120,7 @@ async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
         'Difusiones enviadas': d.broadcastSent, Leídos: d.broadcastRead, '% tasa de lectura': d.broadcastSent > 0 ? d.broadcastRead / d.broadcastSent : 0, 'Respuestas de difusiones': d.broadcast,
         Instagram: d.instagram, Messenger: d.messenger, 'Total de todos los canales': total,
         Ventas: d.sales, 'Valor en ventas (Q)': d.salesAmount, 'Valor en ventas (COP)': d.salesAmount * fx, 'Tasa de cierre': total > 0 ? d.sales / total : 0, ROAS: x?.spend > 0 ? (d.salesAmount * fx) / x.spend : '',
-        'WhatsApp por anuncio (CRM)': d.ads, 'WhatsApp orgánico (CRM, fuera del total)': d.organic, 'Mensajes recibidos (CRM)': d.messages ?? 0,
+        'WhatsApp por anuncio (CRM)': d.ads, 'WhatsApp orgánico (CRM, fuera del total)': d.organic,
       };
     });
     const sumK = (k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0);
@@ -128,8 +128,8 @@ async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
     rows.push({ Fecha: 'Total', Clics: sumK('Clics'), WhatsApp: sumK('WhatsApp'), Inversión: spend, 'Difusiones enviadas': sumK('Difusiones enviadas'), Leídos: sumK('Leídos'), 'Respuestas de difusiones': sumK('Respuestas de difusiones'),
       Instagram: sumK('Instagram'), Messenger: sumK('Messenger'), 'Total de todos los canales': totalAll, Ventas: ventas, 'Valor en ventas (Q)': sumK('Valor en ventas (Q)'), 'Valor en ventas (COP)': cop,
       'Tasa de cierre': totalAll > 0 ? ventas / totalAll : 0, ROAS: spend > 0 ? cop / spend : '',
-      'WhatsApp por anuncio (CRM)': sumK('WhatsApp por anuncio (CRM)'), 'WhatsApp orgánico (CRM, fuera del total)': sumK('WhatsApp orgánico (CRM, fuera del total)'), 'Mensajes recibidos (CRM)': sumK('Mensajes recibidos (CRM)') });
-    const byAdvisor = (adv?.daily ?? []).map((r) => ({ Fecha: r.day, Asesora: r.advisor, 'Conversaciones atendidas': r.conversations, 'Mensajes enviados': r.messages, Ventas: r.sales, 'Valor (Q)': r.salesAmount, 'Valor (COP)': r.salesAmount * fx,
+      'WhatsApp por anuncio (CRM)': sumK('WhatsApp por anuncio (CRM)'), 'WhatsApp orgánico (CRM, fuera del total)': sumK('WhatsApp orgánico (CRM, fuera del total)') });
+    const byAdvisor = (adv?.daily ?? []).map((r) => ({ Fecha: r.day, Asesora: r.advisor, 'Conversaciones atendidas': r.conversations, Ventas: r.sales, 'Valor (Q)': r.salesAmount, 'Valor (COP)': r.salesAmount * fx,
       Conversión: r.conversations > 0 ? r.sales / r.conversations : '' }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Gerencial');
@@ -159,14 +159,13 @@ function DailyTable({ rows }) {
       <div className="max-h-72 overflow-auto">
       <table className="w-full min-w-[900px] text-xs">
         <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
-          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th><th className={th}>Mensajes</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
+          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.day} className="border-t border-line-soft tabular-nums">
               <td className="px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
               <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
-              <td className="px-3 py-1.5 text-right text-greige-ink">{r.messages ?? 0}</td>
               {COLS.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right ${k === 'managerTotal' ? 'font-semibold text-ink' : 'text-greige-ink'}`}>{r[k]}</td>)}
               <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{r.salesAmount ? Math.round(r.salesAmount).toLocaleString('es-GT') : '—'}</td>
@@ -176,7 +175,7 @@ function DailyTable({ rows }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
-            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td><td className="px-3 py-2 text-right">{sum('messages')}</td>
+            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td>
             {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
             <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('managerTotal') > 0 ? pctText(sales / sum('managerTotal')) : '—'}</td>
           </tr>
@@ -366,7 +365,6 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                       <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
                         <SumRow label="Total gerencial" value={data.conversations.managerTotal} strong />
                         <p className="text-[10px] leading-tight text-muted-foreground">Anuncios + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker.</p>
-                        <SumRow label="Mensajes recibidos" value={data.conversations.messages} />
                         <SumRow label="Clientes distintos" value={data.conversations.people} />
                         <SumRow label="• Nuevos" value={data.conversations.newPeople} />
                         <SumRow label="• Recurrentes" value={data.conversations.returning} />
@@ -383,7 +381,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
                         <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
                         <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
-                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas ÷ total gerencial.</p>
+                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas de las dos líneas ÷ total gerencial. Las ventas no se separan por línea.</p>
                       </div>
                       <StatCard
                         label="No leídos"

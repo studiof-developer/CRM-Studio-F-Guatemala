@@ -1007,7 +1007,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
     const hDate = buildDateRangeClause(req.query, hp, 'h.created_at');
     const sDate = buildDateRangeClause(req.query, sp, 'sm.created_at');
     const vDate = buildDateRangeClause(req.query, vp, 's.created_at');
-    const saleLine = lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
+    const saleLine = req.user.role === 'asesor' && lineIds?.length ? ` AND COALESCE(s.whatsapp_number_id, 1) IN (${lineIds.map(Number).join(',')})` : '';
     const [wa, soc, sales, fx] = await Promise.all([
       pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, h.message->'additional_kwargs'->>'advisorName' AS advisor,
           count(*) AS msgs, count(DISTINCT split_part(h.session_id, '__', 1)) AS convs
@@ -1222,7 +1222,8 @@ router.get('/pipeline/stats', async (req, res, next) => {
         WHERE t.first_response_at IS NOT NULL ${responseDateClause} ${parsedLineId ? `AND COALESCE(t.whatsapp_number_id, 1) = $${responseParams.length + 1}` : ''}
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
       timed('conversaciones', conversationStats(req.query, lineIds)),
-      timed('ventas', paidByDay(req.query, lineIds)),
+      // Las ventas son del reporte de métricas diario y cuentan las dos líneas juntas, aunque se filtre una línea (la asesora solo ve sus líneas).
+      timed('ventas', paidByDay(req.query, req.user.role === 'asesor' ? lineIds : null)),
       timed('difusiones', broadcastByDay(req.query, lineIds)),
     ]);
 
