@@ -16,9 +16,9 @@ function metaError(err, req, res, next) {
 // GET /api/meta-ads/report?since=YYYY-MM-DD&until=YYYY-MM-DD&level=campaign|adset|ad
 router.get('/report', async (req, res, next) => {
   try {
-    const { since, until, level = 'campaign' } = req.query;
+    const { since, until, level = 'campaign', name } = req.query;
     if (!validRange(since, until)) return res.status(400).json({ error: 'Indica un rango de fechas válido' });
-    res.json(await fetchReport({ since, until, level }));
+    res.json(await fetchReport({ since, until, level, nameFilter: name }));
   } catch (err) { metaError(err, req, res, next); }
 });
 

@@ -50,10 +50,14 @@ export function totalsOf(rows) {
 export const validRange = (since, until) => /^\d{4}-\d{2}-\d{2}$/.test(since ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(until ?? '') && since <= until;
 
 // Datos de toda la cuenta en el período: el alcance y la frecuencia únicos, y (con daily) un renglón por día para la gráfica.
-async function accountInsights(creds, since, until, daily) {
+// Filtro por nombre de campaña, igual que el del Administrador de anuncios ("el nombre de la campaña contiene…"). Vacío = toda la cuenta.
+const nameFilterParam = (name) => (name ? `&filtering=${encodeURIComponent(JSON.stringify([{ field: 'campaign.name', operator: 'CONTAIN', value: name }]))}` : '');
+export const DEFAULT_NAME_FILTER = 'mensajes';
+
+async function accountInsights(creds, since, until, daily, nameFilter = '') {
   const range = encodeURIComponent(JSON.stringify({ since, until }));
   const fields = ['date_start', ...METRICS].join(',');
-  const body = await graphGet(`act_${creds.accountId}/insights?level=account&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}&limit=100`, creds.token);
+  const body = await graphGet(`act_${creds.accountId}/insights?level=account&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}${nameFilterParam(nameFilter)}&limit=100`, creds.token);
   return (body.data ?? []).map((r) => ({ ...rowMetrics({ ...r, campaign_id: 'account', campaign_name: 'Cuenta' }, 'campaign'), date: r.date_start }));
 }
 
@@ -109,14 +113,14 @@ export function observations({ rows, previous, totals, since, until, fmt }) {
 }
 
 // daily = un renglón por cada día y cada campaña/conjunto/anuncio (para el detalle por día).
-async function insights(creds, level, since, until, daily = false) {
+async function insights(creds, level, since, until, daily = false, nameFilter = '') {
   const L = LEVELS[level];
   const range = encodeURIComponent(JSON.stringify({ since, until }));
   const fields = [...(daily ? ['date_start'] : []), ...L.fields, ...METRICS].join(',');
   const rows = [];
   let after = '';
   for (let page = 0; page < (daily ? 12 : 5); page++) {
-    const body = await graphGet(`act_${creds.accountId}/insights?level=${level}&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}&limit=200${after}`, creds.token);
+    const body = await graphGet(`act_${creds.accountId}/insights?level=${level}&fields=${fields}&time_range=${range}${daily ? '&time_increment=1' : ''}${nameFilterParam(nameFilter)}&limit=200${after}`, creds.token);
     rows.push(...(body.data ?? []));
     const cursor = body.paging?.cursors?.after;
     if (!body.paging?.next || !cursor) break;
@@ -131,30 +135,41 @@ async function statuses(creds, level) {
   return new Map((body.data ?? []).map((x) => [x.id, x.effective_status]));
 }
 
-export async function fetchReport({ since, until, level = 'campaign', fmt }) {
+export async function fetchReport({ since, until, level = 'campaign', fmt, nameFilter }) {
   if (!LEVELS[level]) throw Object.assign(new Error('Nivel no válido'), { status: 400 });
-  const key = `${since}|${until}|${level}`;
+  // Sin indicar, el filtro guardado (por defecto "mensajes": la vista con la que el trafficker reporta); texto vacío = toda la cuenta.
+  const filter = String(nameFilter ?? (await getSetting('meta_ads_name_filter', DEFAULT_NAME_FILTER).catch(() => DEFAULT_NAME_FILTER)) ?? '').trim().slice(0, 80);
+  const key = `${since}|${until}|${level}|${filter}`;
   const hit = cache.get(key);
   if (!fmt && hit && Date.now() - hit.at < CACHE_MS) return hit.report;
-  const report = await buildReport({ since, until, level, fmt });
+  const report = await buildReport({ since, until, level, fmt, nameFilter: filter });
   if (!fmt) cache.set(key, { at: Date.now(), report });
   return report;
 }
 
-async function buildReport({ since, until, level, fmt }) {
+async function buildReport({ since, until, level, fmt, nameFilter }) {
   const creds = await getMetaAdsCredentials();
   if (!creds) throw Object.assign(new Error('Meta Ads no está configurado — guarda el ID de cuenta y el token en Configuración'), { status: 409 });
   const prevRange = previousRange(since, until);
   const multiDay = daysBetween(since, until) > 1;
   const [current, previous, status, account, accNow, accPrev, accDaily, dayRowsRaw, savedThresholds] = await Promise.all([
-    insights(creds, level, since, until), insights(creds, level, prevRange.since, prevRange.until), statuses(creds, level).catch(() => new Map()),
+    insights(creds, level, since, until, false, nameFilter), insights(creds, level, prevRange.since, prevRange.until, false, nameFilter), statuses(creds, level).catch(() => new Map()),
     graphGet(`act_${creds.accountId}?fields=name,currency`, creds.token),
-    accountInsights(creds, since, until, false).catch(() => []), accountInsights(creds, prevRange.since, prevRange.until, false).catch(() => []),
-    multiDay ? accountInsights(creds, since, until, true).catch(() => []) : Promise.resolve([]),
-    multiDay ? insights(creds, level, since, until, true).catch(() => []) : Promise.resolve([]),
+    accountInsights(creds, since, until, false, nameFilter).catch(() => []), accountInsights(creds, prevRange.since, prevRange.until, false, nameFilter).catch(() => []),
+    multiDay ? accountInsights(creds, since, until, true, nameFilter).catch(() => []) : Promise.resolve([]),
+    multiDay ? insights(creds, level, since, until, true, nameFilter).catch(() => []) : Promise.resolve([]),
     getSetting('meta_ads_thresholds', {}).catch(() => ({})),
   ]);
   const rows = current.map((r) => ({ ...r, status: status.get(r.id) ?? null })).sort((a, b) => b.spend - a.spend);
+  // Lo que el filtro deja fuera (campañas con gasto cuyo nombre no lo contiene), para que nada quede escondido.
+  let excluded = null;
+  if (nameFilter) {
+    const all = await insights(creds, 'campaign', since, until).catch(() => null);
+    if (all) {
+      const out = all.filter((c) => c.spend > 0 && !c.name.toLowerCase().includes(nameFilter.toLowerCase()));
+      excluded = { count: out.length, spend: out.reduce((n, c) => n + c.spend, 0), names: out.map((c) => c.name) };
+    }
+  }
   const withAccount = (t, acc) => ({ ...t, reach: acc?.reach ?? null, frequency: acc?.frequency ?? null });
   const totals = withAccount(totalsOf(rows), accNow[0]);
   const prevTotals = withAccount(totalsOf(previous), accPrev[0]);
@@ -162,7 +177,7 @@ async function buildReport({ since, until, level, fmt }) {
   const dots = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const money = fmt ?? ((n) => (account.currency === 'COP' ? `$${dots(n)}` : `${account.currency} ${dots(n)}`));
   return {
-    since, until, level, currency: account.currency, accountName: account.name, days: daysBetween(since, until), previousRange: prevRange,
+    since, until, level, nameFilter, excluded, currency: account.currency, accountName: account.name, days: daysBetween(since, until), previousRange: prevRange,
     fetchedAt: new Date().toISOString(), thresholds: { ...DEFAULT_THRESHOLDS, ...(savedThresholds ?? {}) },
     dayRows: dayRowsRaw.filter((r) => r.spend > 0 || r.conversations > 0).map((r) => ({ ...r, status: status.get(r.id) ?? null })).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.spend - a.spend)),
     rows, totals, previousTotals: prevTotals, daily: multiDay ? fillDaily(accDaily, since, until) : [], observations: observations({ rows, previous, totals, since, until, fmt: money }),

@@ -112,6 +112,15 @@ export default function MetaAdsReport() {
   const [day, setDay] = useState('all');
   const [shown, setShown] = useState(60);
   const [viewer, setViewer] = useState(null);
+  // Filtro "el nombre de la campaña contiene…": sin tocarlo manda el del servidor ("mensajes"); lo que cada quien escribe se recuerda en su navegador.
+  const [nameFilter, setNameFilter] = useState(() => { try { return localStorage.getItem('metaAdsNameFilter') ?? undefined; } catch { return undefined; } });
+  const [nameDraft, setNameDraft] = useState(null);
+  const applyName = () => {
+    if (nameDraft === null) return;
+    const v = nameDraft.trim();
+    setNameFilter(v); setNameDraft(null);
+    try { localStorage.setItem('metaAdsNameFilter', v); } catch { /* sin almacenamiento: vale solo esta sesión */ }
+  };
 
   const range = useMemo(() => rangeOf(preset, today, custom), [preset, today, custom]);
 
@@ -120,11 +129,11 @@ export default function MetaAdsReport() {
     if (!quiet) setLoading(true);
     setError(null);
     try {
-      const r = await fetchMetaAdsReport({ ...range, level });
+      const r = await fetchMetaAdsReport({ ...range, level, name: nameFilter });
       setData(r);
       setText([headline(preset, range, today), '', ...r.observations.map((o) => `- ${o}`)].join('\n'));
     } catch (err) { setError(err.message); if (!quiet) setData(null); } finally { setLoading(false); }
-  }, [range, level, preset, today]);
+  }, [range, level, preset, today, nameFilter]);
   useEffect(() => { setDay('all'); setShown(60); load(); }, [load]);
 
   // En vivo: se vuelve a pedir cada 5 minutos mientras la pestaña está a la vista y el rango incluye hoy.
@@ -225,6 +234,14 @@ export default function MetaAdsReport() {
               </button>
               <p className="mt-1.5">{ago == null ? '' : ago === 0 ? 'Actualizado hace un momento' : `Actualizado hace ${ago} min`}</p>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2 text-xs">
+            <span className="font-semibold text-ink">El nombre de la campaña contiene</span>
+            <input value={nameDraft ?? data.nameFilter ?? ''} onChange={(e) => setNameDraft(e.target.value)} onBlur={applyName} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} placeholder="(toda la cuenta)" className={`${inputCls} w-44`} />
+            {data.nameFilter && data.excluded?.count > 0
+              ? <span className="text-warning">Se excluyen {data.excluded.count} campaña{data.excluded.count === 1 ? '' : 's'} con gasto ({money(data.excluded.spend)}): {data.excluded.names.join(', ')}</span>
+              : <span className="text-greige-ink">{data.nameFilter ? 'Ninguna campaña con gasto queda fuera.' : 'Sin filtro: se suma toda la cuenta.'}</span>}
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
