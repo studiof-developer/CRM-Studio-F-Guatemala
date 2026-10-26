@@ -64,13 +64,64 @@ function StatCard({ label, value, unit, iconBg, iconText, icon: Icon, sub }) {
   );
 }
 
+function SumRow({ label, value, strong, purple }) {
+  return (
+    <div className={`flex items-center justify-between ${purple ? 'text-purple-600 dark:text-purple-400' : ''}`}>
+      <span>{label}</span>
+      <span className={`${strong || purple ? 'font-bold' : 'font-semibold'} ${purple ? '' : strong ? 'text-accent' : 'text-ink'}`}>{value}</span>
+    </div>
+  );
+}
+
+// Conversaciones día por día (lo que el gerente ve en su Excel, pero con lo que el CRM atendió de verdad).
+function DailyTable({ rows }) {
+  const sum = (k) => rows.reduce((n, r) => n + (r[k] ?? 0), 0);
+  const sales = rows.some((r) => r.sales == null) ? null : sum('sales');
+  const COLS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['messenger', 'Messenger'], ['ads', 'Anuncios'], ['broadcast', 'Difusión'], ['organic', 'Orgánico']];
+  const th = 'px-3 py-2 text-right font-semibold';
+  return (
+    <div className="overflow-x-auto rounded-xl border border-line">
+      <table className="w-full min-w-[720px] text-xs">
+        <thead className="bg-black/[0.03] uppercase tracking-wide text-greige-ink dark:bg-white/[0.04]">
+          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Cierre</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.day} className="border-t border-line-soft tabular-nums">
+              <td className="px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
+              <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
+              {COLS.map(([k]) => <td key={k} className="px-3 py-1.5 text-right text-greige-ink">{r[k]}</td>)}
+              <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
+              <td className="px-3 py-1.5 text-right text-greige-ink">{r.sales != null && r.total > 0 ? pctText(r.sales / r.total) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
+            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td>
+            {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
+            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{sales != null && sum('total') > 0 ? pctText(sales / sum('total')) : '—'}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p className="border-t border-line-soft px-3 py-2 text-[11px] text-muted-foreground">Un cliente que escribe dos días distintos cuenta en cada día; por eso la suma de días puede ser mayor que las conversaciones del resumen.</p>
+    </div>
+  );
+}
+
 // "Expandir estadísticas" (2026-09-12): the board's own stat strip only ever shows a
 // card for a bucket that HAS unread messages — a bucket sitting at 0 just isn't there.
 // This is the "todos los estados, sin excepción" view, plus two operational numbers the
 // board doesn't surface at all (mensajes por hora, demora en primera respuesta). Its own
 // period filter, independent of whatever the board is currently showing.
-export default function StatsModal({ open, onClose, lineId }) {
-  const [periodPreset, setPeriodPreset] = useState('todo');
+// Sin "Todo": las estadísticas siempre son de un periodo concreto (por defecto, hoy).
+const STATS_PERIODS = PERIOD_OPTIONS.filter((o) => o.value !== 'todo');
+const pctText = (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
+
+export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) {
+  const [periodPreset, setPeriodPreset] = useState('hoy');
+  const [line, setLine] = useState(lineId ?? '');
+  useEffect(() => { setLine(lineId ?? ''); }, [lineId]);
   const todayStr = guatemalaToday();
   const [monthCursor, setMonthCursor] = useState(() => {
     const [y, m] = todayStr.split('-').map(Number);
@@ -108,11 +159,11 @@ export default function StatsModal({ open, onClose, lineId }) {
     if (!open) return;
     setData(null);
     setError(null);
-    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId })
+    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined })
       .then(setData)
       .catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo, lineId]);
+  }, [open, dateFrom, dateTo, line]);
 
   const hourRef = useRef(null);
   useChart(hourRef, () => ({
@@ -158,7 +209,8 @@ export default function StatsModal({ open, onClose, lineId }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-ink">Estadísticas del pipeline</h3>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={periodPreset} onChange={setPeriodPreset} options={PERIOD_OPTIONS} className="w-44 shrink-0" />
+                {lineOptions.length > 2 && <Select value={line} onChange={setLine} options={lineOptions} className="w-44 shrink-0" />}
+                <Select value={periodPreset} onChange={setPeriodPreset} options={STATS_PERIODS} className="w-44 shrink-0" />
                 {periodPreset === 'mes' && (
                   <div className="flex shrink-0 items-center gap-1 rounded-lg border border-line bg-paper px-1.5 py-1.5 shadow-sm">
                     <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full p-0.5 text-greige-ink hover:bg-black/[0.05] hover:text-ink dark:hover:bg-white/[0.08]" aria-label="Mes anterior">‹</button>
@@ -184,41 +236,34 @@ export default function StatsModal({ open, onClose, lineId }) {
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
-              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[180px_240px_340px_1fr]">
+              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[230px_240px_340px_1fr]">
                 <div className="flex flex-col gap-6">
                   <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen</p>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen del periodo</p>
                     <div className="flex flex-col gap-2">
                       <StatCard
-                        label="Nuevas hoy"
-                        value={data.newToday}
+                        label="Conversaciones"
+                        value={data.conversations.people}
                         iconBg="bg-accent-soft"
                         iconText="text-accent"
                         icon={Calendar}
-                        sub={data.activeTodayTotal ? `${data.newToday} clientes nuevos · ${Math.max(0, data.activeTodayTotal - data.newToday)} recurrentes (${data.activeTodayTotal} conversaciones totales hoy en WhatsApp)` : undefined}
+                        sub="Clientes distintos que escribieron en el periodo, por WhatsApp, Instagram o Messenger"
                       />
-                      {data.activeTodayTotal > 0 && (
-                        <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
-                          <div className="flex items-center justify-between">
-                            <span>Conversaciones hoy:</span>
-                            <span className="font-semibold text-ink">{data.activeTodayTotal}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>• Nuevos clientes:</span>
-                            <span className="font-semibold text-accent">{data.newToday}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>• Recurrentes activos:</span>
-                            <span className="font-semibold text-ink">{Math.max(0, data.activeTodayTotal - data.newToday)}</span>
-                          </div>
-                          {data.pautaTodayTotal > 0 && (
-                            <div className="flex items-center justify-between border-t border-line/60 pt-1 text-purple-600 dark:text-purple-400">
-                              <span>• Por Anuncios Meta:</span>
-                              <span className="font-bold">{data.pautaTodayTotal}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
+                        <SumRow label="Nuevos clientes" value={data.conversations.newPeople} strong />
+                        <SumRow label="Recurrentes" value={data.conversations.returning} />
+                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por canal</p>
+                        <SumRow label="WhatsApp" value={data.conversations.byChannel.whatsapp} />
+                        <SumRow label="Instagram" value={data.conversations.byChannel.instagram} />
+                        <SumRow label="Messenger" value={data.conversations.byChannel.messenger} />
+                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por origen</p>
+                        <SumRow label="Anuncios Meta" value={data.conversations.byOrigin.ads} purple />
+                        <SumRow label="Respuesta a difusión" value={data.conversations.byOrigin.broadcast} />
+                        <SumRow label="Orgánico" value={data.conversations.byOrigin.organic} />
+                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
+                        <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
+                        <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
+                      </div>
                       <StatCard
                         label="No leídos"
                         value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
@@ -320,7 +365,7 @@ export default function StatsModal({ open, onClose, lineId }) {
                       <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
                     )}
                     {!data.conversionCost && !data.conversionCostError && (
-                      <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                      <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>
                     )}
                   </div>
 
@@ -367,7 +412,7 @@ export default function StatsModal({ open, onClose, lineId }) {
                       <p className="text-xs text-danger">No se pudo leer WhatsApp: {data.messageCostError}</p>
                     )}
                     {!data.messageCost && !data.messageCostError && (
-                      <p className="text-xs text-muted-foreground">Elige un periodo con fecha específica (no "Todo") para ver este dato.</p>
+                      <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>
                     )}
                   </div>
                 </div>
@@ -378,6 +423,12 @@ export default function StatsModal({ open, onClose, lineId }) {
                     <canvas ref={hourRef} role="img" aria-label="Conversaciones de clientes por hora del día" />
                   </div>
                 </div>
+                {data.dailyConversations?.length > 1 && (
+                  <div className="lg:col-span-4">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por día</p>
+                    <DailyTable rows={data.dailyConversations} />
+                  </div>
+                )}
               </div>
             )}
           </motion.div>

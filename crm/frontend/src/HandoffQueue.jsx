@@ -926,7 +926,7 @@ export default function HandoffQueue({ user, onOpenConversation }) {
           );
         })}
       </div>
-      <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} lineId={selectedLine || undefined} />
+      <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} lineId={selectedLine || undefined} lineOptions={lineFilterOptions} />
 
       {canFilter && (
         <ConfirmDialog
