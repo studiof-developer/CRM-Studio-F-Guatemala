@@ -865,6 +865,9 @@ function buildDateRangeClause(query, params, dateExpr) {
 // respuesta a difusión (se le mandó una difusión en las 24 horas anteriores a su primer mensaje del día) u orgánico. Instagram y Messenger cuentan como línea 1 (no tienen línea propia).
 const guatemalaDay = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
 
+// Las difusiones "novedad pedido" y "seguimiento asesor" son avisos de servicio, no campañas: el trafficker no las cuenta ni en enviadas, ni en leídas, ni en respuestas.
+const notServiceBroadcast = (alias) => ` AND NOT EXISTS (SELECT 1 FROM campaigns ca WHERE ca.id::text = ${alias}.message->'additional_kwargs'->>'campaignId' AND ca.template_name ~* 'novedad[ _-]*pedido|seguimiento[ _-]*asesor')`;
+
 function waLineSql(ids) {
   if (!ids?.length) return '';
   return ` AND (${ids.map((n) => (n === 1
@@ -890,7 +893,7 @@ async function conversationStats(query, lineIds) {
     -- Las difusiones del periodo (y el día anterior), leídas una sola vez en vez de buscarlas cliente por cliente.
     sends AS (
       SELECT split_part(s.session_id, '__', 1) AS ref, s.created_at AS at FROM n8n_chat_histories s
-      WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL
+      WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${notServiceBroadcast('s')}
         AND s.created_at >= (SELECT min(first_at) FROM wa) - interval '24 hours' AND s.created_at < (SELECT max(first_at) FROM wa)
     )
     SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.channel, wa.ref, wa.ad, wa.msgs,
@@ -912,19 +915,20 @@ async function conversationStats(query, lineIds) {
   const daily = new Map();
   const people = new Map();
   for (const r of all) {
-    const origin = r.ad ? 'ads' : r.broadcast ? 'broadcast' : 'organic';
-    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 };
+    const origin = r.channel !== 'whatsapp' ? 'social' : r.ad ? 'ads' : r.broadcast ? 'broadcast' : 'organic';
+    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0, social: 0 };
     d.messages += Number(r.msgs) || 0;
     d.total += 1; d[r.channel] = (d[r.channel] ?? 0) + 1; d[origin] += 1;
     daily.set(r.day, d);
     const p = people.get(r.ref) ?? { channel: r.channel, origin: 'organic', isNew: false };
-    if (origin === 'ads' || (origin === 'broadcast' && p.origin === 'organic')) p.origin = origin;
+    if (origin === 'ads' || (origin === 'broadcast' && p.origin !== 'ads')) p.origin = origin;
     p.isNew = p.isNew || !!r.is_new;
     people.set(r.ref, p);
   }
   const list = [...people.values()];
   const count = (fn) => list.filter(fn).length;
-  const days = [...daily.values()].sort((a, b) => a.day.localeCompare(b.day));
+  // Total gerencial (como lo arma el trafficker): anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No incluye el orgánico de WhatsApp.
+  const days = [...daily.values()].map((d) => ({ ...d, managerTotal: d.ads + d.broadcast + d.social })).sort((a, b) => a.day.localeCompare(b.day));
   const sum = (k) => days.reduce((n, d) => n + (d[k] ?? 0), 0);
   return {
     daily: days,
@@ -932,7 +936,7 @@ async function conversationStats(query, lineIds) {
       // Conversaciones = clientes por día, sumados (como cuentan Meta y el Excel gerencial); "clientes distintos" es aparte.
       conversations: sum('total'), messages: sum('messages'),
       byChannel: { whatsapp: sum('whatsapp'), instagram: sum('instagram'), messenger: sum('messenger') },
-      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic') },
+      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic'), social: sum('social') }, managerTotal: sum('managerTotal'),
       people: list.length, newPeople: count((p) => p.isNew), returning: count((p) => !p.isNew),
     },
   };
@@ -961,7 +965,7 @@ async function broadcastByDay(query, lineIds) {
   const dateClause = buildDateRangeClause(query, p, 'h.created_at');
   const { rows } = await pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, count(*) AS sent,
       count(*) FILTER (WHERE h.message->'additional_kwargs'->>'status' = 'read') AS read
-    FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${dateClause} ${waLineSql(lineIds)} GROUP BY 1`, p);
+    FROM n8n_chat_histories h WHERE h.message->'additional_kwargs'->>'campaignId' IS NOT NULL ${notServiceBroadcast('h')} ${dateClause} ${waLineSql(lineIds)} GROUP BY 1`, p);
   return Object.fromEntries(rows.map((r) => [r.day, { sent: Number(r.sent), read: Number(r.read) }]));
 }
 
@@ -982,7 +986,7 @@ function fillDays(daily, from, to) {
   const out = [];
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`) && out.length < 400; t += 86400000) {
     const day = new Date(t).toISOString().slice(0, 10);
-    out.push(byDay.get(day) ?? { day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0 });
+    out.push(byDay.get(day) ?? { day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0, social: 0, managerTotal: 0 });
   }
   return out;
 }
@@ -1238,7 +1242,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
     const daily = fillDays(conv.daily, rangeFrom, rangeTo).map((d) => ({ ...d, sales: paid[d.day]?.n ?? 0, salesAmount: paid[d.day]?.amount ?? 0, broadcastSent: broadcasts[d.day]?.sent ?? 0, broadcastRead: broadcasts[d.day]?.read ?? 0 }));
     const sales = daily.reduce((n, d) => n + d.sales, 0);
     const salesAmount = daily.reduce((n, d) => n + d.salesAmount, 0);
-    const conversations = { ...conv.summary, sales, salesAmount, closeRate: conv.summary.conversations > 0 ? sales / conv.summary.conversations : null };
+    const conversations = { ...conv.summary, sales, salesAmount, closeRate: conv.summary.managerTotal > 0 ? sales / conv.summary.managerTotal : null };
 
     // Costo de conversión (2026-09-13): gasto en pauta (Meta Ads, act_ account in
     // Configuración) ÷ clientes QUE LLEGARON POR ESA PAUTA y pasaron a Pagado en el

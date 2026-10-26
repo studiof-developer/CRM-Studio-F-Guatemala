@@ -109,22 +109,26 @@ async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
     try { meta = (await fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign' })).daily ?? []; } catch { /* sin Meta: esas columnas salen vacías */ }
     const metaBy = Object.fromEntries(meta.map((d) => [d.date, d]));
     const fx = adv?.fxQtoCop ?? 420;
+    // Formato del trafficker: WhatsApp = conversaciones por anuncio (Meta), más Instagram, Messenger y respuestas a difusión; el total no cuenta el orgánico de WhatsApp.
     const rows = data.dailyConversations.map((d) => {
-      const m = metaBy[d.day];
-      const omni = d.total;
+      const x = metaBy[d.day];
+      const wa = x?.conversations ?? d.ads;
+      const total = wa + d.social + d.broadcast;
       return {
-        Fecha: d.day, Clics: m?.linkClicks ?? '', 'Costo por clic': m?.cpc ?? '', CTR: m?.ctr != null ? m.ctr / 100 : '', '% conversión': m?.conversionPct != null ? m.conversionPct / 100 : '',
-        'Mensajes (Meta)': m?.conversations ?? '', 'Costo por mensaje': m?.costPerConversation ?? '', Inversión: m?.spend ?? '',
-        'Difusiones enviadas': d.broadcastSent, Leídos: d.broadcastRead, '% tasa de lectura': d.broadcastSent > 0 ? d.broadcastRead / d.broadcastSent : 0, 'Respuestas a difusión (CRM)': d.broadcast,
-        Instagram: d.instagram, Messenger: d.messenger, 'Omnicanal (CRM)': omni, 'Mensajes recibidos': d.messages ?? 0,
-        Ventas: d.sales, 'Vlr Ventas (Q)': d.salesAmount, 'Vlr Ventas COP': d.salesAmount * fx, 'Tasa de cierre': omni > 0 ? d.sales / omni : 0, ROAS: m?.spend > 0 ? (d.salesAmount * fx) / m.spend : '',
+        Fecha: d.day, Clics: x?.linkClicks ?? '', 'Costo por clic': x?.cpc ?? '', CTR: x?.ctr != null ? x.ctr / 100 : '', '% conversión': x?.conversionPct != null ? x.conversionPct / 100 : '',
+        WhatsApp: wa, 'Costo por mensaje': x?.costPerConversation ?? '', Inversión: x?.spend ?? '',
+        'Difusiones enviadas': d.broadcastSent, Leídos: d.broadcastRead, '% tasa de lectura': d.broadcastSent > 0 ? d.broadcastRead / d.broadcastSent : 0, 'Respuestas de difusiones': d.broadcast,
+        Instagram: d.instagram, Messenger: d.messenger, 'Total de todos los canales': total,
+        Ventas: d.sales, 'Valor en ventas (Q)': d.salesAmount, 'Valor en ventas (COP)': d.salesAmount * fx, 'Tasa de cierre': total > 0 ? d.sales / total : 0, ROAS: x?.spend > 0 ? (d.salesAmount * fx) / x.spend : '',
+        'WhatsApp por anuncio (CRM)': d.ads, 'WhatsApp orgánico (CRM, fuera del total)': d.organic, 'Mensajes recibidos (CRM)': d.messages ?? 0,
       };
     });
     const sumK = (k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0);
-    const spend = sumK('Inversión'); const cop = sumK('Vlr Ventas COP'); const omniT = sumK('Omnicanal (CRM)'); const ventas = sumK('Ventas');
-    rows.push({ Fecha: 'Total', Clics: sumK('Clics'), Inversión: spend, 'Mensajes (Meta)': sumK('Mensajes (Meta)'), 'Difusiones enviadas': sumK('Difusiones enviadas'), Leídos: sumK('Leídos'), 'Respuestas a difusión (CRM)': sumK('Respuestas a difusión (CRM)'),
-      Instagram: sumK('Instagram'), Messenger: sumK('Messenger'), 'Omnicanal (CRM)': omniT, 'Mensajes recibidos': sumK('Mensajes recibidos'), Ventas: ventas, 'Vlr Ventas (Q)': sumK('Vlr Ventas (Q)'), 'Vlr Ventas COP': cop,
-      'Tasa de cierre': omniT > 0 ? ventas / omniT : 0, ROAS: spend > 0 ? cop / spend : '' });
+    const spend = sumK('Inversión'); const cop = sumK('Valor en ventas (COP)'); const totalAll = sumK('Total de todos los canales'); const ventas = sumK('Ventas');
+    rows.push({ Fecha: 'Total', Clics: sumK('Clics'), WhatsApp: sumK('WhatsApp'), Inversión: spend, 'Difusiones enviadas': sumK('Difusiones enviadas'), Leídos: sumK('Leídos'), 'Respuestas de difusiones': sumK('Respuestas de difusiones'),
+      Instagram: sumK('Instagram'), Messenger: sumK('Messenger'), 'Total de todos los canales': totalAll, Ventas: ventas, 'Valor en ventas (Q)': sumK('Valor en ventas (Q)'), 'Valor en ventas (COP)': cop,
+      'Tasa de cierre': totalAll > 0 ? ventas / totalAll : 0, ROAS: spend > 0 ? cop / spend : '',
+      'WhatsApp por anuncio (CRM)': sumK('WhatsApp por anuncio (CRM)'), 'WhatsApp orgánico (CRM, fuera del total)': sumK('WhatsApp orgánico (CRM, fuera del total)'), 'Mensajes recibidos (CRM)': sumK('Mensajes recibidos (CRM)') });
     const byAdvisor = (adv?.daily ?? []).map((r) => ({ Fecha: r.day, Asesora: r.advisor, 'Conversaciones atendidas': r.conversations, 'Mensajes enviados': r.messages, Ventas: r.sales, 'Valor (Q)': r.salesAmount, 'Valor (COP)': r.salesAmount * fx,
       Conversión: r.conversations > 0 ? r.sales / r.conversations : '' }));
     const wb = XLSX.utils.book_new();
@@ -148,7 +152,7 @@ function SumRow({ label, value, strong, purple }) {
 function DailyTable({ rows }) {
   const sum = (k) => rows.reduce((n, r) => n + (r[k] ?? 0), 0);
   const sales = rows.some((r) => r.sales == null) ? null : sum('sales');
-  const COLS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['messenger', 'Messenger'], ['ads', 'Anuncios'], ['broadcast', 'Difusión'], ['organic', 'Orgánico']];
+  const COLS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['messenger', 'Messenger'], ['ads', 'Anuncios'], ['broadcast', 'Difusión'], ['organic', 'Orgánico WA'], ['managerTotal', 'Total gerencial']];
   const th = 'px-3 py-2 text-right font-semibold';
   return (
     <div className="rounded-xl border border-line">
@@ -163,10 +167,10 @@ function DailyTable({ rows }) {
               <td className="px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
               <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{r.messages ?? 0}</td>
-              {COLS.map(([k]) => <td key={k} className="px-3 py-1.5 text-right text-greige-ink">{r[k]}</td>)}
+              {COLS.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right ${k === 'managerTotal' ? 'font-semibold text-ink' : 'text-greige-ink'}`}>{r[k]}</td>)}
               <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
               <td className="px-3 py-1.5 text-right text-greige-ink">{r.salesAmount ? Math.round(r.salesAmount).toLocaleString('es-GT') : '—'}</td>
-              <td className="px-3 py-1.5 text-right text-greige-ink">{r.sales != null && r.total > 0 ? pctText(r.sales / r.total) : '—'}</td>
+              <td className="px-3 py-1.5 text-right text-greige-ink">{r.sales != null && r.managerTotal > 0 ? pctText(r.sales / r.managerTotal) : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -174,7 +178,7 @@ function DailyTable({ rows }) {
           <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
             <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td><td className="px-3 py-2 text-right">{sum('messages')}</td>
             {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
-            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('total') > 0 ? pctText(sales / sum('total')) : '—'}</td>
+            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('managerTotal') > 0 ? pctText(sales / sum('managerTotal')) : '—'}</td>
           </tr>
         </tfoot>
       </table>
@@ -360,7 +364,9 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         sub="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta). WhatsApp, Instagram y Messenger"
                       />
                       <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
-                        <SumRow label="Mensajes recibidos" value={data.conversations.messages} strong />
+                        <SumRow label="Total gerencial" value={data.conversations.managerTotal} strong />
+                        <p className="text-[10px] leading-tight text-muted-foreground">Anuncios + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker.</p>
+                        <SumRow label="Mensajes recibidos" value={data.conversations.messages} />
                         <SumRow label="Clientes distintos" value={data.conversations.people} />
                         <SumRow label="• Nuevos" value={data.conversations.newPeople} />
                         <SumRow label="• Recurrentes" value={data.conversations.returning} />
@@ -371,11 +377,13 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por origen</p>
                         <SumRow label="Anuncios Meta" value={data.conversations.byOrigin.ads} purple />
                         <SumRow label="Respuesta a difusión" value={data.conversations.byOrigin.broadcast} />
-                        <SumRow label="Orgánico" value={data.conversations.byOrigin.organic} />
+                        <SumRow label="Orgánico de WhatsApp" value={data.conversations.byOrigin.organic} />
+                        <SumRow label="Instagram y Messenger" value={data.conversations.byOrigin.social} />
                         <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
                         <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
                         <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
                         <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
+                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas ÷ total gerencial.</p>
                       </div>
                       <StatCard
                         label="No leídos"
