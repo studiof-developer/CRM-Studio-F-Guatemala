@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { X, Loader2, Calendar, Mail } from 'lucide-react';
-import { fetchPipelineStats } from '../api.js';
+import { fetchPipelineStats, fetchPipelineStatsCosts } from '../api.js';
 import Select from './Select.jsx';
 import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
 import { DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from '../lib/pipelineColumns.js';
@@ -157,14 +157,21 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
   }
 
   const [data, setData] = useState(null);
+  const [costs, setCosts] = useState(null); // los costos vienen de Meta y tardan más: la pantalla se arma sin esperarlos
   const [error, setError] = useState(null);
   useEffect(() => {
     if (!open) return;
+    let current = true;
     setData(null);
+    setCosts(null);
     setError(null);
     fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined })
-      .then(setData)
-      .catch((err) => setError(err.message));
+      .then((d) => { if (current) setData(d); })
+      .catch((err) => { if (current) setError(err.message); });
+    fetchPipelineStatsCosts({ from: dateFrom, to: dateTo })
+      .then((c) => { if (current) setCosts(c); })
+      .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
+    return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dateFrom, dateTo, line]);
 
@@ -340,28 +347,28 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
                     {data.costsAreAccountWide && <p className="mt-0.5 rounded bg-warning/15 px-2 py-1 text-[11px] font-medium text-warning">Los costos de pauta y de mensajes son de toda la cuenta de Meta: no se separan por línea.</p>}
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Dos formas de medirlo: lo que Meta cuenta como "resultado" (conversaciones iniciadas) y lo que el CRM confirma como venta real. No tienen por qué coincidir.</p>
-                    {data.conversionCost && (
+                    {costs?.conversionCost && (
                       <div className="flex flex-col gap-3">
                         <div>
                           <p className="mb-1 text-[11px] font-medium text-greige-ink">Costo por resultado — igual a Meta Ads</p>
                           <div className="flex flex-wrap gap-2">
                             <StatCard
                               label="gasto en pauta"
-                              value={formatMoney(data.conversionCost.spend, data.conversionCost.currency)}
+                              value={formatMoney(costs?.conversionCost.spend, costs?.conversionCost.currency)}
                               iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
                             />
                             <StatCard
                               label="conversaciones"
-                              value={data.conversionCost.results}
+                              value={costs?.conversionCost.results}
                               iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                               icon={PIPELINE_ICON_MAP.MessageSquareWarning}
                             />
                             <StatCard
                               label="por resultado"
-                              value={data.conversionCost.costPerResult != null ? formatMoney(data.conversionCost.costPerResult, data.conversionCost.currency) : 'Sin conversaciones'}
+                              value={costs?.conversionCost.costPerResult != null ? formatMoney(costs?.conversionCost.costPerResult, costs?.conversionCost.currency) : 'Sin conversaciones'}
                               iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -373,14 +380,14 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                           <div className="flex flex-wrap gap-2">
                             <StatCard
                               label="pagados de pauta"
-                              value={data.conversionCost.conversions}
+                              value={costs?.conversionCost.conversions}
                               iconBg={PIPELINE_COLOR_CLASSES.success.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.success.iconText}
                               icon={PIPELINE_ICON_MAP.CheckCircle2}
                             />
                             <StatCard
                               label="por venta"
-                              value={data.conversionCost.costPerConversion != null ? formatMoney(data.conversionCost.costPerConversion, data.conversionCost.currency) : 'Sin ventas'}
+                              value={costs?.conversionCost.costPerConversion != null ? formatMoney(costs?.conversionCost.costPerConversion, costs?.conversionCost.currency) : 'Sin ventas'}
                               iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -389,10 +396,11 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                         </div>
                       </div>
                     )}
-                    {data.conversionCostError && (
-                      <p className="text-xs text-danger">No se pudo leer Meta Ads: {data.conversionCostError}</p>
+                    {costs?.conversionCostError && (
+                      <p className="text-xs text-danger">No se pudo leer Meta Ads: {costs?.conversionCostError}</p>
                     )}
-                    {!data.conversionCost && !data.conversionCostError && (
+                    {!costs && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
+                    {costs && !costs.conversionCost && !costs.conversionCostError && (
                       <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>
                     )}
                   </div>
@@ -400,46 +408,47 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [] }) 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Lo que WhatsApp cobra por cada mensaje enviado — facturación de la plataforma, no gasto en pauta. No tiene por qué coincidir con "Costo de conversión".</p>
-                    {data.messageCost && (
+                    {costs?.messageCost && (
                       <>
                         <div className="flex flex-wrap gap-2">
                           <StatCard
                             label="gasto acumulado"
-                            value={formatMoney(data.messageCost.totalCost, data.messageCost.currency)}
+                            value={formatMoney(costs?.messageCost.totalCost, costs?.messageCost.currency)}
                             iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
                             iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
                             icon={PIPELINE_ICON_MAP.CircleDollarSign}
                           />
                           <StatCard
                             label="mensajes cobrados"
-                            value={data.messageCost.billableVolume}
+                            value={costs?.messageCost.billableVolume}
                             iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
                             iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
                             icon={PIPELINE_ICON_MAP.MessageSquareWarning}
                           />
                           <StatCard
                             label="promedio por mensaje"
-                            value={data.messageCost.avgCostPerMessage != null ? formatMoney(data.messageCost.avgCostPerMessage, data.messageCost.currency) : 'Sin mensajes cobrados'}
+                            value={costs?.messageCost.avgCostPerMessage != null ? formatMoney(costs?.messageCost.avgCostPerMessage, costs?.messageCost.currency) : 'Sin mensajes cobrados'}
                             iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                             iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                             icon={PIPELINE_ICON_MAP.CircleDollarSign}
                           />
                         </div>
-                        {data.messageCost.byCategory.length > 0 && (
+                        {costs?.messageCost.byCategory.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5">
-                            {data.messageCost.byCategory.map((c) => (
+                            {costs?.messageCost.byCategory.map((c) => (
                               <span key={c.category} className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] text-greige-ink">
-                                {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, data.messageCost.currency)}/msg` : 'gratis'}
+                                {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, costs?.messageCost.currency)}/msg` : 'gratis'}
                               </span>
                             ))}
                           </div>
                         )}
                       </>
                     )}
-                    {data.messageCostError && (
-                      <p className="text-xs text-danger">No se pudo leer WhatsApp: {data.messageCostError}</p>
+                    {costs?.messageCostError && (
+                      <p className="text-xs text-danger">No se pudo leer WhatsApp: {costs?.messageCostError}</p>
                     )}
-                    {!data.messageCost && !data.messageCostError && (
+                    {!costs && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
+                    {costs && !costs.messageCost && !costs.messageCostError && (
                       <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>
                     )}
                   </div>

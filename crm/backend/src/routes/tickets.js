@@ -871,6 +871,8 @@ function waLineSql(ids) {
     : `(h.session_id LIKE '%__line_${n}%' OR h.whatsapp_number_id = ${n})`)).join(' OR ')})`;
 }
 
+const timed = async (name, promise) => { const t0 = Date.now(); const out = await promise; console.log(`[stats] ${name}: ${Date.now() - t0} ms`); return out; };
+
 async function conversationStats(query, lineIds) {
   const hp = []; const sp = [];
   const hDate = buildDateRangeClause(query, hp, 'h.created_at');
@@ -883,13 +885,17 @@ async function conversationStats(query, lineIds) {
       FROM n8n_chat_histories h
       WHERE h.message->>'type' = 'human' ${hDate} ${waLineSql(lineIds)}
       GROUP BY 1, 3
+    ),
+    -- Las difusiones del periodo (y el día anterior), leídas una sola vez en vez de buscarlas cliente por cliente.
+    sends AS (
+      SELECT split_part(s.session_id, '__', 1) AS ref, s.created_at AS at FROM n8n_chat_histories s
+      WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL
+        AND s.created_at >= (SELECT min(first_at) FROM wa) - interval '24 hours' AND s.created_at < (SELECT max(first_at) FROM wa)
     )
     SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.channel, wa.ref, wa.ad,
            (c.created_at AT TIME ZONE 'America/Guatemala')::date = wa.day AS is_new,
            (NOT wa.ad AND EXISTS (
-             SELECT 1 FROM n8n_chat_histories s
-             WHERE s.session_id LIKE wa.ref || '%' AND s.message->'additional_kwargs'->>'campaignId' IS NOT NULL
-               AND s.created_at >= wa.first_at - interval '24 hours' AND s.created_at < wa.first_at
+             SELECT 1 FROM sends s WHERE s.ref = wa.ref AND s.at >= wa.first_at - interval '24 hours' AND s.at < wa.first_at
            )) AS broadcast
     FROM wa LEFT JOIN customers c ON c.whatsapp_number = wa.ref`, hp);
   let social = [];
@@ -965,9 +971,117 @@ function fillDays(daily, from, to) {
   return out;
 }
 
+// Costos de pauta y de mensajes: salen de Meta (llamadas externas, lentas), así que van aparte y la pantalla ya se ve mientras llegan.
+// Se recuerdan 5 minutos por periodo: abrir y cerrar el modal no vuelve a preguntarle a Meta.
+const COSTS_TTL_MS = 5 * 60 * 1000;
+const costsCache = new Map();
+async function statsCosts(query) {
+  const req = { query };
+  const { from, to, since, until } = req.query;
+  const guatemalaDateOnly = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
+  const metaSinceDate = since ? guatemalaDateOnly(since) : (from ?? null);
+  const metaUntilDate = until ? guatemalaDateOnly(until) : (to ?? (metaSinceDate ? guatemalaDateOnly(new Date().toISOString()) : null));
+
+  // El costo por mensaje se pide a la vez que el gasto de pauta, no después.
+  const messageCostCall = metaSinceDate && metaUntilDate ? fetchMessageCost(metaSinceDate, metaUntilDate).then((v) => ({ v }), (e) => ({ e })) : null;
+  let conversionCost = null;
+  let conversionCostError = null;
+  if (metaSinceDate && metaUntilDate) {
+    try {
+      const conversionParams = [];
+      const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'aa.accessed_at');
+      const [conversionsResult, spend] = await Promise.all([
+        // Scoped to customers who actually arrived THROUGH a pauta — a referral-
+        // tagged message anywhere in their thread, same signal dashboard.js's
+        // pautaByDay already keys on — and NOT just "everyone who got marked paid"
+        // this period, or the number answers "how much did we spend per sale
+        // overall" instead of the ad-specific question it's named for (2026-09-13
+        // correction). The referral can predate this period by a lot (the ad click
+        // and the eventual sale are rarely the same day), so it's checked over the
+        // customer's whole history, not narrowed to the same date window as the sale.
+        pool.query(
+          `SELECT count(DISTINCT aa.customer_id) AS conversions
+           FROM access_audit aa
+           JOIN customers c ON c.id = aa.customer_id
+           WHERE aa.action = 'customer_marked_paid' ${conversionDateClause}
+             AND EXISTS (
+               SELECT 1 FROM n8n_chat_histories h
+               WHERE h.session_id LIKE c.whatsapp_number || '%'
+                 AND h.message->'additional_kwargs'->'referral' IS NOT NULL
+             )`,
+          conversionParams
+        ),
+        fetchAdSpend(metaSinceDate, metaUntilDate),
+      ]);
+      if (spend !== null) {
+        const conversions = Number(conversionsResult.rows[0].conversions);
+        conversionCost = {
+          spend: spend.spend,
+          currency: spend.currency,
+          conversions,
+          costPerConversion: conversions > 0 ? spend.spend / conversions : null,
+          // Meta Ads' own "Costo por resultado" — spend ÷ conversations STARTED via
+          // the ad, not ÷ actual sales like costPerConversion above (2026-09-16
+          // report: the two read as the same thing but aren't).
+          results: spend.results,
+          costPerResult: spend.costPerResult,
+        };
+      } else {
+        // A period WAS picked (that's the only way this branch runs at all) — null
+        // here means "not configured", not "no range chosen", and the frontend can't
+        // tell those two null/null states apart on its own, so it has to be spelled
+        // out as an error rather than left silent the way "Todo" is.
+        conversionCostError = 'Meta Ads no está configurado — agrégalo en Configuración > Meta Ads';
+      }
+    } catch (err) {
+      // Meta Ads misconfigured/unreachable shouldn't take the whole popup down with
+      // it — the bucket/hour/response-delay numbers above are still good on their own.
+      conversionCostError = err.message;
+    }
+  }
+
+  // Costo por mensaje (2026-09-13) — WhatsApp's own pricing_analytics, confirmed
+  // against Studio F's real WABA: SERVICE (a normal reply inside the customer-opened
+  // 24h window) always costs 0, MARKETING is what's actually billed. Same
+  // period/config-vs-no-range distinction as conversionCost above.
+  let messageCost = null;
+  let messageCostError = null;
+  if (metaSinceDate && metaUntilDate) {
+    const { v: cost, e: err } = await messageCostCall;
+    if (err) messageCostError = err.message;
+    else if (cost !== null) messageCost = cost;
+    else messageCostError = 'WhatsApp no está configurado — agrega un número activo en Configuración > Números de WhatsApp';
+  }
+
+
+  return { conversionCost, conversionCostError, messageCost, messageCostError };
+}
+
+router.get('/pipeline/stats/costs', async (req, res, next) => {
+  try {
+    const { from, to, since, until } = req.query;
+    const key = JSON.stringify([from, to, since, until]);
+    const hit = costsCache.get(key);
+    if (hit && Date.now() - hit.at < COSTS_TTL_MS) return res.json(hit.payload);
+    const payload = await statsCosts({ from, to, since, until });
+    costsCache.set(key, { at: Date.now(), payload });
+    res.json(payload);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
 // Abierto a todos los roles (2026-10-24; antes admin y supervisor): la asesora ve los totales de sus líneas asignadas.
+const STATS_TTL_MS = 60 * 1000;
+const statsCache = new Map();
+
 router.get('/pipeline/stats', async (req, res, next) => {
   try {
+    const cacheKey = JSON.stringify([req.user.role === 'asesor' ? req.user.id : 'all', req.query.from, req.query.to, req.query.since, req.query.until, req.query.lineId]);
+    const cached = statsCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < STATS_TTL_MS) return res.json(cached.payload);
+    const started = Date.now();
     const bucketParams = [];
     const bucketDateClause = buildDateRangeClause(req.query, bucketParams, 'stage_since');
     const historyParams = [];
@@ -1030,14 +1144,14 @@ router.get('/pipeline/stats', async (req, res, next) => {
                count(*) FILTER (WHERE (customer_created_at AT TIME ZONE 'America/Guatemala') >= date_trunc('day', now() AT TIME ZONE 'America/Guatemala')) AS new_today_total
         FROM bucketed GROUP BY bucket
       `, bucketParams),
-      conversationsByHourQuery(req.query, lineIds),
+      timed('por hora', conversationsByHourQuery(req.query, lineIds)),
       pool.query(`
         SELECT round(avg(extract(epoch FROM (t.first_response_at - t.created_at)))/60) AS avg_min
         FROM tickets t JOIN customers c ON c.id = t.customer_id
         WHERE t.first_response_at IS NOT NULL ${responseDateClause} ${parsedLineId ? `AND COALESCE(t.whatsapp_number_id, 1) = $${responseParams.length + 1}` : ''}
       `, parsedLineId ? [...responseParams, parsedLineId] : responseParams),
-      conversationStats(req.query, lineIds),
-      paidByDay(req.query, lineIds),
+      timed('conversaciones', conversationStats(req.query, lineIds)),
+      timed('ventas', paidByDay(req.query, lineIds)),
     ]);
 
     // Zero-fill every bucket/hour a GROUP BY silently drops instead of returning it as
@@ -1069,84 +1183,7 @@ router.get('/pipeline/stats', async (req, res, next) => {
     // slow and not really what "costo de conversión" means without a period attached —
     // so the metric is simply unavailable then, same as it would be for any "since the
     // beginning of time" spend figure.
-    const { from, to, since, until } = req.query;
-    const guatemalaDateOnly = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
-    const metaSinceDate = since ? guatemalaDateOnly(since) : (from ?? null);
-    const metaUntilDate = until ? guatemalaDateOnly(until) : (to ?? (metaSinceDate ? guatemalaDateOnly(new Date().toISOString()) : null));
-
-    let conversionCost = null;
-    let conversionCostError = null;
-    if (metaSinceDate && metaUntilDate) {
-      try {
-        const conversionParams = [];
-        const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'aa.accessed_at');
-        const [conversionsResult, spend] = await Promise.all([
-          // Scoped to customers who actually arrived THROUGH a pauta — a referral-
-          // tagged message anywhere in their thread, same signal dashboard.js's
-          // pautaByDay already keys on — and NOT just "everyone who got marked paid"
-          // this period, or the number answers "how much did we spend per sale
-          // overall" instead of the ad-specific question it's named for (2026-09-13
-          // correction). The referral can predate this period by a lot (the ad click
-          // and the eventual sale are rarely the same day), so it's checked over the
-          // customer's whole history, not narrowed to the same date window as the sale.
-          pool.query(
-            `SELECT count(DISTINCT aa.customer_id) AS conversions
-             FROM access_audit aa
-             JOIN customers c ON c.id = aa.customer_id
-             WHERE aa.action = 'customer_marked_paid' ${conversionDateClause}
-               AND EXISTS (
-                 SELECT 1 FROM n8n_chat_histories h
-                 WHERE h.session_id LIKE c.whatsapp_number || '%'
-                   AND h.message->'additional_kwargs'->'referral' IS NOT NULL
-               )`,
-            conversionParams
-          ),
-          fetchAdSpend(metaSinceDate, metaUntilDate),
-        ]);
-        if (spend !== null) {
-          const conversions = Number(conversionsResult.rows[0].conversions);
-          conversionCost = {
-            spend: spend.spend,
-            currency: spend.currency,
-            conversions,
-            costPerConversion: conversions > 0 ? spend.spend / conversions : null,
-            // Meta Ads' own "Costo por resultado" — spend ÷ conversations STARTED via
-            // the ad, not ÷ actual sales like costPerConversion above (2026-09-16
-            // report: the two read as the same thing but aren't).
-            results: spend.results,
-            costPerResult: spend.costPerResult,
-          };
-        } else {
-          // A period WAS picked (that's the only way this branch runs at all) — null
-          // here means "not configured", not "no range chosen", and the frontend can't
-          // tell those two null/null states apart on its own, so it has to be spelled
-          // out as an error rather than left silent the way "Todo" is.
-          conversionCostError = 'Meta Ads no está configurado — agrégalo en Configuración > Meta Ads';
-        }
-      } catch (err) {
-        // Meta Ads misconfigured/unreachable shouldn't take the whole popup down with
-        // it — the bucket/hour/response-delay numbers above are still good on their own.
-        conversionCostError = err.message;
-      }
-    }
-
-    // Costo por mensaje (2026-09-13) — WhatsApp's own pricing_analytics, confirmed
-    // against Studio F's real WABA: SERVICE (a normal reply inside the customer-opened
-    // 24h window) always costs 0, MARKETING is what's actually billed. Same
-    // period/config-vs-no-range distinction as conversionCost above.
-    let messageCost = null;
-    let messageCostError = null;
-    if (metaSinceDate && metaUntilDate) {
-      try {
-        const cost = await fetchMessageCost(metaSinceDate, metaUntilDate);
-        if (cost !== null) messageCost = cost;
-        else messageCostError = 'WhatsApp no está configurado — agrega un número activo en Configuración > Números de WhatsApp';
-      } catch (err) {
-        messageCostError = err.message;
-      }
-    }
-
-    res.json({
+    const payload = {
       buckets: bucketStats,
       conversations,
       dailyConversations: daily,
@@ -1154,11 +1191,10 @@ router.get('/pipeline/stats', async (req, res, next) => {
       costsAreAccountWide: !!parsedLineId,
       conversationsByHour,
       avgFirstResponseMinutes: responseDelay.rows[0].avg_min === null ? null : Number(responseDelay.rows[0].avg_min),
-      conversionCost,
-      conversionCostError,
-      messageCost,
-      messageCostError,
-    });
+    };
+    statsCache.set(cacheKey, { at: Date.now(), payload });
+    console.log(`[stats] total: ${Date.now() - started} ms`);
+    res.json(payload);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);

@@ -134,6 +134,13 @@ export async function fetchPipelineSearchSummary(q, period = {}) {
 // The "expandir estadísticas" popup — every bucket's total+unread unconditionally, plus
 // messages-by-hour and average first-response time, for the popup's own period filter
 // (from/to/since/until only; no bucket, no q, no unreadOnly — this isn't a board column).
+export async function fetchPipelineStatsCosts(filters = {}) {
+  const params = pipelineFilterParams(filters);
+  const res = await apiFetch(`/api/tickets/pipeline/stats/costs?${params}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Error al cargar los costos');
+  return res.json();
+}
+
 export async function fetchPipelineStats(filters = {}) {
   const params = pipelineFilterParams(filters);
   const res = await apiFetch(`/api/tickets/pipeline/stats?${params}`);
