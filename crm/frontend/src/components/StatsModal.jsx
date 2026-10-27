@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { X, Loader2, Calendar, Mail, Download } from 'lucide-react';
@@ -68,27 +68,36 @@ function StatCard({ label, value, unit, iconBg, iconText, icon: Icon, sub }) {
 
 const money0 = (n) => Math.round(n).toLocaleString('es-GT');
 
-// Atención y ventas por asesora en el periodo. Conversión = ventas de la asesora ÷ conversaciones que atendió.
+// Atención y ventas por asesora en el periodo. Conversión = ventas de la asesora ÷ conversaciones que atendió. Al abrir una asesora se ve su día por día.
 function AdvisorTable({ adv }) {
+  const [open, setOpen] = useState(null);
   if (!adv) return <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>;
   if (adv.failed) return <p className="text-xs text-danger">No se pudo cargar la atención por asesora.</p>;
   if (!adv.advisors.length) return <p className="text-xs text-muted-foreground">Sin atención ni ventas de asesoras en este periodo.</p>;
-  const tot = adv.advisors.reduce((t, a) => ({ c: t.c + a.conversations, m: t.m + a.messages, s: t.s + a.sales, v: t.v + a.salesAmount }), { c: 0, m: 0, s: 0, v: 0 });
+  const tot = adv.advisors.reduce((t, a) => ({ c: t.c + a.conversations, s: t.s + a.sales, v: t.v + a.salesAmount }), { c: 0, s: 0, v: 0 });
   const th = 'px-3 py-2 text-right font-semibold';
   return (
-    <div className="max-h-64 overflow-auto rounded-xl border border-line">
+    <div className="max-h-72 overflow-auto rounded-xl border border-line">
       <table className="w-full min-w-[760px] text-xs">
         <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
-          <tr><th className="px-3 py-2 text-left font-semibold">Asesora</th><th className={th}>Conversaciones atendidas</th><th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Conversión</th></tr>
+          <tr><th className="px-3 py-2 text-left font-semibold">Asesora (toca para ver por día)</th><th className={th}>Conversaciones atendidas</th><th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Conversión</th></tr>
         </thead>
         <tbody>
           {adv.advisors.map((a) => (
-            <tr key={a.advisor} className="border-t border-line-soft tabular-nums">
-              <td className="px-3 py-1.5 text-left text-ink">{a.advisor}</td>
-              <td className="px-3 py-1.5 text-right">{a.conversations}</td>
-              <td className="px-3 py-1.5 text-right font-semibold text-ink">{a.sales}</td><td className="px-3 py-1.5 text-right">{money0(a.salesAmount)}</td>
-              <td className="px-3 py-1.5 text-right text-greige-ink">{money0(a.salesAmount * adv.fxQtoCop)}</td><td className="px-3 py-1.5 text-right text-greige-ink">{pctText(a.conversionRate)}</td>
-            </tr>
+            <Fragment key={a.advisor}>
+              <tr onClick={() => setOpen(open === a.advisor ? null : a.advisor)} className="cursor-pointer border-t border-line-soft tabular-nums hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+                <td className="px-3 py-1.5 text-left text-ink"><span className="mr-1.5 inline-block w-3 text-greige-ink">{open === a.advisor ? '▾' : '▸'}</span>{a.advisor}</td>
+                <td className="px-3 py-1.5 text-right">{a.conversations}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-ink">{a.sales}</td><td className="px-3 py-1.5 text-right">{money0(a.salesAmount)}</td>
+                <td className="px-3 py-1.5 text-right text-greige-ink">{money0(a.salesAmount * adv.fxQtoCop)}</td><td className="px-3 py-1.5 text-right text-greige-ink">{pctText(a.conversionRate)}</td>
+              </tr>
+              {open === a.advisor && adv.daily.filter((d) => d.advisor === a.advisor).map((d) => (
+                <tr key={d.day} className="bg-black/[0.025] tabular-nums text-greige-ink dark:bg-white/[0.03]">
+                  <td className="py-1 pl-9 pr-3 text-left">{d.day.slice(8)}/{d.day.slice(5, 7)}</td><td className="px-3 py-1 text-right">{d.conversations}</td><td className="px-3 py-1 text-right">{d.sales}</td>
+                  <td className="px-3 py-1 text-right">{money0(d.salesAmount)}</td><td className="px-3 py-1 text-right">{money0(d.salesAmount * adv.fxQtoCop)}</td><td className="px-3 py-1 text-right">{pctText(d.conversations > 0 ? d.sales / d.conversations : null)}</td>
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
         <tfoot>
@@ -148,41 +157,70 @@ function SumRow({ label, value, strong, purple }) {
   );
 }
 
-// Conversaciones día por día (lo que el gerente ve en su Excel, pero con lo que el CRM atendió de verdad).
-function DailyTable({ rows }) {
+// Tabla gerencial día por día: la pauta de Meta (Informe de anuncios, mismo filtro de campañas) junto a lo que el CRM atendió y vendió.
+// Una sola pasada: Total gerencial = anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger (sin orgánico de WhatsApp).
+function DailyTable({ rows, ads, fx }) {
+  const loading = ads === null;
+  const metaBy = Object.fromEntries((ads?.daily ?? []).map((d) => [d.date, d]));
+  // Un solo día: Meta no manda serie diaria, el total del periodo es ese día.
+  const metaOf = (day) => (rows.length === 1 ? ads?.totals : metaBy[day]) ?? null;
   const sum = (k) => rows.reduce((n, r) => n + (r[k] ?? 0), 0);
-  const sales = rows.some((r) => r.sales == null) ? null : sum('sales');
-  const COLS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['messenger', 'Messenger'], ['ads', 'Anuncios'], ['broadcast', 'Difusión'], ['organic', 'Orgánico WA'], ['managerTotal', 'Total gerencial']];
-  const th = 'px-3 py-2 text-right font-semibold';
+  const T = ads?.totals;
+  const spendSum = rows.reduce((n, r) => n + (metaOf(r.day)?.spend ?? 0), 0);
+  const money = (n) => (n == null ? '—' : Math.round(n).toLocaleString('es-GT'));
+  const meta = (v, fmt = (x) => x) => (loading ? '…' : v == null ? '—' : fmt(v));
+  const pct1 = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
+  const copOf = (r) => (r.salesAmount ?? 0) * fx;
+  const roas = (r) => { const sp = metaOf(r.day)?.spend; return sp > 0 ? (copOf(r) / sp).toFixed(2) : '—'; };
+  const th = 'whitespace-nowrap px-3 py-2 text-right font-semibold';
+  const td = 'px-3 py-1.5 text-right';
+  const tf = 'px-3 py-2 text-right';
+  const totalRoas = spendSum > 0 ? ((sum('salesAmount') * fx) / spendSum).toFixed(2) : '—';
   return (
     <div className="rounded-xl border border-line">
-      <div className="max-h-72 overflow-auto">
-      <table className="w-full min-w-[900px] text-xs">
-        <thead className="sticky top-0 bg-paper uppercase tracking-wide text-greige-ink">
-          <tr><th className="px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>{COLS.map(([k, l]) => <th key={k} className={th}>{l}</th>)}<th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Cierre</th></tr>
+      <div className="max-h-80 overflow-auto">
+      <table className="w-full min-w-[1900px] text-xs">
+        <thead className="sticky top-0 z-10 bg-paper uppercase tracking-wide text-greige-ink">
+          <tr>
+            <th className="sticky left-0 bg-paper px-3 py-2 text-left font-semibold">Día</th><th className={th}>Conversaciones</th>
+            <th className={th}>Clics</th><th className={th}>CPC</th><th className={th}>CTR</th><th className={th}>% conv. pauta</th><th className={th}>Mensajes Meta</th><th className={th}>Inversión</th>
+            <th className={th}>Difusiones enviadas</th><th className={th}>Leídos</th><th className={th}>% lectura</th><th className={th}>Resp. difusión</th>
+            <th className={th}>Anuncios WA</th><th className={th}>Orgánico WA</th><th className={th}>Instagram</th><th className={th}>Messenger</th><th className={th}>Total gerencial</th>
+            <th className={th}>Ventas</th><th className={th}>Valor (Q)</th><th className={th}>Valor (COP)</th><th className={th}>Cierre</th><th className={th}>ROAS</th>
+          </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.day} className="border-t border-line-soft tabular-nums">
-              <td className="px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
-              <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total}</td>
-              {COLS.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right ${k === 'managerTotal' ? 'font-semibold text-ink' : 'text-greige-ink'}`}>{r[k]}</td>)}
-              <td className="px-3 py-1.5 text-right text-ink">{r.sales ?? '—'}</td>
-              <td className="px-3 py-1.5 text-right text-greige-ink">{r.salesAmount ? Math.round(r.salesAmount).toLocaleString('es-GT') : '—'}</td>
-              <td className="px-3 py-1.5 text-right text-greige-ink">{r.sales != null && r.managerTotal > 0 ? pctText(r.sales / r.managerTotal) : '—'}</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const m = metaOf(r.day);
+            return (
+              <tr key={r.day} className="border-t border-line-soft tabular-nums">
+                <td className="sticky left-0 bg-paper px-3 py-1.5 text-left text-ink">{r.day.slice(8)}/{r.day.slice(5, 7)}</td>
+                <td className={`${td} font-semibold text-ink`}>{r.total}</td>
+                <td className={td}>{meta(m?.linkClicks, money)}</td><td className={td}>{meta(m?.cpc, money)}</td><td className={td}>{meta(m?.ctr, pct1)}</td><td className={td}>{meta(m?.conversionPct, pct1)}</td>
+                <td className={td}>{meta(m?.conversations)}</td><td className={td}>{meta(m?.spend, money)}</td>
+                <td className={td}>{r.broadcastSent ?? 0}</td><td className={td}>{r.broadcastRead ?? 0}</td><td className={td}>{r.broadcastSent > 0 ? pctText(r.broadcastRead / r.broadcastSent) : '—'}</td><td className={td}>{r.broadcast}</td>
+                <td className={td}>{r.ads}</td><td className={`${td} text-greige-ink`}>{r.organic}</td><td className={td}>{r.instagram}</td><td className={td}>{r.messenger}</td>
+                <td className={`${td} font-semibold text-ink`}>{r.managerTotal}</td>
+                <td className={`${td} text-ink`}>{r.sales ?? 0}</td><td className={td}>{money(r.salesAmount)}</td><td className={td}>{money(copOf(r))}</td>
+                <td className={td}>{r.managerTotal > 0 ? pctText((r.sales ?? 0) / r.managerTotal) : '—'}</td><td className={td}>{meta(roas(r) === '—' ? null : roas(r))}</td>
+              </tr>
+            );
+          })}
         </tbody>
-        <tfoot>
-          <tr className="border-t border-line bg-black/[0.03] font-bold tabular-nums text-ink dark:bg-white/[0.04]">
-            <td className="px-3 py-2 text-left">Suma de días</td><td className="px-3 py-2 text-right">{sum('total')}</td>
-            {COLS.map(([k]) => <td key={k} className="px-3 py-2 text-right">{sum(k)}</td>)}
-            <td className="px-3 py-2 text-right">{sales ?? '—'}</td><td className="px-3 py-2 text-right">{Math.round(sum('salesAmount')).toLocaleString('es-GT')}</td><td className="px-3 py-2 text-right">{sales != null && sum('managerTotal') > 0 ? pctText(sales / sum('managerTotal')) : '—'}</td>
+        <tfoot className="sticky bottom-0 bg-paper">
+          <tr className="border-t border-line font-bold tabular-nums text-ink">
+            <td className="sticky left-0 bg-paper px-3 py-2 text-left">Total del periodo</td><td className={tf}>{sum('total')}</td>
+            <td className={tf}>{meta(T?.linkClicks, money)}</td><td className={tf}>{meta(T?.cpc, money)}</td><td className={tf}>{meta(T?.ctr, pct1)}</td><td className={tf}>{meta(T?.conversionPct, pct1)}</td>
+            <td className={tf}>{meta(T?.conversations)}</td><td className={tf}>{meta(T ? T.spend : null, money)}</td>
+            <td className={tf}>{sum('broadcastSent')}</td><td className={tf}>{sum('broadcastRead')}</td><td className={tf}>{sum('broadcastSent') > 0 ? pctText(sum('broadcastRead') / sum('broadcastSent')) : '—'}</td><td className={tf}>{sum('broadcast')}</td>
+            <td className={tf}>{sum('ads')}</td><td className={tf}>{sum('organic')}</td><td className={tf}>{sum('instagram')}</td><td className={tf}>{sum('messenger')}</td><td className={tf}>{sum('managerTotal')}</td>
+            <td className={tf}>{sum('sales')}</td><td className={tf}>{money(sum('salesAmount'))}</td><td className={tf}>{money(sum('salesAmount') * fx)}</td>
+            <td className={tf}>{sum('managerTotal') > 0 ? pctText(sum('sales') / sum('managerTotal')) : '—'}</td><td className={tf}>{totalRoas}</td>
           </tr>
         </tfoot>
       </table>
       </div>
-      <p className="border-t border-line-soft px-3 py-2 text-[11px] text-muted-foreground">Un cliente que escribe dos días distintos cuenta en cada día; por eso la suma de días puede ser mayor que las conversaciones del resumen.</p>
+      <p className="border-t border-line-soft px-3 py-2 text-[11px] text-muted-foreground">Pauta (clics, CPC, CTR, mensajes e inversión) = Informe de anuncios de Meta. Conversaciones = clientes que escriben cada día, sumados día por día; un cliente que escribe dos días cuenta en cada uno. ROAS = valor vendido en COP ÷ inversión.</p>
     </div>
   );
 }
@@ -233,6 +271,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
 
   const [data, setData] = useState(null);
   const [adv, setAdv] = useState(null);
+  const [ads, setAds] = useState(null); // pauta de Meta por día (Informe de anuncios), para la tabla gerencial
   const [costs, setCosts] = useState(null); // los costos vienen de Meta y tardan más: la pantalla se arma sin esperarlos
   const [error, setError] = useState(null);
   useEffect(() => {
@@ -241,6 +280,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     setData(null);
     setCosts(null);
     setAdv(null);
+    setAds(null);
     setError(null);
     fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined })
       .then((d) => { if (current) setData(d); })
@@ -248,6 +288,9 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     fetchPipelineStatsAdvisors({ from: dateFrom, to: dateTo, lineId: line || undefined })
       .then((a) => { if (current) setAdv(a); })
       .catch(() => { if (current) setAdv({ advisors: [], daily: [], fxQtoCop: 420, failed: true }); });
+    fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign' })
+      .then((r) => { if (current) setAds(r); })
+      .catch(() => { if (current) setAds({ failed: true, daily: [], totals: null }); });
     fetchPipelineStatsCosts({ from: dateFrom, to: dateTo })
       .then((c) => { if (current) setCosts(c); })
       .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
@@ -565,10 +608,10 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                   </div>
                   <AdvisorTable adv={adv} />
                 </div>
-                {data.dailyConversations?.length > 1 && (
+                {data.dailyConversations?.length > 0 && (
                   <div className="lg:col-span-4">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Conversaciones por día</p>
-                    <DailyTable rows={data.dailyConversations} />
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Tabla gerencial día por día</p>
+                    <DailyTable rows={data.dailyConversations} ads={ads} fx={adv?.fxQtoCop ?? 420} />
                   </div>
                 )}
               </div>

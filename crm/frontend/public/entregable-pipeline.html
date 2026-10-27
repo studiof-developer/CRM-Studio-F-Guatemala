@@ -419,7 +419,7 @@
         <div class="kpi-mini">
           <div>
             <div class="kpi-mini-label">Fecha de Entrega</div>
-            <div class="kpi-mini-sub">3 terminados · 5 en validación · 2 desarrollando</div>
+            <div class="kpi-mini-sub">5 terminados · 4 en validación · 1 desarrollando</div>
           </div>
           <div class="kpi-mini-val" style="color: var(--info);">28 Oct</div>
         </div>
@@ -435,6 +435,17 @@
 
       <div class="explain-banner">
         <strong>¿Qué implica este desarrollo?</strong> Acomodar las estadísticas del Pipeline para que reemplacen el cálculo estático en Excel por la operación real en vivo del CRM, permitiendo filtrar por línea y por temporalidad, corrigiendo el bloque de "Resumen" y generando el reporte diario y totalizado de mensajes por canal, atención por asesora, ventas y porcentaje de conversión.
+      </div>
+
+      <div class="explain-banner" style="margin-top:12px">
+        <strong>Definiciones que usan las cifras:</strong>
+        <ul class="sub-bullets">
+          <li><strong>Conversación:</strong> un cliente que escribe en un día (WhatsApp, Instagram o Messenger); se suma día por día, como cuenta Meta.</li>
+          <li><strong>Total gerencial (Total de todos los canales):</strong> conversaciones por anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No incluye el orgánico de WhatsApp, que se muestra aparte.</li>
+          <li><strong>Difusiones:</strong> solo las de marketing; las plantillas de aviso (novedad de pedido, seguimiento de asesor, nuevo chat) no cuentan.</li>
+          <li><strong>Ventas y valor:</strong> las del reporte de ventas del CRM (suma de las asesoras de la línea elegida). Valor en COP con tipo de cambio configurable (420 por defecto).</li>
+          <li><strong>Pauta (clics, CPC, CTR, inversión):</strong> Informe de anuncios de Meta, campañas que contienen “mensajes”. <strong>ROAS</strong> = valor vendido en COP ÷ inversión.</li>
+        </ul>
       </div>
 
       <div class="item-list">
@@ -505,18 +516,18 @@
           <div class="item-left">
             <span class="box-icon icon-info">1.4</span>
             <div class="item-text">
-              <p class="item-name">Conteo de Cuántos Mensajes y Conversaciones Ingresaron por Día</p>
+              <p class="item-name">Conteo de Cuántas Conversaciones Ingresaron por Día</p>
               <p class="item-mini-desc">Registro diario exacto de todo el tráfico entrante real recibido en el CRM dentro del periodo consultado.</p>
               <ul class="sub-bullets">
-                <li>Desglose fecha por fecha (ej. del 1 al 31 de octubre) mostrando cuántos mensajes y conversaciones ingresaron cada día y su suma totalizada.</li>
+                <li>Desglose fecha por fecha (ej. del 1 al 31 de octubre) mostrando cuántas conversaciones ingresaron cada día, por canal y por origen, y su suma. Un cliente que escribe dos días distintos cuenta en cada día (la misma base con la que cuenta Meta).</li>
                 <li>Diferenciación entre ingresos provenientes de <strong>Anuncios Pagos (Meta Ads)</strong>, respuestas a <strong>Difusiones Pagas</strong> e ingresos <strong>Orgánicos / Directos</strong>.</li>
               </ul>
             </div>
           </div>
           <div class="item-right">
-            <span class="status-pill status-val">En validación</span>
+            <span class="status-pill status-done">Terminado</span>
             <span class="pct-pill pill-info">Ingresos x Día</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
           </div>
         </div>
 
@@ -525,10 +536,10 @@
           <div class="item-left">
             <span class="box-icon icon-info">1.5</span>
             <div class="item-text">
-              <p class="item-name">Conteo de Cuántos Mensajes Atendió Cada Asesora por Día</p>
+              <p class="item-name">Conteo de Cuántas Conversaciones Atendió Cada Asesora</p>
               <p class="item-mini-desc">Medición real de la carga operativa atendida por cada asesora en cada fecha del periodo elegido.</p>
               <ul class="sub-bullets">
-                <li>Muestra por día y en el acumulado del periodo cuántos mensajes y conversaciones gestionó efectivamente cada asesora desde el CRM.</li>
+                <li>Muestra en el acumulado del periodo cuántas conversaciones gestionó cada asesora; al tocar su nombre se abre el detalle <strong>día por día</strong>. La asesora solo ve sus propias cifras.</li>
                 <li>Incluye tanto la atención realizada en las líneas de <strong>WhatsApp</strong> como las respuestas enviadas en <strong>Instagram y Messenger</strong> (excluyendo envíos masivos automáticos de difusiones).</li>
               </ul>
             </div>
@@ -568,7 +579,7 @@
               <p class="item-name">Porcentaje de Conversión por Día y Totalizado</p>
               <p class="item-mini-desc">Cálculo automático de la efectividad comercial diaria, por asesora y global del periodo.</p>
               <ul class="sub-bullets">
-                <li><strong>% de Conversión Diario del Equipo:</strong> Ventas cerradas del día ÷ Total de conversaciones/mensajes ingresados y atendidos en el día.</li>
+                <li><strong>% de Conversión Diario del Equipo:</strong> Ventas cerradas del día ÷ Total gerencial del día (anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger).</li>
                 <li><strong>% de Conversión Individual por Asesora:</strong> Ventas de la asesora ÷ Conversaciones atendidas por esa asesora en el mismo periodo.</li>
                 <li><strong>Fila Totalizada:</strong> Tasa de cierre consolidada de todo el rango de fechas y cálculo de ROAS frente a la inversión en pauta.</li>
               </ul>
@@ -586,19 +597,19 @@
           <div class="item-left">
             <span class="box-icon icon-info">1.8</span>
             <div class="item-text">
-              <p class="item-name">Desglose de Mensajes por Canal: WhatsApp, Instagram y Messenger</p>
-              <p class="item-mini-desc">Separación clara del volumen recibido y atendido en cada canal de comunicación dentro del periodo seleccionado.</p>
+              <p class="item-name">Desglose de Conversaciones por Canal: WhatsApp, Instagram y Messenger</p>
+              <p class="item-mini-desc">Separación clara de las conversaciones recibidas en cada canal de comunicación dentro del periodo seleccionado.</p>
               <ul class="sub-bullets">
-                <li><strong>Cuántos mensajes por WhatsApp:</strong> Discriminado para <em>Studio F Online</em> y <em>Basshert</em> (anuncios pagos, difusiones y orgánico).</li>
-                <li><strong>Cuántos mensajes por Instagram:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
-                <li><strong>Cuántos mensajes por Messenger:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
+                <li><strong>Cuántas conversaciones por WhatsApp:</strong> Discriminado para <em>Studio F Online</em> y <em>Basshert</em> (anuncios pagos, difusiones y orgánico).</li>
+                <li><strong>Cuántas conversaciones por Instagram:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
+                <li><strong>Cuántas conversaciones por Messenger:</strong> Conteo diario y totalizado para <em>Studio F Online</em>.</li>
               </ul>
             </div>
           </div>
           <div class="item-right">
-            <span class="status-pill status-val">En validación</span>
+            <span class="status-pill status-done">Terminado</span>
             <span class="pct-pill pill-info">WA · IG · FB</span>
-            <div class="mini-track"><div class="mini-fill-info" style="width:85%"></div></div>
+            <div class="mini-track"><div class="mini-fill-info" style="width:100%"></div></div>
           </div>
         </div>
 
@@ -608,16 +619,16 @@
             <span class="box-icon icon-ok">1.9</span>
             <div class="item-text">
               <p class="item-name">Tabla Consolidada (Formato Excel Gerencial) y Descarga Directa</p>
-              <p class="item-mini-desc">Integración de la tabla tipo Excel de Octubre dentro del modal de Estadísticas del Pipeline con botón de exportación.</p>
+              <p class="item-mini-desc">La tabla tipo Excel de Octubre ya vive dentro de las Estadísticas del Pipeline (sección “Conversaciones por día”): todo se consulta en el CRM; la descarga en Excel queda disponible como respaldo.</p>
               <ul class="sub-bullets">
                 <li>Visualización en pantalla y descarga en <strong>Excel (.xlsx)</strong> con todas las columnas gerenciales: <em>Fecha, Clics, CPC, CTR, % Conversión Pauta, Mensajes WA, Inversión, Difusiones (Enviadas/Leídos/Respuestas), Instagram, Messenger, Total Omnicanal, Atención y Ventas por Asesora, Tasa de Cierre y ROAS</em>.</li>
               </ul>
             </div>
           </div>
           <div class="item-right">
-            <span class="status-pill status-dev">Desarrollando</span>
+            <span class="status-pill status-val">En validación</span>
             <span class="pct-pill pill-ok">Reporte + Excel</span>
-            <div class="mini-track"><div class="mini-fill-ok" style="width:55%"></div></div>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:85%"></div></div>
           </div>
         </div>
 
@@ -629,16 +640,16 @@
               <p class="item-name">Cronograma de Desarrollo y Entrega en Producción (28 de Octubre)</p>
               <p class="item-mini-desc">Proceso de implementación técnica, cruce de bases de datos y auditoría de las cifras reales de Octubre.</p>
               <ul class="sub-bullets">
-                <li><strong>Día 1 (Lun 26 Oct):</strong> Ajuste de filtros de periodo ("Hoy" por defecto, retiro de "Todo"), selector de línea (Studio F Online / Basshert), columna "Resumen" dinámica y consultas backend omnicanal.</li>
-                <li><strong>Día 2 (Mar 27 Oct):</strong> Construcción de la tabla diaria y por asesora en Estadísticas del Pipeline, cálculo de % de conversión y exportador Excel.</li>
-                <li><strong>Entrega Final (Mié 28 Oct 2026):</strong> Validación completa con los datos reales de Octubre y despliegue final en producción.</li>
+                <li><strong>Día 1 (Lun 26 Oct) — hecho:</strong> Ajuste de filtros de periodo ("Hoy" por defecto, retiro de "Todo"), selector de línea (Studio F Online / Basshert), columna "Resumen" dinámica y consultas backend omnicanal.</li>
+                <li><strong>Día 2 (Mar 27 Oct) — hecho:</strong> Construcción de la tabla diaria y por asesora en Estadísticas del Pipeline, cálculo de % de conversión y exportador Excel.</li>
+                <li><strong>Entrega Final (Mié 28 Oct 2026):</strong> Validación completa con los datos reales de Octubre (comparación diaria contra el reporte de ventas y la pauta de Meta) y cierre de las definiciones pendientes.</li>
               </ul>
             </div>
           </div>
           <div class="item-right">
             <span class="status-pill status-dev">Desarrollando</span>
             <span class="pct-pill pill-ok">28 Oct 2026</span>
-            <div class="mini-track"><div class="mini-fill-ok" style="width:55%"></div></div>
+            <div class="mini-track"><div class="mini-fill-ok" style="width:70%"></div></div>
           </div>
         </div>
 
@@ -653,11 +664,11 @@
         ['1.1', 'Filtro por Línea de Negocio (Studio F Online y Basshert)', 'Selector directo en las Estadísticas del Pipeline para ver Todas las líneas o discriminar entre Studio F Online y Basshert en todas las métricas.', 'Filtro de Línea'],
         ['1.2', 'Ajuste del Selector de Periodo ("Hoy" por Defecto, sin "Todo")', 'Se retira la opción "Todo"; inicia por defecto en "Hoy" y actualiza todas las métricas al elegir Ayer, Última semana, Mes o Periodo personalizado.', 'Temporalidad'],
         ['1.3', 'Columna "Resumen" 100% Dinámica según Periodo y Línea', 'El bloque Resumen se actualiza con los datos reales del rango de fechas y línea elegida (nuevas, activas, recurrentes y pauta Meta), sin ocultar chats de más de 24h en consultas históricas.', 'Resumen Vivo'],
-        ['1.4', 'Cuántos Mensajes y Conversaciones Ingresaron por Día', 'Conteo diario y totalizado de todos los ingresos reales en el CRM (separando Anuncios Pagos a WhatsApp, Difusiones Pagas y Orgánico).', 'Ingresos x Día'],
-        ['1.5', 'Cuántos Mensajes Atendió Cada Asesora por Día', 'Medición diaria y acumulada de los mensajes y conversaciones atendidas por cada asesora en WhatsApp, Instagram y Messenger.', 'Atención x Día'],
+        ['1.4', 'Cuántas Conversaciones Ingresaron por Día', 'Conteo diario y totalizado de todas las conversaciones reales en el CRM (separando Anuncios Pagos a WhatsApp, Difusiones Pagas y Orgánico).', 'Ingresos x Día'],
+        ['1.5', 'Cuántas Conversaciones Atendió Cada Asesora', 'Medición acumulada y día por día de las conversaciones atendidas por cada asesora en WhatsApp, Instagram y Messenger.', 'Atención x Día'],
         ['1.6', 'Cuántas Ventas Realizó Cada Asesora por Día', 'Cantidad de ventas confirmadas y monto vendido por cada asesora en cada fecha del periodo seleccionado y su total acumulado.', 'Ventas x Día'],
         ['1.7', 'Porcentaje de Conversión por Día y Totalizado', 'Cálculo automático de la tasa de cierre por día, por asesora y totalizada del periodo (Ventas cerradas / Conversaciones atendidas), más ROAS.', '% Conversión'],
-        ['1.8', 'Desglose por Canal: WhatsApp, Instagram y Messenger', 'Conteo diario y totalizado de mensajes por WhatsApp (Studio F Online y Basshert), mensajes por Instagram y mensajes por Messenger (Studio F Online).', 'WA / IG / FB'],
+        ['1.8', 'Desglose por Canal: WhatsApp, Instagram y Messenger', 'Conteo diario y totalizado de conversaciones por WhatsApp (Studio F Online y Basshert), por Instagram y por Messenger.', 'WA / IG / FB'],
         ['1.9', 'Tabla Consolidada (Estilo Excel Gerencial) y Exportación', 'Vista unificada en el modal del Pipeline y descarga en Excel (.xlsx) con el cuadro completo del periodo.', 'Reporte + Excel'],
         ['1.10', 'Proceso de Implementación y Fecha de Entrega', 'Desarrollo de backend/frontend (26 y 27 de octubre) y entrega auditada en producción el Miércoles 28 de Octubre de 2026.', 'Entrega 28 Oct']
       ];
