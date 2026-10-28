@@ -47,6 +47,11 @@ function isValidPhraseList(v) {
 // reading/writing an arbitrary key, and gives each one a shape check before it's
 // trusted.
 const SETTINGS = {
+  stats_line_ad_filters: {
+    label: 'Campañas de cada línea (Estadísticas)',
+    description: 'Texto que debe contener el nombre de las campañas de cada línea, por id de línea. Con él, el gasto de pauta de las Estadísticas es el de esa línea y no el de toda la cuenta.',
+    validate: (v) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([k, t]) => /^[0-9]+$/.test(k) && typeof t === 'string' && t.length <= 80),
+  },
   ocr_context_hours: {
     label: 'Ventana para combinar comprobantes divididos en el OCR',
     description: 'Si un cliente manda dos fotos de pago separadas para completar un mismo total (ej. pagó en dos partes), cuántas horas hacia atrás se suman entre sí. No afecta cuánto tarda un cliente en pagar después de que se le cotiza un precio — eso ya no tiene límite de tiempo.',
