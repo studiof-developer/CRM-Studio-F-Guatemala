@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { X, Loader2, Calendar, Mail, Download } from 'lucide-react';
+import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp } from 'lucide-react';
+import { ChannelIcon } from '../lib/channelIcons.jsx';
 import * as XLSX from 'xlsx';
 import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
 import { showError } from './Toast.jsx';
@@ -146,6 +147,64 @@ async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Periodo: `${dateFrom} a ${dateTo}`, Línea: line || 'Todas', 'Tipo de cambio Q→COP': fx, Nota: 'Pauta (clics, costo, inversión, mensajes Meta) = Meta con el filtro de campaña del Informe de anuncios. Lo demás = CRM.' }]), 'Notas');
     XLSX.writeFile(wb, `estadisticas-${dateFrom}_${dateTo}.xlsx`);
   } catch (err) { showError(err.message || 'No se pudo generar el Excel'); }
+}
+
+// Resumen en iconos y colores: cuántos escribieron, por qué canal, de dónde vinieron y cómo cerraron. Las explicaciones largas quedan en el texto que sale al pasar el mouse.
+const ORIGINS = [['ads', 'Anuncios', '#4338ca'], ['broadcast', 'Difusión', '#f59e0b'], ['organic', 'Orgánico', '#10b981'], ['social', 'Redes', '#ec4899']];
+
+function Tile({ icon: Icon, tone, value, label, title, big }) {
+  return (
+    <div title={title} className="flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={14} /></span>
+      <span className="min-w-0 leading-tight"><span className={`block font-semibold tabular-nums text-ink ${big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
+    </div>
+  );
+}
+
+function SummaryPanel({ data, costs, adv }) {
+  const c = data.conversations;
+  const orig = ORIGINS.map(([k, label, color]) => ({ k, label, color, n: c.byOrigin[k] ?? 0 }));
+  const originTotal = orig.reduce((n, o) => n + o.n, 0);
+  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div title="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta)" className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><MessagesSquare size={20} /></span>
+        <span className="leading-tight"><span className="block text-3xl font-bold tabular-nums text-ink">{c.conversations}</span><span className="block text-xs text-greige-ink">conversaciones</span></span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {['whatsapp', 'instagram', 'messenger'].map((ch) => (
+          <div key={ch} title={ch === 'whatsapp' ? 'WhatsApp' : ch === 'instagram' ? 'Instagram' : 'Messenger'} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm">
+            <ChannelIcon channel={ch} size={26} />
+            <span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
+          {originTotal > 0 && orig.filter((o) => o.n > 0).map((o) => <span key={o.k} title={`${o.label}: ${o.n}`} style={{ width: `${(o.n / originTotal) * 100}%`, background: o.color }} />)}
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+          {orig.map((o) => (
+            <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>
+          ))}
+        </div>
+      </div>
+
+      <Tile icon={Target} tone="bg-accent text-white" big value={c.managerTotal} label="Total gerencial" title="Anuncios de WhatsApp + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker" />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" title={`Clientes distintos: ${c.people}`} />
+        <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" title={`Clientes distintos: ${c.people}`} />
+        <Tile icon={ShoppingBag} tone="bg-success/10 text-success" value={c.sales ?? '—'} label="Ventas" title="Ventas del reporte de ventas (suma de las asesoras de la línea elegida)" />
+        <Tile icon={Wallet} tone="bg-warning/10 text-warning" value={c.salesAmount ? `Q ${Math.round(c.salesAmount).toLocaleString('es-GT')}` : '—'} label="Vendido" />
+        <Tile icon={Percent} tone="bg-accent-soft text-accent" value={pctText(c.closeRate)} label="Cierre" title="Ventas ÷ total gerencial" />
+        <Tile icon={TrendingUp} tone="bg-purple/10 text-purple" value={roas} label="ROAS" title="Valor vendido en COP ÷ inversión de pauta" />
+      </div>
+    </div>
+  );
 }
 
 function SumRow({ label, value, strong, purple }) {
@@ -392,42 +451,12 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
-              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[230px_240px_340px_1fr]">
+              <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_240px_340px_1fr]">
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen del periodo</p>
                     <div className="flex flex-col gap-2">
-                      <StatCard
-                        label="Conversaciones"
-                        value={data.conversations.conversations}
-                        iconBg="bg-accent-soft"
-                        iconText="text-accent"
-                        icon={Calendar}
-                        sub="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta). WhatsApp, Instagram y Messenger"
-                      />
-                      <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
-                        <SumRow label="Total gerencial" value={data.conversations.managerTotal} strong />
-                        <p className="text-[10px] leading-tight text-muted-foreground">Anuncios + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker.</p>
-                        <SumRow label="Clientes distintos" value={data.conversations.people} />
-                        <SumRow label="• Nuevos" value={data.conversations.newPeople} />
-                        <SumRow label="• Recurrentes" value={data.conversations.returning} />
-                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por canal</p>
-                        <SumRow label="WhatsApp" value={data.conversations.byChannel.whatsapp} />
-                        <SumRow label="Instagram" value={data.conversations.byChannel.instagram} />
-                        <SumRow label="Messenger" value={data.conversations.byChannel.messenger} />
-                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por origen</p>
-                        <SumRow label="Anuncios Meta" value={data.conversations.byOrigin.ads} purple />
-                        <SumRow label="Respuesta a difusión" value={data.conversations.byOrigin.broadcast} />
-                        <SumRow label="Orgánico de WhatsApp" value={data.conversations.byOrigin.organic} />
-                        <SumRow label="Instagram y Messenger" value={data.conversations.byOrigin.social} />
-                        <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
-                        <SumRow label="Ventas confirmadas" value={data.conversations.sales ?? '—'} strong />
-                        <SumRow label="Valor vendido" value={data.conversations.salesAmount ? `Q ${Math.round(data.conversations.salesAmount).toLocaleString('es-GT')}` : '—'} />
-                        <SumRow label="Tasa de cierre" value={pctText(data.conversations.closeRate)} />
-                        <SumRow label="ROAS" value={costs?.conversionCost?.spend > 0 ? ((data.conversations.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…'} />
-                        <p className="text-[10px] leading-tight text-muted-foreground">Valor vendido en COP ÷ inversión de pauta.</p>
-                        <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial.</p>
-                      </div>
+                      <SummaryPanel data={data} costs={costs} adv={adv} />
                       <StatCard
                         label="No leídos"
                         value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
