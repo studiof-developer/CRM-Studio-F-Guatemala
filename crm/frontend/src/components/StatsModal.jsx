@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp } from 'lucide-react';
+import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp, CircleDollarSign, CheckCircle2, Clock, LayoutGrid, List } from 'lucide-react';
 import { ChannelIcon } from '../lib/channelIcons.jsx';
 import * as XLSX from 'xlsx';
 import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
@@ -207,6 +207,90 @@ function SummaryPanel({ data, costs, adv }) {
   );
 }
 
+// Estados en cuadritos: ícono de la columna, cantidad y un punto rojo con los no leídos.
+function StatesGrid({ buckets }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {buckets.map((b) => {
+        const meta = metaFor(b.bucket);
+        const Icon = meta.icon;
+        return (
+          <div key={b.bucket} title={b.unreadTotal > 0 ? `${b.unreadTotal} no leído(s)` : undefined} className="relative flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}><Icon size={14} /></span>
+            <span className="min-w-0 leading-tight"><span className="block text-base font-semibold tabular-nums text-ink">{b.total}</span><span className="block truncate text-[11px] text-greige-ink">{meta.label}</span></span>
+            {b.unreadTotal > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">{b.unreadTotal}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Costos en cuadritos; las explicaciones largas salen al pasar el mouse.
+function CostsVisual({ costs }) {
+  if (!costs) return <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>;
+  const cc = costs.conversionCost; const mc = costs.messageCost;
+  const fm = (n, cur) => (n == null ? '—' : formatMoney(n, cur));
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Lo que Meta cuenta como resultado (conversaciones iniciadas) y lo que el CRM confirma como venta real. No tienen por qué coincidir.">Pauta{cc?.nameFilter ? ` · “${cc.nameFilter}”` : ''}</p>
+        {cc ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={fm(cc.spend, cc.currency)} label="Gasto en pauta" title="Igual que el Informe de anuncios (campañas filtradas por nombre)" />
+            <Tile icon={MessagesSquare} tone="bg-info/10 text-info" value={cc.results} label="Conversaciones" title="Conversaciones iniciadas según Meta" />
+            <Tile icon={Target} tone="bg-warning/10 text-warning" value={fm(cc.costPerResult, cc.currency)} label="Por resultado" title="Costo por conversación iniciada (igual a Meta)" />
+            <Tile icon={CheckCircle2} tone="bg-success/10 text-success" value={cc.conversions} label="Pagados de pauta" title="Clientes que llegaron por anuncio y pagaron, confirmados en el CRM" />
+            <Tile icon={Wallet} tone="bg-accent-soft text-accent" value={cc.costPerConversion != null ? fm(cc.costPerConversion, cc.currency) : 'Sin ventas'} label="Por venta" title="Gasto de pauta ÷ pagados de pauta" />
+          </div>
+        ) : costs.conversionCostError ? <p className="text-xs text-danger">No se pudo leer Meta Ads: {costs.conversionCostError}</p> : <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>}
+      </div>
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Lo que WhatsApp cobra por cada mensaje enviado: facturación de la plataforma, no gasto en pauta. Es de toda la cuenta de WhatsApp; no se separa por línea.">Mensajes de WhatsApp</p>
+        {mc ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={fm(mc.totalCost, mc.currency)} label="Gasto acumulado" />
+              <Tile icon={MessagesSquare} tone="bg-warning/10 text-warning" value={mc.billableVolume} label="Mensajes cobrados" />
+              <Tile icon={Target} tone="bg-info/10 text-info" value={mc.avgCostPerMessage != null ? fm(mc.avgCostPerMessage, mc.currency) : '—'} label="Promedio por mensaje" />
+            </div>
+            {mc.byCategory.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {mc.byCategory.map((c) => <span key={c.category} className="rounded-lg border border-line bg-paper px-2 py-1 text-[11px] text-greige-ink">{PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, mc.currency)}/msg` : 'gratis'}</span>)}
+              </div>
+            )}
+          </>
+        ) : costs.messageCostError ? <p className="text-xs text-danger">No se pudo leer WhatsApp: {costs.messageCostError}</p> : <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>}
+      </div>
+    </div>
+  );
+}
+
+// Vista detallada del resumen: la lista de siempre, con números y texto.
+function SummaryDetail({ data, costs, adv }) {
+  const c = data.conversations;
+  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
+      <SumRow label="Conversaciones" value={c.conversations} strong />
+      <SumRow label="Total gerencial" value={c.managerTotal} strong />
+      <p className="text-[10px] leading-tight text-muted-foreground">Anuncios + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker.</p>
+      <SumRow label="Clientes distintos" value={c.people} />
+      <SumRow label="• Nuevos" value={c.newPeople} />
+      <SumRow label="• Recurrentes" value={c.returning} />
+      <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por canal</p>
+      <SumRow label="WhatsApp" value={c.byChannel.whatsapp} /><SumRow label="Instagram" value={c.byChannel.instagram} /><SumRow label="Messenger" value={c.byChannel.messenger} />
+      <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por origen</p>
+      <SumRow label="Anuncios Meta" value={c.byOrigin.ads} purple /><SumRow label="Respuesta a difusión" value={c.byOrigin.broadcast} />
+      <SumRow label="Orgánico de WhatsApp" value={c.byOrigin.organic} /><SumRow label="Instagram y Messenger" value={c.byOrigin.social} />
+      <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
+      <SumRow label="Ventas confirmadas" value={c.sales ?? '—'} strong /><SumRow label="Valor vendido" value={c.salesAmount ? `Q ${Math.round(c.salesAmount).toLocaleString('es-GT')}` : '—'} />
+      <SumRow label="Tasa de cierre" value={pctText(c.closeRate)} /><SumRow label="ROAS" value={roas} />
+      <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial. ROAS = valor en COP ÷ inversión de pauta.</p>
+    </div>
+  );
+}
+
 function SumRow({ label, value, strong, purple }) {
   return (
     <div className={`flex items-center justify-between ${purple ? 'text-purple-600 dark:text-purple-400' : ''}`}>
@@ -295,6 +379,9 @@ const pctText = (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
 
 export default function StatsModal({ open, onClose, lineId, lineOptions = [], role }) {
   const [periodPreset, setPeriodPreset] = useState('hoy');
+  // Vista del resumen, los estados y los costos: 'visual' (cuadritos e íconos) o 'detalle' (listas con texto). Se recuerda en este navegador.
+  const [view, setViewState] = useState(() => { try { return localStorage.getItem('statsView') === 'detalle' ? 'detalle' : 'visual'; } catch { return 'visual'; } });
+  const setView = (v) => { setViewState(v); try { localStorage.setItem('statsView', v); } catch { /* solo esta sesión */ } };
   const [line, setLine] = useState(lineId ?? '');
   useEffect(() => { setLine(lineId ?? ''); }, [lineId]);
   const todayStr = guatemalaToday();
@@ -425,6 +512,11 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
               <h3 className="text-sm font-semibold text-ink">Estadísticas del pipeline</h3>
               <div className="flex flex-wrap items-center gap-2">
                 {lineOptions.length > 2 && <Select value={line} onChange={setLine} options={lineOptions} className="w-44 shrink-0" />}
+                <div role="group" aria-label="Vista" className="flex shrink-0 rounded-lg border border-line bg-paper p-0.5 shadow-sm">
+                  {[['visual', 'Visual', LayoutGrid], ['detalle', 'Detallada', List]].map(([k, l, I]) => (
+                    <button key={k} type="button" onClick={() => setView(k)} aria-pressed={view === k} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${view === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}><I size={13} />{l}</button>
+                  ))}
+                </div>
                 <Select value={periodPreset} onChange={setPeriodPreset} options={STATS_PERIODS} className="w-44 shrink-0" />
                 {periodPreset === 'mes' && (
                   <div className="flex shrink-0 items-center gap-1 rounded-lg border border-line bg-paper px-1.5 py-1.5 shadow-sm">
@@ -456,7 +548,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen del periodo</p>
                     <div className="flex flex-col gap-2">
-                      <SummaryPanel data={data} costs={costs} adv={adv} />
+                      {view === 'visual' ? <SummaryPanel data={data} costs={costs} adv={adv} /> : <SummaryDetail data={data} costs={costs} adv={adv} />}
                       <StatCard
                         label="No leídos"
                         value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
@@ -478,6 +570,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Todos los estados</p>
+                    {view === 'visual' ? <StatesGrid buckets={data.buckets} /> : (
                     <div className="flex flex-col gap-2">
                       {data.buckets.map((b) => {
                         const meta = metaFor(b.bucket);
@@ -487,21 +580,26 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         );
                       })}
                     </div>
+                    )}
                   </div>
 
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Demora en primera respuesta</p>
-                    <StatCard
+                    {view === 'visual'
+                      ? <Tile icon={Clock} tone="bg-warning/10 text-warning" value={formatMinutes(data.avgFirstResponseMinutes)} label="demora en responder" title="Promedio de la primera respuesta en el periodo" />
+                      : <StatCard
                       label="promedio en el periodo"
                       value={formatMinutes(data.avgFirstResponseMinutes)}
                       iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
                       iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
                       icon={PIPELINE_ICON_MAP.Clock}
-                    />
+                    />}
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-6">
+                  {view === 'visual' ? <CostsVisual costs={costs} /> : (
+                  <>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo de conversión</p>
                     {costs?.conversionCost?.nameFilter && <p className="mt-0.5 text-[11px] text-muted-foreground">Pauta: campañas que contienen “{costs.conversionCost.nameFilter}”, igual que el Informe de anuncios.</p>}
@@ -612,6 +710,8 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                       <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>
                     )}
                   </div>
+                </>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-4">
