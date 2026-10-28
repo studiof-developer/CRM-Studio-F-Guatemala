@@ -43,14 +43,25 @@ function formatMoney(amount, currency) {
   }
 }
 
-// Moneda de lo que se muestra con dinero (costos, vendido, rentabilidad): COP o USD. Los montos de pauta ya vienen en COP; las ventas, en quetzales (tipo de cambio configurado).
+// Moneda de lo que se muestra con dinero: Quetzales (por defecto), COP o USD. Los montos de pauta vienen en COP y las ventas en quetzales;
+// el tipo de cambio Q→COP es el configurado y el del dólar el del día. Menos de 1.000 lleva dos decimales (un costo por mensaje de Q 4,46 no se redondea a Q 4).
 function makeMoney(cur, usdCop, fx) {
-  const out = (cop) => (cur === 'USD'
-    ? `USD ${(cop / usdCop).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : `COP ${Math.round(cop).toLocaleString('es-GT')}`);
-  return { cur, cop: out, q: (quetzales) => out((quetzales ?? 0) * fx), acct: (n, currency) => (currency && currency !== 'COP' ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(n) : out(n)) };
+  const fromCop = (cop) => (cur === 'COP' ? cop : cur === 'Q' ? cop / fx : cop / usdCop);
+  const prefix = cur === 'Q' ? 'Q' : cur;
+  const fmt = (n, compact) => {
+    const v = Math.abs(n);
+    if (compact && v >= 1e6) return `${prefix} ${(n / 1e6).toFixed(2)} M`;
+    const dec = v < 1000 ? 2 : 0;
+    return `${prefix} ${n.toLocaleString(cur === 'USD' ? 'en-US' : 'es-GT', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
+  };
+  const out = (cop) => fmt(fromCop(cop ?? 0));
+  const short = (cop) => fmt(fromCop(cop ?? 0), true);
+  return {
+    cur, cop: out, short, q: (quetzales) => out((quetzales ?? 0) * fx), qShort: (quetzales) => short((quetzales ?? 0) * fx),
+    acct: (n, currency) => (currency && currency !== 'COP' ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(n) : out(n)),
+  };
 }
-const MoneyCtx = createContext(makeMoney('COP', 4000, 420));
+const MoneyCtx = createContext(makeMoney('Q', 4000, 420));
 const useMoney = () => useContext(MoneyCtx);
 
 function metaFor(key) {
@@ -167,7 +178,7 @@ function Tile({ icon: Icon, tone, value, label, title, big }) {
   return (
     <div title={title} className="flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={14} /></span>
-      <span className="min-w-0 leading-tight"><span className={`block font-semibold tabular-nums text-ink ${big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
+      <span className="min-w-0 flex-1 leading-tight"><span title={typeof value === 'string' ? value : undefined} className={`block truncate font-semibold tabular-nums text-ink ${big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
     </div>
   );
 }
@@ -333,14 +344,14 @@ function SummaryDetail({ data, costs, adv }) {
 }
 
 // Ventas por asesora: dona con el valor vendido de cada una y, debajo, su ranking. Es lo mismo que el panel de ventas del Dashboard, aquí a la vista.
-function SalesByAdvisor({ adv, sellers, pieRef }) {
+function SalesByAdvisor({ adv, sellers, pieRef, bare }) {
   const money = useMoney();
   if (!adv) return <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>;
   const total = sellers.reduce((n, a) => n + a.salesAmount, 0);
   const count = sellers.reduce((n, a) => n + a.sales, 0);
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Valor vendido por cada asesora en el periodo elegido (ventas confirmadas del reporte de ventas)">Ventas por asesora</p>
+      {!bare && <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Valor vendido por cada asesora en el periodo elegido (ventas confirmadas del reporte de ventas)">Ventas por asesora</p>}
       {sellers.length === 0 ? <p className="rounded-xl border border-dashed border-line p-6 text-center text-xs text-greige-ink">Sin ventas confirmadas en este periodo.</p> : (
         <>
           <div className="relative mx-auto h-52 w-52">
@@ -370,33 +381,156 @@ function PlatformMark({ platform, size = 22 }) {
   return <span style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-[#1877F2] text-[13px] font-bold leading-none text-white">{platform === 'facebook' ? 'f' : '+'}</span>;
 }
 
-// Rentabilidad de la pauta: lo que Meta gastó contra lo que el CRM vendió. Con el margen guardado se calcula la ganancia estimada; sin él, solo lo que queda después de pagar la pauta.
+// Rentabilidad: lo que queda después de pagar la pauta y, con el margen guardado, la ganancia estimada y el ROAS de equilibrio (el ROAS y el vendido ya están arriba).
 function Profitability({ data, costs, adv }) {
   const money = useMoney();
   const spend = costs?.conversionCost?.spend;
   const fx = adv?.fxQtoCop ?? 420;
   const soldCop = (data.conversations.salesAmount ?? 0) * fx;
-  if (!(spend > 0)) return null;
-  const roas = soldCop / spend;
-  const goal = adv?.roasGoal ?? 10;
+  if (!(spend > 0) || !(soldCop > 0)) return null;
   const left = soldCop - spend;
   const m = adv?.grossMarginPct;
   const profit = m ? soldCop * (m / 100) - spend : null;
-  const cop = money.cop;
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Valor vendido en COP (con el tipo de cambio configurado) comparado con lo invertido en pauta">Rentabilidad de la pauta</p>
-      <div className="rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
-        <div className="flex items-baseline justify-between"><span className="text-2xl font-bold tabular-nums text-ink">{roas.toFixed(2)}</span><span className="text-[11px] text-greige-ink" title="ROAS = cuántos pesos vendes por cada peso invertido en pauta. 6 significa que por cada $1 invertido se vendieron $6.">ROAS · meta {goal}</span></div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10"><span className={`block h-full rounded-full ${roas >= goal ? 'bg-success' : 'bg-accent'}`} style={{ width: `${Math.min(100, (roas / goal) * 100)}%` }} /></div>
-        <p className="mt-1 text-[11px] text-greige-ink">{roas >= goal ? 'Meta cumplida' : `Faltan ${(goal - roas).toFixed(2)} para la meta`}</p>
+      <p className="mb-1.5 text-[11px] font-medium text-greige-ink" title="Vendido menos lo invertido en pauta. Todavía no descuenta el costo de las prendas: eso lo hace la ganancia estimada, si el margen está definido.">Rentabilidad</p>
+      <div className="grid grid-cols-2 gap-2">
+        <Tile icon={TrendingUp} tone="bg-accent-soft text-accent" value={money.short(left)} label={`Tras pauta ${Math.round((left / soldCop) * 100)}%`} title={`${money.cop(left)}: vendido menos pauta, antes del costo de las prendas`} />
+        {costs?.adSales?.amount > 0 && <Tile icon={ShoppingBag} tone="bg-purple/10 text-purple" value={money.qShort(costs.adSales.amount)} label="Ventas anuncios" title={`${costs.adSales.count} ventas de clientes que llegaron por un anuncio`} />}
+        {profit != null && <Tile icon={Wallet} tone={profit >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} value={money.short(profit)} label="Ganancia est." title={`${money.cop(profit)}: vendido × ${m}% de margen − pauta`} />}
+        {m && <Tile icon={Target} tone="bg-warning/10 text-warning" value={(100 / m).toFixed(1)} label="ROAS equilibrio" title="Por debajo de este ROAS la pauta pierde dinero (1 ÷ margen)" />}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Tile icon={ShoppingBag} tone="bg-success/10 text-success" value={cop(soldCop)} label="Vendido" title="Valor vendido en el periodo, en COP" />
-        <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={cop(spend)} label="Invertido en pauta" />
-        <Tile icon={TrendingUp} tone="bg-accent-soft text-accent" value={cop(left)} label={`Después de pauta · ${Math.round((left / soldCop) * 100)}%`} title="Vendido menos pauta, antes del costo de las prendas" />
-        {costs?.adSales?.amount > 0 && <Tile icon={Target} tone="bg-purple/10 text-purple" value={((costs.adSales.amount * fx) / spend).toFixed(2)} label="ROAS solo anuncios" title={`Ventas de clientes que llegaron por anuncio (${costs.adSales.count}): ${money.q(costs.adSales.amount)}, entre la inversión. Es la lectura más exacta de lo que deja la pauta.`} />}
-        {profit != null && <Tile icon={Wallet} tone={profit >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} value={cop(profit)} label={`Ganancia estimada (margen ${m}%)`} title={`Vendido × ${m}% − pauta. ROAS de equilibrio: ${(100 / m).toFixed(1)}`} />}
+      {!m && <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">Define el margen bruto para ver la ganancia estimada y el ROAS de equilibrio.</p>}
+    </div>
+  );
+}
+
+// Una cifra grande de la franja de arriba: la respuesta primero (cuánto se vendió, cuánto se gastó, qué regresó).
+function Kpi({ icon: Icon, tone, label, value, sub, bar, barGood, title }) {
+  return (
+    <div title={title} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-paper px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-medium text-greige-ink"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={13} /></span><span className="truncate">{label}</span></div>
+      <span className="truncate text-2xl font-bold tabular-nums leading-tight text-ink">{value}</span>
+      {bar != null && <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10"><span className={`block h-full rounded-full ${barGood ? 'bg-success' : 'bg-accent'}`} style={{ width: `${Math.max(2, Math.min(100, bar * 100))}%` }} /></div>}
+      <span className="truncate text-[11px] text-greige-ink">{sub}</span>
+    </div>
+  );
+}
+
+function Panel({ title, hint, children }) {
+  return (
+    <section className="min-w-0 rounded-2xl border border-line bg-paper/60 p-4">
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-greige-ink" title={hint}>{title}</h4>
+      <div className="flex flex-col gap-3">{children}</div>
+    </section>
+  );
+}
+
+// Atención: cuántos escribieron, por dónde, de dónde vinieron y qué tan rápido se les responde.
+function AttentionPanel({ data, costs }) {
+  const c = data.conversations;
+  const orig = ORIGINS.map(([k, label, color]) => ({ k, label, color, n: c.byOrigin[k] ?? 0 }));
+  const originTotal = orig.reduce((n, o) => n + o.n, 0);
+  const unread = data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((n, b) => n + b.unreadTotal, 0);
+  const pending = data.buckets.find((b) => b.bucket === 'pendiente')?.total ?? 0;
+  return (
+    <>
+      <div title="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta)" className="flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><MessagesSquare size={22} /></span>
+        <span className="leading-tight"><span className="block text-3xl font-bold tabular-nums text-ink">{c.conversations}</span><span className="block text-xs text-greige-ink">conversaciones · {c.people} clientes distintos</span></span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {['whatsapp', 'instagram', 'messenger'].map((ch) => (
+          <div key={ch} title={ch} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm"><ChannelIcon channel={ch} size={26} /><span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span></div>
+        ))}
+      </div>
+      <div>
+        <p className="mb-1.5 text-[11px] font-medium text-greige-ink">¿De dónde llegaron?</p>
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">{originTotal > 0 && orig.filter((o) => o.n > 0).map((o) => <span key={o.k} title={`${o.label}: ${o.n}`} style={{ width: `${(o.n / originTotal) * 100}%`, background: o.color }} />)}</div>
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">{orig.map((o) => <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>)}</div>
+      </div>
+      {costs?.byPlatform?.length > 0 && (
+        <div title="Mensajes de anuncios según la plataforma donde se mostró el anuncio (dato de Meta). El anuncio lleva a WhatsApp, pero se ve en Instagram o Facebook.">
+          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Mensajes de anuncios vistos en</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">{costs.byPlatform.filter((p) => p.conversations > 0).map((p) => <span key={p.platform} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p.platform} size={18} /><b className="tabular-nums text-ink">{p.conversations}</b></span>)}</div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Tile icon={Target} tone="bg-accent text-white" value={c.managerTotal} label="Total gerencial" title="Anuncios de WhatsApp + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker" />
+        <Tile icon={Clock} tone="bg-warning/10 text-warning" value={formatMinutes(data.avgFirstResponseMinutes)} label="Demora" title="Demora promedio en la primera respuesta, en el periodo" />
+        <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" title="Clientes que escriben por primera vez" />
+        <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" />
+        <Tile icon={Mail} tone="bg-warning/10 text-warning" value={unread} label="Sin leer" />
+        <Tile icon={Clock} tone="bg-danger/10 text-danger" value={pending} label="Sin atender" />
+      </div>
+    </>
+  );
+}
+
+// Pauta y rentabilidad: dónde se mostraron los anuncios, qué regresó cada peso y lo que cobra WhatsApp por los mensajes.
+function PautaPanel({ data, costs, adv, line }) {
+  const money = useMoney();
+  if (!costs) return <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>;
+  const mc = costs.messageCost;
+  return (
+    <>
+      {line && <p className="rounded-lg bg-warning/15 px-2.5 py-2 text-[11px] leading-snug text-warning">Meta no separa el gasto de pauta por línea: la inversión, el ROAS y los costos de esta sección son de toda la cuenta.</p>}
+      {costs.byPlatform?.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11px] font-medium text-greige-ink" title="Dónde se mostraron los anuncios que trajeron los mensajes (dato de Meta)">Pauta por plataforma</p>
+          <div className="flex flex-col gap-1.5">
+            {costs.byPlatform.map((p) => (
+              <div key={p.platform} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+                <PlatformMark platform={p.platform} />
+                <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-xs font-medium text-ink">{PLATFORMS[p.platform] ?? p.platform}</span><span className="block truncate text-[11px] text-greige-ink">{p.conversations} mensajes{p.costPerConversation != null ? ` · ${money.cop(p.costPerConversation)} c/u` : ''}</span></span>
+                <b className="shrink-0 text-xs tabular-nums text-ink" title={money.cop(p.spend)}>{money.short(p.spend)}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <Profitability data={data} costs={costs} adv={adv} />
+      <div>
+        <p className="mb-1.5 text-[11px] font-medium text-greige-ink" title="Lo que WhatsApp cobra por cada mensaje enviado: facturación de la plataforma, no gasto en pauta. Es de toda la cuenta de WhatsApp.">Mensajes de WhatsApp (lo que cobra la plataforma)</p>
+        {mc ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={money.acct(mc.totalCost, mc.currency)} label="Gasto acumulado" />
+            <Tile icon={MessagesSquare} tone="bg-warning/10 text-warning" value={mc.billableVolume} label="Mensajes cobrados" />
+          </div>
+        ) : costs.messageCostError ? <p className="text-xs text-danger">No se pudo leer WhatsApp: {costs.messageCostError}</p> : <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>}
+      </div>
+    </>
+  );
+}
+
+// Vista de gerencia: primero el resultado (ventas, inversión, retorno), después el detalle en cuatro bloques.
+function ManagerView({ data, costs, adv, sellers, pieRef, line }) {
+  const money = useMoney();
+  const c = data.conversations;
+  const cc = costs?.conversionCost;
+  const fx = adv?.fxQtoCop ?? 420;
+  const goal = adv?.roasGoal ?? 5;
+  const spend = cc?.spend;
+  const roas = spend > 0 ? (c.salesAmount * fx) / spend : null;
+  const roasAds = spend > 0 && costs?.adSales?.amount > 0 ? (costs.adSales.amount * fx) / spend : null;
+  const adCount = costs?.adSales?.count;
+  const cac = spend > 0 ? (adCount > 0 ? spend / adCount : cc?.costPerConversation) : null;
+  const wait = costs ? '—' : '…';
+  return (
+    <div className="mt-5 flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Kpi icon={ShoppingBag} tone="bg-success/10 text-success" label="Ventas" value={money.qShort(c.salesAmount)} sub={`${c.sales ?? 0} ventas · ticket ${money.qShort((c.salesAmount ?? 0) / Math.max(c.sales ?? 0, 1))}`} title={money.q(c.salesAmount)} />
+        <Kpi icon={CircleDollarSign} tone="bg-danger/10 text-danger" label="Inversión en pauta" value={spend != null ? money.short(spend) : wait} sub={cc ? `${cc.results} mensajes de anuncios` : ' '} title={spend != null ? money.cop(spend) : undefined} />
+        <Kpi icon={TrendingUp} tone="bg-accent-soft text-accent" label={`ROAS · meta ${goal}`} value={roas != null ? roas.toFixed(2) : wait} bar={roas != null ? roas / goal : null} barGood={roas >= goal} sub={roasAds != null ? `Solo ventas de anuncios: ${roasAds.toFixed(2)}` : 'Vendido ÷ inversión'} title="Cuántos pesos se vendieron por cada peso invertido en pauta. El ROAS 'solo anuncios' cuenta únicamente ventas de clientes que llegaron por un anuncio." />
+        <Kpi icon={MessagesSquare} tone="bg-warning/10 text-warning" label="Costo por mensaje" value={cc?.costPerResult != null ? money.cop(cc.costPerResult) : wait} sub="cada mensaje que llega por anuncio" title="Costo por resultado de Meta: lo que cuesta cada conversación iniciada" />
+        <Kpi icon={Wallet} tone="bg-purple/10 text-purple" label="Costo por venta" value={cac != null ? money.short(cac) : wait} sub={adCount > 0 ? `${adCount} ventas de anuncios` : 'pauta ÷ ventas'} title={cac != null ? money.cop(cac) : undefined} />
+        <Kpi icon={Percent} tone="bg-accent-soft text-accent" label="Cierre" value={pctText(c.closeRate)} sub={`${c.sales ?? 0} ventas de ${c.managerTotal} conversaciones`} title="Ventas ÷ total gerencial (anuncios + difusión + Instagram + Messenger)" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Panel title="Atención"><AttentionPanel data={data} costs={costs} /></Panel>
+        <Panel title="Embudo de ventas" hint="Dónde está cada cliente ahora: frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos"><StatesGrid buckets={data.buckets} /></Panel>
+        <Panel title="Pauta y rentabilidad"><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
+        <Panel title="Ventas por asesora"><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
       </div>
     </div>
   );
@@ -556,7 +690,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dateFrom, dateTo, line]);
 
-  const [cur, setCurState] = useState(() => { try { return localStorage.getItem('statsCurrency') === 'USD' ? 'USD' : 'COP'; } catch { return 'COP'; } });
+  const [cur, setCurState] = useState(() => { try { const v = localStorage.getItem('statsCurrency'); return v === 'USD' || v === 'COP' ? v : 'Q'; } catch { return 'Q'; } });
   const setCur = (v) => { setCurState(v); try { localStorage.setItem('statsCurrency', v); } catch { /* solo esta sesión */ } };
   const money = makeMoney(cur, adv?.usdCop ?? 4000, adv?.fxQtoCop ?? 420);
 
@@ -586,7 +720,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ type: 'spring', bounce: 0.12, duration: 0.22 }}
-            className="glass-card w-full max-w-7xl max-h-[92vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
+            className="glass-card w-full max-w-[1560px] max-h-[94vh] overflow-y-auto rounded-2xl border border-line bg-paper p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -599,7 +733,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                   ))}
                 </div>
                 <div role="group" aria-label="Moneda" className="flex shrink-0 rounded-lg border border-line bg-paper p-0.5 shadow-sm">
-                  {['COP', 'USD'].map((k) => (
+                  {['Q', 'COP', 'USD'].map((k) => (
                     <button key={k} type="button" onClick={() => setCur(k)} aria-pressed={cur === k} className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${cur === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}>{k}</button>
                   ))}
                 </div>
@@ -629,7 +763,11 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
               <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
             )}
             {data && (
+              <>
+              {view === 'visual' && <ManagerView data={data} costs={costs} adv={adv} sellers={sellers} pieRef={pieRef} line={line} />}
               <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_240px_340px_1fr]">
+                {view === 'detalle' && (
+                  <>
                 <div className="flex flex-col gap-6">
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen del periodo</p>
@@ -801,6 +939,8 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 </div>
 
                 <SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} />
+                  </>
+                )}
                 <div className="lg:col-span-4">
                   <button type="button" onClick={() => setShowDetail((v) => !v)} className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:underline">{showDetail ? 'Ocultar el detalle por asesora y por día' : 'Ver el detalle por asesora y por día'}</button>
                 </div>
@@ -822,6 +962,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
   </>
                 )}
               </div>
+              </>
             )}
           </motion.div>
         </motion.div>
