@@ -20,7 +20,7 @@ const RATE_TTL_MS = 6 * 60 * 60 * 1000; // a reporting figure doesn't need a liv
 let cachedRate = null;
 let cachedRateAt = 0;
 
-async function getUsdToCopRate() {
+export async function getUsdToCopRate() {
   if (cachedRate && Date.now() - cachedRateAt < RATE_TTL_MS) return cachedRate;
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD');

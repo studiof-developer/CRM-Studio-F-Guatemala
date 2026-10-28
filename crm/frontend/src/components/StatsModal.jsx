@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, DoughnutController, ArcElement } from 'chart.js';
 import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp, CircleDollarSign, CheckCircle2, Clock, LayoutGrid, List } from 'lucide-react';
@@ -42,6 +42,16 @@ function formatMoney(amount, currency) {
     return `${new Intl.NumberFormat('es-GT').format(amount)} ${currency}`;
   }
 }
+
+// Moneda de lo que se muestra con dinero (costos, vendido, rentabilidad): COP o USD. Los montos de pauta ya vienen en COP; las ventas, en quetzales (tipo de cambio configurado).
+function makeMoney(cur, usdCop, fx) {
+  const out = (cop) => (cur === 'USD'
+    ? `USD ${(cop / usdCop).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `COP ${Math.round(cop).toLocaleString('es-GT')}`);
+  return { cur, cop: out, q: (quetzales) => out((quetzales ?? 0) * fx), acct: (n, currency) => (currency && currency !== 'COP' ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(n) : out(n)) };
+}
+const MoneyCtx = createContext(makeMoney('COP', 4000, 420));
+const useMoney = () => useContext(MoneyCtx);
 
 function metaFor(key) {
   const cfg = DEFAULT_COLUMN_META[key];
@@ -163,6 +173,7 @@ function Tile({ icon: Icon, tone, value, label, title, big }) {
 }
 
 function SummaryPanel({ data, costs, adv }) {
+  const money = useMoney();
   const c = data.conversations;
   const orig = ORIGINS.map(([k, label, color]) => ({ k, label, color, n: c.byOrigin[k] ?? 0 }));
   const originTotal = orig.reduce((n, o) => n + o.n, 0);
@@ -209,7 +220,7 @@ function SummaryPanel({ data, costs, adv }) {
         <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" title={`Clientes distintos: ${c.people}`} />
         <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" title={`Clientes distintos: ${c.people}`} />
         <Tile icon={ShoppingBag} tone="bg-success/10 text-success" value={c.sales ?? '—'} label="Ventas" title="Ventas del reporte de ventas (suma de las asesoras de la línea elegida)" />
-        <Tile icon={Wallet} tone="bg-warning/10 text-warning" value={c.salesAmount ? `Q ${Math.round(c.salesAmount).toLocaleString('es-GT')}` : '—'} label="Vendido" />
+        <Tile icon={Wallet} tone="bg-warning/10 text-warning" value={c.salesAmount ? money.q(c.salesAmount) : '—'} label="Vendido" />
         <Tile icon={Percent} tone="bg-accent-soft text-accent" value={pctText(c.closeRate)} label="Cierre" title="Ventas ÷ total gerencial" />
         <Tile icon={TrendingUp} tone="bg-purple/10 text-purple" value={roas} label="ROAS" title="Valor vendido en COP ÷ inversión de pauta" />
       </div>
@@ -241,9 +252,10 @@ function StatesGrid({ buckets }) {
 
 // Costos en cuadritos; las explicaciones largas salen al pasar el mouse.
 function CostsVisual({ costs, data, adv }) {
+  const money = useMoney();
   if (!costs) return <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>;
   const cc = costs.conversionCost; const mc = costs.messageCost;
-  const fm = (n, cur) => (n == null ? '—' : formatMoney(n, cur));
+  const fm = (n, cur) => (n == null ? '—' : money.acct(n, cur));
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -266,7 +278,7 @@ function CostsVisual({ costs, data, adv }) {
               <div key={p.platform} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
                 <PlatformMark platform={p.platform} />
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-xs font-medium text-ink">{PLATFORMS[p.platform] ?? p.platform}</span><span className="block text-[11px] text-greige-ink">{p.conversations} mensajes{p.costPerConversation != null ? ` · COP ${Math.round(p.costPerConversation).toLocaleString('es-GT')} c/u` : ''}</span></span>
-                <b className="shrink-0 text-xs tabular-nums text-ink">COP {Math.round(p.spend).toLocaleString('es-GT')}</b>
+                <b className="shrink-0 text-xs tabular-nums text-ink">{money.cop(p.spend)}</b>
               </div>
             ))}
           </div>
@@ -284,7 +296,7 @@ function CostsVisual({ costs, data, adv }) {
             </div>
             {mc.byCategory.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {mc.byCategory.map((c) => <span key={c.category} className="rounded-lg border border-line bg-paper px-2 py-1 text-[11px] text-greige-ink">{PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, mc.currency)}/msg` : 'gratis'}</span>)}
+                {mc.byCategory.map((c) => <span key={c.category} className="rounded-lg border border-line bg-paper px-2 py-1 text-[11px] text-greige-ink">{PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${money.acct(c.costPerMessage, mc.currency)}/msg` : 'gratis'}</span>)}
               </div>
             )}
           </>
@@ -296,6 +308,7 @@ function CostsVisual({ costs, data, adv }) {
 
 // Vista detallada del resumen: la lista de siempre, con números y texto.
 function SummaryDetail({ data, costs, adv }) {
+  const money = useMoney();
   const c = data.conversations;
   const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
   return (
@@ -312,7 +325,7 @@ function SummaryDetail({ data, costs, adv }) {
       <SumRow label="Anuncios Meta" value={c.byOrigin.ads} purple /><SumRow label="Respuesta a difusión" value={c.byOrigin.broadcast} />
       <SumRow label="Orgánico de WhatsApp" value={c.byOrigin.organic} /><SumRow label="Instagram y Messenger" value={c.byOrigin.social} />
       <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
-      <SumRow label="Ventas confirmadas" value={c.sales ?? '—'} strong /><SumRow label="Valor vendido" value={c.salesAmount ? `Q ${Math.round(c.salesAmount).toLocaleString('es-GT')}` : '—'} />
+      <SumRow label="Ventas confirmadas" value={c.sales ?? '—'} strong /><SumRow label="Valor vendido" value={c.salesAmount ? money.q(c.salesAmount) : '—'} />
       <SumRow label="Tasa de cierre" value={pctText(c.closeRate)} /><SumRow label="ROAS" value={roas} />
       <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial. ROAS = valor en COP ÷ inversión de pauta.</p>
     </div>
@@ -321,6 +334,7 @@ function SummaryDetail({ data, costs, adv }) {
 
 // Ventas por asesora: dona con el valor vendido de cada una y, debajo, su ranking. Es lo mismo que el panel de ventas del Dashboard, aquí a la vista.
 function SalesByAdvisor({ adv, sellers, pieRef }) {
+  const money = useMoney();
   if (!adv) return <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>;
   const total = sellers.reduce((n, a) => n + a.salesAmount, 0);
   const count = sellers.reduce((n, a) => n + a.sales, 0);
@@ -331,18 +345,18 @@ function SalesByAdvisor({ adv, sellers, pieRef }) {
         <>
           <div className="relative mx-auto h-52 w-52">
             <canvas ref={pieRef} role="img" aria-label="Valor vendido por asesora" />
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight"><span className="text-lg font-bold tabular-nums text-ink">Q {Math.round(total).toLocaleString('es-GT')}</span><span className="text-[11px] text-greige-ink">{count} ventas</span></div>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight"><span className="text-base font-bold tabular-nums text-ink">{money.q(total)}</span><span className="text-[11px] text-greige-ink">{count} ventas</span></div>
           </div>
           <ul className="mt-3 flex flex-col gap-1.5">
             {sellers.map((a, i) => (
               <li key={a.advisor} className="flex items-center gap-2 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs shadow-sm">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                 <span className="min-w-0 flex-1 truncate font-medium text-ink" title={a.advisor}>{a.advisor}</span>
-                <span className="shrink-0 text-right leading-tight"><b className="block tabular-nums text-ink">Q {Math.round(a.salesAmount).toLocaleString('es-GT')}</b><span className="text-[10px] text-greige-ink">{a.sales} ventas · {Math.round((a.salesAmount / total) * 100)}%</span></span>
+                <span className="shrink-0 text-right leading-tight"><b className="block tabular-nums text-ink">{money.q(a.salesAmount)}</b><span className="text-[10px] text-greige-ink">{a.sales} ventas · {Math.round((a.salesAmount / total) * 100)}%</span></span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] text-muted-foreground">Ticket promedio: Q {Math.round(total / Math.max(count, 1)).toLocaleString('es-GT')} por venta.</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">Ticket promedio: {money.q(total / Math.max(count, 1))} por venta.</p>
         </>
       )}
     </div>
@@ -358,6 +372,7 @@ function PlatformMark({ platform, size = 22 }) {
 
 // Rentabilidad de la pauta: lo que Meta gastó contra lo que el CRM vendió. Con el margen guardado se calcula la ganancia estimada; sin él, solo lo que queda después de pagar la pauta.
 function Profitability({ data, costs, adv }) {
+  const money = useMoney();
   const spend = costs?.conversionCost?.spend;
   const fx = adv?.fxQtoCop ?? 420;
   const soldCop = (data.conversations.salesAmount ?? 0) * fx;
@@ -367,12 +382,12 @@ function Profitability({ data, costs, adv }) {
   const left = soldCop - spend;
   const m = adv?.grossMarginPct;
   const profit = m ? soldCop * (m / 100) - spend : null;
-  const cop = (n) => `COP ${Math.round(n).toLocaleString('es-GT')}`;
+  const cop = money.cop;
   return (
     <div>
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Valor vendido en COP (con el tipo de cambio configurado) comparado con lo invertido en pauta">Rentabilidad de la pauta</p>
       <div className="rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
-        <div className="flex items-baseline justify-between"><span className="text-2xl font-bold tabular-nums text-ink">{roas.toFixed(2)}</span><span className="text-[11px] text-greige-ink">ROAS · meta {goal}</span></div>
+        <div className="flex items-baseline justify-between"><span className="text-2xl font-bold tabular-nums text-ink">{roas.toFixed(2)}</span><span className="text-[11px] text-greige-ink" title="ROAS = cuántos pesos vendes por cada peso invertido en pauta. 6 significa que por cada $1 invertido se vendieron $6.">ROAS · meta {goal}</span></div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10"><span className={`block h-full rounded-full ${roas >= goal ? 'bg-success' : 'bg-accent'}`} style={{ width: `${Math.min(100, (roas / goal) * 100)}%` }} /></div>
         <p className="mt-1 text-[11px] text-greige-ink">{roas >= goal ? 'Meta cumplida' : `Faltan ${(goal - roas).toFixed(2)} para la meta`}</p>
       </div>
@@ -380,6 +395,7 @@ function Profitability({ data, costs, adv }) {
         <Tile icon={ShoppingBag} tone="bg-success/10 text-success" value={cop(soldCop)} label="Vendido" title="Valor vendido en el periodo, en COP" />
         <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={cop(spend)} label="Invertido en pauta" />
         <Tile icon={TrendingUp} tone="bg-accent-soft text-accent" value={cop(left)} label={`Después de pauta · ${Math.round((left / soldCop) * 100)}%`} title="Vendido menos pauta, antes del costo de las prendas" />
+        {costs?.adSales?.amount > 0 && <Tile icon={Target} tone="bg-purple/10 text-purple" value={((costs.adSales.amount * fx) / spend).toFixed(2)} label="ROAS solo anuncios" title={`Ventas de clientes que llegaron por anuncio (${costs.adSales.count}): ${money.q(costs.adSales.amount)}, entre la inversión. Es la lectura más exacta de lo que deja la pauta.`} />}
         {profit != null && <Tile icon={Wallet} tone={profit >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} value={cop(profit)} label={`Ganancia estimada (margen ${m}%)`} title={`Vendido × ${m}% − pauta. ROAS de equilibrio: ${(100 / m).toFixed(1)}`} />}
       </div>
     </div>
@@ -540,16 +556,21 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dateFrom, dateTo, line]);
 
+  const [cur, setCurState] = useState(() => { try { return localStorage.getItem('statsCurrency') === 'USD' ? 'USD' : 'COP'; } catch { return 'COP'; } });
+  const setCur = (v) => { setCurState(v); try { localStorage.setItem('statsCurrency', v); } catch { /* solo esta sesión */ } };
+  const money = makeMoney(cur, adv?.usdCop ?? 4000, adv?.fxQtoCop ?? 420);
+
   // Ventas por asesora en el periodo (valor vendido): la misma información del panel de ventas del Dashboard.
   const pieRef = useRef(null);
   const sellers = (adv?.advisors ?? []).filter((a) => a.salesAmount > 0);
   useChart(pieRef, () => ({
     type: 'doughnut',
     data: { labels: sellers.map((a) => a.advisor), datasets: [{ data: sellers.map((a) => a.salesAmount), backgroundColor: sellers.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]), borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: Q ${Math.round(c.parsed).toLocaleString('es-GT')}` } } } },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money.q(c.parsed)}` } } } },
   }), [adv]);
 
   return (
+    <MoneyCtx.Provider value={money}>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -575,6 +596,11 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 <div role="group" aria-label="Vista" className="flex shrink-0 rounded-lg border border-line bg-paper p-0.5 shadow-sm">
                   {[['visual', 'Visual', LayoutGrid], ['detalle', 'Detallada', List]].map(([k, l, I]) => (
                     <button key={k} type="button" onClick={() => setView(k)} aria-pressed={view === k} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${view === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}><I size={13} />{l}</button>
+                  ))}
+                </div>
+                <div role="group" aria-label="Moneda" className="flex shrink-0 rounded-lg border border-line bg-paper p-0.5 shadow-sm">
+                  {['COP', 'USD'].map((k) => (
+                    <button key={k} type="button" onClick={() => setCur(k)} aria-pressed={cur === k} className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${cur === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}>{k}</button>
                   ))}
                 </div>
                 <Select value={periodPreset} onChange={setPeriodPreset} options={STATS_PERIODS} className="w-44 shrink-0" />
@@ -671,7 +697,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                           <div className="flex flex-wrap gap-2">
                             <StatCard
                               label="gasto en pauta"
-                              value={formatMoney(costs?.conversionCost.spend, costs?.conversionCost.currency)}
+                              value={money.acct(costs?.conversionCost.spend, costs?.conversionCost.currency)}
                               iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -685,7 +711,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                             />
                             <StatCard
                               label="por resultado"
-                              value={costs?.conversionCost.costPerResult != null ? formatMoney(costs?.conversionCost.costPerResult, costs?.conversionCost.currency) : 'Sin conversaciones'}
+                              value={costs?.conversionCost.costPerResult != null ? money.acct(costs?.conversionCost.costPerResult, costs?.conversionCost.currency) : 'Sin conversaciones'}
                               iconBg={PIPELINE_COLOR_CLASSES.warning.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.warning.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -704,7 +730,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                             />
                             <StatCard
                               label="por venta"
-                              value={costs?.conversionCost.costPerConversion != null ? formatMoney(costs?.conversionCost.costPerConversion, costs?.conversionCost.currency) : 'Sin ventas'}
+                              value={costs?.conversionCost.costPerConversion != null ? money.acct(costs?.conversionCost.costPerConversion, costs?.conversionCost.currency) : 'Sin ventas'}
                               iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                               iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                               icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -731,7 +757,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                         <div className="flex flex-wrap gap-2">
                           <StatCard
                             label="gasto acumulado"
-                            value={formatMoney(costs?.messageCost.totalCost, costs?.messageCost.currency)}
+                            value={money.acct(costs?.messageCost.totalCost, costs?.messageCost.currency)}
                             iconBg={PIPELINE_COLOR_CLASSES.danger.iconBg}
                             iconText={PIPELINE_COLOR_CLASSES.danger.iconText}
                             icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -745,7 +771,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                           />
                           <StatCard
                             label="promedio por mensaje"
-                            value={costs?.messageCost.avgCostPerMessage != null ? formatMoney(costs?.messageCost.avgCostPerMessage, costs?.messageCost.currency) : 'Sin mensajes cobrados'}
+                            value={costs?.messageCost.avgCostPerMessage != null ? money.acct(costs?.messageCost.avgCostPerMessage, costs?.messageCost.currency) : 'Sin mensajes cobrados'}
                             iconBg={PIPELINE_COLOR_CLASSES.info.iconBg}
                             iconText={PIPELINE_COLOR_CLASSES.info.iconText}
                             icon={PIPELINE_ICON_MAP.CircleDollarSign}
@@ -755,7 +781,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {costs?.messageCost.byCategory.map((c) => (
                               <span key={c.category} className="rounded-lg border border-line bg-paper px-2.5 py-1 text-[11px] text-greige-ink">
-                                {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${formatMoney(c.costPerMessage, costs?.messageCost.currency)}/msg` : 'gratis'}
+                                {PRICING_CATEGORY_LABELS[c.category] ?? c.category}: {c.volume} · {c.cost > 0 ? `${money.acct(c.costPerMessage, costs?.messageCost.currency)}/msg` : 'gratis'}
                               </span>
                             ))}
                           </div>
@@ -801,5 +827,6 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
         </motion.div>
       )}
     </AnimatePresence>
+    </MoneyCtx.Provider>
   );
 }
