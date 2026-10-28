@@ -208,6 +208,9 @@ function SummaryPanel({ data, costs, adv }) {
 }
 
 // Estados en cuadritos: ícono de la columna, cantidad y un punto rojo con los no leídos.
+// En esta vista las tres columnas del medio llevan su nombre de temperatura (frío, tibio, caliente).
+const TEMP_LABEL = { en_atencion: 'Frío', cotizacion: 'Tibio', medio_pago: 'Caliente' };
+
 function StatesGrid({ buckets }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -215,9 +218,9 @@ function StatesGrid({ buckets }) {
         const meta = metaFor(b.bucket);
         const Icon = meta.icon;
         return (
-          <div key={b.bucket} title={b.unreadTotal > 0 ? `${b.unreadTotal} no leído(s)` : undefined} className="relative flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+          <div key={b.bucket} title={`${meta.label}${b.unreadTotal > 0 ? ` · ${b.unreadTotal} no leído(s)` : ''}`} className="relative flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
             <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}><Icon size={14} /></span>
-            <span className="min-w-0 leading-tight"><span className="block text-base font-semibold tabular-nums text-ink">{b.total}</span><span className="block truncate text-[11px] text-greige-ink">{meta.label}</span></span>
+            <span className="min-w-0 leading-tight"><span className="block text-base font-semibold tabular-nums text-ink">{b.total}</span><span className="block truncate text-[11px] text-greige-ink">{TEMP_LABEL[b.bucket] ?? meta.label}</span></span>
             {b.unreadTotal > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">{b.unreadTotal}</span>}
           </div>
         );
