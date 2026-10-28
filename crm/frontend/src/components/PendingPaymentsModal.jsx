@@ -1,4 +1,5 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import InfoModal from './InfoModal.jsx';
 
 const q = (n) => `Q ${Number(n || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -8,6 +9,23 @@ const ago = (iso) => {
   if (min < 1440) return `hace ${Math.floor(min / 60)} h ${min % 60} min`;
   return `hace ${Math.floor(min / 1440)} d ${Math.floor((min % 1440) / 60)} h`;
 };
+
+const GT_DATE = (iso) => new Date(iso).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+
+// Excel de los pendientes tal como están en pantalla: asesora, nombre del cliente, número (o nombre del contacto si el chat es de Instagram o Messenger),
+// monto a pagar y la última vez que se le escribió (cuando la asesora le envió los medios de pago).
+function downloadPending(items) {
+  const rows = items.map((it) => {
+    const social = String(it.phone ?? '').startsWith('social:');
+    return [it.advisorName, social ? '' : (it.customerName ?? ''), social ? (it.customerName ?? 'Contacto de red social') : it.phone, it.amount != null ? Number(it.amount) : 'Por confirmar', GT_DATE(it.sentAt)];
+  });
+  const ws = XLSX.utils.aoa_to_sheet([['Asesor', 'Nombre del cliente', 'Número o contacto', 'Monto a pagar (Q)', 'Última vez contactado'], ...rows]);
+  rows.forEach((r, i) => { if (typeof r[3] === 'number') ws[`D${i + 2}`].z = '#,##0.00'; });
+  ws['!cols'] = [{ wch: 28 }, { wch: 28 }, { wch: 24 }, { wch: 18 }, { wch: 22 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pagos pendientes');
+  XLSX.writeFile(wb, `pagos-pendientes-${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })}.xlsx`);
+}
 
 // Pagos pendientes: medios de pago (link de NeoLink o cuenta) que las asesoras entregaron en los últimos 8 días y que todavía no tienen
 // comprobante ni venta registrada. El monto es el de la página del link o el total que cotizó la asesora en el chat.
@@ -20,6 +38,7 @@ export default function PendingPaymentsModal({ open, onClose, pending }) {
           <div className="rounded-xl border border-warn/30 bg-warn/10 p-3"><p className="text-xl font-bold text-warn">{q(pending?.total)}</p><p className="text-[11px] font-semibold uppercase tracking-wide text-greige-ink">Por cobrar</p></div>
           <div className="rounded-xl border border-line p-3"><p className="text-xl font-bold text-ink">{pending?.count ?? 0}</p><p className="text-[11px] font-semibold uppercase tracking-wide text-greige-ink">Pendientes</p></div>
         </div>
+        {items.length > 0 && <button type="button" onClick={() => downloadPending(items)} className="flex w-fit items-center gap-1.5 justify-self-end rounded-xl border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted"><Download size={13} />Descargar en Excel</button>}
         {items.length === 0
           ? <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-greige-ink">No hay pagos pendientes ahora mismo.</p>
           : (
