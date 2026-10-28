@@ -701,7 +701,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     type: 'doughnut',
     data: { labels: sellers.map((a) => a.advisor), datasets: [{ data: sellers.map((a) => a.salesAmount), backgroundColor: sellers.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]), borderWidth: 0 }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money.q(c.parsed)}` } } } },
-  }), [adv]);
+  }), [adv, data, view, cur]);
 
   return (
     <MoneyCtx.Provider value={money}>
