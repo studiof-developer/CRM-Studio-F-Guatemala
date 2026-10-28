@@ -972,25 +972,20 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
 // Se recuerdan 5 minutos por periodo: abrir y cerrar el modal no vuelve a preguntarle a Meta.
 const COSTS_TTL_MS = 5 * 60 * 1000;
 const costsCache = new Map();
-async function statsCosts(query, lineId = null) {
+async function statsCosts(query) {
   const req = { query };
-  // Con una línea elegida, el gasto sale de las campañas de esa línea (texto guardado en Configuración); sin ese texto no se muestra un gasto que sería de toda la cuenta.
-  const lineFilters = await getSetting('stats_line_ad_filters', {}).catch(() => ({}));
-  const lineFilter = lineId ? lineFilters?.[String(lineId)] : undefined;
-  const needsLineFilter = !!lineId && !lineFilter;
   const { from, to, since, until } = req.query;
   const guatemalaDateOnly = (iso) => new Date(new Date(iso).getTime() - 6 * 3600000).toISOString().slice(0, 10);
   const metaSinceDate = since ? guatemalaDateOnly(since) : (from ?? null);
   const metaUntilDate = until ? guatemalaDateOnly(until) : (to ?? (metaSinceDate ? guatemalaDateOnly(new Date().toISOString()) : null));
 
   // El costo por mensaje se pide a la vez que el gasto de pauta, no después.
-  const messageCostCall = metaSinceDate && metaUntilDate ? fetchMessageCost(metaSinceDate, metaUntilDate, lineId).then((v) => ({ v }), (e) => ({ e })) : null;
+  const messageCostCall = metaSinceDate && metaUntilDate ? fetchMessageCost(metaSinceDate, metaUntilDate).then((v) => ({ v }), (e) => ({ e })) : null;
   let conversionCost = null;
   let conversionCostError = null;
-  if (metaSinceDate && metaUntilDate && !needsLineFilter) {
+  if (metaSinceDate && metaUntilDate) {
     try {
       const conversionParams = [];
-      if (lineId) conversionParams.push(Number(lineId));
       const conversionDateClause = buildDateRangeClause(req.query, conversionParams, 'aa.accessed_at');
       const [conversionsResult, spend] = await Promise.all([
         // Scoped to customers who actually arrived THROUGH a pauta — a referral-
@@ -1010,10 +1005,10 @@ async function statsCosts(query, lineId = null) {
                SELECT 1 FROM n8n_chat_histories h
                WHERE h.session_id LIKE c.whatsapp_number || '%'
                  AND h.message->'additional_kwargs'->'referral' IS NOT NULL
-             )${lineId ? ` AND EXISTS (SELECT 1 FROM tickets tl WHERE tl.customer_id = c.id AND COALESCE(tl.whatsapp_number_id, 1) = $1)` : ''}`,
+             )`,
           conversionParams
         ),
-        fetchReport({ since: metaSinceDate, until: metaUntilDate, level: 'campaign', nameFilter: lineFilter }),
+        fetchReport({ since: metaSinceDate, until: metaUntilDate, level: 'campaign' }),
       ]);
       if (spend) {
         const conversions = Number(conversionsResult.rows[0].conversions);
@@ -1057,17 +1052,16 @@ async function statsCosts(query, lineId = null) {
   }
 
 
-  return { conversionCost, conversionCostError, messageCost, messageCostError, needsLineFilter, lineFilters };
+  return { conversionCost, conversionCostError, messageCost, messageCostError };
 }
 
 router.get('/pipeline/stats/costs', async (req, res, next) => {
   try {
-    const { from, to, since, until, lineId } = req.query;
-    const line = lineId ? parseInt(lineId, 10) : null;
-    const key = JSON.stringify([from, to, since, until, line, await getSetting('stats_line_ad_filters', {}).catch(() => ({}))]); // si cambia el texto de campañas de una línea, el caché no sirve
+    const { from, to, since, until } = req.query;
+    const key = JSON.stringify([from, to, since, until]);
     const hit = costsCache.get(key);
     if (hit && Date.now() - hit.at < COSTS_TTL_MS) return res.json(hit.payload);
-    const payload = await statsCosts({ from, to, since, until }, line);
+    const payload = await statsCosts({ from, to, since, until });
     costsCache.set(key, { at: Date.now(), payload });
     res.json(payload);
   } catch (err) {

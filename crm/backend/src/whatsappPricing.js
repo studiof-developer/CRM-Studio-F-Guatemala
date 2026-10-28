@@ -10,7 +10,6 @@
 // currency); converted to COP below (2026-09-16 request) so it reads consistently
 // alongside "Costo de conversión", which is already COP from the ad account itself.
 import { getActiveCredentials } from './whatsapp.js';
-import { pool } from './db.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 const DISPLAY_CURRENCY = 'COP';
@@ -48,7 +47,7 @@ async function graphGet(path, token) {
 // Total + per-category message cost over [since, until] (YYYY-MM-DD each, Guatemala
 // calendar days). Array-type Graph API params want a JSON-encoded array, not repeated
 // key=value pairs (same convention metaAds.js's time_range needs for an object).
-async function fetchPoints(creds, since, until, displayPhone = null) {
+async function fetchPoints(creds, since, until) {
   const start = Math.floor(new Date(`${since}T00:00:00-06:00`).getTime() / 1000);
   const end = Math.floor(new Date(`${until}T23:59:59-06:00`).getTime() / 1000);
   const params = new URLSearchParams({
@@ -57,8 +56,6 @@ async function fetchPoints(creds, since, until, displayPhone = null) {
     granularity: 'DAILY',
     metric_types: JSON.stringify(['COST', 'VOLUME']),
     dimensions: JSON.stringify(['PRICING_CATEGORY']),
-    // Una línea concreta: Meta factura por número, y las dos líneas pueden compartir cuenta de WhatsApp.
-    ...(displayPhone ? { phone_numbers: JSON.stringify([displayPhone]) } : {}),
   });
   const body = await graphGet(`${creds.wabaId}/pricing_analytics?${params}`, creds.token);
   return body.data?.[0]?.data_points ?? [];
@@ -71,16 +68,10 @@ export async function fetchMessageCostUsd(since, until) {
   return (await fetchPoints(creds, since, until)).reduce((t, p) => t + (p.cost ?? 0), 0);
 }
 
-export async function fetchMessageCost(since, until, lineId = null) {
-  const creds = await getActiveCredentials(null, lineId).catch(() => null);
+export async function fetchMessageCost(since, until) {
+  const creds = await getActiveCredentials().catch(() => null);
   if (!creds?.wabaId) return null;
-  let displayPhone = null;
-  if (lineId) {
-    const { rows } = await pool.query('SELECT display_phone_number FROM whatsapp_numbers WHERE id = $1', [Number(lineId)]);
-    const digits = String(rows[0]?.display_phone_number ?? '').replace(/D/g, '');
-    displayPhone = digits ? `+${digits}` : null;
-  }
-  const points = await fetchPoints(creds, since, until, displayPhone);
+  const points = await fetchPoints(creds, since, until);
 
   let totalCost = 0;
   let billableVolume = 0;

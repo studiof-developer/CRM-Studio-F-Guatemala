@@ -4,7 +4,7 @@ import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, 
 import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp, CircleDollarSign, CheckCircle2, Clock, LayoutGrid, List } from 'lucide-react';
 import { ChannelIcon } from '../lib/channelIcons.jsx';
 import * as XLSX from 'xlsx';
-import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport, updateSetting } from '../api.js';
+import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
 import { showError } from './Toast.jsx';
 import Select from './Select.jsx';
 import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
@@ -113,10 +113,10 @@ function AdvisorTable({ adv }) {
 }
 
 // Excel gerencial: el mismo formato de la hoja del trafficker, con la pauta de Meta (filtro de campaña activo) y lo que atendió el CRM.
-async function downloadExcel({ data, adv, dateFrom, dateTo, line, adsName }) {
+async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
   try {
     let meta = [];
-    try { meta = (await fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign', name: adsName })).daily ?? []; } catch { /* sin Meta: esas columnas salen vacías */ }
+    try { meta = (await fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign' })).daily ?? []; } catch { /* sin Meta: esas columnas salen vacías */ }
     const metaBy = Object.fromEntries(meta.map((d) => [d.date, d]));
     const fx = adv?.fxQtoCop ?? 420;
     // Formato del trafficker: WhatsApp = conversaciones por anuncio (Meta), más Instagram, Messenger y respuestas a difusión; el total no cuenta el orgánico de WhatsApp.
@@ -165,7 +165,7 @@ function SummaryPanel({ data, costs, adv }) {
   const c = data.conversations;
   const orig = ORIGINS.map(([k, label, color]) => ({ k, label, color, n: c.byOrigin[k] ?? 0 }));
   const originTotal = orig.reduce((n, o) => n + o.n, 0);
-  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : costs?.needsLineFilter ? '—' : '…';
+  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
   return (
     <div className="flex flex-col gap-2.5">
       <div title="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta)" className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
@@ -246,10 +246,10 @@ function CostsVisual({ costs }) {
             <Tile icon={CheckCircle2} tone="bg-success/10 text-success" value={cc.conversions} label="Pagados de pauta" title="Clientes que llegaron por anuncio y pagaron, confirmados en el CRM" />
             <Tile icon={Wallet} tone="bg-accent-soft text-accent" value={cc.costPerConversion != null ? fm(cc.costPerConversion, cc.currency) : 'Sin ventas'} label="Por venta" title="Gasto de pauta ÷ pagados de pauta" />
           </div>
-        ) : costs.conversionCostError ? <p className="text-xs text-danger">No se pudo leer Meta Ads: {costs.conversionCostError}</p> : <p className="text-xs text-muted-foreground">{costs.needsLineFilter ? 'Sin gasto de pauta: falta definir las campañas de esta línea.' : 'Sin datos para este periodo.'}</p>}
+        ) : costs.conversionCostError ? <p className="text-xs text-danger">No se pudo leer Meta Ads: {costs.conversionCostError}</p> : <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>}
       </div>
       <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Lo que WhatsApp cobra por cada mensaje enviado: facturación de la plataforma, no gasto en pauta.">Mensajes de WhatsApp</p>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Lo que WhatsApp cobra por cada mensaje enviado: facturación de la plataforma, no gasto en pauta. Es de toda la cuenta de WhatsApp; no se separa por línea.">Mensajes de WhatsApp</p>
         {mc ? (
           <>
             <div className="grid grid-cols-2 gap-2">
@@ -272,7 +272,7 @@ function CostsVisual({ costs }) {
 // Vista detallada del resumen: la lista de siempre, con números y texto.
 function SummaryDetail({ data, costs, adv }) {
   const c = data.conversations;
-  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : costs?.needsLineFilter ? '—' : '…';
+  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface/50 p-2 text-[11px] text-greige-ink">
       <SumRow label="Conversaciones" value={c.conversations} strong />
@@ -290,29 +290,6 @@ function SummaryDetail({ data, costs, adv }) {
       <SumRow label="Ventas confirmadas" value={c.sales ?? '—'} strong /><SumRow label="Valor vendido" value={c.salesAmount ? `Q ${Math.round(c.salesAmount).toLocaleString('es-GT')}` : '—'} />
       <SumRow label="Tasa de cierre" value={pctText(c.closeRate)} /><SumRow label="ROAS" value={roas} />
       <p className="text-[10px] leading-tight text-muted-foreground">Ventas del reporte de ventas (suma de las asesoras de la línea elegida) ÷ total gerencial. ROAS = valor en COP ÷ inversión de pauta.</p>
-    </div>
-  );
-}
-
-// Qué campañas son de esta línea: el texto que contiene su nombre. Lo guarda el administrador; con él el gasto de pauta y el ROAS son de la línea.
-function LineFilterEditor({ line, lineLabel, filters, canEdit, onSaved }) {
-  const current = filters?.[line] ?? '';
-  const [text, setText] = useState(current);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { setText(current); }, [current, line]);
-  async function save() {
-    setBusy(true);
-    try { await updateSetting('stats_line_ad_filters', { ...(filters ?? {}), [line]: text.trim() }); onSaved(); } catch (err) { showError(err.message); } finally { setBusy(false); }
-  }
-  if (!current && !canEdit) return <p className="rounded-lg bg-warning/15 px-2.5 py-2 text-[11px] text-warning">Falta definir qué campañas son de {lineLabel}: pídeselo a un administrador. Mientras tanto no se muestra gasto de pauta.</p>;
-  if (!canEdit) return null;
-  return (
-    <div className={`rounded-lg px-2.5 py-2 ${current ? 'border border-line bg-paper' : 'bg-warning/15'}`}>
-      <p className={`text-[11px] ${current ? 'text-greige-ink' : 'font-medium text-warning'}`}>{current ? `Campañas de ${lineLabel}: el nombre contiene…` : `Define qué campañas son de ${lineLabel} (el nombre contiene…) para ver su gasto de pauta:`}</p>
-      <div className="mt-1.5 flex gap-1.5">
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} placeholder="ej. mensajes" className="min-w-0 flex-1 rounded-lg border border-line bg-paper px-2 py-1 text-xs text-ink outline-none focus:border-accent" />
-        <button type="button" disabled={busy || !text.trim() || text.trim() === current} onClick={save} className="shrink-0 rounded-lg bg-accent px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40">{busy ? '…' : 'Guardar'}</button>
-      </div>
     </div>
   );
 }
@@ -443,7 +420,6 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
 
   const [data, setData] = useState(null);
   const [adv, setAdv] = useState(null);
-  const [costsKey, setCostsKey] = useState(0);
   const [ads, setAds] = useState(null); // pauta de Meta por día (Informe de anuncios), para la tabla gerencial
   const [costs, setCosts] = useState(null); // los costos vienen de Meta y tardan más: la pantalla se arma sin esperarlos
   const [error, setError] = useState(null);
@@ -461,24 +437,15 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     fetchPipelineStatsAdvisors({ from: dateFrom, to: dateTo, lineId: line || undefined })
       .then((a) => { if (current) setAdv(a); })
       .catch(() => { if (current) setAdv({ advisors: [], daily: [], fxQtoCop: 420, failed: true }); });
-    fetchPipelineStatsCosts({ from: dateFrom, to: dateTo, lineId: line || undefined })
+    fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign' })
+      .then((r) => { if (current) setAds(r); })
+      .catch(() => { if (current) setAds({ failed: true, daily: [], totals: null }); });
+    fetchPipelineStatsCosts({ from: dateFrom, to: dateTo })
       .then((c) => { if (current) setCosts(c); })
       .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
     return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo, line, costsKey]);
-
-  // La pauta por día usa las campañas de la línea elegida; sin ese texto guardado no se muestra pauta (sería la de toda la cuenta).
-  useEffect(() => {
-    if (!open || !costs) return undefined;
-    let current = true;
-    if (line && !costs.lineFilters?.[line]) { setAds({ unconfigured: true, daily: [], totals: null }); return undefined; }
-    fetchMetaAdsReport({ since: dateFrom, until: dateTo, level: 'campaign', name: line ? costs.lineFilters[line] : undefined })
-      .then((r) => { if (current) setAds(r); })
-      .catch(() => { if (current) setAds({ failed: true, daily: [], totals: null }); });
-    return () => { current = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [costs]);
+  }, [open, dateFrom, dateTo, line]);
 
   const dayRef = useRef(null);
   const days = data?.dailyConversations ?? [];
@@ -634,7 +601,6 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 </div>
 
                 <div className="flex flex-col gap-6">
-                  {line && costs && <LineFilterEditor line={line} lineLabel={lineOptions.find((o) => String(o.value) === String(line))?.label ?? 'esta línea'} filters={costs.lineFilters} canEdit={role === 'admin'} onSaved={() => setCostsKey((k) => k + 1)} />}
                   {view === 'visual' ? <CostsVisual costs={costs} /> : (
                   <>
                   <div>
@@ -701,7 +667,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Costo por mensaje</p>
-                    
+                    {data.costsAreAccountWide && <p className="mt-0.5 text-[11px] text-warning">Facturación de toda la cuenta de WhatsApp: no se separa por línea.</p>}
                     <p className="mb-2 mt-0.5 text-[11px] text-muted-foreground">Lo que WhatsApp cobra por cada mensaje enviado — facturación de la plataforma, no gasto en pauta. No tiene por qué coincidir con "Costo de conversión".</p>
                     {costs?.messageCost && (
                       <>
@@ -770,7 +736,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                 <div className="lg:col-span-4">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-greige-ink">Atención y ventas por asesora</p>
-                    {role !== 'asesor' && <button type="button" onClick={() => downloadExcel({ data, adv, dateFrom, dateTo, line, adsName: line ? costs?.lineFilters?.[line] : undefined })} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted"><Download size={13} />Descargar Excel</button>}
+                    {role !== 'asesor' && <button type="button" onClick={() => downloadExcel({ data, adv, dateFrom, dateTo, line })} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-muted"><Download size={13} />Descargar Excel</button>}
                   </div>
                   <AdvisorTable adv={adv} />
                 </div>
