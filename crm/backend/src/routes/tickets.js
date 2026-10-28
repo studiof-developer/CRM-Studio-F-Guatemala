@@ -6,7 +6,7 @@ import { requireRole } from '../auth.js';
 import { getSetting } from './settings.js';
 import { buildSalesFilter } from './sales.js';
 import { EFFECTIVE_STATUS_SQL } from './customers.js';
-import { fetchReport } from '../metaAdsReport.js';
+import { fetchReport, fetchPlatformBreakdown } from '../metaAdsReport.js';
 import { loadConversationStats, dayRange, servicePattern, notService } from '../statsDays.js';
 import { fetchMessageCost } from '../whatsappPricing.js';
 
@@ -934,7 +934,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
     const hDate = buildDateRangeClause(req.query, hp, 'h.created_at');
     const sDate = buildDateRangeClause(req.query, sp, 'sm.created_at');
     const saleFilter = buildSalesFilter('personalizado', req.query.from, req.query.to, parsedLineId, vp);
-    const [wa, soc, sales, fx] = await Promise.all([
+    const [wa, soc, sales, fx, roasGoal, grossMarginPct] = await Promise.all([
       pool.query(`SELECT to_char((h.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, h.message->'additional_kwargs'->>'advisorName' AS advisor,
           count(*) AS msgs, count(DISTINCT split_part(h.session_id, '__', 1)) AS convs
         FROM n8n_chat_histories h
@@ -945,6 +945,8 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
       pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, s.advisor_name AS advisor, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
         FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${saleFilter} GROUP BY 1, 2`, vp),
       getSetting('fx_q_cop', 420).catch(() => 420),
+      getSetting('roas_goal', 10).catch(() => 10),
+      getSetting('gross_margin_pct', null).catch(() => null),
     ]);
     const norm = (n) => String(n ?? '').trim() || 'Sin asignar';
     const rows = new Map();
@@ -961,7 +963,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
       byAdvisor.set(r.advisor, a);
     }
     const advisors = [...byAdvisor.values()].map((a) => ({ ...a, conversionRate: a.conversations > 0 ? a.sales / a.conversations : null })).sort((a, b) => b.salesAmount - a.salesAmount || b.conversations - a.conversations);
-    res.json({ advisors, daily, fxQtoCop: Number(fx) > 0 ? Number(fx) : 420 });
+    res.json({ advisors, daily, fxQtoCop: Number(fx) > 0 ? Number(fx) : 420, roasGoal: Number(roasGoal) > 0 ? Number(roasGoal) : 10, grossMarginPct: Number(grossMarginPct) > 0 ? Number(grossMarginPct) : null });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
@@ -980,6 +982,7 @@ async function statsCosts(query) {
   const metaUntilDate = until ? guatemalaDateOnly(until) : (to ?? (metaSinceDate ? guatemalaDateOnly(new Date().toISOString()) : null));
 
   // El costo por mensaje se pide a la vez que el gasto de pauta, no después.
+  const platformCall = metaSinceDate && metaUntilDate ? fetchPlatformBreakdown({ since: metaSinceDate, until: metaUntilDate }).catch(() => null) : Promise.resolve(null);
   const messageCostCall = metaSinceDate && metaUntilDate ? fetchMessageCost(metaSinceDate, metaUntilDate).then((v) => ({ v }), (e) => ({ e })) : null;
   let conversionCost = null;
   let conversionCostError = null;
@@ -1052,7 +1055,7 @@ async function statsCosts(query) {
   }
 
 
-  return { conversionCost, conversionCostError, messageCost, messageCostError };
+  return { conversionCost, conversionCostError, messageCost, messageCostError, byPlatform: await platformCall };
 }
 
 router.get('/pipeline/stats/costs', async (req, res, next) => {

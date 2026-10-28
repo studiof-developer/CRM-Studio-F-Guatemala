@@ -135,6 +135,26 @@ async function statuses(creds, level) {
   return new Map((body.data ?? []).map((x) => [x.id, x.effective_status]));
 }
 
+// Gasto y conversaciones iniciadas por plataforma donde se mostró el anuncio (Instagram, Facebook, Messenger…), con el mismo filtro de campañas del informe.
+// Es el dato de Meta: un anuncio de "mensajes a WhatsApp" también se muestra en Instagram o Facebook, y aquí se ve cuánto trajo cada una.
+const platformCache = new Map();
+export async function fetchPlatformBreakdown({ since, until, nameFilter }) {
+  const filter = String(nameFilter ?? (await getSetting('meta_ads_name_filter', DEFAULT_NAME_FILTER).catch(() => DEFAULT_NAME_FILTER)) ?? '').trim().slice(0, 80);
+  const key = `${since}|${until}|${filter}`;
+  const hit = platformCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.rows;
+  const creds = await getMetaAdsCredentials();
+  if (!creds) throw Object.assign(new Error('Meta Ads no está configurado — guarda el ID de cuenta y el token en Configuración'), { status: 409 });
+  const range = encodeURIComponent(JSON.stringify({ since, until }));
+  const body = await graphGet(`act_${creds.accountId}/insights?level=account&fields=${METRICS.join(',')}&breakdowns=publisher_platform&time_range=${range}${nameFilterParam(filter)}&limit=50`, creds.token);
+  const rows = (body.data ?? [])
+    .map((r) => { const x = rowMetrics({ ...r, campaign_id: r.publisher_platform, campaign_name: r.publisher_platform }, 'campaign'); return { platform: r.publisher_platform, spend: x.spend, conversations: x.conversations, costPerConversation: x.costPerConversation, linkClicks: x.linkClicks }; })
+    .filter((r) => r.spend > 0 || r.conversations > 0)
+    .sort((a, b) => b.spend - a.spend);
+  platformCache.set(key, { at: Date.now(), rows });
+  return rows;
+}
+
 export async function fetchReport({ since, until, level = 'campaign', fmt, nameFilter }) {
   if (!LEVELS[level]) throw Object.assign(new Error('Nivel no válido'), { status: 400 });
   // Sin indicar, el filtro guardado (por defecto "mensajes": la vista con la que el trafficker reporta); texto vacío = toda la cuenta.

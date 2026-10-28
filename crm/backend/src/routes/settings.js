@@ -47,6 +47,16 @@ function isValidPhraseList(v) {
 // reading/writing an arbitrary key, and gives each one a shape check before it's
 // trusted.
 const SETTINGS = {
+  roas_goal: {
+    label: 'Meta de ROAS',
+    description: 'Cuántas veces debe regresar la inversión en pauta en ventas (valor vendido ÷ inversión). Es la referencia que se muestra en las Estadísticas del Pipeline.',
+    validate: (v) => Number.isFinite(v) && v > 0 && v <= 100,
+  },
+  gross_margin_pct: {
+    label: 'Margen bruto de las ventas (%)',
+    description: 'Qué porcentaje de lo vendido queda después del costo de la prenda (sin contar la pauta). Con él, las Estadísticas calculan la ganancia estimada y el ROAS de equilibrio.',
+    validate: (v) => Number.isFinite(v) && v > 0 && v <= 100,
+  },
   ocr_context_hours: {
     label: 'Ventana para combinar comprobantes divididos en el OCR',
     description: 'Si un cliente manda dos fotos de pago separadas para completar un mismo total (ej. pagó en dos partes), cuántas horas hacia atrás se suman entre sí. No afecta cuánto tarda un cliente en pagar después de que se le cotiza un precio — eso ya no tiene límite de tiempo.',
