@@ -196,9 +196,9 @@ const HINTS = {
   cpm: { t: 'Costo por mensaje', d: 'Lo que cuesta que una persona escriba por un anuncio (costo por resultado de Meta). Se calcula sobre los mensajes que Meta cuenta como iniciados.', i: 'Bueno: hasta COP 1,200 (unos Q 2.90). Aceptable: hasta COP 2,500 (Q 6). Más de eso es caro y conviene revisar el anuncio.' },
   cierre: { t: 'Cierre', d: 'De cada 100 conversaciones del total gerencial (anuncios + difusión + Instagram + Messenger), cuántas terminan en venta: ventas ÷ total gerencial.', i: 'Referencia para ropa por WhatsApp con anuncios: 3 % a 5 %. Por debajo de 2 % se escribe mucho pero se cierra poco: revisar seguimiento y cotizaciones. Octubre cerró cerca de 2.5 %.' },
   conv: { t: 'Conversaciones', d: 'Personas que escribieron cada día, sumadas día por día (como lo cuenta Meta). Un cliente que escribe en dos días distintos cuenta dos veces; "clientes distintos" lo cuenta una sola.' },
-  channels: { t: 'Por qué canal escribieron', d: 'WhatsApp, Instagram o Messenger: el canal por el que el cliente nos escribió.' },
+  channels: { t: 'Por dónde escribieron', d: 'WhatsApp, Instagram o Messenger. WhatsApp incluye a quienes llegaron por anuncios, difusiones o por su cuenta. Las tres cifras suman el total de conversaciones.' },
   origin: { t: '¿De dónde llegaron?', d: 'Anuncios: llegaron por un anuncio de Meta. Difusión: respondieron a un envío masivo en las 24 horas siguientes. Orgánico: escribieron por su cuenta en WhatsApp. Redes: llegaron por Instagram o Messenger.', i: 'Con pauta activa, "Anuncios" debe ser la mayor parte. Si el orgánico crece solo, la marca está generando recordación.' },
-  seen: { t: 'Mensajes de anuncios vistos en', d: 'En qué plataforma se mostró el anuncio que trajo el mensaje (dato de Meta). El anuncio lleva a WhatsApp, pero se ve en Facebook, Instagram o los Estados de WhatsApp.' },
+  seen: { t: 'Anuncios según Meta', d: 'Dato de Meta, aparte del CRM: en qué plataforma se mostró el anuncio que trajo el mensaje. Todos terminan en WhatsApp, por eso no se suman al canal ni al origen.' },
   manager: { t: 'Total gerencial', d: 'Anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No cuenta el orgánico de WhatsApp. Es la base del cierre y la que usa el trafficker en su reporte.' },
   wait: { t: 'Demora en responder', d: 'Tiempo promedio que tarda una asesora en dar la primera respuesta a un cliente que escribe.', i: 'Ideal: 5 a 10 minutos. Aceptable hasta 30. Pasada 1 hora, el Pipeline marca el chat como "atrasado".' },
   fresh: { t: 'Nuevos', d: 'Clientes que escriben por primera vez en el periodo.', i: 'Con pauta activa deben crecer cuando sube la inversión; si no crecen, el anuncio no está atrayendo gente nueva.' },
@@ -441,22 +441,28 @@ function AttentionPanel({ data, costs }) {
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><MessagesSquare size={22} /></span>
         <span className="leading-tight"><span className="block text-3xl font-bold tabular-nums text-ink">{c.conversations}</span><span className="block text-xs text-greige-ink">conversaciones · {c.people} clientes distintos</span></span>
       </div></Hint>
-      <Hint h={HINTS.channels}><div className="grid grid-cols-3 gap-2">
-        {['whatsapp', 'instagram', 'messenger'].map((ch) => (
-          <div key={ch} title={ch} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm"><ChannelIcon channel={ch} size={26} /><span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span></div>
-        ))}
+      <Hint h={HINTS.channels}><div>
+        <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Por dónde escribieron <span className="font-normal">(suma {c.conversations})</span></p>
+        <div className="grid grid-cols-3 gap-2">
+          {['whatsapp', 'instagram', 'messenger'].map((ch) => (
+            <div key={ch} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm"><ChannelIcon channel={ch} size={26} /><span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span><span className="text-[10px] capitalize text-greige-ink">{ch}</span></div>
+          ))}
+        </div>
       </div></Hint>
       <Hint h={HINTS.origin}><div>
-        <p className="mb-1.5 text-[11px] font-medium text-greige-ink">¿De dónde llegaron?</p>
+        <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Cómo llegaron <span className="font-normal">(suma {originTotal}, las mismas {c.conversations})</span></p>
         <div className="flex h-2.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">{originTotal > 0 && orig.filter((o) => o.n > 0).map((o) => <span key={o.k} title={`${o.label}: ${o.n}`} style={{ width: `${(o.n / originTotal) * 100}%`, background: o.color }} />)}</div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">{orig.map((o) => <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>)}</div>
+        <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Los de WhatsApp ({c.byChannel.whatsapp}) son Anuncios + Difusión + Orgánico; los de Redes ({c.byChannel.instagram + c.byChannel.messenger}) son Instagram y Messenger.</p>
       </div></Hint>
       {costs?.byPlatform?.length > 0 && (
-        <Hint h={HINTS.seen}><div>
-          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Mensajes de anuncios vistos en</p>
+        <Hint h={HINTS.seen}><div className="rounded-xl border border-dashed border-line p-2.5">
+          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Según Meta: dónde se vio el anuncio <span className="font-normal">(no se suma a lo de arriba)</span></p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">{costs.byPlatform.filter((p) => p.conversations > 0).map((p) => <span key={p.platform} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p.platform} size={18} /><b className="tabular-nums text-ink">{p.conversations}</b></span>)}</div>
+          <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Son los mismos mensajes de anuncios que llegan a WhatsApp (ya están dentro de los {c.byChannel.whatsapp}), vistos por plataforma. Dato de Meta de toda la cuenta; puede diferir de "Anuncios" del CRM.</p>
         </div></Hint>
       )}
+      <p className="text-[10px] leading-snug text-greige-ink">Sin leer y Sin atender muestran el embudo "{'Ahora'}" o "Del periodo" según lo que elijas en el embudo.</p>
       <div className="grid grid-cols-2 gap-2">
         <Tile icon={Target} tone="bg-accent text-white" value={c.managerTotal} label="Total gerencial" hint={HINTS.manager} />
         <Tile icon={Clock} tone="bg-warning/10 text-warning" value={formatMinutes(data.avgFirstResponseMinutes)} label="Demora" hint={HINTS.wait} />
