@@ -505,7 +505,7 @@ function PautaPanel({ data, costs, adv, line }) {
 }
 
 // Vista de gerencia: primero el resultado (ventas, inversión, retorno), después el detalle en cuatro bloques.
-function ManagerView({ data, costs, adv, sellers, pieRef, line, funnelPeriod }) {
+function ManagerView({ data, costs, adv, sellers, pieRef, line, funnelPeriod, funnelMode, setFunnelMode }) {
   const money = useMoney();
   const c = data.conversations;
   const cc = costs?.conversionCost;
@@ -529,7 +529,10 @@ function ManagerView({ data, costs, adv, sellers, pieRef, line, funnelPeriod }) 
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Panel title="Atención"><AttentionPanel data={data} costs={costs} /></Panel>
-        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><StatesGrid buckets={data.buckets} /><p className="text-[10px] leading-snug text-muted-foreground">Periodo: {funnelPeriod}. Pon el Pipeline en el mismo periodo y la misma línea para comparar: deben coincidir.</p></Panel>
+        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><div role="group" aria-label="Qué cuenta el embudo" className="flex w-fit rounded-lg border border-line bg-paper p-0.5 text-[11px] font-medium">
+            {[['now', 'Ahora'], ['period', 'Del periodo']].map(([k, l]) => <button key={k} type="button" onClick={() => setFunnelMode(k)} aria-pressed={funnelMode === k} className={`rounded-md px-2.5 py-1 transition-colors ${funnelMode === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}>{l}</button>)}
+          </div>
+          <StatesGrid buckets={data.buckets} /><p className="text-[10px] leading-snug text-muted-foreground">{funnelMode === 'now' ? funnelPeriod : `Periodo: ${funnelPeriod}`}. Pon el Pipeline en el mismo periodo y la misma línea para comparar: deben coincidir.</p></Panel>
         <Panel title="Pauta y rentabilidad"><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
         <Panel title="Ventas por asesora"><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
       </div>
@@ -653,13 +656,16 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
 
   // El embudo usa el mismo corte del Pipeline: Hoy = desde el último mensaje de las asesoras de ayer; Ayer = lo que cerró esa jornada (lo que quedó pendiente al terminar el turno cuenta como de hoy).
   const { todayCutoff, yesterdayCutoff } = useDayCutoffs(todayStr);
+  // El embudo es una foto de lo que hay en cada etapa: por defecto "Ahora" (todo el Pipeline, como el "Todo" del tablero); "Del periodo" lo acota al periodo elegido.
+  const [funnelMode, setFunnelMode] = useState('now');
   let fSince; let fUntil;
-  if (periodPreset === 'hoy') { fSince = todayCutoff ?? guatemalaMidnight(todayStr); }
+  if (funnelMode === 'now') { /* sin corte */ }
+  else if (periodPreset === 'hoy') { fSince = todayCutoff ?? guatemalaMidnight(todayStr); }
   else if (periodPreset === 'ayer') { fSince = yesterdayCutoff ?? guatemalaMidnight(addDays(todayStr, -1)); fUntil = todayCutoff ?? guatemalaMidnight(todayStr); }
 
   // El periodo exacto que cuenta el embudo, a la vista, para compararlo con el del Pipeline.
   const gtStamp = (iso) => new Date(iso).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
-  const funnelPeriod = fSince ? (fUntil ? `${gtStamp(fSince)} → ${gtStamp(fUntil)}` : `Desde ${gtStamp(fSince)}`) : `${dateFrom} a ${dateTo}`;
+  const funnelPeriod = funnelMode === 'now' ? 'Ahora: todos los clientes que hay hoy en cada etapa (igual al "Todo" del Pipeline)' : fSince ? (fUntil ? `${gtStamp(fSince)} → ${gtStamp(fUntil)}` : `Desde ${gtStamp(fSince)}`) : `${dateFrom} a ${dateTo}`;
 
   function shiftMonth(delta) {
     setMonthCursor((prev) => {
@@ -685,7 +691,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     setAdv(null);
     setAds(null);
     setError(null);
-    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined, fSince, fUntil })
+    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined, fSince, fUntil, fAll: funnelMode === 'now' })
       .then((d) => { if (current) setData(d); })
       .catch((err) => { if (current) setError(err.message); });
     fetchPipelineStatsAdvisors({ from: dateFrom, to: dateTo, lineId: line || undefined })
@@ -699,7 +705,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
       .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
     return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo, line, fSince, fUntil]);
+  }, [open, dateFrom, dateTo, line, fSince, fUntil, funnelMode]);
 
   const [cur, setCurState] = useState(() => { try { const v = localStorage.getItem('statsCurrency'); return v === 'USD' || v === 'COP' ? v : 'Q'; } catch { return 'Q'; } });
   const setCur = (v) => { setCurState(v); try { localStorage.setItem('statsCurrency', v); } catch { /* solo esta sesión */ } };
@@ -775,7 +781,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
             )}
             {data && (
               <>
-              {view === 'visual' && <ManagerView data={data} costs={costs} adv={adv} sellers={sellers} pieRef={pieRef} line={line} funnelPeriod={funnelPeriod} />}
+              {view === 'visual' && <ManagerView data={data} costs={costs} adv={adv} sellers={sellers} pieRef={pieRef} line={line} funnelPeriod={funnelPeriod} funnelMode={funnelMode} setFunnelMode={setFunnelMode} />}
               <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_240px_340px_1fr]">
                 {view === 'detalle' && (
                   <>

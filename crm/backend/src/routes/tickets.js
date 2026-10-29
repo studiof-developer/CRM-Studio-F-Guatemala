@@ -1088,14 +1088,15 @@ const statsCache = new Map();
 
 router.get('/pipeline/stats', async (req, res, next) => {
   try {
-    const cacheKey = JSON.stringify([req.user.role === 'asesor' ? req.user.id : 'all', req.query.from, req.query.to, req.query.since, req.query.until, req.query.lineId, req.query.fSince, req.query.fUntil]);
+    const cacheKey = JSON.stringify([req.user.role === 'asesor' ? req.user.id : 'all', req.query.from, req.query.to, req.query.since, req.query.until, req.query.lineId, req.query.fSince, req.query.fUntil, req.query.fAll]);
     const cached = statsCache.get(cacheKey);
     if (cached && Date.now() - cached.at < STATS_TTL_MS) return res.json(cached.payload);
     const started = Date.now();
     const bucketParams = [];
     // El embudo cuenta igual que las columnas del Pipeline: mismo corte de periodo (para Hoy/Ayer, desde el último mensaje de las asesoras del día anterior — fSince/fUntil —,
     // no desde la medianoche) y misma fecha de orden (la etapa para "No atendidos"; el último mensaje del cliente para el resto).
-    const funnelQuery = req.query.fSince || req.query.fUntil ? { since: req.query.fSince, until: req.query.fUntil } : req.query;
+    // fAll=1: "Ahora" — todo lo que hay hoy en cada etapa, sin periodo (es el "Todo" del Pipeline).
+    const funnelQuery = req.query.fAll === '1' ? {} : req.query.fSince || req.query.fUntil ? { since: req.query.fSince, until: req.query.fUntil } : req.query;
     const bucketDateClause = buildDateRangeClause(funnelQuery, bucketParams, `(CASE WHEN (${BUCKET_CASE_SQL}) = 'pendiente' THEN stage_since ELSE COALESCE(last_customer_message_at, stage_since) END)`);
     const historyParams = [];
     const historyDateClause = buildDateRangeClause(req.query, historyParams, 'h.created_at');
