@@ -375,9 +375,9 @@ function SalesByAdvisor({ adv, sellers, pieRef, bare }) {
 }
 
 // Logo y nombre de cada plataforma donde se mostró el anuncio.
-const PLATFORMS = { instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', audience_network: 'Otras apps (red de audiencia)' };
+const PLATFORMS = { instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', whatsapp: 'WhatsApp (Estados)', audience_network: 'Otras apps (red de audiencia)' };
 function PlatformMark({ platform, size = 22 }) {
-  if (platform === 'instagram' || platform === 'messenger') return <ChannelIcon channel={platform} size={size} />;
+  if (platform === 'instagram' || platform === 'messenger' || platform === 'whatsapp') return <ChannelIcon channel={platform} size={size} />;
   return <span style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-[#1877F2] text-[13px] font-bold leading-none text-white">{platform === 'facebook' ? 'f' : '+'}</span>;
 }
 
