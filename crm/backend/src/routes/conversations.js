@@ -9,7 +9,7 @@ import { saveAttachment, isAllowedAttachmentMime } from '../attachmentStorage.js
 import { compressStoredAttachment } from '../attachmentCompression.js';
 import { broadcast } from '../events.js';
 import { isConfirmationMessage, confirmSaleByAdvisorMessage } from '../salesAttribution.js';
-import { fetchRecentThreads, FAST_LIST_MAX } from '../conversationList.js';
+import { fetchRecentThreads, fetchThreadsForPhones, FAST_LIST_MAX } from '../conversationList.js';
 
 // WhatsApp's own per-type caps (not ours) — checked again per-kind below, once we know
 // the file's mimetype. Multer's limit has to be a single outer bound before that, so it
@@ -507,7 +507,12 @@ router.get('/', async (req, res, next) => {
     // discard every row below.
     const skipWhatsapp = channel && channel !== 'whatsapp';
     // Lista por defecto (las N más recientes): parte de los mensajes recientes, no de toda la tabla (ver conversationList.js).
-    const { rows } = skipWhatsapp ? { rows: [] } : limit && limit <= FAST_LIST_MAX ? { rows: await cachedRead(`list:fast:${limit}`, () => fetchRecentThreads(limit)) } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
+    // Con búsqueda por nombre/número solo se leen los hilos de los clientes que coinciden (el filtro de abajo sigue aplicando igual).
+    const searchText = q?.trim();
+    const searchedPhones = !skipWhatsapp && searchText
+      ? (await pool.query('SELECT whatsapp_number FROM customers WHERE full_name ILIKE $1 OR whatsapp_number ILIKE $1 LIMIT 100', [`%${searchText}%`])).rows.map((r) => r.whatsapp_number)
+      : null;
+    const { rows } = skipWhatsapp ? { rows: [] } : searchedPhones ? { rows: await fetchThreadsForPhones(searchedPhones) } : limit && limit <= FAST_LIST_MAX ? { rows: await cachedRead(`list:fast:${limit}`, () => fetchRecentThreads(limit)) } : await cachedRead(`list:${unreadOnly}:${limit}`, () => pool.query(`
       WITH readable AS (
         SELECT h.session_id, h.id, h.message, h.created_at,
                COALESCE(h.whatsapp_number_id, CASE WHEN h.session_id ~ '__line_[0-9]+' THEN (regexp_match(h.session_id, '__line_([0-9]+)'))[1]::int ELSE 1 END) AS line_id,
@@ -823,14 +828,14 @@ router.post('/:sessionId/presence/leave', (req, res) => {
 router.get('/search-all', async (req, res, next) => {
   try {
     const q = req.query.q?.trim();
-    if (!q) return res.json([]);
+    if (!q || q.length < 3) return res.json([]);
     const { rows } = await pool.query(
       `WITH matches AS (
          SELECT h.id, h.session_id, h.message->>'content' AS content, h.created_at,
                 (SELECT count(*) FROM n8n_chat_histories h2 WHERE h2.session_id = h.session_id AND h2.id >= h.id) AS distance_from_latest
          FROM n8n_chat_histories h
          WHERE h.message->>'content' ILIKE $1
-         ORDER BY h.id DESC
+         ORDER BY h.id + 0 DESC
          LIMIT 30
        )
        SELECT m.*, split_part(m.session_id, '__', 1) AS phone, c.full_name

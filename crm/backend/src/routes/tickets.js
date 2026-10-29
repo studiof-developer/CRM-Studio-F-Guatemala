@@ -178,14 +178,14 @@ function buildPipelineFilters(bucket, query, paramsSoFar) {
     let messageMatch = '';
     if (trimmedQ.length >= 3) {
       messageMatch = `
-        OR EXISTS (
-          SELECT 1 FROM n8n_chat_histories h
-          WHERE h.session_id LIKE whatsapp_number || '%' AND h.message->>'content' ILIKE $${params.length}
+        OR whatsapp_number IN (
+          SELECT split_part(h.session_id, '__', 1) FROM n8n_chat_histories h
+          WHERE h.message->>'content' ILIKE $${params.length}
         )
-        OR EXISTS (
-          SELECT 1 FROM social_messages sm
+        OR customer_id IN (
+          SELECT sc.customer_id FROM social_messages sm
           JOIN social_contacts sc ON sc.id = sm.contact_id
-          WHERE sc.customer_id = customer_id AND sm.body ILIKE $${params.length}
+          WHERE sm.body ILIKE $${params.length}
         )
       `;
     }
@@ -585,14 +585,14 @@ function buildAllTimeSearchClause(trimmedQ, params, dateClause = '') {
   let messageMatch = '';
   if (trimmedQ.length >= 3) {
     messageMatch = `
-      OR EXISTS (
-        SELECT 1 FROM n8n_chat_histories h
-        WHERE h.session_id LIKE c.whatsapp_number || '%' AND h.message->>'content' ILIKE $${params.length} ${dateClause}
+      OR c.whatsapp_number IN (
+        SELECT split_part(h.session_id, '__', 1) FROM n8n_chat_histories h
+        WHERE h.message->>'content' ILIKE $${params.length} ${dateClause}
       )
-      OR EXISTS (
-        SELECT 1 FROM social_messages sm
+      OR c.id IN (
+        SELECT sc.customer_id FROM social_messages sm
         JOIN social_contacts sc ON sc.id = sm.contact_id
-        WHERE sc.customer_id = c.id AND sm.body ILIKE $${params.length}
+        WHERE sm.body ILIKE $${params.length}
       )
     `;
   }

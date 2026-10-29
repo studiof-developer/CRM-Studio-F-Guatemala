@@ -14,12 +14,14 @@ const READABLE_SQL = (col) => `${col}.message->>'type' IN ('human', 'ai')
        OR (${col}.message->'additional_kwargs'->>'fileUrl') IS NOT NULL
        OR EXISTS (SELECT 1 FROM message_attachments a WHERE a.n8n_message_id = ${col}.id))`;
 
+// Marcador que fetchThreadsForPhones reemplaza por las condiciones de sesión (teléfonos ya validados como solo dígitos).
+const PHONES_SQL = 'true';
 const TOP_SQL = `
   WITH readable AS (
     SELECT h.session_id, h.id, h.message, h.created_at, ${LINE_ID_SQL('h')} AS line_id,
            split_part(h.session_id, '__', 1) AS raw_phone
     FROM n8n_chat_histories h
-    WHERE h.id > $2 AND ${READABLE_SQL('h')}
+    WHERE h.id > $2 AND ${PHONES_SQL} AND ${READABLE_SQL('h')}
   ),
   threaded AS (
     SELECT r.id, r.message, r.created_at, r.line_id,
@@ -96,6 +98,16 @@ async function unreadCountsChunk(threads) {
 
 // Más allá de esto la consulta completa sale mejor que cientos de consultas chicas.
 export const FAST_LIST_MAX = 300;
+
+// Hilos de unos teléfonos concretos (búsqueda por nombre/número): lee solo los mensajes de esos clientes por el índice de session_id.
+export async function fetchThreadsForPhones(phones) {
+  const valid = phones.filter((p) => /^[0-9]{7,15}$/.test(p));
+  if (!valid.length) return [];
+  const cond = '(' + valid.map((p) => `h.session_id = '${p}' OR h.session_id LIKE '${p}\_\_%'`).join(' OR ') + ')';
+  const { rows } = await pool.query(TOP_SQL.replace(`h.id > $2 AND ${PHONES_SQL}`, `h.id > $2 AND ${cond}`), [valid.length * 4, 0]);
+  const unread = await unreadCounts(rows);
+  return rows.map((r) => ({ ...r, unread_count: unread.get(r.thread_key) ?? 0 }));
+}
 
 export async function fetchRecentThreads(limit) {
   const { rows: [{ max }] } = await pool.query('SELECT COALESCE(max(id), 0) AS max FROM n8n_chat_histories');
