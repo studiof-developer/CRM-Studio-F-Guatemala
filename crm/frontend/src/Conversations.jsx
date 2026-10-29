@@ -97,6 +97,13 @@ function isSameThread(a, b) {
 // a message has to be summarised in a single line. Prefers the real filename — that's
 // what tells an advisor which file it was — and falls back to the kind when WhatsApp
 // gave us no name, which is common for photos taken in the app.
+// Imagen de Meta cuyo enlace caduca (historias a las 24 h): si no carga, muestra un aviso en vez del icono roto.
+function ExpiringImage({ src, alt, className, onClick, label = 'La imagen ya no está disponible (Meta la borra al cabo de un tiempo)' }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <div className="flex min-h-16 items-center justify-center rounded-lg bg-black/[0.04] px-3 py-3 text-center text-[11px] text-greige-ink dark:bg-white/[0.06]">{label}</div>;
+  return <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onClick={onClick} onError={() => setFailed(true)} className={className} />;
+}
+
 // Wraps every occurrence of the search term in a highlighted span, like WhatsApp's own
 // global search does — lets an advisor scan a page of results for the match instead of
 // reading each snippet in full.
@@ -604,14 +611,7 @@ function SocialThreadPanel({
                         </div>
                         {m.story.url && (
                           <div className="relative group cursor-pointer" onClick={() => setLightboxUrl(m.story.url)}>
-                            <img
-                              src={m.story.url}
-                              alt="Historia"
-                              loading="lazy"
-                              decoding="async"
-                              referrerPolicy="no-referrer"
-                              className="max-h-72 w-full object-cover rounded-b-xl"
-                            />
+                            <ExpiringImage src={m.story.url} alt="Historia" label="La historia ya no está disponible (Instagram y Facebook las borran a las 24 h)" className="max-h-72 w-full object-cover rounded-b-xl" />
                             <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
                               <span className="rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium backdrop-blur-sm">
                                 Ver completa
@@ -638,13 +638,7 @@ function SocialThreadPanel({
                         <div key={att.id || attIdx} className="mb-1">
                           {isImg && (
                             <div className="relative overflow-hidden rounded-lg">
-                              <img
-                                src={fileSrc}
-                                alt={att.filename || 'Imagen adjunta'}
-                                onClick={() => setLightboxUrl(fileSrc)}
-                                referrerPolicy="no-referrer"
-                                className="max-h-60 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
-                              />
+                              <ExpiringImage src={fileSrc} alt={att.filename || 'Imagen adjunta'} onClick={() => setLightboxUrl(fileSrc)} className="max-h-60 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90" />
                             </div>
                           )}
                           {isAudio && (

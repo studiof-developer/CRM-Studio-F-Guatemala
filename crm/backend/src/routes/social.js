@@ -168,7 +168,16 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
       }
     }
 
-    const enrichedMessages = await Promise.all(messagesList.map(async (msg) => {
+    // Meta manda estos tipos sin contenido que se pueda mostrar; se rotulan en vez de enseñar "[UNSUPPORTED_TYPE]".
+    const FRIENDLY_BODY = {
+      '[STORY_MENTION]': 'Te mencionó en una historia',
+      '[UNSUPPORTED_TYPE]': 'Mensaje que Meta no deja ver aquí (ábrelo en la app de Instagram o Facebook)',
+      '[REEL]': 'Compartió un reel', '[IG_REEL]': 'Compartió un reel', '[IG_POST]': 'Compartió una publicación',
+      '[FALLBACK]': 'Compartió un enlace o contenido', '[LIKE_HEART]': '❤️', '[SHARE]': 'Compartió una publicación',
+    };
+    // Eco del asesor sin texto que Meta liga a una historia (reacción/corazón): no es un mensaje real, solo ensuciaba el chat.
+    const isEmptyStoryEcho = (m) => m.direction === 'out' && m.body === 'Respondió a tu historia' && !m.attachments?.length;
+    const enrichedMessages = (await Promise.all(messagesList.filter((m) => !isEmptyStoryEcho(m)).map(async (msg) => {
       let story = null;
       let referral = null;
       let replyTo = null;
@@ -216,6 +225,12 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
             };
           }
 
+          // Mención en historia que llega como adjunto (type story_mention) con la imagen en el payload
+          if (!story) {
+            const mentionAtt = (p?.message?.attachments || []).find((a) => (a.type || '').toLowerCase() === 'story_mention');
+            if (mentionAtt) story = { id: null, url: mentionAtt.payload?.url || mentionAtt.url || null, type: 'mention', title: 'Te mencionó en una historia' };
+          }
+
           // 2. Check for referral (Meta Ads / Messenger Ads / Instagram Ads / Shortlink)
           const ref = p?.message?.referral || p?.referral || p?.postback?.referral;
           if (ref) {
@@ -259,6 +274,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
             const rawAtts = p?.message?.attachments || [];
             for (const att of rawAtts) {
               const attType = (att.type || 'image').toLowerCase();
+              if (attType === 'story_mention' || attType === 'unsupported_type') continue;
               let directUrl = att.payload?.url || att.url;
               const el = att.payload?.elements?.[0];
               if (!directUrl && el) {
@@ -346,7 +362,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
       return {
         id: msg.id,
         direction: msg.direction,
-        body: msg.body,
+        body: FRIENDLY_BODY[msg.body] ?? msg.body,
         attachment: attachments[0] || null,
         attachments,
         story,
@@ -355,7 +371,7 @@ router.get('/contacts/:id/messages', async (req, res, next) => {
         rawPayload: msg.raw_payload,
         createdAt: msg.createdAt,
       };
-    }));
+    })));
 
     res.json(enrichedMessages);
   } catch (err) { next(err); }

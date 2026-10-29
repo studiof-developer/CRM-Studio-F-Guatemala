@@ -100,8 +100,12 @@ router.post('/', async (req, res) => {
         let text = event.message?.text || event.postback?.title || event.postback?.payload || null;
         const attachments = event.message?.attachments || [];
         const isStoryReply = Boolean(event.message?.reply_to?.story);
-        const storyUrl = event.message?.reply_to?.story?.url || event.message?.story?.mention?.link;
+        const storyUrl = event.message?.reply_to?.story?.url || event.message?.story?.mention?.link
+          || attachments.find((a) => (a.type || '').toLowerCase() === 'story_mention')?.payload?.url;
         const referral = event.message?.referral || event.referral || event.postback?.referral || null;
+
+        // Eco sin texto ligado a una historia (reacción del asesor desde la app): no es un mensaje, no se guarda.
+        if (isEcho && !text && isStoryReply && !attachments.length) continue;
 
         if (!text) {
           if (isStoryReply) {
@@ -111,7 +115,8 @@ router.post('/', async (req, res) => {
           } else if (attachments.length) {
             const first = attachments[0];
             const typeStr = (first.type || 'archivo').toLowerCase();
-            text = typeStr === 'share' ? 'Compartió una publicación' : `[${typeStr.toUpperCase()}]`;
+            const LABELS = { share: 'Compartió una publicación', story_mention: 'Te mencionó en una historia', ig_reel: 'Compartió un reel', reel: 'Compartió un reel', ig_post: 'Compartió una publicación', unsupported_type: 'Mensaje que Meta no deja ver aquí (ábrelo en la app de Instagram o Facebook)', fallback: 'Compartió un enlace o contenido' };
+            text = LABELS[typeStr] ?? `[${typeStr.toUpperCase()}]`;
           } else if (referral) {
             text = 'Inició conversación desde un anuncio';
           }
@@ -182,6 +187,8 @@ router.post('/', async (req, res) => {
           mediaToDownload.push({ url: refPhoto, kind: 'image', filename: 'anuncio.jpg', isStory: false });
         }
         for (const att of attachments) {
+          const t = (att.type || '').toLowerCase();
+          if (t === 'story_mention' || t === 'unsupported_type') continue; // la mención ya se guarda como historia.jpg
           let directUrl = att.payload?.url || att.url;
           if (!directUrl && att.payload?.elements?.[0]?.image_url) {
             directUrl = att.payload.elements[0].image_url;
