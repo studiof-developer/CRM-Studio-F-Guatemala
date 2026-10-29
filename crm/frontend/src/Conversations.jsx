@@ -1161,6 +1161,9 @@ function MessageTicks({ status, statusError, onRetry, retrying }) {
 export default function Conversations({ user, openSessionId, onOpenedConversation, singleThreadMode = false, onClose }) {
   const [conversations, setConversations] = useState([]);
   const [search, setSearch] = useState('');
+  // La lista se pide con el texto ya asentado (no en cada tecla): evita una consulta por letra.
+  const [listSearch, setListSearch] = useState('');
+  useEffect(() => { const t = setTimeout(() => setListSearch(search), 300); return () => clearTimeout(t); }, [search]);
   // "Buscar en todos los chats" — matches WhatsApp's own global search, distinct from
   // the name/phone filter above (search) and from the in-chat search built earlier.
   const [globalResults, setGlobalResults] = useState([]);
@@ -1405,8 +1408,8 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
       // capping it the same way as the plain list silently hid real unread threads
       // that fell outside the recency window (the bug reported 2026-08-26).
       const data = isUnreadFilter
-        ? await fetchConversations(search, temperature, '', undefined, true, channelFilter, lineFilter || undefined)
-        : await fetchConversations(search, temperature, ticketStatusFilter, visibleCount, undefined, channelFilter, lineFilter || undefined);
+        ? await fetchConversations(listSearch, temperature, '', undefined, true, channelFilter, lineFilter || undefined)
+        : await fetchConversations(listSearch, temperature, ticketStatusFilter, visibleCount, undefined, channelFilter, lineFilter || undefined);
       setConversations(data);
       setHasMore(isUnreadFilter ? false : data.length >= visibleCount);
       setListLoaded(true);
@@ -1415,10 +1418,10 @@ export default function Conversations({ user, openSessionId, onOpenedConversatio
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [search, temperature, ticketStatusFilter, channelFilter, lineFilter, visibleCount]);
+  }, [listSearch, temperature, ticketStatusFilter, channelFilter, lineFilter, visibleCount]);
 
   // A new search/filter is a fresh list — start back at one page of it.
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, temperature, ticketStatusFilter, channelFilter, lineFilter]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [listSearch, temperature, ticketStatusFilter, channelFilter, lineFilter]);
 
   useEffect(() => { load(); }, [load]);
 
