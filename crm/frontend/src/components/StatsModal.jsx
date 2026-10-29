@@ -173,87 +173,86 @@ async function downloadExcel({ data, adv, dateFrom, dateTo, line }) {
 // Resumen en iconos y colores: cuántos escribieron, por qué canal, de dónde vinieron y cómo cerraron. Las explicaciones largas quedan en el texto que sale al pasar el mouse.
 const ORIGINS = [['ads', 'Anuncios', '#4338ca'], ['broadcast', 'Difusión', '#f59e0b'], ['organic', 'Orgánico', '#10b981'], ['social', 'Redes', '#ec4899']];
 
-function Tile({ icon: Icon, tone, value, label, title, big }) {
+// Ayuda que aparece al pasar el mouse (o con el teclado): qué es la cifra y, cuando aplica, el valor ideal para un negocio como Studio F.
+function Hint({ h, align = 'left', up = false, className = '', children }) {
+  if (!h) return <div className={className}>{children}</div>;
   return (
-    <div title={title} className="flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={14} /></span>
-      <span className="min-w-0 flex-1 leading-tight"><span title={typeof value === 'string' ? value : undefined} className={`block truncate font-semibold tabular-nums text-ink ${String(value).length > 11 ? 'text-sm' : big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
+    <div tabIndex={0} className={`group relative outline-none ${className}`}>
+      {children}
+      <div role="tooltip" className={`pointer-events-none absolute z-[60] hidden w-72 rounded-xl border border-line bg-paper p-3 text-left text-xs font-normal normal-case tracking-normal text-ink shadow-xl group-hover:block group-focus-within:block ${up ? 'bottom-full mb-2' : 'top-full mt-2'} ${align === 'right' ? 'right-0' : 'left-0'}`}>
+        <p className="mb-1 text-[13px] font-semibold">{h.t}</p>
+        <p className="leading-snug text-greige-ink">{h.d}</p>
+        {h.i && <p className="mt-2 rounded-lg bg-accent-soft px-2 py-1.5 leading-snug text-accent"><b>Ideal:</b> {h.i}</p>}
+      </div>
     </div>
   );
 }
 
-function SummaryPanel({ data, costs, adv }) {
-  const money = useMoney();
-  const c = data.conversations;
-  const orig = ORIGINS.map(([k, label, color]) => ({ k, label, color, n: c.byOrigin[k] ?? 0 }));
-  const originTotal = orig.reduce((n, o) => n + o.n, 0);
-  const roas = costs?.conversionCost?.spend > 0 ? ((c.salesAmount * (adv?.fxQtoCop ?? 420)) / costs.conversionCost.spend).toFixed(2) : '…';
+// Referencias para un negocio como Studio F (ropa por WhatsApp con anuncios de mensajes). Son guías generales: ajústalas con el historial propio.
+const HINTS = {
+  sales: { t: 'Ventas', d: 'Dinero de las ventas confirmadas en el periodo (las del reporte de ventas). El ticket es lo que gasta en promedio cada cliente que compra.', i: 'No hay una cifra fija: compáralo con el mismo periodo anterior. Si el ticket sube, cada cliente deja más.' },
+  spend: { t: 'Inversión en pauta', d: 'Lo que Meta cobró por los anuncios que traen mensajes (campañas filtradas por nombre, igual que el Informe de anuncios).', i: 'Debe moverse junto con las ventas: si sube la inversión y no suben las ventas, algo falla en el anuncio o en el cierre.' },
+  roas: { t: 'ROAS (retorno de la pauta)', d: 'Cuánto dinero se vendió por cada peso invertido en pauta: ventas ÷ inversión. Un 11 significa que por cada $1 invertido se vendieron $11. "Solo ventas de anuncios" cuenta únicamente a clientes que llegaron por un anuncio.', i: 'Meta de Studio F: 10 o más. Mínimo para no perder: 1 ÷ margen (con margen de 50 %, un ROAS de 2). Un solo día varía mucho: léelo en semana o mes.' },
+  cpm: { t: 'Costo por mensaje', d: 'Lo que cuesta que una persona escriba por un anuncio (costo por resultado de Meta). Se calcula sobre los mensajes que Meta cuenta como iniciados.', i: 'Bueno: hasta COP 1,200 (unos Q 2.90). Aceptable: hasta COP 2,500 (Q 6). Más de eso es caro y conviene revisar el anuncio.' },
+  cierre: { t: 'Cierre', d: 'De cada 100 conversaciones del total gerencial (anuncios + difusión + Instagram + Messenger), cuántas terminan en venta: ventas ÷ total gerencial.', i: 'Referencia para ropa por WhatsApp con anuncios: 3 % a 5 %. Por debajo de 2 % se escribe mucho pero se cierra poco: revisar seguimiento y cotizaciones. Octubre cerró cerca de 2.5 %.' },
+  conv: { t: 'Conversaciones', d: 'Personas que escribieron cada día, sumadas día por día (como lo cuenta Meta). Un cliente que escribe en dos días distintos cuenta dos veces; "clientes distintos" lo cuenta una sola.' },
+  channels: { t: 'Por qué canal escribieron', d: 'WhatsApp, Instagram o Messenger: el canal por el que el cliente nos escribió.' },
+  origin: { t: '¿De dónde llegaron?', d: 'Anuncios: llegaron por un anuncio de Meta. Difusión: respondieron a un envío masivo en las 24 horas siguientes. Orgánico: escribieron por su cuenta en WhatsApp. Redes: llegaron por Instagram o Messenger.', i: 'Con pauta activa, "Anuncios" debe ser la mayor parte. Si el orgánico crece solo, la marca está generando recordación.' },
+  seen: { t: 'Mensajes de anuncios vistos en', d: 'En qué plataforma se mostró el anuncio que trajo el mensaje (dato de Meta). El anuncio lleva a WhatsApp, pero se ve en Facebook, Instagram o los Estados de WhatsApp.' },
+  manager: { t: 'Total gerencial', d: 'Anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No cuenta el orgánico de WhatsApp. Es la base del cierre y la que usa el trafficker en su reporte.' },
+  wait: { t: 'Demora en responder', d: 'Tiempo promedio que tarda una asesora en dar la primera respuesta a un cliente que escribe.', i: 'Ideal: 5 a 10 minutos. Aceptable hasta 30. Pasada 1 hora, el Pipeline marca el chat como "atrasado".' },
+  fresh: { t: 'Nuevos', d: 'Clientes que escriben por primera vez en el periodo.', i: 'Con pauta activa deben crecer cuando sube la inversión; si no crecen, el anuncio no está atrayendo gente nueva.' },
+  back: { t: 'Recurrentes', d: 'Clientes que ya habían escrito antes y vuelven.', i: 'Un buen número de recurrentes indica seguimiento y confianza; ayudan a vender sin pagar anuncio.' },
+  unread: { t: 'Sin leer', d: 'Chats con mensajes del cliente que nadie ha abierto. Sigue el modo del embudo (Ahora o Del periodo).', i: 'Ideal: 0 al terminar el turno.' },
+  pending: { t: 'Sin atender', d: 'Clientes que escribieron y ninguna asesora ha tomado todavía. Sigue el modo del embudo (Ahora o Del periodo).', i: 'Ideal: 0 al cerrar el día.' },
+  cac: (pct) => ({ t: 'Costo por venta', d: 'Cuánto se invirtió en pauta por cada venta que vino de un anuncio: inversión ÷ ventas de anuncios.', i: `Que no pase del 15 % al 20 % del ticket promedio. ${pct != null ? `En este periodo equivale al ${pct.toFixed(1)} % del ticket.` : ''}` }),
+  net: { t: 'Tras pauta', d: 'Lo vendido menos lo invertido en pauta, antes de descontar el costo de las prendas. Todavía no es ganancia.', i: 'Cuanto más alto el porcentaje, mejor; para ver la ganancia real hay que definir el margen bruto.' },
+  adSales: { t: 'Ventas de anuncios', d: 'Valor de las ventas de clientes que llegaron por un anuncio. Es la parte de las ventas que la pauta realmente generó.', i: 'Compáralo con "Ventas": si es casi igual, casi todo lo vendido viene de la pauta.' },
+  waCost: { t: 'Gasto acumulado de WhatsApp', d: 'Lo que cobra WhatsApp por los mensajes de plantilla (difusiones y avisos). No es gasto en pauta.', i: 'Referencia: mantenerlo por debajo del 3 % de lo vendido.' },
+  waMsgs: { t: 'Mensajes cobrados', d: 'Mensajes de plantilla que WhatsApp cobró en el periodo. Las respuestas normales dentro de las 24 horas son gratis.' },
+  sellers: { t: 'Ventas por asesora', d: 'Valor vendido por cada asesora en el periodo y su parte del total. Sirve para ver cómo se reparte el cierre.' },
+  funnel: { t: 'Embudo de ventas', d: 'Dónde está cada cliente: Frío (conversando), Tibio (ya se le cotizó), Caliente (ya tiene el medio de pago), Pagado y Por despacho. "Ahora" es todo lo que hay hoy en cada etapa (el "Todo" del Pipeline); "Del periodo" es lo que se movió en el periodo elegido. El punto rojo son los no leídos.', i: 'Un embudo sano baja de Frío a Tibio a Caliente. Mucho Tibio y poco Caliente = falta cerrar.' },
+  stages: {
+    pendiente: { t: 'No atendidos', d: 'Clientes que escribieron y ninguna asesora ha tomado.', i: '0 al cerrar el día.' },
+    en_atencion: { t: 'Frío (en conversación)', d: 'Clientes que están hablando con una asesora pero todavía sin cotización.' },
+    cotizacion: { t: 'Tibio (cotización)', d: 'Clientes a quienes ya se les dio precio o cotización.', i: 'Si se acumulan, falta darles seguimiento para pasarlos a Caliente.' },
+    medio_pago: { t: 'Caliente (medio de pago)', d: 'Clientes a quienes ya se les dio cómo pagar. Están a un paso de comprar.', i: 'Son los que hay que perseguir hoy: cada uno es una venta casi hecha.' },
+    pagado: { t: 'Pagado', d: 'Clientes que mandaron su comprobante y siguen en esta etapa.', i: 'Pasan rápido a "Por despacho" cuando se prepara el pedido.' },
+    despacho: { t: 'Por despacho', d: 'Pedidos pagados que se están preparando o enviando.' },
+    pqrs: { t: 'PQRS', d: 'Peticiones, quejas y reclamos que requieren atención especial.', i: '0 pendientes sin resolver.' },
+  },
+};
+
+function Tile({ icon: Icon, tone, value, label, title, big, hint, align, up }) {
   return (
-    <div className="flex flex-col gap-2.5">
-      <div title="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta)" className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><MessagesSquare size={20} /></span>
-        <span className="leading-tight"><span className="block text-3xl font-bold tabular-nums text-ink">{c.conversations}</span><span className="block text-xs text-greige-ink">conversaciones</span></span>
+    <Hint h={hint} align={align} up={up}>
+      <div title={hint ? undefined : title} className="flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={14} /></span>
+        <span className="min-w-0 flex-1 leading-tight"><span title={typeof value === 'string' ? value : undefined} className={`block truncate font-semibold tabular-nums text-ink ${String(value).length > 11 ? 'text-sm' : big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
       </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {['whatsapp', 'instagram', 'messenger'].map((ch) => (
-          <div key={ch} title={ch === 'whatsapp' ? 'WhatsApp' : ch === 'instagram' ? 'Instagram' : 'Messenger'} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm">
-            <ChannelIcon channel={ch} size={26} />
-            <span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span>
-          </div>
-        ))}
-      </div>
-
-      {costs?.byPlatform?.length > 0 && (
-        <div title="Mensajes de anuncios por plataforma donde se mostró el anuncio (dato de Meta). El anuncio lleva a WhatsApp, pero se ve en Instagram o Facebook." className="rounded-xl border border-line bg-paper px-3 py-2 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Mensajes de anuncios vistos en</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-            {costs.byPlatform.filter((p) => p.conversations > 0).map((p) => <span key={p.platform} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p.platform} size={18} /><b className="tabular-nums text-ink">{p.conversations}</b></span>)}
-          </div>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-line bg-paper px-3 py-2.5 shadow-sm">
-        <div className="flex h-2.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
-          {originTotal > 0 && orig.filter((o) => o.n > 0).map((o) => <span key={o.k} title={`${o.label}: ${o.n}`} style={{ width: `${(o.n / originTotal) * 100}%`, background: o.color }} />)}
-        </div>
-        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-          {orig.map((o) => (
-            <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>
-          ))}
-        </div>
-      </div>
-
-      <Tile icon={Target} tone="bg-accent text-white" big value={c.managerTotal} label="Total gerencial" title="Anuncios de WhatsApp + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker" />
-
-      <div className="grid grid-cols-2 gap-2">
-        <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" title={`Clientes distintos: ${c.people}`} />
-        <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" title={`Clientes distintos: ${c.people}`} />
-        <Tile icon={ShoppingBag} tone="bg-success/10 text-success" value={c.sales ?? '—'} label="Ventas" title="Ventas del reporte de ventas (suma de las asesoras de la línea elegida)" />
-        <Tile icon={Wallet} tone="bg-warning/10 text-warning" value={c.salesAmount ? money.q(c.salesAmount) : '—'} label="Vendido" />
-        <Tile icon={Percent} tone="bg-accent-soft text-accent" value={pctText(c.closeRate)} label="Cierre" title="Ventas ÷ total gerencial" />
-        <Tile icon={TrendingUp} tone="bg-purple/10 text-purple" value={roas} label="ROAS" title="Valor vendido en COP ÷ inversión de pauta" />
-      </div>
-    </div>
+    </Hint>
   );
 }
+
 
 // Estados en cuadritos: ícono de la columna, cantidad y un punto rojo con los no leídos.
 // En esta vista las tres columnas del medio llevan su nombre de temperatura (frío, tibio, caliente).
 const TEMP_LABEL = { en_atencion: 'Frío', cotizacion: 'Tibio', medio_pago: 'Caliente' };
 
-function StatesGrid({ buckets }) {
+function StatesGrid({ buckets, align }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {buckets.map((b) => {
         const meta = metaFor(b.bucket);
         const Icon = meta.icon;
         return (
-          <div key={b.bucket} title={`${meta.label}${b.unreadTotal > 0 ? ` · ${b.unreadTotal} no leído(s)` : ''}`} className="relative flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+          <Hint key={b.bucket} h={HINTS.stages[b.bucket]} align={align}>
+          <div className="relative flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
             <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${meta.iconBg} ${meta.iconText}`}><Icon size={14} /></span>
             <span className="min-w-0 leading-tight"><span className="block text-base font-semibold tabular-nums text-ink">{b.total}</span><span className="block truncate text-[11px] text-greige-ink">{TEMP_LABEL[b.bucket] ?? meta.label}</span></span>
             {b.unreadTotal > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">{b.unreadTotal}</span>}
           </div>
+          </Hint>
         );
       })}
     </div>
@@ -285,7 +284,7 @@ function CostsVisual({ costs, data, adv }) {
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Dónde se mostraron los anuncios que trajeron los mensajes (dato de Meta): el anuncio va a WhatsApp, pero se ve en Instagram, Facebook o Messenger">Pauta por plataforma</p>
           <div className="flex flex-col gap-1.5">
             {costs.byPlatform.map((p) => (
-              <div key={p.platform} title={PLATFORM_HINT[p.platform]} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+              <div key={p.platform} title={PLATFORM_HINT[p.platform] ?? `Mensajes y gasto de los anuncios mostrados en ${PLATFORMS[p.platform] ?? p.platform}. c/u es el costo por mensaje: la plataforma con menor c/u rinde más por peso.`} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
                 <PlatformMark platform={p.platform} />
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-xs font-medium text-ink">{PLATFORMS[p.platform] ?? p.platform}</span><span className="block text-[11px] text-greige-ink">{p.conversations} mensajes{p.costPerConversation != null ? ` · COP ${Math.round(p.costPerConversation).toLocaleString('es-GT')} c/u` : ''}</span></span>
                 <b className="shrink-0 text-xs tabular-nums text-ink">{money.cop(p.spend)}</b>
@@ -355,7 +354,7 @@ function SalesByAdvisor({ adv, sellers, pieRef, bare }) {
         <>
           <div className="relative mx-auto h-52 w-52">
             <canvas ref={pieRef} role="img" aria-label="Valor vendido por asesora" />
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight"><span className="text-base font-bold tabular-nums text-ink">{money.q(total)}</span><span className="text-[11px] text-greige-ink">{count} ventas</span></div>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight"><span className={`font-bold tabular-nums text-ink ${money.q(total).length > 11 ? 'text-xs' : 'text-base'}`}>{money.q(total)}</span><span className="text-[11px] text-greige-ink">{count} ventas</span></div>
           </div>
           <ul className="mt-3 flex flex-col gap-1.5">
             {sellers.map((a, i) => (
@@ -395,9 +394,9 @@ function Profitability({ data, costs, adv }) {
   return (
     <div>
       <p className="mb-1.5 text-[11px] font-medium text-greige-ink" title="Vendido menos lo invertido en pauta. Todavía no descuenta el costo de las prendas: eso lo hace la ganancia estimada, si el margen está definido.">Rentabilidad</p>
-      <div className="grid grid-cols-2 gap-2">
-        <Tile icon={TrendingUp} tone="bg-accent-soft text-accent" value={money.short(left)} label={`Tras pauta ${Math.round((left / soldCop) * 100)}%`} title={`${money.cop(left)}: vendido menos pauta, antes del costo de las prendas`} />
-        {costs?.adSales?.amount > 0 && <Tile icon={ShoppingBag} tone="bg-purple/10 text-purple" value={money.qShort(costs.adSales.amount)} label="Ventas anuncios" title={`${costs.adSales.count} ventas de clientes que llegaron por un anuncio`} />}
+      <div className="grid grid-cols-1 gap-2">
+        <Tile icon={TrendingUp} tone="bg-accent-soft text-accent" value={money.short(left)} label={`Tras pauta ${Math.round((left / soldCop) * 100)}%`} hint={HINTS.net} align="right" />
+        {costs?.adSales?.amount > 0 && <Tile icon={ShoppingBag} tone="bg-purple/10 text-purple" value={money.qShort(costs.adSales.amount)} label={`Ventas anuncios · ${costs.adSales.count}`} hint={HINTS.adSales} align="right" />}
         {profit != null && <Tile icon={Wallet} tone={profit >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} value={money.short(profit)} label="Ganancia est." title={`${money.cop(profit)}: vendido × ${m}% de margen − pauta`} />}
         {m && <Tile icon={Target} tone="bg-warning/10 text-warning" value={(100 / m).toFixed(1)} label="ROAS equilibrio" title="Por debajo de este ROAS la pauta pierde dinero (1 ÷ margen)" />}
       </div>
@@ -407,21 +406,23 @@ function Profitability({ data, costs, adv }) {
 }
 
 // Una cifra grande de la franja de arriba: la respuesta primero (cuánto se vendió, cuánto se gastó, qué regresó).
-function Kpi({ icon: Icon, tone, label, value, sub, bar, barGood, title }) {
+function Kpi({ icon: Icon, tone, label, value, sub, bar, barGood, title, hint, align }) {
   return (
-    <div title={title} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-paper px-4 py-3 shadow-sm">
+    <Hint h={hint} align={align} className="min-w-0">
+    <div title={hint ? undefined : title} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-paper px-4 py-3 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-medium text-greige-ink"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={13} /></span><span className="truncate">{label}</span></div>
       <span className={`truncate font-bold tabular-nums leading-tight text-ink ${String(value).length > 13 ? 'text-xl' : 'text-2xl'}`}>{value}</span>
       {bar != null && <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10"><span className={`block h-full rounded-full ${barGood ? 'bg-success' : 'bg-accent'}`} style={{ width: `${Math.max(2, Math.min(100, bar * 100))}%` }} /></div>}
       <span className="truncate text-[11px] text-greige-ink">{sub}</span>
     </div>
+    </Hint>
   );
 }
 
-function Panel({ title, hint, children }) {
+function Panel({ title, hint, align, children }) {
   return (
     <section className="min-w-0 rounded-2xl border border-line bg-paper/60 p-4">
-      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-greige-ink" title={hint}>{title}</h4>
+      <Hint h={hint && typeof hint === 'object' ? hint : null} align={align}><h4 className="mb-3 w-fit cursor-help text-xs font-semibold uppercase tracking-wide text-greige-ink" title={typeof hint === 'string' ? hint : undefined}>{title}</h4></Hint>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
   );
@@ -436,33 +437,33 @@ function AttentionPanel({ data, costs }) {
   const pending = data.buckets.find((b) => b.bucket === 'pendiente')?.total ?? 0;
   return (
     <>
-      <div title="Clientes que escribieron cada día, sumados día por día (como las cuenta Meta)" className="flex items-center gap-3">
+      <Hint h={HINTS.conv}><div className="flex items-center gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><MessagesSquare size={22} /></span>
         <span className="leading-tight"><span className="block text-3xl font-bold tabular-nums text-ink">{c.conversations}</span><span className="block text-xs text-greige-ink">conversaciones · {c.people} clientes distintos</span></span>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
+      </div></Hint>
+      <Hint h={HINTS.channels}><div className="grid grid-cols-3 gap-2">
         {['whatsapp', 'instagram', 'messenger'].map((ch) => (
           <div key={ch} title={ch} className="flex flex-col items-center gap-1 rounded-xl border border-line bg-paper py-2 shadow-sm"><ChannelIcon channel={ch} size={26} /><span className="text-lg font-bold tabular-nums leading-none text-ink">{c.byChannel[ch]}</span></div>
         ))}
-      </div>
-      <div>
+      </div></Hint>
+      <Hint h={HINTS.origin}><div>
         <p className="mb-1.5 text-[11px] font-medium text-greige-ink">¿De dónde llegaron?</p>
         <div className="flex h-2.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">{originTotal > 0 && orig.filter((o) => o.n > 0).map((o) => <span key={o.k} title={`${o.label}: ${o.n}`} style={{ width: `${(o.n / originTotal) * 100}%`, background: o.color }} />)}</div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">{orig.map((o) => <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>)}</div>
-      </div>
+      </div></Hint>
       {costs?.byPlatform?.length > 0 && (
-        <div title="Mensajes de anuncios según la plataforma donde se mostró el anuncio (dato de Meta). El anuncio lleva a WhatsApp, pero se ve en Instagram o Facebook.">
+        <Hint h={HINTS.seen}><div>
           <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Mensajes de anuncios vistos en</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">{costs.byPlatform.filter((p) => p.conversations > 0).map((p) => <span key={p.platform} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p.platform} size={18} /><b className="tabular-nums text-ink">{p.conversations}</b></span>)}</div>
-        </div>
+        </div></Hint>
       )}
       <div className="grid grid-cols-2 gap-2">
-        <Tile icon={Target} tone="bg-accent text-white" value={c.managerTotal} label="Total gerencial" title="Anuncios de WhatsApp + difusión + Instagram + Messenger (sin orgánico de WhatsApp), como lo arma el trafficker" />
-        <Tile icon={Clock} tone="bg-warning/10 text-warning" value={formatMinutes(data.avgFirstResponseMinutes)} label="Demora" title="Demora promedio en la primera respuesta, en el periodo" />
-        <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" title="Clientes que escriben por primera vez" />
-        <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" />
-        <Tile icon={Mail} tone="bg-warning/10 text-warning" value={unread} label="Sin leer" />
-        <Tile icon={Clock} tone="bg-danger/10 text-danger" value={pending} label="Sin atender" />
+        <Tile icon={Target} tone="bg-accent text-white" value={c.managerTotal} label="Total gerencial" hint={HINTS.manager} />
+        <Tile icon={Clock} tone="bg-warning/10 text-warning" value={formatMinutes(data.avgFirstResponseMinutes)} label="Demora" hint={HINTS.wait} />
+        <Tile icon={UserPlus} tone="bg-success/10 text-success" value={c.newPeople} label="Nuevos" hint={HINTS.fresh} />
+        <Tile icon={Repeat} tone="bg-info/10 text-info" value={c.returning} label="Recurrentes" hint={HINTS.back} />
+        <Tile icon={Mail} tone="bg-warning/10 text-warning" value={unread} label="Sin leer" hint={HINTS.unread} up />
+        <Tile icon={Clock} tone="bg-danger/10 text-danger" value={pending} label="Sin atender" hint={HINTS.pending} up />
       </div>
     </>
   );
@@ -495,8 +496,8 @@ function PautaPanel({ data, costs, adv, line }) {
         <p className="mb-1.5 text-[11px] font-medium text-greige-ink" title="Lo que WhatsApp cobra por cada mensaje enviado: facturación de la plataforma, no gasto en pauta. Es de toda la cuenta de WhatsApp.">Mensajes de WhatsApp (lo que cobra la plataforma)</p>
         {mc ? (
           <div className="grid grid-cols-2 gap-2">
-            <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={money.acct(mc.totalCost, mc.currency)} label="Gasto acumulado" />
-            <Tile icon={MessagesSquare} tone="bg-warning/10 text-warning" value={mc.billableVolume} label="Mensajes cobrados" />
+            <Tile icon={CircleDollarSign} tone="bg-danger/10 text-danger" value={money.acct(mc.totalCost, mc.currency)} label="Gasto acumulado" hint={HINTS.waCost} align="right" up />
+            <Tile icon={MessagesSquare} tone="bg-warning/10 text-warning" value={mc.billableVolume} label="Mensajes cobrados" hint={HINTS.waMsgs} align="right" up />
           </div>
         ) : costs.messageCostError ? <p className="text-xs text-danger">No se pudo leer WhatsApp: {costs.messageCostError}</p> : <p className="text-xs text-muted-foreground">Sin datos para este periodo.</p>}
       </div>
@@ -520,21 +521,21 @@ function ManagerView({ data, costs, adv, sellers, pieRef, line, funnelPeriod, fu
   return (
     <div className="mt-5 flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={ShoppingBag} tone="bg-success/10 text-success" label="Ventas" value={money.qShort(c.salesAmount)} sub={`${c.sales ?? 0} ventas · ticket ${money.qShort((c.salesAmount ?? 0) / Math.max(c.sales ?? 0, 1))}`} title={money.q(c.salesAmount)} />
-        <Kpi icon={CircleDollarSign} tone="bg-danger/10 text-danger" label="Inversión en pauta" value={spend != null ? money.short(spend) : wait} sub={cc ? `${cc.results} mensajes de anuncios` : ' '} title={spend != null ? money.cop(spend) : undefined} />
-        <Kpi icon={TrendingUp} tone="bg-accent-soft text-accent" label={`ROAS · meta ${goal}`} value={roas != null ? roas.toFixed(2) : wait} bar={roas != null ? roas / goal : null} barGood={roas >= goal} sub={roasAds != null ? `Solo ventas de anuncios: ${roasAds.toFixed(2)}` : 'Vendido ÷ inversión'} title="Cuántos pesos se vendieron por cada peso invertido en pauta. El ROAS 'solo anuncios' cuenta únicamente ventas de clientes que llegaron por un anuncio." />
-        <Kpi icon={MessagesSquare} tone="bg-warning/10 text-warning" label="Costo por mensaje" value={cc?.costPerResult != null ? money.cop(cc.costPerResult) : wait} sub="cada mensaje que llega por anuncio" title="Costo por resultado de Meta: lo que cuesta cada conversación iniciada" />
-        <Kpi icon={Wallet} tone="bg-purple/10 text-purple" label="Costo por venta" value={cac != null ? money.short(cac) : wait} sub={adCount > 0 ? `${adCount} ventas de anuncios` : 'pauta ÷ ventas'} title={cac != null ? money.cop(cac) : undefined} />
-        <Kpi icon={Percent} tone="bg-accent-soft text-accent" label="Cierre" value={pctText(c.closeRate)} sub={`${c.sales ?? 0} ventas de ${c.managerTotal} conversaciones`} title="Ventas ÷ total gerencial (anuncios + difusión + Instagram + Messenger)" />
+        <Kpi icon={ShoppingBag} tone="bg-success/10 text-success" label="Ventas" value={money.qShort(c.salesAmount)} sub={`${c.sales ?? 0} ventas · ticket ${money.qShort((c.salesAmount ?? 0) / Math.max(c.sales ?? 0, 1))}`} hint={HINTS.sales} />
+        <Kpi icon={CircleDollarSign} tone="bg-danger/10 text-danger" label="Inversión en pauta" value={spend != null ? money.short(spend) : wait} sub={cc ? `${cc.results} mensajes de anuncios` : ' '} hint={HINTS.spend} />
+        <Kpi icon={TrendingUp} tone="bg-accent-soft text-accent" label={`ROAS · meta ${goal}`} value={roas != null ? roas.toFixed(2) : wait} bar={roas != null ? roas / goal : null} barGood={roas >= goal} sub={roasAds != null ? `Solo ventas de anuncios: ${roasAds.toFixed(2)}` : 'Vendido ÷ inversión'} hint={HINTS.roas} />
+        <Kpi icon={MessagesSquare} tone="bg-warning/10 text-warning" label="Costo por mensaje" value={cc?.costPerResult != null ? money.cop(cc.costPerResult) : wait} sub="cada mensaje que llega por anuncio" hint={HINTS.cpm} align="right" />
+        <Kpi icon={Wallet} tone="bg-purple/10 text-purple" label="Costo por venta" value={cac != null ? money.short(cac) : wait} sub={adCount > 0 ? `${adCount} ventas de anuncios` : 'pauta ÷ ventas'} hint={HINTS.cac(cac != null && c.sales > 0 && c.salesAmount > 0 ? (cac / ((c.salesAmount * fx) / c.sales)) * 100 : null)} align="right" />
+        <Kpi icon={Percent} tone="bg-accent-soft text-accent" label="Cierre" value={pctText(c.closeRate)} sub={`${c.sales ?? 0} ventas de ${c.managerTotal} conversaciones`} hint={HINTS.cierre} align="right" />
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Panel title="Atención"><AttentionPanel data={data} costs={costs} /></Panel>
-        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><div role="group" aria-label="Qué cuenta el embudo" className="flex w-fit rounded-lg border border-line bg-paper p-0.5 text-[11px] font-medium">
+        <Panel title="Atención" hint={{ t: 'Atención', d: 'Cuántas personas escribieron, por qué canal, de dónde llegaron y qué tan rápido se les responde.' }}><AttentionPanel data={data} costs={costs} /></Panel>
+        <Panel title="Embudo de ventas" hint={HINTS.funnel} legacyHint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><div role="group" aria-label="Qué cuenta el embudo" className="flex w-fit rounded-lg border border-line bg-paper p-0.5 text-[11px] font-medium">
             {[['now', 'Ahora'], ['period', 'Del periodo']].map(([k, l]) => <button key={k} type="button" onClick={() => setFunnelMode(k)} aria-pressed={funnelMode === k} className={`rounded-md px-2.5 py-1 transition-colors ${funnelMode === k ? 'bg-accent text-white' : 'text-greige-ink hover:text-ink'}`}>{l}</button>)}
           </div>
           <StatesGrid buckets={data.buckets} /><p className="text-[10px] leading-snug text-muted-foreground">{funnelMode === 'now' ? funnelPeriod : `Periodo: ${funnelPeriod}`}. Pon el Pipeline en el mismo periodo y la misma línea para comparar: deben coincidir.</p></Panel>
-        <Panel title="Pauta y rentabilidad"><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
-        <Panel title="Ventas por asesora"><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
+        <Panel title="Pauta y rentabilidad" align="right" hint={{ t: 'Pauta y rentabilidad', d: 'Dónde se mostraron los anuncios, cuánto costó cada mensaje en cada plataforma y qué regresó la inversión.' }}><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
+        <Panel title="Ventas por asesora" align="right" hint={HINTS.sellers}><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
       </div>
     </div>
   );
@@ -717,7 +718,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
   useChart(pieRef, () => ({
     type: 'doughnut',
     data: { labels: sellers.map((a) => a.advisor), datasets: [{ data: sellers.map((a) => a.salesAmount), backgroundColor: sellers.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]), borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money.q(c.parsed)}` } } } },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '66%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money.q(c.parsed)}` } } } },
   }), [adv, data, view, cur]);
 
   return (
@@ -789,7 +790,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink">Resumen del periodo</p>
                     <div className="flex flex-col gap-2">
-                      {view === 'visual' ? <SummaryPanel data={data} costs={costs} adv={adv} /> : <SummaryDetail data={data} costs={costs} adv={adv} />}
+                      <SummaryDetail data={data} costs={costs} adv={adv} />
                       <StatCard
                         label="No leídos"
                         value={data.buckets.filter((b) => b.bucket !== 'pendiente').reduce((sum, b) => sum + b.unreadTotal, 0)}
