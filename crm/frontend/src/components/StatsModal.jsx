@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
 import { showError } from './Toast.jsx';
 import Select from './Select.jsx';
-import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES } from '../lib/pipelinePeriod.js';
+import { PERIOD_OPTIONS, guatemalaToday, addDays, monthBounds, MONTH_NAMES, guatemalaMidnight, useDayCutoffs } from '../lib/pipelinePeriod.js';
 import { DEFAULT_COLUMN_META, PIPELINE_ICON_MAP, PIPELINE_COLOR_CLASSES } from '../lib/pipelineColumns.js';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, DoughnutController, ArcElement);
@@ -529,7 +529,7 @@ function ManagerView({ data, costs, adv, sellers, pieRef, line }) {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Panel title="Atención"><AttentionPanel data={data} costs={costs} /></Panel>
-        <Panel title="Embudo de ventas" hint="Dónde está cada cliente ahora: frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos"><StatesGrid buckets={data.buckets} /></Panel>
+        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><StatesGrid buckets={data.buckets} /></Panel>
         <Panel title="Pauta y rentabilidad"><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
         <Panel title="Ventas por asesora"><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
       </div>
@@ -651,6 +651,12 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
   else if (periodPreset === 'mes') { ({ from: dateFrom, to: dateTo } = monthBounds(monthCursor.year, monthCursor.month)); }
   else if (periodPreset === 'personalizado') { dateFrom = customFrom; dateTo = customTo; }
 
+  // El embudo usa el mismo corte del Pipeline: Hoy = desde el último mensaje de las asesoras de ayer; Ayer = lo que cerró esa jornada (lo que quedó pendiente al terminar el turno cuenta como de hoy).
+  const { todayCutoff, yesterdayCutoff } = useDayCutoffs(todayStr);
+  let fSince; let fUntil;
+  if (periodPreset === 'hoy') { fSince = todayCutoff ?? guatemalaMidnight(todayStr); }
+  else if (periodPreset === 'ayer') { fSince = yesterdayCutoff ?? guatemalaMidnight(addDays(todayStr, -1)); fUntil = todayCutoff ?? guatemalaMidnight(todayStr); }
+
   function shiftMonth(delta) {
     setMonthCursor((prev) => {
       let month = prev.month + delta;
@@ -675,7 +681,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
     setAdv(null);
     setAds(null);
     setError(null);
-    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined })
+    fetchPipelineStats({ from: dateFrom, to: dateTo, lineId: line || undefined, fSince, fUntil })
       .then((d) => { if (current) setData(d); })
       .catch((err) => { if (current) setError(err.message); });
     fetchPipelineStatsAdvisors({ from: dateFrom, to: dateTo, lineId: line || undefined })
@@ -689,7 +695,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
       .catch((err) => { if (current) setCosts({ conversionCostError: err.message, messageCostError: err.message }); });
     return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, dateFrom, dateTo, line]);
+  }, [open, dateFrom, dateTo, line, fSince, fUntil]);
 
   const [cur, setCurState] = useState(() => { try { const v = localStorage.getItem('statsCurrency'); return v === 'USD' || v === 'COP' ? v : 'Q'; } catch { return 'Q'; } });
   const setCur = (v) => { setCurState(v); try { localStorage.setItem('statsCurrency', v); } catch { /* solo esta sesión */ } };

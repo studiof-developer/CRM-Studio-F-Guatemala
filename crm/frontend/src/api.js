@@ -51,8 +51,11 @@ export async function fetchMe() {
 
 // Shared by the paged column fetch and the whole-bucket export below — same period/
 // search/unreadOnly filters either way.
-function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant, lineId } = {}) {
+function pipelineFilterParams({ from, to, since, until, q, unreadOnly, dormant, lineId, fSince, fUntil } = {}) {
   const params = new URLSearchParams();
+  // Corte del embudo de las Estadísticas (el mismo que usa el Pipeline para Hoy y Ayer).
+  if (fSince) params.set('fSince', fSince);
+  if (fUntil) params.set('fUntil', fUntil);
   if (q) {
     // A search match has to show up regardless of the active period — the backend
     // ignores from/to/since/until whenever q is present, so there's no point sending them.
