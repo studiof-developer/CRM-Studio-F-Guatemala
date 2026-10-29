@@ -1,7 +1,7 @@
 import { Fragment, createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, DoughnutController, ArcElement } from 'chart.js';
-import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp, CircleDollarSign, CheckCircle2, Clock, LayoutGrid, List } from 'lucide-react';
+import { X, Loader2, Calendar, Mail, Download, MessagesSquare, UserPlus, Repeat, Target, ShoppingBag, Wallet, Percent, TrendingUp, CircleDollarSign, CheckCircle2, Clock, LayoutGrid, List, Globe } from 'lucide-react';
 import { ChannelIcon } from '../lib/channelIcons.jsx';
 import * as XLSX from 'xlsx';
 import { fetchPipelineStats, fetchPipelineStatsCosts, fetchPipelineStatsAdvisors, fetchMetaAdsReport } from '../api.js';
@@ -48,14 +48,13 @@ function formatMoney(amount, currency) {
 function makeMoney(cur, usdCop, fx) {
   const fromCop = (cop) => (cur === 'COP' ? cop : cur === 'Q' ? cop / fx : cop / usdCop);
   const prefix = cur === 'Q' ? 'Q' : cur;
-  const fmt = (n, compact) => {
+  const fmt = (n) => {
     const v = Math.abs(n);
-    if (compact && v >= 1e6) return `${prefix} ${(n / 1e6).toFixed(2)} M`;
     const dec = v < 1000 ? 2 : 0;
     return `${prefix} ${n.toLocaleString(cur === 'USD' ? 'en-US' : 'es-GT', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
   };
   const out = (cop) => fmt(fromCop(cop ?? 0));
-  const short = (cop) => fmt(fromCop(cop ?? 0), true);
+  const short = out; // antes abreviaba ("3.66 M"); se confundía con 3,066,000: ahora siempre el número completo
   return {
     cur, cop: out, short, q: (quetzales) => out((quetzales ?? 0) * fx), qShort: (quetzales) => short((quetzales ?? 0) * fx),
     acct: (n, currency) => (currency && currency !== 'COP' ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(n) : out(n)),
@@ -178,7 +177,7 @@ function Tile({ icon: Icon, tone, value, label, title, big }) {
   return (
     <div title={title} className="flex items-center gap-2 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={14} /></span>
-      <span className="min-w-0 flex-1 leading-tight"><span title={typeof value === 'string' ? value : undefined} className={`block truncate font-semibold tabular-nums text-ink ${big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
+      <span className="min-w-0 flex-1 leading-tight"><span title={typeof value === 'string' ? value : undefined} className={`block truncate font-semibold tabular-nums text-ink ${String(value).length > 11 ? 'text-sm' : big ? 'text-xl' : 'text-base'}`}>{value}</span><span className="block truncate text-[11px] text-greige-ink">{label}</span></span>
     </div>
   );
 }
@@ -286,7 +285,7 @@ function CostsVisual({ costs, data, adv }) {
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-greige-ink" title="Dónde se mostraron los anuncios que trajeron los mensajes (dato de Meta): el anuncio va a WhatsApp, pero se ve en Instagram, Facebook o Messenger">Pauta por plataforma</p>
           <div className="flex flex-col gap-1.5">
             {costs.byPlatform.map((p) => (
-              <div key={p.platform} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
+              <div key={p.platform} title={PLATFORM_HINT[p.platform]} className="flex items-center gap-2.5 rounded-xl border border-line bg-paper px-2.5 py-2 shadow-sm">
                 <PlatformMark platform={p.platform} />
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-xs font-medium text-ink">{PLATFORMS[p.platform] ?? p.platform}</span><span className="block text-[11px] text-greige-ink">{p.conversations} mensajes{p.costPerConversation != null ? ` · COP ${Math.round(p.costPerConversation).toLocaleString('es-GT')} c/u` : ''}</span></span>
                 <b className="shrink-0 text-xs tabular-nums text-ink">{money.cop(p.spend)}</b>
@@ -375,10 +374,12 @@ function SalesByAdvisor({ adv, sellers, pieRef, bare }) {
 }
 
 // Logo y nombre de cada plataforma donde se mostró el anuncio.
-const PLATFORMS = { instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', whatsapp: 'WhatsApp (Estados)', audience_network: 'Otras apps (red de audiencia)' };
+const PLATFORMS = { instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', whatsapp: 'WhatsApp (Estados)', audience_network: 'Audience Network' };
+const PLATFORM_HINT = { audience_network: 'Apps y sitios web de terceros donde Meta también muestra los anuncios', whatsapp: 'Anuncios mostrados en los Estados de WhatsApp' };
 function PlatformMark({ platform, size = 22 }) {
   if (platform === 'instagram' || platform === 'messenger' || platform === 'whatsapp') return <ChannelIcon channel={platform} size={size} />;
-  return <span style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-[#1877F2] text-[13px] font-bold leading-none text-white">{platform === 'facebook' ? 'f' : '+'}</span>;
+  if (platform === 'facebook') return <span style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-[#1877F2] text-[13px] font-bold leading-none text-white">f</span>;
+  return <span style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-black/10 text-greige-ink dark:bg-white/15"><Globe size={Math.round(size * 0.6)} /></span>;
 }
 
 // Rentabilidad: lo que queda después de pagar la pauta y, con el margen guardado, la ganancia estimada y el ROAS de equilibrio (el ROAS y el vendido ya están arriba).
@@ -410,7 +411,7 @@ function Kpi({ icon: Icon, tone, label, value, sub, bar, barGood, title }) {
   return (
     <div title={title} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-paper px-4 py-3 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-medium text-greige-ink"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon size={13} /></span><span className="truncate">{label}</span></div>
-      <span className="truncate text-2xl font-bold tabular-nums leading-tight text-ink">{value}</span>
+      <span className={`truncate font-bold tabular-nums leading-tight text-ink ${String(value).length > 13 ? 'text-xl' : 'text-2xl'}`}>{value}</span>
       {bar != null && <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10"><span className={`block h-full rounded-full ${barGood ? 'bg-success' : 'bg-accent'}`} style={{ width: `${Math.max(2, Math.min(100, bar * 100))}%` }} /></div>}
       <span className="truncate text-[11px] text-greige-ink">{sub}</span>
     </div>
@@ -509,7 +510,7 @@ function ManagerView({ data, costs, adv, sellers, pieRef, line }) {
   const c = data.conversations;
   const cc = costs?.conversionCost;
   const fx = adv?.fxQtoCop ?? 420;
-  const goal = adv?.roasGoal ?? 5;
+  const goal = adv?.roasGoal ?? 10;
   const spend = cc?.spend;
   const roas = spend > 0 ? (c.salesAmount * fx) / spend : null;
   const roasAds = spend > 0 && costs?.adSales?.amount > 0 ? (costs.adSales.amount * fx) / spend : null;

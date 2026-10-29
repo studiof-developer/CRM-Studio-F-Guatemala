@@ -945,7 +945,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
       pool.query(`SELECT to_char((s.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS day, s.advisor_name AS advisor, count(*) AS n, COALESCE(sum(s.amount), 0) AS amount
         FROM sales s WHERE s.status = 'confirmada' AND s.amount > 0 ${saleFilter} GROUP BY 1, 2`, vp),
       getSetting('fx_q_cop', 420).catch(() => 420),
-      getSetting('roas_goal', 5).catch(() => 5),
+      getSetting('roas_goal', 10).catch(() => 10),
       getUsdToCopRate().catch(() => 4000),
       getSetting('gross_margin_pct', null).catch(() => null),
     ]);
@@ -964,7 +964,7 @@ router.get('/pipeline/stats/advisors', async (req, res, next) => {
       byAdvisor.set(r.advisor, a);
     }
     const advisors = [...byAdvisor.values()].map((a) => ({ ...a, conversionRate: a.conversations > 0 ? a.sales / a.conversations : null })).sort((a, b) => b.salesAmount - a.salesAmount || b.conversations - a.conversations);
-    res.json({ advisors, daily, fxQtoCop: Number(fx) > 0 ? Number(fx) : 420, roasGoal: Number(roasGoal) > 0 ? Number(roasGoal) : 5, usdCop: Number(usdCop) > 0 ? Number(usdCop) : 4000, grossMarginPct: Number(grossMarginPct) > 0 ? Number(grossMarginPct) : null });
+    res.json({ advisors, daily, fxQtoCop: Number(fx) > 0 ? Number(fx) : 420, roasGoal: Number(roasGoal) > 0 ? Number(roasGoal) : 10, usdCop: Number(usdCop) > 0 ? Number(usdCop) : 4000, grossMarginPct: Number(grossMarginPct) > 0 ? Number(grossMarginPct) : null });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
