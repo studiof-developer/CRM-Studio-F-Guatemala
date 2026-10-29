@@ -505,7 +505,7 @@ function PautaPanel({ data, costs, adv, line }) {
 }
 
 // Vista de gerencia: primero el resultado (ventas, inversión, retorno), después el detalle en cuatro bloques.
-function ManagerView({ data, costs, adv, sellers, pieRef, line }) {
+function ManagerView({ data, costs, adv, sellers, pieRef, line, funnelPeriod }) {
   const money = useMoney();
   const c = data.conversations;
   const cc = costs?.conversionCost;
@@ -529,7 +529,7 @@ function ManagerView({ data, costs, adv, sellers, pieRef, line }) {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Panel title="Atención"><AttentionPanel data={data} costs={costs} /></Panel>
-        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><StatesGrid buckets={data.buckets} /></Panel>
+        <Panel title="Embudo de ventas" hint="Los mismos números que las columnas del Pipeline para este periodo. Frío, tibio y caliente son las etapas de conversación; el punto rojo son los no leídos. Hoy cuenta desde el último mensaje de las asesoras de ayer; Ayer, lo que se trabajó esa jornada (lo que quedó pendiente al cerrar el turno cuenta como de hoy)."><StatesGrid buckets={data.buckets} /><p className="text-[10px] leading-snug text-muted-foreground">Periodo: {funnelPeriod}. Pon el Pipeline en el mismo periodo y la misma línea para comparar: deben coincidir.</p></Panel>
         <Panel title="Pauta y rentabilidad"><PautaPanel data={data} costs={costs} adv={adv} line={line} /></Panel>
         <Panel title="Ventas por asesora"><SalesByAdvisor adv={adv} sellers={sellers} pieRef={pieRef} bare /></Panel>
       </div>
@@ -657,6 +657,10 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
   if (periodPreset === 'hoy') { fSince = todayCutoff ?? guatemalaMidnight(todayStr); }
   else if (periodPreset === 'ayer') { fSince = yesterdayCutoff ?? guatemalaMidnight(addDays(todayStr, -1)); fUntil = todayCutoff ?? guatemalaMidnight(todayStr); }
 
+  // El periodo exacto que cuenta el embudo, a la vista, para compararlo con el del Pipeline.
+  const gtStamp = (iso) => new Date(iso).toLocaleString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const funnelPeriod = fSince ? (fUntil ? `${gtStamp(fSince)} → ${gtStamp(fUntil)}` : `Desde ${gtStamp(fSince)}`) : `${dateFrom} a ${dateTo}`;
+
   function shiftMonth(delta) {
     setMonthCursor((prev) => {
       let month = prev.month + delta;
@@ -771,7 +775,7 @@ export default function StatsModal({ open, onClose, lineId, lineOptions = [], ro
             )}
             {data && (
               <>
-              {view === 'visual' && <ManagerView data={data} costs={costs} adv={adv} sellers={sellers} pieRef={pieRef} line={line} />}
+              {view === 'visual' && <ManagerView data={data} costs={costs} adv={adv} sellers={sellers} pieRef={pieRef} line={line} funnelPeriod={funnelPeriod} />}
               <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[260px_240px_340px_1fr]">
                 {view === 'detalle' && (
                   <>
