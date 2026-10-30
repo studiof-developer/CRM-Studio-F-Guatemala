@@ -198,6 +198,7 @@ const HINTS = {
   conv: { t: 'Conversaciones', d: 'Personas que escribieron cada día, sumadas día por día (como lo cuenta Meta). Un cliente que escribe en dos días distintos cuenta dos veces; "clientes distintos" lo cuenta una sola.' },
   channels: { t: 'Por dónde escribieron', d: 'WhatsApp, Instagram o Messenger. WhatsApp incluye a quienes llegaron por anuncios, difusiones o por su cuenta. Las tres cifras suman el total de conversaciones.' },
   origin: { t: '¿De dónde llegaron?', d: 'Anuncios: llegaron por un anuncio de Meta. Difusión: respondieron a un envío masivo en las 24 horas siguientes. Orgánico: escribieron por su cuenta en WhatsApp. Redes: llegaron por Instagram o Messenger.', i: 'Con pauta activa, "Anuncios" debe ser la mayor parte. Si el orgánico crece solo, la marca está generando recordación.' },
+  adsFrom: { t: 'Anuncios por red', d: 'De los clientes que llegaron por anuncio (los mismos de "Anuncios"), cuántos hicieron clic en un anuncio de Facebook y cuántos en uno de Instagram. Siempre suma lo mismo que Anuncios.' },
   seen: { t: 'Anuncios según Meta', d: 'Dato de Meta, aparte del CRM: en qué plataforma se mostró el anuncio que trajo el mensaje. Todos terminan en WhatsApp, por eso no se suman al canal ni al origen.' },
   manager: { t: 'Total gerencial', d: 'Anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No cuenta el orgánico de WhatsApp. Es la base del cierre y la que usa el trafficker en su reporte.' },
   wait: { t: 'Demora en responder', d: 'Tiempo promedio que tarda una asesora en dar la primera respuesta a un cliente que escribe.', i: 'Ideal: 5 a 10 minutos. Aceptable hasta 30. Pasada 1 hora, el Pipeline marca el chat como "atrasado".' },
@@ -331,7 +332,7 @@ function SummaryDetail({ data, costs, adv }) {
       <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por canal</p>
       <SumRow label="WhatsApp" value={c.byChannel.whatsapp} /><SumRow label="Instagram" value={c.byChannel.instagram} /><SumRow label="Messenger" value={c.byChannel.messenger} />
       <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Por origen</p>
-      <SumRow label="Anuncios Meta" value={c.byOrigin.ads} purple /><SumRow label="Respuesta a difusión" value={c.byOrigin.broadcast} />
+      <SumRow label="Anuncios Meta" value={c.byOrigin.ads} purple />{c.byAdPlatform && <><SumRow label="• desde Facebook" value={c.byAdPlatform.facebook} /><SumRow label="• desde Instagram" value={c.byAdPlatform.instagram} /></>}<SumRow label="Respuesta a difusión" value={c.byOrigin.broadcast} />
       <SumRow label="Orgánico de WhatsApp" value={c.byOrigin.organic} /><SumRow label="Instagram y Messenger" value={c.byOrigin.social} />
       <p className="mt-1 border-t border-line/60 pt-1 font-medium uppercase tracking-wide">Cierre</p>
       <SumRow label="Ventas confirmadas" value={c.sales ?? '—'} strong /><SumRow label="Valor vendido" value={c.salesAmount ? money.q(c.salesAmount) : '—'} />
@@ -455,6 +456,13 @@ function AttentionPanel({ data, costs }) {
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">{orig.map((o) => <span key={o.k} className="flex items-center gap-1.5 text-[11px] text-greige-ink"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} /><span className="truncate">{o.label}</span><b className="ml-auto tabular-nums text-ink">{o.n}</b></span>)}</div>
         <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Los de WhatsApp ({c.byChannel.whatsapp}) son Anuncios + Difusión + Orgánico; los de Redes ({c.byChannel.instagram + c.byChannel.messenger}) son Instagram y Messenger.</p>
       </div></Hint>
+      {c.byAdPlatform && c.byOrigin.ads > 0 && (
+        <Hint h={HINTS.adsFrom}><div className="rounded-xl border border-line bg-paper p-2.5">
+          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Anuncios: en qué red hicieron clic <span className="font-normal">(suma {c.byOrigin.ads}, los mismos Anuncios)</span></p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">{['facebook', 'instagram'].map((p) => <span key={p} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p} size={18} /><span className="text-greige-ink">{PLATFORMS[p]}</span><b className="tabular-nums text-ink">{c.byAdPlatform[p]}</b></span>)}</div>
+          <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Cada anuncio se ve en Facebook o Instagram y el cliente termina escribiendo por WhatsApp. Se saca del enlace del anuncio que trae el chat.</p>
+        </div></Hint>
+      )}
       {costs?.byPlatform?.length > 0 && (
         <Hint h={HINTS.seen}><div className="rounded-xl border border-dashed border-line p-2.5">
           <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Según Meta: dónde se vio el anuncio <span className="font-normal">(no se suma a lo de arriba)</span></p>

@@ -38,6 +38,7 @@ async function computeRange(a, b, pattern) {
         SELECT split_part(h.session_id, '__', 1) AS ref, COALESCE((regexp_match(h.session_id, '__line_(\\d+)'))[1]::int, h.whatsapp_number_id, 1) AS line,
                (h.created_at AT TIME ZONE '${TZ}')::date AS day,
                bool_or(h.message->'additional_kwargs'->'referral' IS NOT NULL OR h.message->'additional_kwargs'->>'ad_id' IS NOT NULL) AS ad,
+               bool_or(h.message->'additional_kwargs'->'referral'->>'source_url' ILIKE '%instagram.com%') AS ig,
                min(h.created_at) AS first_at, count(*) AS msgs
         FROM n8n_chat_histories h
         WHERE h.message->>'type' = 'human' AND h.created_at >= ${START('$1')} AND h.created_at < ${END('$2')}
@@ -47,12 +48,12 @@ async function computeRange(a, b, pattern) {
         WHERE s.message->'additional_kwargs'->>'campaignId' IS NOT NULL${notService('s', pattern)}
           AND s.created_at >= ${START('$1')} - interval '24 hours' AND s.created_at < ${END('$2')}
       )
-      SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.line, 'whatsapp' AS channel, wa.ref, wa.ad, wa.msgs,
+      SELECT to_char(wa.day, 'YYYY-MM-DD') AS day, wa.line, 'whatsapp' AS channel, wa.ref, wa.ad, CASE WHEN wa.ig THEN 'instagram' WHEN wa.ad THEN 'facebook' END AS ad_platform, wa.msgs,
              COALESCE((c.created_at AT TIME ZONE '${TZ}')::date = wa.day, false) AS is_new,
              (NOT wa.ad AND EXISTS (SELECT 1 FROM sends s WHERE s.ref = wa.ref AND s.at >= wa.first_at - interval '24 hours' AND s.at < wa.first_at)) AS broadcast
       FROM wa LEFT JOIN customers c ON c.whatsapp_number = wa.ref`, [a, b]),
     pool.query(`
-      SELECT to_char((sm.created_at AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS day, 1 AS line, sc.provider AS channel, 'social:' || sc.id AS ref, false AS ad, count(*) AS msgs,
+      SELECT to_char((sm.created_at AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS day, 1 AS line, sc.provider AS channel, 'social:' || sc.id AS ref, false AS ad, NULL::text AS ad_platform, count(*) AS msgs,
              COALESCE(bool_or((c.created_at AT TIME ZONE '${TZ}')::date = (sm.created_at AT TIME ZONE '${TZ}')::date), false) AS is_new, false AS broadcast
       FROM social_messages sm JOIN social_contacts sc ON sc.id = sm.contact_id LEFT JOIN customers c ON c.id = sc.customer_id
       WHERE sm.direction = 'in' AND sm.created_at >= ${START('$1')} AND sm.created_at < ${END('$2')}
@@ -70,12 +71,15 @@ async function computeRange(a, b, pattern) {
 
 const inflight = new Map();
 
+// v2: las reglas incluyen la plataforma del anuncio; los días guardados antes se recalculan.
+const rulesOf = (pattern) => `${pattern}|v2`;
+
 // Guarda en las tablas los días ya cerrados de [from, to] que todavía no están (o que se calcularon con otra regla de difusiones).
 export async function ensureDays(from, to) {
   const end = to < addDay(gtToday(), -1) ? to : addDay(gtToday(), -1);
   if (from > end) return;
   const pattern = await servicePattern();
-  const { rows } = await pool.query('SELECT to_char(day, \'YYYY-MM-DD\') AS day FROM stats_days_done WHERE day BETWEEN $1 AND $2 AND rules = $3', [from, end, pattern]);
+  const { rows } = await pool.query('SELECT to_char(day, \'YYYY-MM-DD\') AS day FROM stats_days_done WHERE day BETWEEN $1 AND $2 AND rules = $3', [from, end, rulesOf(pattern)]);
   const done = new Set(rows.map((r) => r.day));
   const missing = [];
   for (let d = from; d <= end; d = addDay(d, 1)) if (!done.has(d)) missing.push(d);
@@ -102,9 +106,9 @@ async function persist(a, b, pattern) {
     for (let i = 0; i < conv.length; i += 4000) {
       const p = conv.slice(i, i + 4000);
       await client.query(
-        `INSERT INTO stats_conv_days (day, line, channel, ref, ad, broadcast, is_new, msgs)
-         SELECT * FROM unnest($1::date[], $2::int[], $3::text[], $4::text[], $5::bool[], $6::bool[], $7::bool[], $8::int[]) ON CONFLICT DO NOTHING`,
-        [p.map((r) => r.day), p.map((r) => r.line), p.map((r) => r.channel), p.map((r) => r.ref), p.map((r) => r.ad), p.map((r) => r.broadcast), p.map((r) => r.is_new), p.map((r) => r.msgs)]
+        `INSERT INTO stats_conv_days (day, line, channel, ref, ad, broadcast, is_new, msgs, ad_platform)
+         SELECT * FROM unnest($1::date[], $2::int[], $3::text[], $4::text[], $5::bool[], $6::bool[], $7::bool[], $8::int[], $9::text[]) ON CONFLICT DO NOTHING`,
+        [p.map((r) => r.day), p.map((r) => r.line), p.map((r) => r.channel), p.map((r) => r.ref), p.map((r) => r.ad), p.map((r) => r.broadcast), p.map((r) => r.is_new), p.map((r) => r.msgs), p.map((r) => r.ad_platform)]
       );
     }
     if (hours.length) {
@@ -112,7 +116,7 @@ async function persist(a, b, pattern) {
         [hours.map((r) => r.day), hours.map((r) => r.line), hours.map((r) => r.hour), hours.map((r) => r.n)]);
     }
     await client.query(`INSERT INTO stats_days_done (day, rules) SELECT d::date, $3 FROM generate_series($1::date, $2::date, interval '1 day') d
-      ON CONFLICT (day) DO UPDATE SET rules = EXCLUDED.rules, computed_at = now()`, [a, b, pattern]);
+      ON CONFLICT (day) DO UPDATE SET rules = EXCLUDED.rules, computed_at = now()`, [a, b, rulesOf(pattern)]);
     await client.query('COMMIT');
   } catch (err) { await client.query('ROLLBACK').catch(() => {}); throw err; } finally { client.release(); }
 }
@@ -131,7 +135,7 @@ async function loadRows(from, to) {
   const conv = []; const hours = [];
   if (from <= pastEnd) {
     const [c, h] = await Promise.all([
-      pool.query("SELECT to_char(day, 'YYYY-MM-DD') AS day, line, channel, ref, ad, broadcast, is_new, msgs FROM stats_conv_days WHERE day BETWEEN $1 AND $2", [from, pastEnd]),
+      pool.query("SELECT to_char(day, 'YYYY-MM-DD') AS day, line, channel, ref, ad, ad_platform, broadcast, is_new, msgs FROM stats_conv_days WHERE day BETWEEN $1 AND $2", [from, pastEnd]),
       pool.query("SELECT to_char(day, 'YYYY-MM-DD') AS day, line, hour, n FROM stats_hour_days WHERE day BETWEEN $1 AND $2", [from, pastEnd]),
     ]);
     conv.push(...c.rows); hours.push(...h.rows);
@@ -153,15 +157,16 @@ export async function loadConversationStats({ from, to, lineIds }) {
     const k = `${r.day}|${r.ref}|${r.channel}`;
     const m = merged.get(k);
     if (!m) merged.set(k, { ...r });
-    else { m.ad = m.ad || r.ad; m.broadcast = m.broadcast || r.broadcast; m.is_new = m.is_new || r.is_new; m.msgs += r.msgs; }
+    else { m.ad = m.ad || r.ad; if (r.ad_platform === 'instagram' || !m.ad_platform) m.ad_platform = r.ad_platform ?? m.ad_platform; m.broadcast = m.broadcast || r.broadcast; m.is_new = m.is_new || r.is_new; m.msgs += r.msgs; }
   }
   const daily = new Map();
   const people = new Map();
   for (const r of merged.values()) {
     const origin = r.channel !== 'whatsapp' ? 'social' : r.ad ? 'ads' : r.broadcast ? 'broadcast' : 'organic';
-    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0, social: 0 };
+    const d = daily.get(r.day) ?? { day: r.day, total: 0, messages: 0, whatsapp: 0, instagram: 0, messenger: 0, ads: 0, broadcast: 0, organic: 0, social: 0, adsInstagram: 0, adsFacebook: 0 };
     d.messages += Number(r.msgs) || 0;
     d.total += 1; d[r.channel] = (d[r.channel] ?? 0) + 1; d[origin] += 1;
+    if (origin === 'ads') d[r.ad_platform === 'instagram' ? 'adsInstagram' : 'adsFacebook'] += 1;
     daily.set(r.day, d);
     const p = people.get(r.ref) ?? { channel: r.channel, origin: 'organic', isNew: false };
     if (origin === 'ads' || (origin === 'broadcast' && p.origin !== 'ads')) p.origin = origin;
@@ -182,7 +187,7 @@ export async function loadConversationStats({ from, to, lineIds }) {
       // Conversaciones = clientes por día, sumados (como cuentan Meta y el Excel gerencial); "clientes distintos" es aparte.
       conversations: sum('total'), messages: sum('messages'),
       byChannel: { whatsapp: sum('whatsapp'), instagram: sum('instagram'), messenger: sum('messenger') },
-      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic'), social: sum('social') }, managerTotal: sum('managerTotal'),
+      byOrigin: { ads: sum('ads'), broadcast: sum('broadcast'), organic: sum('organic'), social: sum('social') }, byAdPlatform: { instagram: sum('adsInstagram'), facebook: sum('adsFacebook') }, managerTotal: sum('managerTotal'),
       people: list.length, newPeople: count((p) => p.isNew), returning: count((p) => !p.isNew),
     },
   };
