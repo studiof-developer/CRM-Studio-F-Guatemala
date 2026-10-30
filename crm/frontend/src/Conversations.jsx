@@ -9,7 +9,7 @@ import {
   fetchConversations, fetchConversation, sendConversationMessage, sendConversationAttachment,
   attachmentUrl, attachmentDownloadUrl, updateTicket, updateCustomerTags, updateCustomerOptOut, startConversation,
   fetchQuickReplies, markConversationUnread, takeConversation, searchConversation, fetchMessageByWamid, searchAllConversations,
-  fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
+  fetchMetaAdCreative, fetchMessageDistance, retryFailedMessage, fetchPresenceSnapshot, sendPresenceHeartbeat, leavePresence, fetchAdvisors,
   fetchSocialMessages, sendSocialMessage, fetchSocialContact, takeSocialContact, markSocialContactUnread, syncSocialContact, fetchWhatsappNumbers, fetchProducts,
   createSale, fetchCustomerSales, fetchCustomerQuotes,
 } from './api.js';
@@ -3383,12 +3383,28 @@ function isMetaUrlExpired(urlStr) {
   return false;
 }
 
+// El enlace de imagen que trae el mensaje es temporal (caduca o falla según el momento); si no sirve, se pide la imagen del anuncio a Meta por su id.
+const adImages = new Map();
+function adImageFor(adId) {
+  if (!adImages.has(adId)) adImages.set(adId, fetchMetaAdCreative(adId).then((c) => c?.thumbnailUrl ?? c?.imageUrl ?? null).catch(() => { adImages.delete(adId); return null; }));
+  return adImages.get(adId);
+}
+
 function ReferralThumbnail({ referral, hasAttachment, outgoing }) {
   const rawUrl = referral?.thumbnail_url || referral?.image_url;
-  const isExpired = !rawUrl || isMetaUrlExpired(rawUrl);
-  const [loadFailed, setLoadFailed] = useState(isExpired);
+  const adId = /^[0-9]+$/.test(referral?.source_id ?? '') ? referral.source_id : null;
+  const [loadFailed, setLoadFailed] = useState(!rawUrl || isMetaUrlExpired(rawUrl));
+  const [adSrc, setAdSrc] = useState(null);
+  const [adFailed, setAdFailed] = useState(false);
+  useEffect(() => {
+    if (!loadFailed || hasAttachment || !adId) return undefined;
+    let cancelled = false;
+    adImageFor(adId).then((u) => { if (!cancelled) setAdSrc(u); });
+    return () => { cancelled = true; };
+  }, [loadFailed, hasAttachment, adId]);
+  const src = loadFailed ? (adFailed ? null : adSrc) : rawUrl;
 
-  if (hasAttachment || loadFailed || !rawUrl) {
+  if (hasAttachment || !src) {
     return (
       <span className={`flex aspect-square w-full items-center justify-center ${outgoing ? 'bg-white/15' : 'bg-black/5 dark:bg-white/10'}`}>
         <Megaphone size={22} />
@@ -3398,12 +3414,12 @@ function ReferralThumbnail({ referral, hasAttachment, outgoing }) {
 
   return (
     <img
-      src={rawUrl}
+      src={src}
       alt=""
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => setLoadFailed(true)}
+      onError={() => (loadFailed ? setAdFailed(true) : setLoadFailed(true))}
       className="aspect-square w-full object-cover"
     />
   );
