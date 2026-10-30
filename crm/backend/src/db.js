@@ -12,7 +12,9 @@ import pg from 'pg';
 // was enough to spike past 30 and queue everyone behind it. Confirmed the server's
 // max_connections is 100 with only ~20 in use at rest, so there's plenty of headroom
 // left for n8n and admin psql sessions after this.
-export const pool = new pg.Pool({ max: 60, connectionTimeoutMillis: 10000 });
+// jit=off: Postgres sobreestima el costo de las consultas grandes (pipeline, estadísticas) y las "compila" en cada ejecución;
+// medido con 40 mil tickets: 785 ms de los cuales 695 ms eran compilación JIT (94 ms sin ella).
+export const pool = new pg.Pool({ max: 60, connectionTimeoutMillis: 10000, options: '-c jit=off' });
 
 // An idle client in the pool dying (server restart, idle_session_timeout, a network
 // blip) emits 'error' on the pool itself — with no listener that's an uncaught

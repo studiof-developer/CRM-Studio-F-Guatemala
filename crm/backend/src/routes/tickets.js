@@ -284,7 +284,7 @@ router.get('/pipeline', async (req, res, next) => {
     params.push(limit);
 
     const lClause = linesClause(req.user, 't');
-    const cacheKey = `${req.user.id}:${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}:${parsedLineId ?? ''}`;
+    const cacheKey = `${lClause}:${bucket}:${offset}:${limit}:${sort}:${from ?? ''}:${to ?? ''}:${since ?? ''}:${until ?? ''}:${trimmedQ}:${unreadOnly ?? ''}:${dormant ?? ''}:${parsedLineId ?? ''}`;
 
     const { rows } = await cachedRead(cacheKey, () => pool.query(`
       WITH temped AS (
