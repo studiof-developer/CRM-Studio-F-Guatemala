@@ -199,7 +199,6 @@ const HINTS = {
   channels: { t: 'Por dónde escribieron', d: 'WhatsApp, Instagram o Messenger. WhatsApp incluye a quienes llegaron por anuncios, difusiones o por su cuenta. Las tres cifras suman el total de conversaciones.' },
   origin: { t: '¿De dónde llegaron?', d: 'Anuncios: llegaron por un anuncio de Meta. Difusión: respondieron a un envío masivo en las 24 horas siguientes. Orgánico: escribieron por su cuenta en WhatsApp. Redes: llegaron por Instagram o Messenger.', i: 'Con pauta activa, "Anuncios" debe ser la mayor parte. Si el orgánico crece solo, la marca está generando recordación.' },
   adsFrom: { t: 'Anuncios por red', d: 'De los clientes que llegaron por anuncio (los mismos de "Anuncios"), cuántos hicieron clic en un anuncio de Facebook y cuántos en uno de Instagram. Siempre suma lo mismo que Anuncios.' },
-  seen: { t: 'Anuncios según Meta', d: 'Dato de Meta, aparte del CRM: en qué plataforma se mostró el anuncio que trajo el mensaje. Todos terminan en WhatsApp, por eso no se suman al canal ni al origen.' },
   manager: { t: 'Total gerencial', d: 'Anuncios de WhatsApp + respuestas a difusión + Instagram + Messenger. No cuenta el orgánico de WhatsApp. Es la base del cierre y la que usa el trafficker en su reporte.' },
   wait: { t: 'Demora en responder', d: 'Tiempo promedio que tarda una asesora en dar la primera respuesta a un cliente que escribe.', i: 'Ideal: 5 a 10 minutos. Aceptable hasta 30. Pasada 1 hora, el Pipeline marca el chat como "atrasado".' },
   fresh: { t: 'Nuevos', d: 'Clientes que escriben por primera vez en el periodo.', i: 'Con pauta activa deben crecer cuando sube la inversión; si no crecen, el anuncio no está atrayendo gente nueva.' },
@@ -461,13 +460,6 @@ function AttentionPanel({ data, costs }) {
           <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Anuncios: en qué red hicieron clic <span className="font-normal">(suma {c.byOrigin.ads}, los mismos Anuncios)</span></p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">{['facebook', 'instagram'].map((p) => <span key={p} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p} size={18} /><span className="text-greige-ink">{PLATFORMS[p]}</span><b className="tabular-nums text-ink">{c.byAdPlatform[p]}</b></span>)}</div>
           <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Cada anuncio se ve en Facebook o Instagram y el cliente termina escribiendo por WhatsApp. Se saca del enlace del anuncio que trae el chat.</p>
-        </div></Hint>
-      )}
-      {costs?.byPlatform?.length > 0 && (
-        <Hint h={HINTS.seen}><div className="rounded-xl border border-dashed border-line p-2.5">
-          <p className="mb-1.5 text-[11px] font-medium text-greige-ink">Según Meta: dónde se vio el anuncio <span className="font-normal">(no se suma a lo de arriba)</span></p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">{costs.byPlatform.filter((p) => p.conversations > 0).map((p) => <span key={p.platform} className="flex items-center gap-1.5 text-xs"><PlatformMark platform={p.platform} size={18} /><b className="tabular-nums text-ink">{p.conversations}</b></span>)}</div>
-          <p className="mt-1.5 text-[10px] leading-snug text-greige-ink">Son los mismos mensajes de anuncios que llegan a WhatsApp (ya están dentro de los {c.byChannel.whatsapp}), vistos por plataforma. Dato de Meta de toda la cuenta; puede diferir de "Anuncios" del CRM.</p>
         </div></Hint>
       )}
       <p className="text-[10px] leading-snug text-greige-ink">Sin leer y Sin atender muestran el embudo "{'Ahora'}" o "Del periodo" según lo que elijas en el embudo.</p>
