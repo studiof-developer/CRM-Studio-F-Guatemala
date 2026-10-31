@@ -62,8 +62,8 @@ async function fetchPoints(creds, since, until) {
 }
 
 // Costo en USD (la moneda en que Meta cobra la API) de [since, until]: con eso se estima el saldo pendiente de pago.
-export async function fetchMessageCostUsd(since, until) {
-  const creds = await getActiveCredentials().catch(() => null);
+export async function fetchMessageCostUsd(since, until, lineId) {
+  const creds = await getActiveCredentials(undefined, lineId).catch(() => null);
   if (!creds?.wabaId) return null;
   return (await fetchPoints(creds, since, until)).reduce((t, p) => t + (p.cost ?? 0), 0);
 }

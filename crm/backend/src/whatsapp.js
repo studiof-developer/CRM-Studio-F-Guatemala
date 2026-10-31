@@ -86,11 +86,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Meta responde 131042 cuando la cuenta de WhatsApp Business no puede enviar por un problema de pago: se anota (para la alerta
 // de facturación) y se avisa en vivo a las pantallas abiertas.
-function noteIfPaymentBlocked(body) {
+function noteIfPaymentBlocked(body, path) {
   if (!/"code"\s*:\s*131042/.test(body)) return;
-  pool.query(`INSERT INTO app_settings (key, value, updated_at) VALUES ('meta_billing_blocked_at', to_jsonb(now()::text), now())
-    ON CONFLICT (key) DO UPDATE SET value = to_jsonb(now()::text), updated_at = now()`)
-    .then(() => broadcast('billing_alert', '{}'))
+  // El primer tramo de la ruta es el número (envíos) o la cuenta de WhatsApp Business: de ahí sale la línea afectada.
+  pool.query('SELECT id FROM whatsapp_numbers WHERE phone_number_id = $1 OR waba_id = $1 LIMIT 1', [String(path).split(/[/?]/)[0]])
+    .then(({ rows }) => rows[0] && pool.query(`INSERT INTO app_settings (key, value, updated_at) VALUES ('meta_billing_blocked_at', jsonb_build_object($1::text, now()::text), now())
+      ON CONFLICT (key) DO UPDATE SET value = (CASE WHEN jsonb_typeof(app_settings.value) = 'object' THEN app_settings.value ELSE '{}'::jsonb END) || jsonb_build_object($1::text, now()::text), updated_at = now()`, [String(rows[0].id)]))
+    .then((r) => r && broadcast('billing_alert', '{}'))
     .catch((err) => console.error('could not record payment block', err.message));
 }
 
@@ -112,7 +114,7 @@ async function graphFetch(path, options, token, timeoutMs = REQUEST_TIMEOUT_MS) 
     }
     if (res.ok) return res.json();
     const body = await res.text();
-    noteIfPaymentBlocked(body);
+    noteIfPaymentBlocked(body, path);
     if (!RETRYABLE_STATUS.has(res.status) || attempt === MAX_ATTEMPTS) {
       throw new Error(`WhatsApp API ${res.status}: ${body}`);
     }
